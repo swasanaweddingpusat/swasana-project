@@ -1,29 +1,65 @@
 {
-  "name": "Swasana",
+  "id": "/dashboard",
+  "name": "Swasana Wedding Management",
   "short_name": "Swasana",
-  "description": "Swasana Wedding Management System",
-  "start_url": "/dashboard",
+  "description": "Sistem manajemen wedding & MICE Swasana — CRM, booking, approval, hingga finance dalam satu aplikasi.",
+  "start_url": "/dashboard?source=pwa",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait-primary",
+  "lang": "id",
+  "dir": "ltr",
   "theme_color": "#0F4159",
   "background_color": "#FAF7F2",
+  "categories": ["business", "productivity"],
   "icons": [
     {
       "src": "/icons/icon-192x192.png",
       "sizes": "192x192",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any"
     },
     {
       "src": "/icons/icon-512x512.png",
       "sizes": "512x512",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any"
     },
     {
       "src": "/icons/icon-maskable-512x512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Booking Weddings",
+      "short_name": "Weddings",
+      "description": "Lihat & kelola booking wedding",
+      "url": "/dashboard/booking-weddings?source=pwa",
+      "icons": [{ "src": "/icons/shortcut-96x96.png", "sizes": "96x96", "type": "image/png" }]
+    },
+    {
+      "name": "Booking MICE",
+      "short_name": "MICE",
+      "description": "Lihat & kelola booking MICE",
+      "url": "/dashboard/booking-mice?source=pwa",
+      "icons": [{ "src": "/icons/shortcut-96x96.png", "sizes": "96x96", "type": "image/png" }]
+    },
+    {
+      "name": "Finance",
+      "short_name": "Finance",
+      "description": "Ringkasan keuangan & piutang",
+      "url": "/dashboard/finance?source=pwa",
+      "icons": [{ "src": "/icons/shortcut-96x96.png", "sizes": "96x96", "type": "image/png" }]
+    },
+    {
+      "name": "Notifikasi",
+      "short_name": "Notifikasi",
+      "description": "Lihat notifikasi terbaru",
+      "url": "/dashboard/notifications?source=pwa",
+      "icons": [{ "src": "/icons/shortcut-96x96.png", "sizes": "96x96", "type": "image/png" }]
     }
   ]
 }

@@ -47,8 +47,10 @@ import { getWeddingTimeRange } from "@/lib/constants/wedding-session-times";
 import { useVenues } from "@/hooks/use-venues";
 import { useEventTypes } from "@/hooks/use-event-types";
 import { useLeadStatuses } from "@/hooks/use-lead-statuses";
+import { useLeadSegments, useCreateLeadSegment } from "@/hooks/use-lead-segments";
 import { useSalesUsers } from "@/hooks/use-sales-users";
 import { useUpdateLead } from "@/hooks/use-leads";
+import { useCurrentUser } from "@/hooks/use-current-user";
 import {
   SectionHeader,
   SessionPillRadio,
@@ -90,7 +92,7 @@ interface EditLeadFormState {
   weddingSessionAlt: WeddingSession | "";
   miceSession: WeddingSession | "";
   miceSessionAlt: WeddingSession | "";
-  instansi: string;
+  segmentId: string;
   isDateLocked: boolean;
   bookingFeeAmount: number;
   bookingFeeDate: string;
@@ -180,7 +182,7 @@ export function LeadDrawer({ open, onOpenChange, editLead, onSuccess }: LeadDraw
     weddingSessionAlt: "",
     miceSession: "",
     miceSessionAlt: "",
-    instansi: "",
+    segmentId: "",
     isDateLocked: false,
     bookingFeeAmount: 0,
     bookingFeeDate: "",
@@ -190,6 +192,13 @@ export function LeadDrawer({ open, onOpenChange, editLead, onSuccess }: LeadDraw
   const [contactNumbers, setContactNumbers] = useState<ContactNumber[]>([]);
   const [contactPopoverOpen, setContactPopoverOpen] = useState(false);
   const [contactInput, setContactInput] = useState({ name: "", phone: "" });
+
+  // ── MICE segment options (normalized master, FK-backed) ──────────────────────
+  const { data: masterSegments = [] } = useLeadSegments();
+  const createSegment = useCreateLeadSegment();
+  const miceSegments = masterSegments
+    .filter((s) => s.isActive)
+    .map((s) => ({ id: s.id, name: s.name }));
 
   // ── UI toggles ─────────────────────────────────────────────────────────────
   const [showDateAlt, setShowDateAlt] = useState(false);
@@ -213,7 +222,10 @@ export function LeadDrawer({ open, onOpenChange, editLead, onSuccess }: LeadDraw
   const { data: eventTypesData } = useEventTypes(category ?? undefined);
   const { data: leadStatuses = [] } = useLeadStatuses();
   const { users: salesUsers } = useSalesUsers();
+  const { user: currentUser } = useCurrentUser();
   const updateLead = useUpdateLead();
+
+  const isMiceOnly = currentUser?.roleName === "sales-mice";
 
   // ── Sources of information ─────────────────────────────────────────────────
   const [sources, setSources] = useState<{ id: string; name: string }[]>([]);
@@ -287,7 +299,7 @@ export function LeadDrawer({ open, onOpenChange, editLead, onSuccess }: LeadDraw
       weddingSessionAlt: isWed ? rawSessionAlt : "",
       miceSession: !isWed ? rawSession : "",
       miceSessionAlt: !isWed ? rawSessionAlt : "",
-      instansi: editLead.instansi ?? "",
+      segmentId: editLead.segmentId ?? "",
       isDateLocked: editLead.isDateLocked ?? false,
       bookingFeeAmount: editLead.bookingFeeAmount
         ? Number(editLead.bookingFeeAmount)
@@ -346,16 +358,16 @@ export function LeadDrawer({ open, onOpenChange, editLead, onSuccess }: LeadDraw
     !category ||
     !form.name.trim() ||
     contactNumbers.length === 0 ||
-    !form.eventDate ||
-    !form.eventTypeId ||
+    (!isMice && !form.eventDate) ||
+    (!isMice && !form.eventTypeId) ||
     !form.sourceOfInformationId ||
     !form.assignedToId ||
     !form.statusId ||
     (isWedding && !form.weddingSession) ||
     (isWedding && !!form.eventDateAlt && !form.weddingSessionAlt) ||
     (isBitrixSource && !form.bitrixId.trim()) ||
-    (!!form.eventDateAlt && form.eventDateAlt === form.eventDate) ||
-    isLockIncomplete;
+    (!isMice && !!form.eventDateAlt && form.eventDateAlt === form.eventDate) ||
+    (!isMice && isLockIncomplete);
 
   // ── Handlers ───────────────────────────────────────────────────────────────
 
@@ -438,7 +450,7 @@ export function LeadDrawer({ open, onOpenChange, editLead, onSuccess }: LeadDraw
         estimatedPax: form.estimatedPax ? parseInt(form.estimatedPax, 10) : undefined,
         budgetRange: form.budgetRange || undefined,
         notes: form.notes || undefined,
-        instansi: isMice ? (form.instansi || undefined) : undefined,
+        segmentId: isMice ? (form.segmentId || undefined) : undefined,
         category: category!,
         venueId: form.venueId || undefined,
         venueSecondaryId: form.venueSecondaryId || null,
@@ -488,9 +500,9 @@ export function LeadDrawer({ open, onOpenChange, editLead, onSuccess }: LeadDraw
           <div className="flex flex-col gap-6 pb-4">
 
             {/* ════════════════════════════════════════════════════════
-                Tipe Booking (readonly di edit — ditampilkan saja)
+                Tipe Booking (readonly di edit — hidden for sales-mice)
             ════════════════════════════════════════════════════════ */}
-            <div className="flex flex-col gap-3">
+            {!isMiceOnly && <div className="flex flex-col gap-3">
               <p className="text-sm font-semibold text-foreground">Tipe Booking</p>
               <div className="grid grid-cols-2 gap-3">
                 <div
@@ -558,7 +570,7 @@ export function LeadDrawer({ open, onOpenChange, editLead, onSuccess }: LeadDraw
               <p className="text-xs text-muted-foreground text-center">
                 Tipe booking tidak dapat diubah setelah lead dibuat.
               </p>
-            </div>
+            </div>}
 
             {/* ════════════════════════════════════════════════════════
                 SECTION: Informasi Client
@@ -568,13 +580,13 @@ export function LeadDrawer({ open, onOpenChange, editLead, onSuccess }: LeadDraw
 
               <div className="flex flex-col gap-1.5">
                 <label className="text-sm font-medium text-foreground">
-                  {isWedding ? "Nama Pasangan" : "Nama Client"}
+                  {isMice ? "Perusahaan / Instansi" : "Nama Pasangan"}
                   <span className="text-destructive ml-0.5">*</span>
                 </label>
                 <Input
                   value={form.name}
                   onChange={(e) => setField("name", e.target.value)}
-                  placeholder={isWedding ? "e.g. Budi & Siti" : "e.g. PT Maju Bersama"}
+                  placeholder={isMice ? "e.g. PT Maju Bersama" : "e.g. Budi & Siti"}
                   className="rounded-xl"
                 />
               </div>
@@ -582,13 +594,25 @@ export function LeadDrawer({ open, onOpenChange, editLead, onSuccess }: LeadDraw
               {isMice && (
                 <div className="flex flex-col gap-1.5">
                   <label className="text-sm font-medium text-foreground">
-                    Perusahaan / Instansi
+                    Segment / Kategori
+                    <span className="ml-1.5 font-normal text-muted-foreground text-xs">(opsional)</span>
                   </label>
-                  <Input
-                    value={form.instansi}
-                    onChange={(e) => setField("instansi", e.target.value)}
-                    placeholder="e.g. PT Maju Bersama (opsional)"
-                    className="rounded-xl"
+                  <SearchableSelect
+                    options={miceSegments}
+                    value={form.segmentId}
+                    onChange={(id) => setField("segmentId", id)}
+                    onAdd={async (name) => {
+                      const created = await createSegment.mutateAsync({
+                        name: name.trim(),
+                        isActive: true,
+                        sortOrder: 0,
+                      });
+                      setField("segmentId", created.id);
+                    }}
+                    placeholder="Pilih atau tambah segment..."
+                    searchPlaceholder="Cari segment..."
+                    emptyText="Belum ada segment"
+                    addingLabel="Menambahkan..."
                   />
                 </div>
               )}
@@ -745,6 +769,7 @@ export function LeadDrawer({ open, onOpenChange, editLead, onSuccess }: LeadDraw
                       phoneValue={contactInput.phone}
                       onPhoneChange={(v) => setContactInput((p) => ({ ...p, phone: v }))}
                       onAdd={addContact}
+                      namePlaceholder={isMice ? "Nama PIC..." : "Label wajib: cpw, cpp, ortu..."}
                     />
                   </PopoverContent>
                 </Popover>
@@ -760,7 +785,7 @@ export function LeadDrawer({ open, onOpenChange, editLead, onSuccess }: LeadDraw
             {/* ════════════════════════════════════════════════════════
                 SECTION: Venue
             ════════════════════════════════════════════════════════ */}
-            <div className="flex flex-col gap-4">
+            {!isMice && <div className="flex flex-col gap-4">
               <SectionHeader icon={MapPoint} title="Venue" />
 
               <div className="flex flex-col gap-1.5">
@@ -808,12 +833,12 @@ export function LeadDrawer({ open, onOpenChange, editLead, onSuccess }: LeadDraw
                   Tambah Venue Secondary
                 </button>
               )}
-            </div>
+            </div>}
 
             {/* ════════════════════════════════════════════════════════
                 SECTION: Tanggal Event
             ════════════════════════════════════════════════════════ */}
-            <div className="flex flex-col gap-4">
+            {!isMice && <div className="flex flex-col gap-4">
               <SectionHeader icon={CalendarDate} title="Tanggal Event" />
 
               {/* Tanggal Utama + session-nya */}
@@ -914,12 +939,12 @@ export function LeadDrawer({ open, onOpenChange, editLead, onSuccess }: LeadDraw
                   Tambah Tanggal Alternatif
                 </button>
               )}
-            </div>
+            </div>}
 
             {/* ════════════════════════════════════════════════════════
                 SECTION: Kunci Tanggal & Venue
             ════════════════════════════════════════════════════════ */}
-            <div className="flex flex-col gap-4">
+            {!isMice && <div className="flex flex-col gap-4">
               <div className="flex flex-col gap-3">
                 <div className="flex items-start gap-3 rounded-xl border border-border bg-card p-3.5">
                   <Switch
@@ -1153,12 +1178,12 @@ export function LeadDrawer({ open, onOpenChange, editLead, onSuccess }: LeadDraw
                   </div>
                 </div>
               )}
-            </div>
+            </div>}
 
             {/* ════════════════════════════════════════════════════════
                 SECTION: Detail Event
             ════════════════════════════════════════════════════════ */}
-            <div className="flex flex-col gap-4">
+            {!isMice && <div className="flex flex-col gap-4">
               <SectionHeader icon={Buildings2} title="Detail Event" />
 
               <div className="flex flex-col gap-1.5">
@@ -1214,7 +1239,7 @@ export function LeadDrawer({ open, onOpenChange, editLead, onSuccess }: LeadDraw
                   className="rounded-xl"
                 />
               </div>
-            </div>
+            </div>}
 
             {/* ════════════════════════════════════════════════════════
                 SECTION: Sales & Pipeline

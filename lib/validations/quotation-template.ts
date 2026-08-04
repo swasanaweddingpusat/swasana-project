@@ -13,6 +13,8 @@ export const quotationTemplateItemSchema = z.object({
 export const upsertQuotationTemplateSchema = z.object({
   venueId: z.string().min(1, "Venue wajib dipilih"),
   paymentMethodId: z.string().optional().nullable(),
+  // Default booking fee auto-loaded into the quotation form for this venue.
+  bookingFee: z.coerce.number().int().min(0).optional().nullable(),
   items: z.array(quotationTemplateItemSchema).default([]),
 });
 

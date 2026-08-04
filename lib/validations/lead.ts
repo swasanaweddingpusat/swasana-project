@@ -40,18 +40,24 @@ const baseLeadSchema = z.object({
   addressCpp: z.string().trim().max(1000).optional(),
   addressCpw: z.string().trim().max(1000).optional(),
   address: z.string().trim().max(500).optional(),
-  eventDate: z.string().min(1, "Tanggal event wajib diisi"),
+  // Wajib hanya untuk WEDDINGS (dienforce via requireWeddingEventFields).
+  // MICE tidak mengirim tanggal event → biarkan optional di level dasar.
+  eventDate: z.string().optional().or(z.literal("")),
   eventDateAlt: z.string().optional().nullable(),
   time: z.string().trim().max(100).optional(),
   estimatedPax: z.coerce.number().int().min(1).optional().nullable(),
   budgetRange: z.string().trim().max(100).optional(),
   notes: z.string().trim().max(2000).optional(),
+  // Legacy free-text MICE segment — dipertahankan sementara untuk kompat; UI baru pakai segmentId.
   instansi: z.string().trim().max(200).optional(),
+  // FK ke LeadSegment (MICE segment ternormalisasi). Null utk wedding.
+  segmentId: z.string().optional().nullable(),
   category: z.enum(["WEDDINGS", "MICE"]).default("WEDDINGS"),
   venueId: z.string().optional(),
   venueSecondaryId: z.string().optional().nullable(),
   packageId: z.string().optional().nullable(),
-  eventTypeId: z.string().min(1, "Event type wajib dipilih"),
+  // Wajib hanya untuk WEDDINGS (dienforce via requireWeddingEventFields).
+  eventTypeId: z.string().optional().or(z.literal("")),
   sourceOfInformationId: z.string().min(1, "Sumber informasi wajib dipilih"),
   assignedToId: z.string().min(1, "Assign ke sales wajib dipilih"),
   statusId: z.string().min(1, "Status wajib dipilih"),
@@ -75,6 +81,29 @@ const requireWeddingSession = (
       code: z.ZodIssueCode.custom,
       path: ["weddingSession"],
       message: "Session wajib dipilih untuk wedding",
+    });
+  }
+};
+
+// WEDDINGS require an event date and event type; MICE leads (company/instansi funnel)
+// do not collect these in the UI, so they stay optional for that category.
+const requireWeddingEventFields = (
+  data: { category?: "WEDDINGS" | "MICE"; eventDate?: string; eventTypeId?: string },
+  ctx: z.RefinementCtx,
+) => {
+  if (data.category !== "WEDDINGS") return;
+  if (!data.eventDate) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["eventDate"],
+      message: "Tanggal event wajib diisi",
+    });
+  }
+  if (!data.eventTypeId) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["eventTypeId"],
+      message: "Event type wajib dipilih",
     });
   }
 };
@@ -148,6 +177,7 @@ const requireDistinctEventDates = (
 
 export const createLeadSchema = baseLeadSchema
   .superRefine(requireWeddingSession)
+  .superRefine(requireWeddingEventFields)
   .superRefine(requireAltSession)
   .superRefine(requireBookingFeeWhenLocked)
   .superRefine(requireDistinctEventDates);
@@ -156,6 +186,7 @@ export const updateLeadSchema = baseLeadSchema
   .partial()
   .extend({ id: z.string().min(1) })
   .superRefine(requireWeddingSession)
+  .superRefine(requireWeddingEventFields)
   .superRefine(requireAltSession)
   .superRefine(requireBookingFeeWhenLocked)
   .superRefine(requireDistinctEventDates);
@@ -166,6 +197,7 @@ export const leadFilterSchema = z.object({
   statusId: z.string().optional(),
   venueId: z.string().optional(),
   eventTypeId: z.string().optional(),
+  segmentId: z.string().optional(),
   assignedToId: z.string().optional(),
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(20),

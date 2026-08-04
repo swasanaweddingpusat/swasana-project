@@ -463,6 +463,7 @@ Permission `(module, action)` tuples — kebab-case format:
 | `complimentary` | `view`, `create`, `edit`, `delete` |
 | `leads` | `view`, `create`, `edit`, `delete` |
 | `settings-lead-status` | `view`, `create`, `edit`, `delete` |
+| `settings-lead-segment` | `view`, `create`, `edit`, `delete` |
 | `quotations` | `view`, `create`, `edit`, `delete` |
 | `procurement` | `view`, `create`, `edit`, `delete`, `approve` |
 

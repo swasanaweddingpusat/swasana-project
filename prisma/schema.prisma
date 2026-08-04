@@ -1753,6 +1753,19 @@ model LeadStatus {
   @@map("lead_statuses")
 }
 
+model LeadSegment {
+  id        String   @id @default(uuid())
+  name      String
+  isActive  Boolean  @default(true)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  leads     Lead[]
+
+  @@index([sortOrder])
+  @@map("lead_segments")
+}
+
 model Lead {
   id             String @id @default(uuid())
   name           String
@@ -1777,7 +1790,8 @@ model Lead {
   weddingSessionAlt  WeddingSession? // Session untuk tanggal alternatif (per-date session)
 
   bitrixId       String?
-  instansi       String?
+  instansi       String? // DEPRECATED: legacy free-text segment (MICE). Digantikan segmentId; masih dibaca sebagai fallback sampai kolom di-drop.
+  segmentId      String? // FK ke LeadSegment (MICE segment ternormalisasi)
 
   // Date locking (booking fee)
   isDateLocked          Boolean   @default(false)
@@ -1808,6 +1822,7 @@ model Lead {
   package               Package?             @relation(fields: [packageId], references: [id], onDelete: SetNull)
   eventType             EventType?           @relation(fields: [eventTypeId], references: [id], onDelete: SetNull)
   sourceOfInformation   SourceOfInformation? @relation(fields: [sourceOfInformationId], references: [id], onDelete: SetNull)
+  segment               LeadSegment?         @relation(fields: [segmentId], references: [id], onDelete: SetNull)
   status                LeadStatus           @relation(fields: [statusId], references: [id], onDelete: Restrict)
   createdBy             Profile              @relation(fields: [createdById], references: [id], onDelete: Restrict)
   assignedTo            Profile?             @relation("LeadAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
@@ -1821,6 +1836,7 @@ model Lead {
   @@index([eventDate])
   @@index([venueId])
   @@index([venueSecondaryId])
+  @@index([segmentId])
   @@index([isDateLocked])
   // Composite index buat availability check: cari locked leads per venue+date+session
   @@index([venueId, eventDate, weddingSession, isDateLocked])
@@ -1883,12 +1899,16 @@ model Quotation {
   weddingSession  WeddingSession?
   eventDate       DateTime?
   time            String?
+  place           String?   // Area/ruang venue (mis. Ballroom, Outdoor, Gazebo)
   details         String?
 
   // Pricing (server-computed)
   subtotal        Int              @default(0)
   discount        Int              @default(0)
   totalPrice      Int              @default(0)
+  // Booking fee required to confirm the reservation (shown in the Term & Payment
+  // boilerplate: "Booking Fee of Rp X is required to confirm the reservation").
+  bookingFee      Int?
 
   // Meta
   validUntil      DateTime?
@@ -1958,6 +1978,7 @@ model QuotationTemplate {
   id              String   @id @default(uuid())
   venueId         String   @unique // one template per venue
   paymentMethodId String?
+  bookingFee      Int?     // default booking fee auto-loaded into the quotation form
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 

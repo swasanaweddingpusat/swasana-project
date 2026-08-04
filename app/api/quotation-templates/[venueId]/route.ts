@@ -18,6 +18,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ venueId
       where: { venueId },
       select: {
         paymentMethodId: true,
+        bookingFee: true,
         items: {
           orderBy: { sortOrder: "asc" },
           select: { title: true, description: true, qty: true, price: true, total: true, manualTotal: true, sortOrder: true },
@@ -25,9 +26,9 @@ export async function GET(_req: Request, { params }: { params: Promise<{ venueId
       },
     });
 
-    if (!tpl) return Response.json({ items: [], paymentMethodId: null });
+    if (!tpl) return Response.json({ items: [], paymentMethodId: null, bookingFee: null });
 
-    return Response.json({ items: tpl.items, paymentMethodId: tpl.paymentMethodId });
+    return Response.json({ items: tpl.items, paymentMethodId: tpl.paymentMethodId, bookingFee: tpl.bookingFee });
   } catch {
     return Response.json({ error: "Gagal mengambil template" }, { status: 500 });
   }

@@ -63,3 +63,6 @@ docs/superpowers/
 /prisma/seeders/_*
 # Exception: _client.ts is a real shared dependency imported by every seeder — must be tracked
 !/prisma/seeders/_client.ts
+
+
+scripts/

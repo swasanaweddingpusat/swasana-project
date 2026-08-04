@@ -255,6 +255,7 @@ interface ContactEntryProps {
   onPhoneChange: (v: string) => void;
   onAdd: () => void;
   disabled?: boolean;
+  namePlaceholder?: string;
 }
 
 export function ContactEntry({
@@ -264,6 +265,7 @@ export function ContactEntry({
   onPhoneChange,
   onAdd,
   disabled,
+  namePlaceholder = "Label wajib: cpw, cpp, ortu...",
 }: ContactEntryProps) {
   const { nationalNumber } = parseStoredPhone(phoneValue);
   const labelMissing = !nameValue.trim();
@@ -277,7 +279,7 @@ export function ContactEntry({
           type="text"
           value={nameValue}
           onChange={(e) => onNameChange(e.target.value)}
-          placeholder="Label wajib: cpw, cpp, ortu..."
+          placeholder={namePlaceholder}
           className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-xs outline-none placeholder:text-muted-foreground focus:ring-2 focus:ring-ring"
         />
         {labelMissing && nameValue !== "" && (

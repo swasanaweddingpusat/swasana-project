@@ -9,6 +9,7 @@ const PUBLIC_EXACT = new Set<string>([
   "/auth/verify",
   "/client-agreement",
   "/wedding-indicator",
+  "/offline", // PWA offline shell — must never redirect to login (SW precaches it)
 ]);
 
 // Auth pages that are redundant once logged in — redirect to dashboard.

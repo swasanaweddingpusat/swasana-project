@@ -34,7 +34,10 @@ export async function upsertQuotationTemplate(data: unknown) {
       ops.push(
         db.quotationTemplate.update({
           where: { id: templateId },
-          data: { paymentMethodId: input.paymentMethodId ?? null },
+          data: {
+            paymentMethodId: input.paymentMethodId ?? null,
+            bookingFee: input.bookingFee ?? null,
+          },
         }),
         db.quotationTemplateItem.deleteMany({ where: { templateId } }),
       );
@@ -45,6 +48,7 @@ export async function upsertQuotationTemplate(data: unknown) {
             id: templateId,
             venueId: input.venueId,
             paymentMethodId: input.paymentMethodId ?? null,
+            bookingFee: input.bookingFee ?? null,
           },
         }),
       );

@@ -9,6 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import {
   CloseCircle, FileText, Copy, Refresh, Link, DownloadMinimalistic, TrashBinTrash,
   UserRounded, CalendarMark, Wallet, UserId, Buildings, ClockCircle, Bill, Tag,
+  Paperclip2, CardReceive,
 } from "@solar-icons/react";
 import { format } from "date-fns";
 import { toast } from "sonner";
@@ -59,6 +60,35 @@ const AGREEMENT_COLOR: Record<string, string> = {
   Viewed: "bg-muted text-foreground/70",
   Signed: "bg-primary/20 text-primary",
 };
+
+/* Status termin (derived §5) — label + warna token. */
+type TermStatus = "paid" | "partial" | "overdue" | "not_due_yet";
+const TERM_STATUS: Record<TermStatus, { label: string; className: string }> = {
+  paid: { label: "Lunas", className: "bg-primary/15 text-primary" },
+  partial: { label: "Sebagian", className: "bg-secondary text-foreground/70" },
+  overdue: { label: "Jatuh tempo", className: "bg-destructive/10 text-destructive" },
+  not_due_yet: { label: "Belum jatuh tempo", className: "bg-muted text-muted-foreground" },
+};
+
+/* Status verifikasi cash-in (Ledger.ackStatus). */
+type AckStatus = "pending" | "acknowledged" | "rejected";
+const ACK_STATUS: Record<AckStatus, { label: string; className: string }> = {
+  acknowledged: { label: "Terverifikasi", className: "bg-primary text-primary-foreground" },
+  pending: { label: "Menunggu", className: "bg-secondary text-muted-foreground" },
+  rejected: { label: "Ditolak", className: "bg-destructive/10 text-destructive" },
+};
+
+/* Bentuk cash-in yang di-resolve route (Ledger + evidenceUrl). */
+interface CashInView {
+  id: string;
+  amount: number;
+  occurredAt: string;
+  ackStatus: AckStatus;
+  invoiceNumber: string | null;
+  notes: string | null;
+  linkedTermNames: string[];
+  evidenceUrl: string | null;
+}
 
 /* ─── Mobile section card wrapper ─────────────────────────────────────────── */
 
@@ -672,67 +702,7 @@ export function BookingDetailModal({ open, onClose, bookingId }: Props) {
               )}
 
               {/* ═══ TAB: Pembayaran ═══ */}
-              {activeTab === "payment" && (
-                <div className="space-y-4 text-sm">
-                  <div className="flex items-center gap-2 mb-2">
-                    <p className={lbl}>Metode Pembayaran:</p>
-                    <p className={val}>
-                      {booking.paymentMethod?.bankName ?? "-"}
-                      {booking.paymentMethod?.bankAccountNumber ? ` (${booking.paymentMethod.bankAccountNumber})` : ""}
-                    </p>
-                  </div>
-
-                  {booking.termOfPayments.length === 0 ? (
-                    <p className="text-muted-foreground text-sm">Belum ada data pembayaran.</p>
-                  ) : (
-                    <>
-                      {/* Mobile: card per termin */}
-                      <div className="sm:hidden space-y-3">
-                        {booking.termOfPayments.map((t, i) => (
-                          <div key={t.id} className="rounded-2xl border bg-card p-4 space-y-2">
-                            <div className="flex items-center gap-2">
-                              <Bill weight="BoldDuotone" className="h-4 w-4 text-muted-foreground shrink-0" />
-                              <p className="text-sm font-semibold text-foreground">{t.name || `Termin ${i + 1}`}</p>
-                            </div>
-                            <div className="space-y-1.5 text-sm">
-                              <div>
-                                <p className={lbl}>Nominal</p>
-                                <p className={val}>{fmtPrice(t.amount)}</p>
-                              </div>
-                              <div>
-                                <p className={lbl}>Jatuh Tempo</p>
-                                <p className={val}>{fmtDate(t.dueDate, "long")}</p>
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-
-                      {/* Desktop: original table */}
-                      <div className="hidden sm:block overflow-x-auto">
-                        <table className="w-full text-sm">
-                          <thead>
-                            <tr className="border-b bg-muted/50">
-                              <th className="text-left px-4 py-3 font-medium text-muted-foreground">Termin</th>
-                              <th className="text-left px-4 py-3 font-medium text-muted-foreground">Nominal</th>
-                              <th className="text-left px-4 py-3 font-medium text-muted-foreground">Jatuh Tempo</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {booking.termOfPayments.map((t, i) => (
-                              <tr key={t.id} className="border-b hover:bg-muted/50">
-                                <td className="px-4 py-3 font-medium text-foreground">{t.name || `Termin ${i + 1}`}</td>
-                                <td className="px-4 py-3 text-foreground">{fmtPrice(t.amount)}</td>
-                                <td className="px-4 py-3 text-foreground">{fmtDate(t.dueDate, "long")}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </>
-                  )}
-                </div>
-              )}
+              {activeTab === "payment" && <PaymentSection booking={booking} />}
 
               {/* ═══ TAB: Dokumen ═══ */}
               {activeTab === "documents" && (
@@ -919,6 +889,230 @@ export function BookingDetailModal({ open, onClose, bookingId }: Props) {
           void refetch();
         }}
       />
+    </div>
+  );
+}
+
+/* ─── Payment Sub-component ────────────────────────────────────────────────── */
+
+function PaymentSection({ booking }: { booking: BookingDetail }) {
+  // termStatuses & cashIns di-resolve server-side di GET /api/bookings/[id] tapi
+  // BUKAN bagian dari tipe BookingDetail — dibaca lewat cast inline (pola sama
+  // dengan fileUrl / snapComplimentaries di file ini).
+  const termStatuses =
+    (booking as typeof booking & { termStatuses?: Record<string, TermStatus> }).termStatuses ?? {};
+  const cashIns =
+    (booking as typeof booking & { cashIns?: CashInView[] }).cashIns ?? [];
+
+  return (
+    <div className="space-y-6 text-sm">
+      <div className="flex items-center gap-2">
+        <p className={lbl}>Metode Pembayaran:</p>
+        <p className={val}>
+          {booking.paymentMethod?.bankName ?? "-"}
+          {booking.paymentMethod?.bankAccountNumber ? ` (${booking.paymentMethod.bankAccountNumber})` : ""}
+        </p>
+      </div>
+
+      {/* ── Jadwal termin + status ── */}
+      {booking.termOfPayments.length === 0 ? (
+        <p className="text-muted-foreground text-sm">Belum ada jadwal pembayaran.</p>
+      ) : (
+        <>
+          {/* Mobile: card per termin */}
+          <div className="sm:hidden space-y-3">
+            {booking.termOfPayments.map((t, i) => {
+              const st = TERM_STATUS[termStatuses[t.id] ?? "not_due_yet"];
+              return (
+                <div key={t.id} className="rounded-2xl border bg-card p-4 space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <Bill weight="BoldDuotone" className="h-4 w-4 text-muted-foreground shrink-0" />
+                      <p className="text-sm font-semibold text-foreground truncate">{t.name || `Termin ${i + 1}`}</p>
+                    </div>
+                    <Badge className={`shrink-0 ${st.className}`}>{st.label}</Badge>
+                  </div>
+                  <div className="space-y-1.5 text-sm">
+                    <div>
+                      <p className={lbl}>Nominal</p>
+                      <p className={val}>{fmtPrice(t.amount)}</p>
+                    </div>
+                    <div>
+                      <p className={lbl}>Jatuh Tempo</p>
+                      <p className={val}>{fmtDate(t.dueDate, "long")}</p>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Desktop: table */}
+          <div className="hidden sm:block overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b bg-muted/50">
+                  <th className="text-left px-4 py-3 font-medium text-muted-foreground">Termin</th>
+                  <th className="text-left px-4 py-3 font-medium text-muted-foreground">Nominal</th>
+                  <th className="text-left px-4 py-3 font-medium text-muted-foreground">Jatuh Tempo</th>
+                  <th className="text-left px-4 py-3 font-medium text-muted-foreground">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {booking.termOfPayments.map((t, i) => {
+                  const st = TERM_STATUS[termStatuses[t.id] ?? "not_due_yet"];
+                  return (
+                    <tr key={t.id} className="border-b hover:bg-muted/50">
+                      <td className="px-4 py-3 font-medium text-foreground">{t.name || `Termin ${i + 1}`}</td>
+                      <td className="px-4 py-3 text-foreground">{fmtPrice(t.amount)}</td>
+                      <td className="px-4 py-3 text-foreground">{fmtDate(t.dueDate, "long")}</td>
+                      <td className="px-4 py-3">
+                        <Badge className={st.className}>{st.label}</Badge>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+
+      {/* ── Riwayat pembayaran (cash-in Ledger) ── */}
+      <div className="space-y-3">
+        <div className="flex items-center gap-2">
+          <CardReceive weight="BoldDuotone" className="h-4 w-4 text-muted-foreground shrink-0" />
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Riwayat Pembayaran</p>
+        </div>
+
+        {cashIns.length === 0 ? (
+          <div className="rounded-2xl border border-dashed bg-muted/20 p-6 text-center">
+            <p className="text-sm text-muted-foreground">Belum ada pembayaran tercatat.</p>
+          </div>
+        ) : (
+          <>
+            {/* Mobile: card per pembayaran (biar tetap kebaca di layar sempit) */}
+            <div className="sm:hidden space-y-3">
+              {cashIns.map((ci) => {
+                const ack = ACK_STATUS[ci.ackStatus] ?? ACK_STATUS.pending;
+                return (
+                  <div key={ci.id} className="rounded-2xl border bg-card p-4 space-y-2 shadow-sm">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="text-base font-heading font-semibold tabular-nums text-foreground">{fmtPrice(ci.amount)}</p>
+                        <p className="text-xs text-muted-foreground">{fmtDate(ci.occurredAt, "long")}</p>
+                      </div>
+                      <Badge className={`shrink-0 ${ack.className}`}>{ack.label}</Badge>
+                    </div>
+
+                    {ci.linkedTermNames.length > 0 && (
+                      <div className="flex flex-wrap gap-1">
+                        {ci.linkedTermNames.map((name, idx) => (
+                          <span
+                            key={idx}
+                            className="inline-flex items-center rounded-full bg-secondary/60 px-2 py-0.5 text-[11px] text-foreground/70"
+                          >
+                            {name}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+
+                    {ci.invoiceNumber && (
+                      <p className="text-xs text-muted-foreground">
+                        No. Kwitansi: <span className="font-mono text-foreground">{ci.invoiceNumber}</span>
+                      </p>
+                    )}
+                    {ci.notes && <p className="text-xs text-muted-foreground">{ci.notes}</p>}
+
+                    <div className="border-t pt-2">
+                      {ci.evidenceUrl ? (
+                        <a
+                          href={ci.evidenceUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 text-xs text-primary underline-offset-2 hover:underline"
+                        >
+                          <Paperclip2 weight="BoldDuotone" className="h-3.5 w-3.5" />
+                          Lihat bukti
+                        </a>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">Tanpa bukti</span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Desktop: table — sibling dari tabel termin di atasnya (header & ritme sama) */}
+            <div className="hidden sm:block overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b bg-muted/50">
+                    <th className="text-left px-4 py-3 font-medium text-muted-foreground">Tanggal</th>
+                    <th className="text-left px-4 py-3 font-medium text-muted-foreground">Nominal</th>
+                    <th className="text-left px-4 py-3 font-medium text-muted-foreground">Termin</th>
+                    <th className="text-left px-4 py-3 font-medium text-muted-foreground">Status</th>
+                    <th className="text-left px-4 py-3 font-medium text-muted-foreground">Bukti</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {cashIns.map((ci) => {
+                    const ack = ACK_STATUS[ci.ackStatus] ?? ACK_STATUS.pending;
+                    return (
+                      <tr key={ci.id} className="border-b align-top hover:bg-muted/50">
+                        <td className="px-4 py-3">
+                          <p className="text-foreground">{fmtDate(ci.occurredAt, "long")}</p>
+                          {ci.invoiceNumber && (
+                            <p className="mt-0.5 font-mono text-[11px] text-muted-foreground">{ci.invoiceNumber}</p>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 font-medium tabular-nums text-foreground">{fmtPrice(ci.amount)}</td>
+                        <td className="px-4 py-3">
+                          {ci.linkedTermNames.length > 0 ? (
+                            <div className="flex flex-wrap gap-1">
+                              {ci.linkedTermNames.map((name, idx) => (
+                                <span
+                                  key={idx}
+                                  className="inline-flex items-center rounded-full bg-secondary/60 px-2 py-0.5 text-[11px] text-foreground/70"
+                                >
+                                  {name}
+                                </span>
+                              ))}
+                            </div>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
+                          {ci.notes && <p className="mt-1 text-xs text-muted-foreground">{ci.notes}</p>}
+                        </td>
+                        <td className="px-4 py-3">
+                          <Badge className={ack.className}>{ack.label}</Badge>
+                        </td>
+                        <td className="px-4 py-3">
+                          {ci.evidenceUrl ? (
+                            <a
+                              href={ci.evidenceUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 text-primary underline-offset-2 hover:underline"
+                            >
+                              <Paperclip2 weight="BoldDuotone" className="h-3.5 w-3.5" />
+                              Lihat bukti
+                            </a>
+                          ) : (
+                            <span className="text-muted-foreground">Tanpa bukti</span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+      </div>
     </div>
   );
 }

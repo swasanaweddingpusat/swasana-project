@@ -81,6 +81,7 @@ export const SETTINGS_MODULES = [
   "settings-role-permission",
   "settings-source-of-information",
   "settings-lead-status",
+  "settings-lead-segment",
   "settings-maintenance-category",
   "settings-maintenance-priority",
   "settings-maintenance-status",
@@ -119,16 +120,16 @@ export const navItems: NavItem[] = [
     permission: { module: "quotations", action: "view" },
   },
   {
-    name: "Booking Weddings",
-    href: "/dashboard/booking-weddings",
-    icon: Ticket,
-    permission: { module: "booking", action: "view" },
-  },
-  {
     name: "Booking MICE",
     href: "/dashboard/booking-mice",
     icon: TicketSale,
     permission: { module: "booking-mice", action: "view" },
+  },
+  {
+    name: "Booking Weddings",
+    href: "/dashboard/booking-weddings",
+    icon: Ticket,
+    permission: { module: "booking", action: "view" },
   },
   {
     name: "Voucher / Program",

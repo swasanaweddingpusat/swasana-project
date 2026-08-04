@@ -9,9 +9,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   DropdownMenu,
@@ -26,21 +24,166 @@ import {
   ArrowRight,
   UsersGroupRounded,
   CalendarMark,
-  UserCircle,
   TrashBinTrash,
   CheckCircle,
   CloseCircle,
   MenuDots,
   Refresh,
+  Heart,
+  Suitcase,
+  Phone,
+  Buildings2,
 } from "@solar-icons/react";
 import { PermissionGate } from "@/components/shared/permission-gate";
 import { cn } from "@/lib/utils";
 import type { LeadItem } from "@/lib/queries/leads";
 
-function formatEventDate(date: Date | string | null): string {
+// ─── Helpers ────────────────────────────────────────────────────────────────
+
+function formatShortDate(date: Date | string | null): string {
   if (!date) return "—";
   return format(new Date(date), "d MMM yyyy");
 }
+
+/** First contact from the stored contactNumbers JSON, or null when empty. */
+function firstContactNumber(
+  contactNumbers: LeadItem["contactNumbers"],
+): { label: string; number: string } | null {
+  if (!Array.isArray(contactNumbers) || contactNumbers.length === 0) return null;
+  const c = contactNumbers[0] as { label?: string; number?: string };
+  if (!c?.number) return null;
+  return { label: c.label ?? "", number: c.number };
+}
+
+/** Two-letter initials for the sales PIC avatar. Filters non-alpha tokens
+ *  (e.g. the "&" in "Budi & Siti") so couples resolve to real initials. */
+function getInitials(name: string): string {
+  const words = name.trim().split(/\s+/).filter((w) => /[a-zA-Z]/.test(w));
+  if (words.length === 0) return "?";
+  const first = words[0][0];
+  const second = words.length > 1 ? words[words.length - 1][0] : "";
+  return (first + second).toUpperCase();
+}
+
+/** Sales PIC display name — prefer assignee nickname, fall back to creator. */
+function salesLabel(lead: LeadItem): string {
+  const src = lead.assignedTo ?? lead.createdBy;
+  return src.nickName ?? src.fullName ?? "—";
+}
+
+// ─── Shared atoms ───────────────────────────────────────────────────────────
+
+/** Pipeline status pill. Color is a per-status DB value (LeadStatus.color),
+ *  rendered as a soft tint + dot — the only data-driven color on the surface. */
+function StatusPill({
+  status,
+  className,
+}: {
+  status: LeadItem["status"];
+  className?: string;
+}) {
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-medium",
+        className,
+      )}
+      style={{ backgroundColor: `${status.color}1A`, color: status.color }}
+    >
+      <span
+        aria-hidden="true"
+        className="inline-block h-1.5 w-1.5 rounded-full shrink-0"
+        style={{ backgroundColor: status.color }}
+      />
+      {status.name}
+    </span>
+  );
+}
+
+/** Category chip — Wedding vs MICE, icon-led to match the create drawer's
+ *  visual language. Token-only colors. */
+function CategoryChip({ category }: { category: string }) {
+  const isMice = category === "MICE";
+  const Icon = isMice ? Suitcase : Heart;
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full bg-secondary px-2 py-0.5 text-[11px] font-medium text-secondary-foreground">
+      <Icon weight="BoldDuotone" aria-hidden="true" className="h-3 w-3" />
+      {isMice ? "MICE" : "Wedding"}
+    </span>
+  );
+}
+
+/** Sales PIC avatar + name. */
+function SalesChip({ lead, className }: { lead: LeadItem; className?: string }) {
+  const name = salesLabel(lead);
+  return (
+    <span className={cn("flex items-center gap-2 min-w-0", className)}>
+      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-accent text-[11px] font-semibold text-foreground">
+        {getInitials(name)}
+      </span>
+      <span className="truncate text-xs text-muted-foreground">{name}</span>
+    </span>
+  );
+}
+
+/** Action menu shared by card + table rows. */
+function LeadActionsMenu({
+  lead,
+  onMarkDeal,
+  onMarkLost,
+  onReset,
+  onDelete,
+  triggerLabel,
+}: {
+  lead: LeadItem;
+  onMarkDeal: (lead: LeadItem) => void;
+  onMarkLost: (lead: LeadItem) => void;
+  onReset: (lead: LeadItem) => void;
+  onDelete: (lead: LeadItem) => void;
+  triggerLabel: string;
+}) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="ghost" size="icon" className="h-9 w-9 shrink-0 rounded-full" aria-label={triggerLabel}>
+          <MenuDots weight="BoldDuotone" aria-hidden="true" className="h-4 w-4" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        {!lead.status.isFinal && (
+          <DropdownMenuItem onClick={() => onMarkDeal(lead)}>
+            <CheckCircle weight="BoldDuotone" aria-hidden="true" className="h-4 w-4 mr-2 text-primary" />
+            Tandai sebagai Deal
+          </DropdownMenuItem>
+        )}
+        {!lead.status.isFinal && (
+          <DropdownMenuItem onClick={() => onMarkLost(lead)}>
+            <CloseCircle weight="BoldDuotone" aria-hidden="true" className="h-4 w-4 mr-2 text-destructive" />
+            Tandai sebagai Lost
+          </DropdownMenuItem>
+        )}
+        {lead.status.isFinal && (
+          <DropdownMenuItem onClick={() => onReset(lead)}>
+            <Refresh weight="BoldDuotone" aria-hidden="true" className="h-4 w-4 mr-2 text-muted-foreground" />
+            Reset ke Cold
+          </DropdownMenuItem>
+        )}
+        <DropdownMenuSeparator />
+        <PermissionGate module="leads" action="delete">
+          <DropdownMenuItem
+            onClick={() => onDelete(lead)}
+            className="text-destructive focus:text-destructive"
+          >
+            <TrashBinTrash weight="BoldDuotone" aria-hidden="true" className="h-4 w-4 mr-2" />
+            Hapus
+          </DropdownMenuItem>
+        </PermissionGate>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+// ─── Props ──────────────────────────────────────────────────────────────────
 
 interface LeadsListViewProps {
   leads: LeadItem[];
@@ -56,6 +199,136 @@ interface LeadsListViewProps {
   onReset: (lead: LeadItem) => void;
   onViewDetail: (lead: LeadItem) => void;
   isLoading?: boolean;
+}
+
+// ─── Lead Card (mobile + tablet) ──────────────────────────────────────────────
+
+function LeadCard({
+  lead,
+  onEdit,
+  onDelete,
+  onMarkDeal,
+  onMarkLost,
+  onReset,
+  onViewDetail,
+}: {
+  lead: LeadItem;
+  onEdit: (lead: LeadItem) => void;
+  onDelete: (lead: LeadItem) => void;
+  onMarkDeal: (lead: LeadItem) => void;
+  onMarkLost: (lead: LeadItem) => void;
+  onReset: (lead: LeadItem) => void;
+  onViewDetail: (lead: LeadItem) => void;
+}) {
+  const contact = firstContactNumber(lead.contactNumbers);
+  const isMice = lead.category === "MICE";
+
+  function handleKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      onViewDetail(lead);
+    }
+  }
+
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      aria-label={`Lihat detail lead ${lead.name}`}
+      onClick={() => onViewDetail(lead)}
+      onKeyDown={handleKeyDown}
+      className={cn(
+        "group relative flex flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-sm cursor-pointer",
+        "transition-shadow hover:shadow-md motion-reduce:transition-none",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+      )}
+    >
+      {/* Status spine — pipeline color at a glance */}
+      <span
+        aria-hidden="true"
+        className="absolute inset-y-0 left-0 w-1.5"
+        style={{ backgroundColor: lead.status.color }}
+      />
+
+      <div className="flex flex-col gap-3 p-4 pl-5">
+        {/* Header: name + contact ·· status */}
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h3 className="font-heading text-[15px] font-semibold leading-tight text-foreground truncate">
+              {lead.name}
+            </h3>
+            {contact && (
+              <p className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
+                <Phone weight="BoldDuotone" aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
+                <span className="tabular-nums truncate">+{contact.number}</span>
+              </p>
+            )}
+          </div>
+          <StatusPill status={lead.status} className="shrink-0" />
+        </div>
+
+        {/* Chips: category (+ segment for MICE, instansi fallback for legacy) */}
+        <div className="flex flex-wrap items-center gap-1.5">
+          <CategoryChip category={lead.category} />
+          {isMice && (lead.segment?.name ?? lead.instansi) && (
+            <span
+              className="inline-flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-[11px] font-medium text-foreground/80 max-w-full"
+              title={lead.segment?.name ?? lead.instansi ?? undefined}
+            >
+              <Buildings2 weight="BoldDuotone" aria-hidden="true" className="h-3 w-3 shrink-0" />
+              <span className="truncate">{lead.segment?.name ?? lead.instansi}</span>
+            </span>
+          )}
+          {lead.sourceOfInformation?.name && (
+            <span className="text-[11px] text-muted-foreground truncate">
+              · {lead.sourceOfInformation.name}
+            </span>
+          )}
+        </div>
+
+        {/* Meta: aging + pax */}
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+          <span className="flex items-center gap-1.5">
+            <CalendarMark weight="BoldDuotone" aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
+            Masuk {formatShortDate(lead.createdAt)}
+          </span>
+          {lead.estimatedPax != null && (
+            <span className="flex items-center gap-1.5">
+              <UsersGroupRounded weight="BoldDuotone" aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
+              {lead.estimatedPax.toLocaleString("id-ID")} pax
+            </span>
+          )}
+        </div>
+
+        {/* Footer: sales PIC ·· actions */}
+        <div
+          className="flex items-center justify-between gap-2 pt-3 border-t border-border"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <SalesChip lead={lead} className="flex-1" />
+          <div className="flex items-center gap-1.5 shrink-0">
+            <Button
+              variant="outline"
+              className="h-9 rounded-full px-3 text-xs"
+              onClick={() => onEdit(lead)}
+              aria-label={`Edit lead ${lead.name}`}
+            >
+              <Pen weight="BoldDuotone" aria-hidden="true" className="h-3.5 w-3.5 mr-1" />
+              Edit
+            </Button>
+            <LeadActionsMenu
+              lead={lead}
+              onMarkDeal={onMarkDeal}
+              onMarkLost={onMarkLost}
+              onReset={onReset}
+              onDelete={onDelete}
+              triggerLabel={`Aksi lainnya untuk lead ${lead.name}`}
+            />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 // ─── Pagination ───────────────────────────────────────────────────────────────
@@ -76,6 +349,7 @@ function PaginationBar({
     >
       <Button
         variant="outline"
+        className="rounded-full"
         onClick={() => onPageChange(Math.max(currentPage - 1, 1))}
         disabled={currentPage === 1}
         aria-label="Halaman sebelumnya"
@@ -99,11 +373,11 @@ function PaginationBar({
               aria-label={`Halaman ${page}`}
               aria-current={isCurrent ? "page" : undefined}
               className={cn(
-                "px-3 py-1 rounded-md text-sm font-medium shrink-0",
+                "px-3 py-1 rounded-full text-sm font-medium shrink-0",
                 "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
                 isCurrent
                   ? "bg-primary text-primary-foreground"
-                  : "text-foreground hover:bg-muted"
+                  : "text-foreground hover:bg-muted",
               )}
             >
               {page}
@@ -114,6 +388,7 @@ function PaginationBar({
 
       <Button
         variant="outline"
+        className="rounded-full"
         onClick={() => onPageChange(Math.min(currentPage + 1, totalPages))}
         disabled={currentPage === totalPages}
         aria-label="Halaman berikutnya"
@@ -121,172 +396,6 @@ function PaginationBar({
         Next <ArrowRight weight="BoldDuotone" aria-hidden="true" className="w-4 h-4" />
       </Button>
     </nav>
-  );
-}
-
-// ─── Mobile Card List ─────────────────────────────────────────────────────────
-
-function MobileLeadCard({
-  lead,
-  rowNumber,
-  onEdit,
-  onDelete,
-  onMarkDeal,
-  onMarkLost,
-  onReset,
-  onViewDetail,
-}: {
-  lead: LeadItem;
-  rowNumber: number;
-  onEdit: (lead: LeadItem) => void;
-  onDelete: (lead: LeadItem) => void;
-  onMarkDeal: (lead: LeadItem) => void;
-  onMarkLost: (lead: LeadItem) => void;
-  onReset: (lead: LeadItem) => void;
-  onViewDetail: (lead: LeadItem) => void;
-}) {
-  const firstContact = Array.isArray(lead.contactNumbers)
-    ? (lead.contactNumbers[0] as { number?: string } | undefined)?.number ?? ""
-    : "";
-
-  const salesName = lead.assignedTo
-    ? (lead.assignedTo.nickName ?? lead.assignedTo.fullName ?? "—")
-    : (lead.createdBy.nickName ?? lead.createdBy.fullName ?? "—");
-
-  const showFinalActions = !lead.status.isFinal;
-
-  return (
-    <Card
-      className="rounded-lg border bg-card cursor-pointer hover:shadow-md transition-shadow"
-      onClick={() => onViewDetail(lead)}
-    >
-      <CardContent className="px-3 py-2 space-y-1.5">
-        {/* Row 1: Nama + Status */}
-        <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0">
-            <p className="text-sm font-semibold text-foreground truncate">
-              {rowNumber}. {lead.name}
-            </p>
-            {firstContact && (
-              <p className="text-xs text-muted-foreground">+{firstContact}</p>
-            )}
-          </div>
-          <span className="flex items-center gap-1.5 shrink-0">
-            <span
-              aria-hidden="true"
-              className="inline-block w-2 h-2 rounded-full shrink-0"
-              style={{ backgroundColor: lead.status.color }}
-            />
-            <span className="text-xs font-medium text-foreground/80 whitespace-nowrap">
-              {lead.status.name}
-            </span>
-          </span>
-        </div>
-
-        {/* Row 2: Venue + Event Type badge */}
-        <div className="flex items-start gap-1.5 flex-wrap text-xs text-muted-foreground">
-          <span className="flex flex-col gap-0.5 min-w-0">
-            <span className="truncate">{lead.venue?.name ?? "Venue —"}</span>
-            {lead.venueSecondary && (
-              <span className="text-muted-foreground/70 truncate">{lead.venueSecondary.name}</span>
-            )}
-          </span>
-          {lead.eventType && (
-            <>
-              <span aria-hidden="true" className="mt-0.5">·</span>
-              <span className="text-foreground/70 mt-0.5">{lead.eventType.name}</span>
-              <Badge variant="outline" className="text-[10px] px-1 py-0 mt-0.5">
-                {lead.eventType.category === "MICE" ? "MICE" : "Wedding"}
-              </Badge>
-            </>
-          )}
-        </div>
-
-        {/* Row 3: Tanggal + Pax */}
-        <div className="flex items-center gap-3 text-xs text-muted-foreground">
-          <span className="flex items-start gap-1">
-            <CalendarMark weight="BoldDuotone" aria-hidden="true" className="h-3.5 w-3.5 shrink-0 mt-px" />
-            <span className="flex flex-col gap-0.5">
-              <span>
-                {formatEventDate(lead.eventDate)}
-                {lead.time && <span className="text-muted-foreground"> · {lead.time}</span>}
-              </span>
-              {lead.eventDateAlt && (
-                <span className="text-muted-foreground/70">alt: {formatEventDate(lead.eventDateAlt)}</span>
-              )}
-            </span>
-          </span>
-          <span className="flex items-center gap-1">
-            <UsersGroupRounded weight="BoldDuotone" aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
-            {lead.estimatedPax ? lead.estimatedPax.toLocaleString("id-ID") : "—"} pax
-          </span>
-        </div>
-
-        {/* Row 4: Sales */}
-        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-          <UserCircle weight="BoldDuotone" aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
-          <span>{salesName}</span>
-        </div>
-
-        {/* Footer: Actions */}
-        <div
-          className="flex items-center gap-2 pt-1 border-t border-border"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <Button
-            variant="outline"
-            className="h-9 flex-1 text-xs"
-            onClick={() => onEdit(lead)}
-            aria-label={`Edit lead ${lead.name}`}
-          >
-            <Pen weight="BoldDuotone" aria-hidden="true" className="h-3.5 w-3.5 mr-1" />
-            Edit
-          </Button>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="outline"
-                size="icon"
-                className="h-9 shrink-0"
-                aria-label={`Aksi lainnya untuk lead ${lead.name}`}
-              >
-                <MenuDots weight="BoldDuotone" aria-hidden="true" className="h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              {showFinalActions && (
-                <DropdownMenuItem onClick={() => onMarkDeal(lead)}>
-                  <CheckCircle weight="BoldDuotone" aria-hidden="true" className="h-4 w-4 mr-2 text-primary" />
-                  Tandai sebagai Deal
-                </DropdownMenuItem>
-              )}
-              {showFinalActions && (
-                <DropdownMenuItem onClick={() => onMarkLost(lead)}>
-                  <CloseCircle weight="BoldDuotone" aria-hidden="true" className="h-4 w-4 mr-2 text-destructive" />
-                  Tandai sebagai Lost
-                </DropdownMenuItem>
-              )}
-              {lead.status.isFinal && (
-                <DropdownMenuItem onClick={() => onReset(lead)}>
-                  <Refresh weight="BoldDuotone" aria-hidden="true" className="h-4 w-4 mr-2 text-muted-foreground" />
-                  Reset ke Cold
-                </DropdownMenuItem>
-              )}
-              <DropdownMenuSeparator />
-              <PermissionGate module="leads" action="delete">
-                <DropdownMenuItem
-                  onClick={() => onDelete(lead)}
-                  className="text-destructive focus:text-destructive"
-                >
-                  <TrashBinTrash weight="BoldDuotone" aria-hidden="true" className="h-4 w-4 mr-2" />
-                  Hapus
-                </DropdownMenuItem>
-              </PermissionGate>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-      </CardContent>
-    </Card>
   );
 }
 
@@ -311,17 +420,17 @@ export function LeadsListView({
   if (isLoading) {
     return (
       <>
-        {/* Mobile skeleton */}
-        <div className="block sm:hidden px-3 py-2 space-y-2">
-          {Array.from({ length: 5 }).map((_, i) => (
-            <Skeleton key={i} className="h-28 w-full rounded-lg" />
+        {/* Card grid skeleton (mobile + tablet) */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 p-3 sm:p-4 lg:hidden">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <Skeleton key={i} className="h-40 w-full rounded-2xl" />
           ))}
         </div>
 
-        {/* Desktop/tablet skeleton */}
-        <div className="hidden sm:block p-6 space-y-3">
-          {Array.from({ length: 5 }).map((_, i) => (
-            <Skeleton key={i} className="h-10 w-full" />
+        {/* Table skeleton (desktop) */}
+        <div className="hidden lg:block p-6 space-y-3">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <Skeleton key={i} className="h-12 w-full rounded-xl" />
           ))}
         </div>
       </>
@@ -342,52 +451,57 @@ export function LeadsListView({
 
   return (
     <>
-      {/* ── Mobile: Card List (<sm) ── */}
-      <div className="block sm:hidden px-3 py-2 space-y-2">
-        {leads.map((lead, index) => {
-          const rowNumber = (currentPage - 1) * pageSize + index + 1;
-          return (
-            <MobileLeadCard
-              key={lead.id}
-              lead={lead}
-              rowNumber={rowNumber}
-              onEdit={onEdit}
-              onDelete={onDelete}
-              onMarkDeal={onMarkDeal}
-              onMarkLost={onMarkLost}
-              onReset={onReset}
-              onViewDetail={onViewDetail}
-            />
-          );
-        })}
+      {/* ── Mobile + Tablet: Card grid (<lg) ── */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 p-3 sm:p-4 lg:hidden bg-muted/20">
+        {leads.map((lead) => (
+          <LeadCard
+            key={lead.id}
+            lead={lead}
+            onEdit={onEdit}
+            onDelete={onDelete}
+            onMarkDeal={onMarkDeal}
+            onMarkLost={onMarkLost}
+            onReset={onReset}
+            onViewDetail={onViewDetail}
+          />
+        ))}
       </div>
 
-      {/* ── Desktop/Tablet: Table (sm+) ── */}
-      <div className="hidden sm:block w-full min-w-0">
+      {/* ── Desktop: Table (lg+) ── */}
+      <div className="hidden lg:block w-full min-w-0">
         <Table className="text-sm w-full">
           <TableHeader>
-            <TableRow className="bg-muted/50">
-              {/* No — hidden on mobile (already handled by block/hidden wrapper) */}
-              <TableHead className="px-4 whitespace-nowrap w-12 text-right hidden sm:table-cell">No</TableHead>
-              {/* Client — always visible; sub-row embeds pax + sumber */}
-              <TableHead className="px-4 whitespace-nowrap">Client</TableHead>
-              {/* Tanggal Event — md+ (freed up after Pax/Sumber removed) */}
-              <TableHead className="px-4 whitespace-nowrap hidden md:table-cell">Tanggal Event</TableHead>
-              {/* Venue — lg+ */}
-              <TableHead className="px-4 whitespace-nowrap hidden lg:table-cell">Venue</TableHead>
-              {/* Event Type — xl+ (push out to give lg breathing room) */}
-              <TableHead className="px-4 whitespace-nowrap hidden xl:table-cell">Event Type</TableHead>
-              {/* Status — always visible */}
-              <TableHead className="px-4 whitespace-nowrap">Status</TableHead>
-              {/* Sales — md+ */}
-              <TableHead className="px-4 whitespace-nowrap w-24 hidden md:table-cell">Sales</TableHead>
-              {/* Action — always visible */}
-              <TableHead className="px-4 whitespace-nowrap w-20 text-right">Aksi</TableHead>
+            <TableRow className="bg-muted/50 hover:bg-muted/50">
+              <TableHead className="px-4 w-12 text-right text-[11px] uppercase tracking-wider text-muted-foreground">
+                No
+              </TableHead>
+              <TableHead className="px-4 text-[11px] uppercase tracking-wider text-muted-foreground">
+                Client
+              </TableHead>
+              <TableHead className="px-4 text-[11px] uppercase tracking-wider text-muted-foreground">
+                Kategori
+              </TableHead>
+              <TableHead className="px-4 text-[11px] uppercase tracking-wider text-muted-foreground">
+                Kontak
+              </TableHead>
+              <TableHead className="px-4 whitespace-nowrap text-[11px] uppercase tracking-wider text-muted-foreground hidden xl:table-cell">
+                Masuk
+              </TableHead>
+              <TableHead className="px-4 text-[11px] uppercase tracking-wider text-muted-foreground">
+                Status
+              </TableHead>
+              <TableHead className="px-4 w-40 text-[11px] uppercase tracking-wider text-muted-foreground">
+                Sales
+              </TableHead>
+              <TableHead className="px-4 w-20 text-right text-[11px] uppercase tracking-wider text-muted-foreground">
+                Aksi
+              </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {leads.map((lead, index) => {
               const rowNumber = (currentPage - 1) * pageSize + index + 1;
+              const contact = firstContactNumber(lead.contactNumbers);
               return (
                 <TableRow
                   key={lead.id}
@@ -395,58 +509,49 @@ export function LeadsListView({
                   onClick={() => onViewDetail(lead)}
                 >
                   {/* No */}
-                  <TableCell className="px-4 text-right tabular-nums text-muted-foreground hidden sm:table-cell">
+                  <TableCell className="px-4 py-3 text-right tabular-nums text-muted-foreground align-top">
                     {rowNumber}
                   </TableCell>
 
-                  {/* Client — primary: name bold; sub: pax · sumber */}
-                  <TableCell className="px-4 max-w-52" title={lead.name}>
-                    <div className="font-medium truncate">{lead.name}</div>
+                  {/* Client — name (editorial) + sub: pax · sumber */}
+                  <TableCell className="px-4 py-3 max-w-52 align-top" title={lead.name}>
+                    <div className="font-heading font-semibold text-foreground truncate">
+                      {lead.name}
+                    </div>
                     {(() => {
-                      const paxPart = lead.estimatedPax
-                        ? `${lead.estimatedPax.toLocaleString("id-ID")} pax`
-                        : null;
-                      const sumberPart = lead.sourceOfInformation?.name ?? null;
                       const subParts: string[] = [];
-                      if (paxPart) subParts.push(paxPart);
-                      if (sumberPart) subParts.push(sumberPart);
-                      if (subParts.length > 0) {
-                        return (
-                          <div className="text-xs text-muted-foreground truncate mt-0.5">
-                            {subParts.join(" · ")}
-                          </div>
-                        );
-                      }
-                      return null;
+                      if (lead.estimatedPax) subParts.push(`${lead.estimatedPax.toLocaleString("id-ID")} pax`);
+                      if (lead.sourceOfInformation?.name) subParts.push(lead.sourceOfInformation.name);
+                      if (subParts.length === 0) return null;
+                      return (
+                        <div className="text-xs text-muted-foreground truncate mt-0.5">
+                          {subParts.join(" · ")}
+                        </div>
+                      );
                     })()}
                   </TableCell>
 
-                  {/* Tanggal Event — md+ */}
-                  <TableCell className="px-4 text-foreground/80 hidden md:table-cell">
-                    <div className="whitespace-nowrap">{formatEventDate(lead.eventDate)}</div>
-                    {lead.time && (
-                      <div className="text-xs text-muted-foreground">{lead.time}</div>
-                    )}
-                    {lead.eventDateAlt && (
-                      <div className="text-xs text-muted-foreground/70 whitespace-nowrap">
-                        alt: {formatEventDate(lead.eventDateAlt)}
+                  {/* Kategori — MICE shows segment (instansi fallback) as sub-line */}
+                  <TableCell className="px-4 py-3 align-top">
+                    <CategoryChip category={lead.category} />
+                    {lead.category === "MICE" && (lead.segment?.name ?? lead.instansi) && (
+                      <div
+                        className="text-xs text-muted-foreground truncate max-w-40 mt-1"
+                        title={lead.segment?.name ?? lead.instansi ?? undefined}
+                      >
+                        {lead.segment?.name ?? lead.instansi}
                       </div>
                     )}
                   </TableCell>
 
-                  {/* Venue — lg+ */}
-                  <TableCell className="px-4 text-foreground/80 hidden lg:table-cell">
-                    {lead.venue ? (
+                  {/* Kontak */}
+                  <TableCell className="px-4 py-3 text-foreground/80 align-top">
+                    {contact ? (
                       <div className="flex flex-col gap-0.5">
-                        <span className="truncate max-w-36" title={lead.venue.name}>
-                          {lead.venue.name}
-                        </span>
-                        {lead.venueSecondary && (
-                          <span
-                            className="text-xs text-muted-foreground/70 truncate max-w-36"
-                            title={lead.venueSecondary.name}
-                          >
-                            {lead.venueSecondary.name}
+                        <span className="whitespace-nowrap font-medium tabular-nums">+{contact.number}</span>
+                        {contact.label && (
+                          <span className="text-xs text-muted-foreground truncate max-w-36">
+                            {contact.label}
                           </span>
                         )}
                       </div>
@@ -455,96 +560,41 @@ export function LeadsListView({
                     )}
                   </TableCell>
 
-                  {/* Event Type — xl+ */}
-                  <TableCell className="px-4 whitespace-nowrap text-foreground/80 hidden xl:table-cell">
-                    {lead.eventType ? (
-                      <span className="flex items-center gap-1.5">
-                        {lead.eventType.name}
-                        <Badge variant="outline" className="text-[10px] px-1 py-0">
-                          {lead.eventType.category === "MICE" ? "MICE" : "Wedding"}
-                        </Badge>
-                      </span>
-                    ) : (
-                      <span className="text-muted-foreground">—</span>
-                    )}
+                  {/* Masuk — xl+ */}
+                  <TableCell className="px-4 py-3 whitespace-nowrap text-muted-foreground align-top hidden xl:table-cell">
+                    {formatShortDate(lead.createdAt)}
                   </TableCell>
 
-                  {/* Status — pill style */}
-                  <TableCell className="px-4">
-                    <span
-                      className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-medium"
-                      style={{ backgroundColor: `${lead.status.color}1A`, color: lead.status.color }}
-                    >
-                      <span
-                        aria-hidden="true"
-                        className="inline-block w-1.5 h-1.5 rounded-full shrink-0"
-                        style={{ backgroundColor: lead.status.color }}
-                      />
-                      {lead.status.name}
-                    </span>
+                  {/* Status */}
+                  <TableCell className="px-4 py-3 align-top">
+                    <StatusPill status={lead.status} />
                   </TableCell>
 
-                  {/* Sales — md+ */}
-                  <TableCell className="px-4 text-muted-foreground align-top hidden md:table-cell">
-                    <div className="w-24 whitespace-normal break-words leading-tight text-sm">
-                      {lead.assignedTo
-                        ? (lead.assignedTo.nickName ?? lead.assignedTo.fullName ?? "—")
-                        : (lead.createdBy.nickName ?? lead.createdBy.fullName ?? "—")}
-                    </div>
+                  {/* Sales */}
+                  <TableCell className="px-4 py-3 align-top">
+                    <SalesChip lead={lead} />
                   </TableCell>
 
                   {/* Action — stopPropagation prevents row click from opening detail. */}
-                  <TableCell className="px-4" onClick={(e) => e.stopPropagation()}>
+                  <TableCell className="px-4 py-3 align-top" onClick={(e) => e.stopPropagation()}>
                     <div className="flex items-center justify-end gap-1">
                       <Button
                         variant="ghost"
                         size="icon"
+                        className="h-9 w-9 rounded-full"
                         onClick={() => onEdit(lead)}
                         aria-label={`Edit lead ${lead.name}`}
                       >
                         <Pen weight="BoldDuotone" aria-hidden="true" className="h-4 w-4" />
                       </Button>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            aria-label={`Aksi lainnya untuk lead ${lead.name}`}
-                          >
-                            <MenuDots weight="BoldDuotone" aria-hidden="true" className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          {!lead.status.isFinal && (
-                            <DropdownMenuItem onClick={() => onMarkDeal(lead)}>
-                              <CheckCircle weight="BoldDuotone" aria-hidden="true" className="h-4 w-4 mr-2 text-primary" />
-                              Tandai sebagai Deal
-                            </DropdownMenuItem>
-                          )}
-                          {!lead.status.isFinal && (
-                            <DropdownMenuItem onClick={() => onMarkLost(lead)}>
-                              <CloseCircle weight="BoldDuotone" aria-hidden="true" className="h-4 w-4 mr-2 text-destructive" />
-                              Tandai sebagai Lost
-                            </DropdownMenuItem>
-                          )}
-                          {lead.status.isFinal && (
-                            <DropdownMenuItem onClick={() => onReset(lead)}>
-                              <Refresh weight="BoldDuotone" aria-hidden="true" className="h-4 w-4 mr-2 text-muted-foreground" />
-                              Reset ke Cold
-                            </DropdownMenuItem>
-                          )}
-                          <DropdownMenuSeparator />
-                          <PermissionGate module="leads" action="delete">
-                            <DropdownMenuItem
-                              onClick={() => onDelete(lead)}
-                              className="text-destructive focus:text-destructive"
-                            >
-                              <TrashBinTrash weight="BoldDuotone" aria-hidden="true" className="h-4 w-4 mr-2" />
-                              Hapus
-                            </DropdownMenuItem>
-                          </PermissionGate>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                      <LeadActionsMenu
+                        lead={lead}
+                        onMarkDeal={onMarkDeal}
+                        onMarkLost={onMarkLost}
+                        onReset={onReset}
+                        onDelete={onDelete}
+                        triggerLabel={`Aksi lainnya untuk lead ${lead.name}`}
+                      />
                     </div>
                   </TableCell>
                 </TableRow>

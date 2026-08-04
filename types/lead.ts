@@ -59,7 +59,8 @@ export type LeadListItem = {
   weddingSession: WeddingSession | null;
   weddingSessionAlt: WeddingSession | null;
   bitrixId: string | null;
-  instansi: string | null;
+  instansi: string | null; // legacy free-text segment fallback (MICE)
+  segmentId: string | null;
   isDateLocked: boolean;
   bookingFeeAmount: number | null;
   bookingFeeDate: Date | null;
@@ -70,6 +71,7 @@ export type LeadListItem = {
   package: { id: string; packageName: string } | null;
   eventType: { id: string; name: string; category: "WEDDINGS" | "MICE"; code: string } | null;
   sourceOfInformation: { id: string; name: string } | null;
+  segment: { id: string; name: string } | null;
   createdBy: { id: string; fullName: string | null; nickName: string | null };
   assignedTo: { id: string; fullName: string | null; nickName: string | null } | null;
   convertedToCustomer: { id: string; name: string } | null;

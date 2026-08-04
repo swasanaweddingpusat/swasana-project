@@ -20,11 +20,13 @@ interface QuotationPreviewProps {
 
 const PRINT_AREA_ID = "quotation-print-area";
 
-/** Nomor dokumen — pakai yang ada, atau derive dari id + kategori. */
+/**
+ * Nomor dokumen — pakai yang tersimpan (format register: "#201-MICE").
+ * Fallback untuk row lama tanpa nomor: slug pendek dari id, tetap berpola "#…-MICE".
+ */
 function deriveQuotationNo(q: QuotationItem): string {
   if (q.quotationNo) return q.quotationNo;
-  const suffix = q.category === "mice" ? "MICE" : "WED";
-  return `#${q.id}-${suffix}`;
+  return `#${q.id.slice(0, 6).toUpperCase()}-MICE`;
 }
 
 function formatRupiah(amount: number): string {
@@ -55,9 +57,13 @@ function resolveItems(q: QuotationItem): QuotationLineItem[] {
   ];
 }
 
-/** Baris section header = teks diakhiri ":" (mis. "A. Ballroom Facilities :"). */
+/**
+ * Baris section header = judul berprefix huruf "A. / B. / C." (konvensi sheet QUO,
+ * mis. "B. Equipments" walau tanpa titik dua) ATAU diakhiri ":" (backward-compat).
+ */
 function isSectionHeader(item: QuotationLineItem): boolean {
-  return item.description.trim().endsWith(":");
+  const text = item.description.trim();
+  return /^[A-Z]\.\s/.test(text) || text.endsWith(":");
 }
 
 interface InfoRowProps {
@@ -168,17 +174,17 @@ export function QuotationPreview({
               <div className="mt-6 grid grid-cols-1 gap-x-8 gap-y-1 sm:grid-cols-2">
                 <div className="space-y-1">
                   <InfoRow label="Quotation No" value={deriveQuotationNo(q)} />
+                  {/* Purchase Order Num. — di-assign saat quotation dikonversi jadi booking; kosong ("—") di tahap quotation. */}
                   <InfoRow
                     label="Purchase Order Num."
                     value={q.purchaseOrderNo}
                   />
                   <InfoRow label="To" value={q.leadName} />
                   <InfoRow label="No. Hp" value={q.leadPhone} />
-                  {q.instansi && q.instansi.trim() ? (
-                    <InfoRow label="Instansi" value={q.instansi} />
-                  ) : null}
+                  {/* Instansi selalu tampil (mengikuti layout dokumen QUO), "—" kalau kosong. */}
+                  <InfoRow label="Instansi" value={q.instansi} />
                   <div className="h-1" />
-                  <InfoRow label="Sales" value={q.salesName} />
+                  <InfoRow label="Sales MICE" value={q.salesName} />
                   <InfoRow label="No. Hp" value={q.salesPhone} />
                 </div>
                 <div className="space-y-1">
@@ -303,18 +309,22 @@ export function QuotationPreview({
                       </span>
                     </div>
                   )}
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Down Payment</span>
-                    <span className="tabular-nums text-muted-foreground">
-                      {formatRupiah(downPayment)}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Others</span>
-                    <span className="tabular-nums text-muted-foreground">
-                      {formatRupiah(others)}
-                    </span>
-                  </div>
+                  {downPayment > 0 && (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Down Payment</span>
+                      <span className="tabular-nums text-muted-foreground">
+                        {formatRupiah(downPayment)}
+                      </span>
+                    </div>
+                  )}
+                  {others > 0 && (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Others</span>
+                      <span className="tabular-nums text-muted-foreground">
+                        {formatRupiah(others)}
+                      </span>
+                    </div>
+                  )}
                   <div className="mt-1 flex justify-between border-t pt-2">
                     <span className="font-bold text-foreground">Total</span>
                     <span className="font-bold tabular-nums text-foreground">
@@ -331,6 +341,11 @@ export function QuotationPreview({
                 </p>
               ) : null}
 
+              {/* Klausul standar dokumen QUO — muncul di semua venue. */}
+              <p className="mt-6 text-[11px] font-medium text-foreground">
+                All confirm transactions are non-cancellable and non-refundable
+              </p>
+
               <p className="mt-6 text-[11px] leading-relaxed text-muted-foreground">
                 We look forward to welcoming you and your team at Kediaman Event
                 Venue — {q.venue}. Should you require any further assistance,
@@ -344,9 +359,7 @@ export function QuotationPreview({
                 </p>
                 <div className="mt-12 w-56 border-t border-foreground pt-1 text-center">
                   <p className="font-bold text-foreground">{q.salesName}</p>
-                  <p className="text-muted-foreground">
-                    {q.category === "mice" ? "MICE Event Sales" : "Event Sales"}
-                  </p>
+                  <p className="text-muted-foreground">MICE Event Sales</p>
                 </div>
               </div>
             </div>

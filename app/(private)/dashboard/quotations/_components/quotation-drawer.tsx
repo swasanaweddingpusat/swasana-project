@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useForm, useFieldArray, type UseFormReturn, type FieldPath } from "react-hook-form";
 import {
   DndContext,
@@ -16,7 +17,6 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { useQuery } from "@tanstack/react-query";
 import { useCreateQuotation, useUpdateQuotation } from "@/hooks/use-quotations";
 import { toast } from "sonner";
 import { format, startOfMonth } from "date-fns";
@@ -43,7 +43,6 @@ import {
   CollapsibleTrigger,
   CollapsibleContent,
 } from "@/components/ui/collapsible";
-import { TimeRangePicker } from "@/components/shared/time-range-picker";
 import { SimpleEditor } from "@/components/shared/SimpleEditor";
 import { BankAccountSelect } from "@/components/shared/bank-account-select";
 import { PhoneInput } from "@/components/shared/PhoneInput";
@@ -56,11 +55,6 @@ import {
   Calendar as CalendarSolarIcon,
   AlignVerticalSpacing,
 } from "@solar-icons/react";
-import {
-  getWeddingTimeRange,
-  type WeddingSession,
-  type WeddingEventType,
-} from "@/lib/constants/wedding-session-times";
 import { cn } from "@/lib/utils";
 import { useVenues } from "@/hooks/use-venues";
 import { useEventTypes } from "@/hooks/use-event-types";
@@ -94,18 +88,18 @@ interface QuotationFormValues {
   salesId: string;
   salesName: string;
   salesPhone: string;
-  category: "WEDDINGS" | "MICE" | "";
   eventTypeId: string;
   eventTypeName: string; // nama event type untuk display/preview
   details: string;
   time: string;
-  weddingSession: WeddingSession | "";
+  place: string;
   venueId: string;
   venue: string;
   eventDate: string;
   // Step 2 — items + ringkasan
   items: QuotationItemForm[];
   discount: string;
+  bookingFee: string;
   validUntil: string;
   notes: string;
   paymentMethodId: string;
@@ -113,32 +107,7 @@ interface QuotationFormValues {
 
 // ── API response types ───────────────────────────────────────────────────────
 
-interface LeadOption {
-  id: string;
-  name: string;
-  email: string | null;
-  contactNumbers: Array<{ label?: string; name?: string; number: string }>;
-  category: string | null;
-  venueId: string | null;
-  eventType: { id: string; name: string } | null;
-  eventDate: string | null;
-  assignedTo: { id: string; fullName: string | null } | null;
-}
-
-interface CustomerOption {
-  id: string;
-  name: string;
-  mobileNumber: string;
-  email: string;
-}
-
 // ── Helpers ──────────────────────────────────────────────────────────────────
-
-async function fetchJson<T>(url: string): Promise<T> {
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`Request failed (${res.status}): ${url}`);
-  return res.json();
-}
 
 function parseNumericInput(raw: string): number {
   return parseInt(raw.replace(/\D/g, ""), 10) || 0;
@@ -159,34 +128,6 @@ function formatRupiah(amount: number): string {
     minimumFractionDigits: 0,
     maximumFractionDigits: 0,
   });
-}
-
-/** Map QuotationItem.category (lowercase dari table) ke UPPERCASE form value */
-function normalizeCategoryUp(cat: string): "WEDDINGS" | "MICE" | "" {
-  if (cat === "weddings" || cat === "WEDDINGS") return "WEDDINGS";
-  if (cat === "mice" || cat === "MICE") return "MICE";
-  return "";
-}
-
-const SESSION_LABELS: Record<string, string> = {
-  morning: "Pagi",
-  evening: "Malam",
-  fullday: "Full Day",
-};
-
-/**
- * Map nama Event Type (mis. "Akad & Resepsi", "Resepsi") ke kategori waktu
- * akad/resepsi yang dipakai untuk auto-fill jam wedding. Gantikan field
- * "Type Acara" terpisah karena infonya sudah ada di Event Type.
- */
-function deriveWeddingEventType(eventTypeName: string): WeddingEventType | "" {
-  const n = eventTypeName.toLowerCase();
-  const hasAkad = n.includes("akad");
-  const hasResepsi = n.includes("resepsi");
-  if (hasAkad && hasResepsi) return "akad-dan-resepsi";
-  if (hasAkad) return "akad";
-  if (hasResepsi) return "resepsi";
-  return "";
 }
 
 const LABEL_CLASS = cn("text-sm", "font-medium", "text-foreground");
@@ -220,17 +161,17 @@ const DEFAULT_VALUES: QuotationFormValues = {
   salesId: "",
   salesName: "",
   salesPhone: "",
-  category: "",
   eventTypeId: "",
   eventTypeName: "",
   details: "",
   time: "",
-  weddingSession: "",
+  place: "",
   venueId: "",
   venue: "",
   eventDate: "",
   items: DEFAULT_ITEMS.map((it) => ({ ...it })),
   discount: "",
+  bookingFee: "",
   validUntil: "",
   notes: "",
   paymentMethodId: "",
@@ -337,7 +278,9 @@ function SortableItemRow({
   const titleVal = watchedArray?.[index]?.title ?? "";
   const totalVal = watchedArray?.[index]?.total ?? "";
   const qtyVal = watchedArray?.[index]?.qty ?? "";
-  const isSectionHeader = titleVal.trimEnd().endsWith(":");
+  // Header = prefix huruf "A./B./C." (konvensi sheet QUO) ATAU diakhiri ":".
+  const titleTrimmed = titleVal.trim();
+  const isSectionHeader = /^[A-Z]\.\s/.test(titleTrimmed) || titleTrimmed.endsWith(":");
 
   return (
     <div ref={setNodeRef} style={style} {...attributes}>
@@ -649,6 +592,7 @@ export function QuotationDrawer({
 }: QuotationDrawerProps) {
   const isEdit = !!editQuotation;
   const [step, setStep] = useState<1 | 2 | 3>(1);
+  const queryClient = useQueryClient();
 
   // ── Mutation hooks ───────────────────────────────────────────────────────
   const createQuotation = useCreateQuotation();
@@ -690,52 +634,44 @@ export function QuotationDrawer({
   // the sales field to themselves; admin/manager picks freely.
   const currentUserIsSales = !!user && salesUsers.some((s) => s.id === user.profileId);
 
-  // ── Client picker state ──────────────────────────────────────────────────
-  const [selectedLeadId, setSelectedLeadId] = useState("");
-  const [customerId, setCustomerId] = useState("");
-  const [clientSearch, setClientSearch] = useState("");
-  const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [clientDropdownOpen, setClientDropdownOpen] = useState(false);
-  const clientDropdownRef = useRef<HTMLDivElement>(null);
+  // ── Instansi lookup (leads search) ──────────────────────────────────────
+  interface LeadSearchOption {
+    id: string;
+    name: string;
+    instansi: string | null;
+  }
+  const [instansiSearch, setInstansiSearch] = useState("");
+  const [debouncedInstansi, setDebouncedInstansi] = useState("");
+  const [instansiDropdownOpen, setInstansiDropdownOpen] = useState(false);
+  const instansiDropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const t = setTimeout(() => setDebouncedSearch(clientSearch), 300);
+    const t = setTimeout(() => setDebouncedInstansi(instansiSearch), 300);
     return () => clearTimeout(t);
-  }, [clientSearch]);
+  }, [instansiSearch]);
 
-  // Close dropdown on outside click
   useEffect(() => {
     function handleClick(e: MouseEvent) {
-      if (clientDropdownRef.current && !clientDropdownRef.current.contains(e.target as Node)) {
-        setClientDropdownOpen(false);
+      if (instansiDropdownRef.current && !instansiDropdownRef.current.contains(e.target as Node)) {
+        setInstansiDropdownOpen(false);
       }
     }
     document.addEventListener("mousedown", handleClick);
     return () => document.removeEventListener("mousedown", handleClick);
   }, []);
 
-  // ── Search queries ───────────────────────────────────────────────────────
-  const { data: leadsResult } = useQuery({
-    queryKey: ["leads-search", debouncedSearch],
-    queryFn: () =>
-      fetchJson<{ items: LeadOption[] }>(
-        `/api/leads?search=${encodeURIComponent(debouncedSearch)}&pageSize=5`,
-      ),
-    enabled: debouncedSearch.length >= 1,
+  const { data: leadsSearchResult } = useQuery({
+    queryKey: ["leads-instansi-search", debouncedInstansi],
+    queryFn: async () => {
+      const res = await fetch(`/api/leads?search=${encodeURIComponent(debouncedInstansi)}&pageSize=8`);
+      if (!res.ok) return { items: [] as LeadSearchOption[] };
+      const data = (await res.json()) as { items?: LeadSearchOption[] };
+      return data;
+    },
+    enabled: debouncedInstansi.trim().length >= 1,
     staleTime: 30_000,
   });
-  const leadOptions = leadsResult?.items ?? [];
-
-  const { data: customersResult } = useQuery({
-    queryKey: ["customers-search", debouncedSearch],
-    queryFn: () =>
-      fetchJson<{ data: CustomerOption[] }>(
-        `/api/customers?search=${encodeURIComponent(debouncedSearch)}`,
-      ),
-    enabled: debouncedSearch.length >= 1,
-    staleTime: 30_000,
-  });
-  const customerOptions = customersResult?.data ?? [];
+  const leadInstansiOptions: LeadSearchOption[] = leadsSearchResult?.items ?? [];
 
   // ── Form ─────────────────────────────────────────────────────────────────
   const form = useForm<QuotationFormValues>({
@@ -759,6 +695,7 @@ export function QuotationDrawer({
       const data = (await res.json()) as {
         items?: Array<{ title: string; description: string | null; qty: number; price: number; total: number; manualTotal: boolean }>;
         paymentMethodId?: string | null;
+        bookingFee?: number | null;
       };
       const tplItems: QuotationItemForm[] = (data.items ?? []).map((it) => ({
         title: it.title,
@@ -771,6 +708,10 @@ export function QuotationDrawer({
       replaceItems(tplItems);
       setExpandedItems(new Set());
       form.setValue("paymentMethodId", data.paymentMethodId ?? "");
+      form.setValue(
+        "bookingFee",
+        data.bookingFee && data.bookingFee > 0 ? formatNumericDisplay(data.bookingFee) : "",
+      );
     } catch {
       /* network error — leave form as-is */
     }
@@ -796,25 +737,18 @@ export function QuotationDrawer({
 
   const watchedClientName = form.watch("clientName");
   const watchedSalesId = form.watch("salesId");
+  const watchedSalesPhone = form.watch("salesPhone");
   const watchedVenueId = form.watch("venueId");
   const watchedItems = form.watch("items");
   const watchedDiscount = form.watch("discount");
-  const watchedCategory = form.watch("category");
   const watchedEventTypeId = form.watch("eventTypeId");
-  const watchedEventTypeName = form.watch("eventTypeName");
-  const watchedWeddingSession = form.watch("weddingSession");
   const watchedEventDate = form.watch("eventDate");
-  const watchedTime = form.watch("time");
-  const isWeddings = watchedCategory === "WEDDINGS";
 
   const isStep1Incomplete =
     !watchedClientName?.trim() ||
     !watchedSalesId ||
-    !watchedCategory ||
     !watchedEventTypeId ||
-    !watchedEventDate ||
-    // Session & time are wedding concepts — only required for WEDDINGS.
-    (isWeddings && (!watchedWeddingSession || !watchedTime?.trim()));
+    !watchedEventDate;
 
   // Step 2 (items + discount) has no hard-required field — items default to one row.
   const isStep2Incomplete = false;
@@ -827,25 +761,14 @@ export function QuotationDrawer({
     salesUsers.find((s) => s.id === watchedSalesId)?.fullName ??
     (currentUserIsSales ? (user?.name ?? "—") : "—");
 
-  // ── Auto-fill sales name when salesId changes ────────────────────────────
+  // ── Auto-fill sales name + phone when salesId changes ──────────────────
   useEffect(() => {
     const matched = salesUsers.find((u) => u.id === watchedSalesId);
     if (matched) {
       form.setValue("salesName", matched.fullName ?? "");
-      // salesPhone tidak tersedia di AssignableSalesUser — biarkan user isi manual
+      form.setValue("salesPhone", matched.phoneNumber ?? "");
     }
   }, [watchedSalesId]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // ── Auto-fill time for weddings based on session + derived event type ────
-  // Tipe acara (akad/resepsi) diturunkan dari nama Event Type, bukan field terpisah.
-  const derivedWeddingEventType = deriveWeddingEventType(watchedEventTypeName);
-  useEffect(() => {
-    if (!isWeddings) return;
-    const autoTime = getWeddingTimeRange(watchedWeddingSession, derivedWeddingEventType);
-    if (autoTime) {
-      form.setValue("time", autoTime);
-    }
-  }, [watchedWeddingSession, derivedWeddingEventType, isWeddings]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Venue availability ───────────────────────────────────────────────────
   type DayAvail = { morning: boolean; evening: boolean; fullday: boolean };
@@ -881,20 +804,32 @@ export function QuotationDrawer({
     return "partial";
   }
 
-  function getAvailableSessions(dateStr: string): string[] {
-    const a = availability[dateStr];
-    if (!a) return ["morning", "evening", "fullday"];
-    const sessions: string[] = [];
-    if (a.morning) sessions.push("morning");
-    if (a.evening) sessions.push("evening");
-    if (a.fullday && a.morning && a.evening) sessions.push("fullday");
-    return sessions;
-  }
+  // ── Event types — quotation is MICE-only ────────────────────────────────
+  const filteredEventTypes = eventTypes.filter((et) => et.category === "MICE");
 
-  // ── Filtered event types by category ────────────────────────────────────
-  const filteredEventTypes = eventTypes.filter(
-    (et) => !watchedCategory || et.category === watchedCategory,
-  );
+  async function handleAddEventType(name: string) {
+    try {
+      const res = await fetch("/api/event-types", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, category: "MICE" }),
+      });
+      if (!res.ok) {
+        const err = (await res.json()) as { error?: string };
+        toast.error(err.error ?? "Gagal membuat event type");
+        return;
+      }
+      const created = (await res.json()) as { id: string; name: string; category: string; sortOrder: number; isActive: boolean; code: string; createdAt: string };
+      // Invalidate cache so the hook reflects the new entry
+      await queryClient.invalidateQueries({ queryKey: ["event-types"] });
+      // Immediately select the new event type
+      form.setValue("eventTypeId", created.id);
+      form.setValue("eventTypeName", created.name);
+      toast.success(`Event type "${created.name}" ditambahkan`);
+    } catch {
+      toast.error("Gagal membuat event type");
+    }
+  }
 
   // ── Item totals ──────────────────────────────────────────────────────────
   const subtotal = (watchedItems ?? []).reduce(
@@ -908,11 +843,6 @@ export function QuotationDrawer({
   useEffect(() => {
     if (!open) return;
     setStep(1);
-    setSelectedLeadId("");
-    setCustomerId("");
-    setClientSearch("");
-    setDebouncedSearch("");
-    setClientDropdownOpen(false);
     // Reset accordion state; auto-expand the FIRST card so at least one card is
     // open when the user reaches step 2.
     setExpandedItems(new Set());
@@ -921,11 +851,14 @@ export function QuotationDrawer({
     sigSalesRef.current?.clear();
     setSignatureSales("");
     setSigningLocation("");
+    // Reset instansi lookup state
+    setInstansiSearch("");
+    setDebouncedInstansi("");
+    setInstansiDropdownOpen(false);
 
     if (editQuotation) {
       const matchedVenue = venues.find((v) => v.name === editQuotation.venue);
       const matchedSales = salesUsers.find((u) => u.fullName === editQuotation.salesName);
-      const editCategory = normalizeCategoryUp(editQuotation.category);
       const items: QuotationItemForm[] =
         editQuotation.items && editQuotation.items.length > 0
           ? editQuotation.items.map((it) => ({
@@ -941,17 +874,16 @@ export function QuotationDrawer({
       if (editQuotation.signingLocation) setSigningLocation(editQuotation.signingLocation);
       form.reset({
         clientName: editQuotation.leadName,
-        clientPhone: editQuotation.leadPhone ?? "",
+        clientPhone: editQuotation.leadPhone?.trim() ?? "",
         instansi: editQuotation.instansi ?? "",
         salesId: matchedSales?.id ?? "",
         salesName: editQuotation.salesName,
         salesPhone: editQuotation.salesPhone ?? "",
-        category: editCategory,
         eventTypeId: "",
         eventTypeName: editQuotation.eventType,
         details: editQuotation.details ?? "",
         time: editQuotation.time ?? "",
-        weddingSession: "",
+        place: editQuotation.place ?? "",
         venueId: matchedVenue?.id ?? "",
         venue: editQuotation.venue,
         eventDate: editQuotation.eventDate,
@@ -960,10 +892,16 @@ export function QuotationDrawer({
           editQuotation.discount > 0
             ? formatNumericDisplay(editQuotation.discount)
             : "",
+        bookingFee:
+          editQuotation.bookingFee && editQuotation.bookingFee > 0
+            ? formatNumericDisplay(editQuotation.bookingFee)
+            : "",
         validUntil: editQuotation.validUntil,
         notes: editQuotation.notes,
         paymentMethodId: editQuotation.paymentMethodId ?? "",
       });
+      // Sync instansi search input with existing value
+      setInstansiSearch(editQuotation.instansi ?? "");
     } else {
       const draft = readQuotationDraft();
       if (draft?.values) {
@@ -1018,78 +956,6 @@ export function QuotationDrawer({
     persistQuotationDraft(form.getValues(), signingLocation);
   }, [signingLocation]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Auto-fill from lead ──────────────────────────────────────────────────
-  function applyLeadAutofill(lead: LeadOption) {
-    setSelectedLeadId(lead.id);
-    setCustomerId("");
-    form.setValue("clientName", lead.name);
-    // Phone: ambil nomor pertama dari contactNumbers — pass raw stored value,
-    // PhoneInput akan parse dial code secara generic (longest-prefix-match)
-    const firstContact = lead.contactNumbers?.[0];
-    if (firstContact?.number) {
-      form.setValue("clientPhone", firstContact.number.replace(/\D/g, ""));
-    }
-    // Category UPPERCASE
-    if (lead.category) {
-      const cat = normalizeCategoryUp(lead.category);
-      form.setValue("category", cat);
-      // Reset event type saat category berubah
-      form.setValue("eventTypeId", "");
-      form.setValue("eventTypeName", "");
-    }
-    // Venue
-    if (lead.venueId) {
-      form.setValue("venueId", lead.venueId);
-      const matchedVenue = venues.find((v) => v.id === lead.venueId);
-      form.setValue("venue", matchedVenue?.name ?? "");
-      form.setValue("eventDate", "");
-    }
-    // Event type
-    if (lead.eventType) {
-      form.setValue("eventTypeId", lead.eventType.id);
-      form.setValue("eventTypeName", lead.eventType.name);
-    }
-    // Event date
-    if (lead.eventDate) {
-      const dateStr = new Date(lead.eventDate).toISOString().split("T")[0];
-      form.setValue("eventDate", dateStr);
-    }
-    // Sales — autofill dari sales yang di-assign ke lead. Skip kalau user yang
-    // login adalah sales (field-nya terkunci ke dirinya sendiri).
-    if (!currentUserIsSales && lead.assignedTo?.id) {
-      form.setValue("salesId", lead.assignedTo.id);
-      form.setValue("salesName", lead.assignedTo.fullName ?? "");
-    }
-    setClientSearch(lead.name);
-    setClientDropdownOpen(false);
-  }
-
-  // ── Auto-fill from customer ──────────────────────────────────────────────
-  function applyCustomerAutofill(customer: CustomerOption) {
-    setCustomerId(customer.id);
-    setSelectedLeadId("");
-    form.setValue("clientName", customer.name);
-    // mobileNumber bisa string JSON array atau plain number string
-    // Pass raw stored value — PhoneInput will parse dial code via longest-prefix-match
-    if (customer.mobileNumber) {
-      let phone = "";
-      try {
-        const parsed = JSON.parse(customer.mobileNumber);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          const first = parsed[0];
-          const raw: string = typeof first === "object" ? (first.number ?? "") : String(first);
-          phone = raw.replace(/\D/g, "");
-        }
-      } catch {
-        // Plain string
-        phone = customer.mobileNumber.split(",")[0].trim().replace(/\D/g, "");
-      }
-      if (phone) form.setValue("clientPhone", phone);
-    }
-    setClientSearch(customer.name);
-    setClientDropdownOpen(false);
-  }
-
   // ── Navigation ───────────────────────────────────────────────────────────
   async function handleNext() {
     if (step === 1) {
@@ -1097,11 +963,8 @@ export function QuotationDrawer({
         "clientName",
         "salesId",
         "venueId",
-        "category",
         "eventTypeId",
         "eventDate",
-        // Session & time only validated for WEDDINGS (wedding concepts).
-        ...(isWeddings ? (["weddingSession", "time"] as const) : []),
       ] as const;
       const ok = await form.trigger([...step1Fields]);
       if (ok) setStep(2);
@@ -1134,23 +997,26 @@ export function QuotationDrawer({
     }));
 
     const discountNum = parseNumericInput(values.discount);
+    const bookingFeeNum = parseNumericInput(values.bookingFee);
 
     const payload = {
       clientName: values.clientName,
-      clientPhone: values.clientPhone,
+      clientPhone: values.clientPhone || null,
       instansi: values.instansi || null,
       salesId: values.salesId,
       venueId: values.venueId,
       venueName: values.venue || null,
       eventTypeId: values.eventTypeId || null,
       eventTypeName: values.eventTypeName || null,
-      category: (values.category || "WEDDINGS") as "WEDDINGS" | "MICE",
-      weddingSession: (values.weddingSession || null) as "morning" | "evening" | "fullday" | null,
+      category: "MICE" as const,
+      weddingSession: null,
       eventDate: values.eventDate || null,
       time: values.time || null,
+      place: values.place || null,
       details: values.details || null,
       items,
       discount: discountNum,
+      bookingFee: bookingFeeNum > 0 ? bookingFeeNum : null,
       validUntil: values.validUntil,
       notes: values.notes || null,
       paymentMethodId: values.paymentMethodId || null,
@@ -1208,143 +1074,109 @@ export function QuotationDrawer({
                     Info Client
                   </p>
 
-                  {/* Client / Lead — unified search picker */}
-                  <div ref={clientDropdownRef}>
-                    <FormField
-                      control={form.control}
-                      name="clientName"
-                      rules={{ required: "Client / Lead wajib diisi" }}
-                      render={({ field }) => (
-                        <FormItem className="w-full">
-                          <FormLabel className={LABEL_CLASS}>Client / Lead *</FormLabel>
-                          {selectedLeadId && (
-                            <p className="text-xs text-[var(--brand-gold)] mt-0.5">
-                              Dari Lead — data di-autofill, semua field bisa diedit
-                            </p>
-                          )}
-                          {customerId && (
-                            <p className="text-xs text-muted-foreground mt-0.5">
-                              Customer terdaftar — data di-autofill, semua field bisa diedit
-                            </p>
-                          )}
-                          <div className="relative mt-1">
-                            <FormControl>
-                              <Input
-                                value={clientSearch || field.value}
-                                onChange={(e) => {
-                                  const val = e.target.value;
-                                  field.onChange(val);
-                                  setClientSearch(val);
-                                  setSelectedLeadId("");
-                                  setCustomerId("");
-                                  setClientDropdownOpen(true);
-                                }}
-                                onFocus={() => {
-                                  if ((clientSearch || field.value).trim()) {
-                                    setClientDropdownOpen(true);
-                                  }
-                                }}
-                                placeholder="Cari lead atau customer terdaftar..."
-                                className="w-full"
-                              />
-                            </FormControl>
-                            {clientDropdownOpen &&
-                              (clientSearch || field.value).trim() &&
-                              (leadOptions.length > 0 || customerOptions.length > 0) && (
-                                <div className="absolute z-50 w-full mt-1 max-h-80 overflow-auto rounded-xl border bg-background shadow-md">
-                                  {leadOptions.length > 0 && (
-                                    <div>
-                                      <p className="px-3 pt-2 pb-1 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                                        Dari Leads
-                                      </p>
-                                      {leadOptions.map((lead) => (
-                                        <div
-                                          key={lead.id}
-                                          className="cursor-pointer px-3 py-2 text-sm hover:bg-accent transition-colors"
-                                          onClick={() => applyLeadAutofill(lead)}
-                                        >
-                                          <p className="font-medium">{lead.name}</p>
-                                          {lead.email && (
-                                            <p className="text-xs text-muted-foreground">
-                                              {lead.email}
-                                            </p>
-                                          )}
-                                        </div>
-                                      ))}
-                                    </div>
-                                  )}
-                                  {customerOptions.length > 0 && (
-                                    <div>
-                                      {leadOptions.length > 0 && (
-                                        <div className="border-t my-1" />
-                                      )}
-                                      <p className="px-3 pt-2 pb-1 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                                        Customer Terdaftar
-                                      </p>
-                                      {customerOptions.map((c) => (
-                                        <div
-                                          key={c.id}
-                                          className="cursor-pointer px-3 py-2 text-sm hover:bg-accent transition-colors"
-                                          onClick={() => applyCustomerAutofill(c)}
-                                        >
-                                          <p className="font-medium">{c.name}</p>
-                                          {c.email && (
-                                            <p className="text-xs text-muted-foreground">
-                                              {c.email}
-                                            </p>
-                                          )}
-                                        </div>
-                                      ))}
-                                    </div>
-                                  )}
-                                </div>
-                              )}
-                          </div>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-1 gap-4">
-                    <FormField
-                      control={form.control}
-                      name="clientPhone"
-                      render={({ field }) => (
-                        <FormItem className="w-full">
-                          <FormLabel className={LABEL_CLASS}>No. Hp Client</FormLabel>
-                          <FormControl>
-                            <PhoneInput
-                              value={field.value}
-                              onChange={field.onChange}
-                              onBlur={field.onBlur}
-                            />
-                          </FormControl>
-                        </FormItem>
-                      )}
-                    />
+                  {/* Perusahaan / Instansi — combobox lookup dari leads */}
+                  <div ref={instansiDropdownRef} className="w-full">
                     <FormField
                       control={form.control}
                       name="instansi"
                       render={({ field }) => (
                         <FormItem className="w-full">
                           <FormLabel className={LABEL_CLASS}>
-                            Instansi{" "}
+                            Perusahaan / Instansi{" "}
                             <span className="font-normal text-muted-foreground">
                               (opsional)
                             </span>
                           </FormLabel>
                           <FormControl>
-                            <Input
-                              {...field}
-                              placeholder="mis. Al Azhar"
-                              className="w-full"
-                            />
+                            <div className="relative">
+                              <Input
+                                value={instansiSearch}
+                                onChange={(e) => {
+                                  setInstansiSearch(e.target.value);
+                                  field.onChange(e.target.value);
+                                  setInstansiDropdownOpen(true);
+                                }}
+                                onFocus={() => {
+                                  if (instansiSearch.trim()) setInstansiDropdownOpen(true);
+                                }}
+                                placeholder="Ketik nama perusahaan / instansi..."
+                                className="w-full"
+                                autoComplete="off"
+                              />
+                              {instansiDropdownOpen && debouncedInstansi.trim().length >= 1 && leadInstansiOptions.length > 0 && (
+                                <div className="absolute z-50 w-full mt-1 max-h-64 overflow-auto rounded-xl border bg-background shadow-md">
+                                  <p className="px-3 pt-2 pb-1 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                                    Dari Leads
+                                  </p>
+                                  {leadInstansiOptions.map((lead) => (
+                                    <div
+                                      key={lead.id}
+                                      className="cursor-pointer px-3 py-2 text-sm hover:bg-accent transition-colors"
+                                      onMouseDown={(e) => {
+                                        e.preventDefault();
+                                        setInstansiSearch(lead.name);
+                                        field.onChange(lead.name);
+                                        setInstansiDropdownOpen(false);
+                                      }}
+                                    >
+                                      <p className="font-medium">{lead.name}</p>
+                                      {lead.instansi && (
+                                        <p className="text-xs text-muted-foreground truncate">
+                                          {lead.instansi}
+                                        </p>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
                           </FormControl>
                         </FormItem>
                       )}
                     />
                   </div>
+
+                  {/* PIC / Client (To) — input teks biasa */}
+                  <FormField
+                    control={form.control}
+                    name="clientName"
+                    rules={{ required: "Nama client wajib diisi" }}
+                    render={({ field }) => (
+                      <FormItem className="w-full">
+                        <FormLabel className={LABEL_CLASS}>PIC / Client (To) <span className="text-destructive">*</span></FormLabel>
+                        <FormControl>
+                          <Input
+                            {...field}
+                            placeholder="Nama client / PIC..."
+                            className="w-full"
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  {/* No. HP / WA Client */}
+                  <FormField
+                    control={form.control}
+                    name="clientPhone"
+                    render={({ field }) => (
+                      <FormItem className="w-full">
+                        <FormLabel className={LABEL_CLASS}>
+                          No. HP / WA Client{" "}
+                          <span className="font-normal text-muted-foreground">(opsional)</span>
+                        </FormLabel>
+                        <FormControl>
+                          <PhoneInput
+                            value={field.value}
+                            onChange={field.onChange}
+                            onBlur={field.onBlur}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
                 </div>
 
                 {/* ── Sales ───────────────────────────────────────── */}
@@ -1355,7 +1187,7 @@ export function QuotationDrawer({
                   {currentUserIsSales ? (
                     /* Logged-in user is a sales → locked to themselves */
                     <div className="w-full">
-                      <FormLabel className={LABEL_CLASS}>Sales *</FormLabel>
+                      <FormLabel className={LABEL_CLASS}>Sales <span className="text-destructive">*</span></FormLabel>
                       <div className="mt-1 flex h-9 w-full items-center rounded-md border border-input bg-muted/40 px-3 text-sm text-foreground cursor-not-allowed select-none">
                         {lockedSalesName}
                       </div>
@@ -1370,7 +1202,7 @@ export function QuotationDrawer({
                       rules={{ required: "Sales wajib dipilih" }}
                       render={({ field }) => (
                         <FormItem className="w-full">
-                          <FormLabel className={LABEL_CLASS}>Sales *</FormLabel>
+                          <FormLabel className={LABEL_CLASS}>Sales <span className="text-destructive">*</span></FormLabel>
                           <FormControl>
                             <SearchableSelect
                               options={salesUsers.map((u) => ({
@@ -1389,298 +1221,239 @@ export function QuotationDrawer({
                       )}
                     />
                   )}
-                  <FormField
-                    control={form.control}
-                    name="salesPhone"
-                    render={({ field }) => (
-                      <FormItem className="w-full">
-                        <FormLabel className={LABEL_CLASS}>No. Hp Sales</FormLabel>
-                        <FormControl>
-                          <PhoneInput
-                            value={field.value}
-                            onChange={field.onChange}
-                            onBlur={field.onBlur}
-                          />
-                        </FormControl>
-                      </FormItem>
-                    )}
-                  />
+                  {/* No. Hp Sales — read-only; diambil dari profil sales terpilih.
+                      Bukan input editable karena tidak disimpan di quotation
+                      (preview membacanya dari Profile.phoneNumber). */}
+                  <div className="w-full">
+                    <FormLabel className={LABEL_CLASS}>No. Hp Sales</FormLabel>
+                    <div className="mt-1 flex h-9 w-full items-center rounded-md border border-input bg-muted/40 px-3 text-sm text-foreground cursor-not-allowed select-none">
+                      {watchedSalesPhone?.trim() ? watchedSalesPhone : "—"}
+                    </div>
+                  </div>
                 </div>
 
                 {/* ── Detail Event ─────────────────────────────────── */}
+                {/* Urutan sesuai dokumen QUO: Event → Detail → Time → Place → Date → Venue */}
                 <div className="border-t pt-4 space-y-3">
-                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                    Detail Event
-                  </p>
-                  <div className="flex flex-col gap-3">
-
-                    {/* Venue */}
-                    <FormField
-                      control={form.control}
-                      name="venueId"
-                      render={({ field }) => (
-                        <FormItem className="w-full">
-                          <FormLabel className={LABEL_CLASS}>Venue</FormLabel>
-                          <FormControl>
-                            <SearchableSelect
-                              options={venues.map((v) => ({ id: v.id, name: v.name }))}
-                              value={field.value}
-                              onChange={(id) => {
-                                field.onChange(id);
-                                const matched = venues.find((v) => v.id === id);
-                                form.setValue("venue", matched?.name ?? "");
-                                // Reset date & session when venue changes
-                                form.setValue("eventDate", "");
-                                form.setValue("weddingSession", "");
-                                // Auto-load per-venue template (create mode only).
-                                void loadVenueTemplate(id);
-                              }}
-                              placeholder="Pilih / cari venue..."
-                              searchPlaceholder="Cari venue..."
-                              emptyText="Venue tidak ditemukan"
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-
-                    {/* Tipe Booking */}
-                    <FormField
-                      control={form.control}
-                      name="category"
-                      rules={{ required: "Tipe booking wajib dipilih" }}
-                      render={({ field }) => (
-                        <FormItem className="w-full">
-                          <FormLabel className={LABEL_CLASS}>Tipe Booking *</FormLabel>
-                          <FormControl>
-                            <SearchableSelect
-                              options={[
-                                { id: "WEDDINGS", name: "Wedding" },
-                                { id: "MICE", name: "MICE" },
-                              ]}
-                              value={field.value}
-                              onChange={(v) => {
-                                field.onChange(v);
-                                // Reset event type saat category berubah
-                                form.setValue("eventTypeId", "");
-                                form.setValue("eventTypeName", "");
-                              }}
-                              placeholder="Pilih tipe booking..."
-                              searchPlaceholder="Cari tipe booking..."
-                              emptyText="Tidak ada opsi"
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-
-                    {/* Event Type — searchable, difilter by category */}
-                    <FormField
-                      control={form.control}
-                      name="eventTypeId"
-                      rules={{ required: "Event type wajib dipilih" }}
-                      render={({ field }) => (
-                        <FormItem className="w-full">
-                          <FormLabel className={LABEL_CLASS}>Event Type *</FormLabel>
-                          <FormControl>
-                            <SearchableSelect
-                              options={filteredEventTypes.map((et) => ({ id: et.id, name: et.name }))}
-                              value={field.value}
-                              onChange={(v) => {
-                                field.onChange(v);
-                                const matched = filteredEventTypes.find((et) => et.id === v);
-                                form.setValue("eventTypeName", matched?.name ?? "");
-                              }}
-                              placeholder={
-                                !watchedCategory
-                                  ? "Pilih tipe booking dulu"
-                                  : "Pilih event type..."
-                              }
-                              searchPlaceholder="Cari event type..."
-                              emptyText="Tidak ada event type"
-                              disabled={!watchedCategory || filteredEventTypes.length === 0}
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                      Detail Event
+                    </p>
+                    {/* MICE context pill — quotation is MICE-only */}
+                    <span className="inline-flex items-center rounded-full border border-primary/25 bg-primary/10 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary">
+                      MICE
+                    </span>
                   </div>
 
-                  <div className="space-y-3">
-                    {/* Tanggal Event + Availability */}
-                    <FormField
-                      control={form.control}
-                      name="eventDate"
-                      rules={{ required: "Tanggal event wajib diisi" }}
-                      render={({ field }) => (
-                        <FormItem className="w-full">
-                          <FormLabel className={LABEL_CLASS}>Tanggal Event *</FormLabel>
-                          <Popover>
-                            <PopoverTrigger
-                              render={
-                                <Button
-                                  variant="outline"
-                                  className={cn(
-                                    "w-full justify-start text-left font-normal",
-                                    !field.value && "text-muted-foreground",
-                                  )}
-                                >
-                                  <CalendarSolarIcon
-                                    weight="BoldDuotone"
-                                    className="mr-2 h-4 w-4"
-                                  />
-                                  {field.value
-                                    ? format(
-                                        new Date(field.value + "T00:00:00"),
-                                        "PPP",
-                                      )
-                                    : "Pilih tanggal event"}
-                                </Button>
-                              }
-                            />
-                            <PopoverContent className="w-auto p-0" align="start">
-                              <Calendar
-                                mode="single"
-                                captionLayout="dropdown"
-                                selected={
-                                  field.value
-                                    ? new Date(field.value + "T00:00:00")
-                                    : undefined
-                                }
-                                onSelect={(date) => {
-                                  if (date) {
-                                    const y = date.getFullYear();
-                                    const m = String(date.getMonth() + 1).padStart(
-                                      2,
-                                      "0",
-                                    );
-                                    const d = String(date.getDate()).padStart(2, "0");
-                                    field.onChange(`${y}-${m}-${d}`);
-                                    // Reset session when date changes
-                                    form.setValue("weddingSession", "");
-                                  } else {
-                                    field.onChange("");
-                                    form.setValue("weddingSession", "");
-                                  }
-                                }}
-                                disabled={(d) => getDateStatus(d) === "unavailable"}
-                                fromYear={new Date().getFullYear() - 10}
-                                toYear={new Date().getFullYear() + 5}
-                                defaultMonth={
-                                  field.value
-                                    ? new Date(field.value + "T00:00:00")
-                                    : new Date()
-                                }
-                                onMonthChange={setVisibleMonth}
-                                modifiers={{
-                                  available: (d) =>
-                                    !!watchedVenueId && getDateStatus(d) === "available",
-                                  partial: (d) =>
-                                    !!watchedVenueId && getDateStatus(d) === "partial",
-                                  unavailable: (d) =>
-                                    !!watchedVenueId &&
-                                    getDateStatus(d) === "unavailable",
-                                }}
-                                modifiersClassNames={{
-                                  available: "day-available",
-                                  partial: "day-partial",
-                                  unavailable: "day-unavailable",
-                                }}
-                              />
-                            </PopoverContent>
-                          </Popover>
-                          {availLoading && (
-                            <p className="text-xs text-muted-foreground mt-1">
-                              Mengecek ketersediaan...
-                            </p>
-                          )}
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
+                  {/* Event Type — MICE event types */}
+                  <FormField
+                    control={form.control}
+                    name="eventTypeId"
+                    rules={{ required: "Event type wajib dipilih" }}
+                    render={({ field }) => (
+                      <FormItem className="w-full">
+                        <FormLabel className={LABEL_CLASS}>Event <span className="text-destructive">*</span></FormLabel>
+                        <FormControl>
+                          <SearchableSelect
+                            options={filteredEventTypes.map((et) => ({ id: et.id, name: et.name }))}
+                            value={field.value}
+                            onChange={(v) => {
+                              field.onChange(v);
+                              const matched = filteredEventTypes.find((et) => et.id === v);
+                              form.setValue("eventTypeName", matched?.name ?? "");
+                            }}
+                            placeholder="Pilih event type..."
+                            searchPlaceholder="Cari / ketik nama baru..."
+                            emptyText="Tidak ada event type MICE"
+                            onAdd={handleAddEventType}
+                            addingLabel="Menambahkan event type..."
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
 
-                    {/* Session — selalu muncul, difilter dari availability */}
-                    <FormField
-                      control={form.control}
-                      name="weddingSession"
-                      rules={{ required: isWeddings ? "Session wajib dipilih" : false }}
-                      render={({ field }) => {
-                        const sessions = watchedEventDate
-                          ? getAvailableSessions(watchedEventDate)
-                          : ["morning", "evening", "fullday"];
-                        return (
-                          <FormItem className="w-full">
-                            <FormLabel className={LABEL_CLASS}>
-                              Session {isWeddings ? "*" : ""}
-                            </FormLabel>
-                            <FormControl>
-                              <SearchableSelect
-                                options={sessions.map((s) => ({ id: s, name: SESSION_LABELS[s] }))}
-                                value={field.value}
-                                onChange={(v) => field.onChange(v as WeddingSession)}
-                                placeholder={
-                                  !watchedEventDate
-                                    ? "Pilih tanggal dulu"
-                                    : "Pilih session..."
-                                }
-                                searchPlaceholder="Cari session..."
-                                emptyText="Tidak ada session tersedia"
-                                disabled={!watchedEventDate}
-                              />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        );
-                      }}
-                    />
-
-                    {/* Time — auto-fill dari session + event type untuk weddings */}
-                    <FormField
-                      control={form.control}
-                      name="time"
-                      rules={{ required: isWeddings ? "Time wajib diisi" : false }}
-                      render={({ field }) => (
-                        <FormItem className="flex w-full flex-col">
-                          <FormLabel className={LABEL_CLASS}>
-                            Time {isWeddings ? "*" : ""}
-                            {isWeddings &&
-                              watchedWeddingSession &&
-                              derivedWeddingEventType && (
-                                <span className="ml-2 font-normal text-muted-foreground text-xs">
-                                  (auto-filled, bisa diubah manual)
-                                </span>
-                              )}
-                          </FormLabel>
-                          <FormControl>
-                            <TimeRangePicker
-                              value={field.value}
-                              onChange={field.onChange}
-                              placeholder="Pilih waktu (bisa rentang)..."
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
-
+                  {/* Details */}
                   <FormField
                     control={form.control}
                     name="details"
                     render={({ field }) => (
                       <FormItem className="w-full">
-                        <FormLabel className={LABEL_CLASS}>Details</FormLabel>
+                        <FormLabel className={LABEL_CLASS}>
+                          Details{" "}
+                          <span className="font-normal text-muted-foreground">(opsional)</span>
+                        </FormLabel>
                         <FormControl>
-                          <Textarea
+                          <Input
                             {...field}
-                            rows={2}
-                            placeholder="mis. Venue Only"
+                            placeholder="mis. Venue Only, Meeting Only..."
                             className="w-full"
                           />
                         </FormControl>
+                      </FormItem>
+                    )}
+                  />
+
+                  {/* Time */}
+                  <FormField
+                    control={form.control}
+                    name="time"
+                    render={({ field }) => (
+                      <FormItem className="w-full">
+                        <FormLabel className={LABEL_CLASS}>
+                          Time{" "}
+                          <span className="font-normal text-muted-foreground">(opsional)</span>
+                        </FormLabel>
+                        <FormControl>
+                          <Input
+                            {...field}
+                            placeholder="mis. Half Day, Full Day, Evening..."
+                            className="w-full"
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  {/* Place */}
+                  <FormField
+                    control={form.control}
+                    name="place"
+                    render={({ field }) => (
+                      <FormItem className="w-full">
+                        <FormLabel className={LABEL_CLASS}>
+                          Place{" "}
+                          <span className="font-normal text-muted-foreground">(opsional)</span>
+                        </FormLabel>
+                        <FormControl>
+                          <Input
+                            {...field}
+                            placeholder="mis. Ballroom, Outdoor, Gazebo..."
+                            className="w-full"
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  {/* Tanggal Event + Availability */}
+                  <FormField
+                    control={form.control}
+                    name="eventDate"
+                    rules={{ required: "Tanggal event wajib diisi" }}
+                    render={({ field }) => (
+                      <FormItem className="w-full">
+                        <FormLabel className={LABEL_CLASS}>Date <span className="text-destructive">*</span></FormLabel>
+                        <Popover>
+                          <PopoverTrigger
+                            render={
+                              <Button
+                                variant="outline"
+                                className={cn(
+                                  "w-full justify-start text-left font-normal",
+                                  !field.value && "text-muted-foreground",
+                                )}
+                              >
+                                <CalendarSolarIcon
+                                  weight="BoldDuotone"
+                                  className="mr-2 h-4 w-4"
+                                />
+                                {field.value
+                                  ? format(
+                                      new Date(field.value + "T00:00:00"),
+                                      "PPP",
+                                    )
+                                  : "Pilih tanggal event"}
+                              </Button>
+                            }
+                          />
+                          <PopoverContent className="w-auto p-0" align="start">
+                            <Calendar
+                              mode="single"
+                              captionLayout="dropdown"
+                              selected={
+                                field.value
+                                  ? new Date(field.value + "T00:00:00")
+                                  : undefined
+                              }
+                              onSelect={(date) => {
+                                if (date) {
+                                  const y = date.getFullYear();
+                                  const m = String(date.getMonth() + 1).padStart(
+                                    2,
+                                    "0",
+                                  );
+                                  const d = String(date.getDate()).padStart(2, "0");
+                                  field.onChange(`${y}-${m}-${d}`);
+                                } else {
+                                  field.onChange("");
+                                }
+                              }}
+                              disabled={(d) => getDateStatus(d) === "unavailable"}
+                              fromYear={new Date().getFullYear() - 10}
+                              toYear={new Date().getFullYear() + 5}
+                              defaultMonth={
+                                field.value
+                                  ? new Date(field.value + "T00:00:00")
+                                  : new Date()
+                              }
+                              onMonthChange={setVisibleMonth}
+                              modifiers={{
+                                available: (d) =>
+                                  !!watchedVenueId && getDateStatus(d) === "available",
+                                partial: (d) =>
+                                  !!watchedVenueId && getDateStatus(d) === "partial",
+                                unavailable: (d) =>
+                                  !!watchedVenueId &&
+                                  getDateStatus(d) === "unavailable",
+                              }}
+                              modifiersClassNames={{
+                                available: "day-available",
+                                partial: "day-partial",
+                                unavailable: "day-unavailable",
+                              }}
+                            />
+                          </PopoverContent>
+                        </Popover>
+                        {availLoading && (
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Mengecek ketersediaan...
+                          </p>
+                        )}
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  {/* Venue */}
+                  <FormField
+                    control={form.control}
+                    name="venueId"
+                    render={({ field }) => (
+                      <FormItem className="w-full">
+                        <FormLabel className={LABEL_CLASS}>Venue</FormLabel>
+                        <FormControl>
+                          <SearchableSelect
+                            options={venues.map((v) => ({ id: v.id, name: v.name }))}
+                            value={field.value}
+                            onChange={(id) => {
+                              field.onChange(id);
+                              const matched = venues.find((v) => v.id === id);
+                              form.setValue("venue", matched?.name ?? "");
+                              // Reset date when venue changes
+                              form.setValue("eventDate", "");
+                              // Auto-load per-venue template (create mode only).
+                              void loadVenueTemplate(id);
+                            }}
+                            placeholder="Pilih / cari venue..."
+                            searchPlaceholder="Cari venue..."
+                            emptyText="Venue tidak ditemukan"
+                          />
+                        </FormControl>
+                        <FormMessage />
                       </FormItem>
                     )}
                   />
@@ -1698,9 +1471,9 @@ export function QuotationDrawer({
                     </span>
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    Akhiri judul dengan &quot;:&quot; untuk jadi judul section
-                    (mis. &quot;Ballroom Facilities :&quot;). Harga boleh
-                    dikosongkan untuk item tanpa biaya.
+                    Awali judul dengan &quot;A. / B. / C.&quot; atau akhiri dengan
+                    &quot;:&quot; untuk jadi judul section (mis. &quot;A. Ballroom
+                    Facilities&quot;). Harga boleh dikosongkan untuk item tanpa biaya.
                   </p>
 
                   <ItemListEditor
@@ -1771,51 +1544,144 @@ export function QuotationDrawer({
                   </div>
                 </div>
 
-                {/* ── Metode Pembayaran ─────────────────────────────── */}
-                <FormField
-                  control={form.control}
-                  name="paymentMethodId"
-                  render={({ field }) => (
-                    <FormItem className="w-full">
-                      <FormLabel className={LABEL_CLASS}>Metode Pembayaran</FormLabel>
-                      <BankAccountSelect
-                        value={field.value ?? ""}
-                        onChange={field.onChange}
-                        venueId={watchedVenueId || undefined}
-                        placeholder="Pilih metode pembayaran..."
-                        disableAdd
-                      />
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                {/* ── Ketentuan Penawaran ───────────────────────────── */}
+                <div className="border-t pt-4 space-y-3">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                    Ketentuan Penawaran
+                  </p>
 
-                {/* ── Catatan ───────────────────────────────────────── */}
-                <FormField
-                  control={form.control}
-                  name="notes"
-                  render={({ field }) => (
-                    <FormItem className="w-full">
-                      <FormLabel className={LABEL_CLASS}>Catatan</FormLabel>
-                      <FormControl>
-                        <Textarea
-                          {...field}
-                          rows={2}
-                          placeholder="Catatan tambahan (opsional)..."
-                          className="w-full"
+                  <FormField
+                    control={form.control}
+                    name="paymentMethodId"
+                    render={({ field }) => (
+                      <FormItem className="w-full">
+                        <FormLabel className={LABEL_CLASS}>Metode Pembayaran</FormLabel>
+                        <BankAccountSelect
+                          value={field.value ?? ""}
+                          onChange={field.onChange}
+                          venueId={watchedVenueId || undefined}
+                          placeholder="Pilih metode pembayaran..."
+                          disableAdd
                         />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="bookingFee"
+                    render={({ field }) => (
+                      <FormItem className="w-full">
+                        <FormLabel className={LABEL_CLASS}>
+                          Booking Fee{" "}
+                          <span className="font-normal text-muted-foreground">(opsional)</span>
+                        </FormLabel>
+                        <FormControl>
+                          <div className="relative w-full">
+                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground select-none">
+                              Rp
+                            </span>
+                            <Input
+                              value={field.value}
+                              onChange={(e) =>
+                                field.onChange(formatNumericDisplay(e.target.value))
+                              }
+                              placeholder="0"
+                              inputMode="numeric"
+                              className="w-full pl-8"
+                            />
+                          </div>
+                        </FormControl>
+                        <p className="text-xs text-muted-foreground">
+                          Tampil di dokumen: &quot;Booking Fee of Rp X is required to confirm the
+                          reservation&quot;. Kosongkan bila tidak ada.
+                        </p>
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="validUntil"
+                    render={({ field }) => (
+                      <FormItem className="w-full">
+                        <FormLabel className={LABEL_CLASS}>
+                          Berlaku Sampai{" "}
+                          <span className="font-normal text-muted-foreground">(opsional)</span>
+                        </FormLabel>
+                        <Popover>
+                          <PopoverTrigger
+                            render={
+                              <Button
+                                variant="outline"
+                                className={cn(
+                                  "w-full justify-start text-left font-normal",
+                                  !field.value && "text-muted-foreground",
+                                )}
+                              >
+                                <CalendarSolarIcon weight="BoldDuotone" className="mr-2 h-4 w-4" />
+                                {field.value
+                                  ? format(new Date(field.value + "T00:00:00"), "PPP")
+                                  : "Pilih tanggal berlaku..."}
+                              </Button>
+                            }
+                          />
+                          <PopoverContent className="w-auto p-0" align="start">
+                            <Calendar
+                              mode="single"
+                              captionLayout="dropdown"
+                              selected={field.value ? new Date(field.value + "T00:00:00") : undefined}
+                              onSelect={(date) => {
+                                if (date) {
+                                  const y = date.getFullYear();
+                                  const m = String(date.getMonth() + 1).padStart(2, "0");
+                                  const d = String(date.getDate()).padStart(2, "0");
+                                  field.onChange(`${y}-${m}-${d}`);
+                                } else {
+                                  field.onChange("");
+                                }
+                              }}
+                              fromYear={new Date().getFullYear()}
+                              toYear={new Date().getFullYear() + 5}
+                              defaultMonth={field.value ? new Date(field.value + "T00:00:00") : new Date()}
+                            />
+                          </PopoverContent>
+                        </Popover>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="notes"
+                    render={({ field }) => (
+                      <FormItem className="w-full">
+                        <FormLabel className={LABEL_CLASS}>
+                          Catatan{" "}
+                          <span className="font-normal text-muted-foreground">(opsional)</span>
+                        </FormLabel>
+                        <FormControl>
+                          <Textarea
+                            {...field}
+                            rows={2}
+                            placeholder="Catatan tambahan untuk client..."
+                            className="w-full"
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
               </div>
 
               {/* ════════════════ STEP 3 — TTD ════════════════ */}
               <div className={cn(step !== 3 && "hidden", "space-y-6")}>
                 <div>
                   <FormLabel className={cn("text-sm", "font-medium", "text-foreground", "mb-2", "block")}>
-                    Lokasi Tanda Tangan *
+                    Lokasi Tanda Tangan <span className="text-destructive">*</span>
                   </FormLabel>
                   <Input
                     placeholder="Contoh: Jakarta, Bandung, Surabaya..."
@@ -1823,9 +1689,9 @@ export function QuotationDrawer({
                     onChange={(e) => setSigningLocation(e.target.value)}
                   />
                 </div>
-                <div>
+                <div className="border-t border-border pt-6">
                   <FormLabel className={cn("text-sm", "font-medium", "text-foreground", "mb-2", "block")}>
-                    Tanda Tangan Sales *
+                    Tanda Tangan Sales <span className="text-destructive">*</span>
                   </FormLabel>
                   <div
                     className={cn(
@@ -1852,25 +1718,17 @@ export function QuotationDrawer({
                       />
                     )}
                   </div>
-                  <div className={cn("flex", "items-center", "justify-between", "mt-1.5")}>
-                    {!signatureSales && (
-                      <p className={cn("text-xs", "text-destructive")}>
-                        Tanda tangan sales wajib diisi
-                      </p>
-                    )}
+                  <div className="flex items-center justify-between mt-1.5">
+                    <p className={cn("text-xs", "text-destructive", signatureSales && "invisible")}>
+                      Tanda tangan sales wajib diisi
+                    </p>
                     <button
                       type="button"
                       onClick={() => {
                         sigSalesRef.current?.clear();
                         setSignatureSales("");
                       }}
-                      className={cn(
-                        "text-xs",
-                        "text-destructive",
-                        "hover:text-destructive",
-                        "underline",
-                        "ml-auto",
-                      )}
+                      className="text-xs text-destructive hover:text-destructive underline ml-auto"
                     >
                       Hapus tanda tangan
                     </button>
