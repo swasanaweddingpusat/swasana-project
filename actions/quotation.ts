@@ -37,9 +37,12 @@ function computePricing(items: CreateQuotationInput["items"], discount: number):
 
 async function generateQuotationNo(category: "WEDDINGS" | "MICE"): Promise<string> {
   const year = new Date().getFullYear();
-  const seq = await getNextSequence(`quotation-${year}`);
   const prefix = category === "MICE" ? "MICE" : "WED";
-  return `${seq.toString().padStart(3, "0")}/${prefix}/${year}`;
+  // Per-category counter → MICE numbers stay contiguous (matches the operational
+  // "NO QUOTATION" register: #201-MICE, #202-MICE … sequential per year).
+  const seq = await getNextSequence(`quotation-${prefix}-${year}`);
+  const padded = seq.toString().padStart(3, "0");
+  return category === "MICE" ? `#${padded}-MICE` : `${padded}/WED/${year}`;
 }
 
 // ── Create ─────────────────────────────────────────────────────────────────────
@@ -88,10 +91,12 @@ export async function createQuotation(
           weddingSession: input.weddingSession ?? null,
           eventDate: input.eventDate ? new Date(input.eventDate) : null,
           time: input.time ?? null,
+          place: input.place ?? null,
           details: input.details ?? null,
           subtotal,
           discount: input.discount,
           totalPrice,
+          bookingFee: input.bookingFee ?? null,
           validUntil: input.validUntil ? new Date(input.validUntil) : null,
           notes: input.notes ?? null,
           signingLocation: input.signingLocation ?? null,
@@ -225,12 +230,14 @@ export async function updateQuotation(
           weddingSession: input.weddingSession ?? null,
           eventDate: input.eventDate ? new Date(input.eventDate) : null,
           time: input.time ?? null,
+          place: input.place ?? null,
           details: input.details ?? null,
           ...(pricingUpdate !== undefined && {
             subtotal: pricingUpdate.subtotal,
             discount: pricingUpdate.discount,
             totalPrice: pricingUpdate.totalPrice,
           }),
+          bookingFee: input.bookingFee ?? null,
           validUntil: input.validUntil ? new Date(input.validUntil) : undefined,
           notes: input.notes ?? null,
           signingLocation: input.signingLocation ?? null,

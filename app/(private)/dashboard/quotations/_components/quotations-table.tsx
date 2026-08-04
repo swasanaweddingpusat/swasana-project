@@ -130,6 +130,7 @@ function mapRowToQuotationItem(row: QuotationListRow): QuotationItem {
     eventType: row.eventTypeName ?? row.eventType?.name ?? "",
     eventDate: row.eventDate ? format(new Date(row.eventDate), "yyyy-MM-dd") : "",
     time: row.time ?? undefined,
+    place: row.place ?? undefined,
     details: row.details ?? undefined,
     // items from DB → QuotationLineItem[]
     items: row.items.map((it) => ({
@@ -144,6 +145,7 @@ function mapRowToQuotationItem(row: QuotationListRow): QuotationItem {
     price: row.subtotal,
     discount: row.discount,
     totalPrice: row.totalPrice,
+    bookingFee: row.bookingFee ?? undefined,
     status: row.status as QuotationItem["status"],
     paymentMethodId: row.paymentMethodId ?? undefined,
     bankName: row.paymentMethod?.bankName,

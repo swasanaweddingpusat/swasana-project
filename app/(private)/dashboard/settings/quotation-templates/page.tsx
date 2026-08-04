@@ -49,6 +49,7 @@ type TemplateDetail = {
     sortOrder: number;
   }[];
   paymentMethodId: string | null;
+  bookingFee: number | null;
 };
 
 const emptyRow = (): ItemRow => ({ title: "", description: "", qty: 1, price: 0, total: 0, manualTotal: false });
@@ -70,6 +71,7 @@ export default function QuotationTemplatesPage() {
   const [editing, setEditing] = useState<TemplateListItem | null>(null);
   const [venueId, setVenueId] = useState("");
   const [paymentMethodId, setPaymentMethodId] = useState<string | null>(null);
+  const [bookingFee, setBookingFee] = useState(0);
   const [rows, setRows] = useState<ItemRow[]>([emptyRow()]);
   const [saving, setSaving] = useState(false);
   const [prefilling, setPrefilling] = useState(false);
@@ -107,6 +109,7 @@ export default function QuotationTemplatesPage() {
     setEditing(null);
     setVenueId("");
     setPaymentMethodId(null);
+    setBookingFee(0);
     setRows([emptyRow()]);
     setFormOpen(true);
   };
@@ -118,6 +121,7 @@ export default function QuotationTemplatesPage() {
       if (!res.ok) {
         setRows([emptyRow()]);
         setPaymentMethodId(null);
+        setBookingFee(0);
         return;
       }
       const detail = (await res.json()) as TemplateDetail;
@@ -136,9 +140,11 @@ export default function QuotationTemplatesPage() {
         setRows([emptyRow()]);
       }
       setPaymentMethodId(detail.paymentMethodId);
+      setBookingFee(detail.bookingFee ?? 0);
     } catch {
       setRows([emptyRow()]);
       setPaymentMethodId(null);
+      setBookingFee(0);
     } finally {
       setPrefilling(false);
     }
@@ -156,6 +162,7 @@ export default function QuotationTemplatesPage() {
   const handleVenueChange = (vid: string) => {
     setVenueId(vid);
     setPaymentMethodId(null);
+    setBookingFee(0);
     if (vid) {
       void loadTemplateDetail(vid);
     } else {
@@ -194,6 +201,7 @@ export default function QuotationTemplatesPage() {
       const res = await upsertQuotationTemplate({
         venueId,
         paymentMethodId: paymentMethodId ?? undefined,
+        bookingFee: bookingFee > 0 ? bookingFee : undefined,
         items: cleanRows.map((r, idx) => ({
           title: r.title.trim(),
           description: r.description || undefined,
@@ -407,6 +415,26 @@ export default function QuotationTemplatesPage() {
                 disableAdd
                 className="mt-1"
               />
+            </div>
+
+            <div>
+              <Label className="text-sm">Default Booking Fee</Label>
+              <div className="relative mt-1">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground select-none">
+                  Rp
+                </span>
+                <Input
+                  inputMode="numeric"
+                  value={formatNumber(bookingFee)}
+                  onChange={(e) => setBookingFee(parseNumber(e.target.value))}
+                  placeholder="0"
+                  className="pl-8"
+                />
+              </div>
+              <p className={cn("text-xs", "text-muted-foreground", "mt-1")}>
+                Auto-terisi ke form quotation venue ini. Tampil di dokumen sebagai &quot;Booking
+                Fee of Rp X is required to confirm the reservation&quot;.
+              </p>
             </div>
 
             {/* Items editor */}

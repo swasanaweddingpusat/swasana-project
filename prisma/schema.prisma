@@ -1899,12 +1899,16 @@ model Quotation {
   weddingSession  WeddingSession?
   eventDate       DateTime?
   time            String?
+  place           String?   // Area/ruang venue (mis. Ballroom, Outdoor, Gazebo)
   details         String?
 
   // Pricing (server-computed)
   subtotal        Int              @default(0)
   discount        Int              @default(0)
   totalPrice      Int              @default(0)
+  // Booking fee required to confirm the reservation (shown in the Term & Payment
+  // boilerplate: "Booking Fee of Rp X is required to confirm the reservation").
+  bookingFee      Int?
 
   // Meta
   validUntil      DateTime?
@@ -1974,6 +1978,7 @@ model QuotationTemplate {
   id              String   @id @default(uuid())
   venueId         String   @unique // one template per venue
   paymentMethodId String?
+  bookingFee      Int?     // default booking fee auto-loaded into the quotation form
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
