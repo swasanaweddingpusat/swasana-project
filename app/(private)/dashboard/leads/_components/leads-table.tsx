@@ -18,19 +18,11 @@ import { LeadDrawer } from "./lead-drawer";
 import { CreateLeadDrawer } from "./CreateLeadDrawer";
 import { LeadsFilters } from "./leads-filters";
 import { LeadsListView } from "./leads-list-view";
-import { BookingDrawer } from "@/app/(private)/dashboard/booking-weddings/_components/booking-drawer";
-import { MiceBookingDrawer } from "@/app/(private)/dashboard/booking-mice/_components/MiceBookingDrawer";
 import { useLeads, useUpdateLeadStatus, useDeleteLead } from "@/hooks/use-leads";
-import {
-  convertLeadToDraftBooking,
-  convertLeadToDraftMiceBooking,
-} from "@/actions/lead-conversion";
-import { DealConfirmModal } from "./DealConfirmModal";
-import type { DealSelection } from "./DealConfirmModal";
 import { LeadDetailModal } from "./LeadDetailModal";
 import { useLeadStatuses } from "@/hooks/use-lead-statuses";
 import type { LeadItem } from "@/lib/queries/leads";
-import type { LeadListItem, BookingPrefillLead, ContactNumber } from "@/types/lead";
+import type { LeadListItem } from "@/types/lead";
 import type { LeadScope } from "@/lib/validations/lead";
 
 export type { LeadItem };
@@ -43,27 +35,22 @@ export function LeadsTable() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [venueFilter, setVenueFilter] = useState("all");
   const [eventTypeFilter, setEventTypeFilter] = useState("all");
+  const [segmentFilter, setSegmentFilter] = useState("all");
   const [currentPage, setCurrentPage] = useState(1);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editLead, setEditLead] = useState<LeadListItem | null>(null);
   // CreateLeadDrawer — new redesigned create flow (frontend-only for now)
   const [createDrawerOpen, setCreateDrawerOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<LeadItem | null>(null);
+  // Deal / Lost / Reset are pure pipeline status flips. Leads carry no booking:
+  // a Deal only marks the pipeline outcome; the actual Booking is created later
+  // from the Booking menu (with its own in-drawer lead picker) or via Quotation.
   const [dealTarget, setDealTarget] = useState<LeadItem | null>(null);
-  // MICE deal = flip status only (no booking). Booking MICE dibuat nanti lewat
-  // Quotation → Booking, bukan langsung dari lead. Wedding tetap Deal + draft booking.
-  const [dealMiceTarget, setDealMiceTarget] = useState<LeadItem | null>(null);
   const [lostTarget, setLostTarget] = useState<LeadItem | null>(null);
   const [resetTarget, setResetTarget] = useState<LeadItem | null>(null);
   const [detailLead, setDetailLead] = useState<LeadItem | null>(null);
   const [isMarkingStatus, setIsMarkingStatus] = useState(false);
   const [isManualRefresh, setIsManualRefresh] = useState(false);
-  // Booking creation from a lead — routed to wedding or MICE drawer by category.
-  const [weddingPrefill, setWeddingPrefill] = useState<BookingPrefillLead | null>(null);
-  const [micePrefill, setMicePrefill] = useState<BookingPrefillLead | null>(null);
-  // initialDraftId injected from Deal flow — skips createDraftBooking on Step 1 "Continue"
-  const [weddingInitialDraftId, setWeddingInitialDraftId] = useState<string | null>(null);
-  const [miceInitialDraftId, setMiceInitialDraftId] = useState<string | null>(null);
 
   const pageSize = 20;
 
@@ -76,10 +63,11 @@ export function LeadsTable() {
       statusId: scope === "active" && statusFilter !== "all" ? statusFilter : undefined,
       venueId: venueFilter !== "all" ? venueFilter : undefined,
       eventTypeId: eventTypeFilter !== "all" ? eventTypeFilter : undefined,
+      segmentId: segmentFilter !== "all" ? segmentFilter : undefined,
       page: currentPage,
       pageSize,
     }),
-    [search, scope, statusFilter, venueFilter, eventTypeFilter, currentPage, pageSize],
+    [search, scope, statusFilter, venueFilter, eventTypeFilter, segmentFilter, currentPage, pageSize],
   );
 
   const { data: leadsData, isLoading: leadsLoading, refetch: refetchLeads } = useLeads(leadsFilter);
@@ -114,37 +102,24 @@ export function LeadsTable() {
     statuses.find((s) => s.isFinal && !s.isSystem);
 
   // Open confirmation modal; the actual mutation runs on confirm.
+  // Deal is a plain status flip for both wedding & MICE — no booking is created here.
   function handleMarkDeal(lead: LeadItem) {
-    // Block if already final — except when status is Deal (isSystem=true) but
-    // the booking was deleted (convertedToBookingId = null). In that case, allow
-    // re-deal so the user can recreate the draft without getting stuck.
     if (lead.status.isFinal) {
-      const isDealWithoutBooking = lead.status.isSystem && !lead.convertedToBooking?.id;
-      if (!isDealWithoutBooking) {
-        toast.info("Lead sudah berstatus final.");
-        return;
-      }
-    }
-    // MICE: Deal cukup flip status. Booking MICE dibuat belakangan lewat
-    // Quotation → Booking (relasi tetap lewat lead via quotation). Wedding tetap
-    // pakai DealConfirmModal → langsung buat draft booking.
-    const category = lead.eventType?.category ?? lead.category;
-    if (category === "MICE") {
-      setDealMiceTarget(lead);
+      toast.info("Lead sudah berstatus final.");
       return;
     }
     setDealTarget(lead);
   }
 
-  async function handleConfirmDealMice() {
-    if (!dealMiceTarget) return;
+  async function handleConfirmDeal() {
+    if (!dealTarget) return;
     if (!dealStatus) { toast.error("Status Deal tidak ditemukan."); return; }
     setIsMarkingStatus(true);
     try {
-      const res = await updateStatus({ id: dealMiceTarget.id, statusId: dealStatus.id });
+      const res = await updateStatus({ id: dealTarget.id, statusId: dealStatus.id });
       if (res.success) {
-        toast.success(`${dealMiceTarget.name} ditandai sebagai Deal.`);
-        setDealMiceTarget(null);
+        toast.success(`${dealTarget.name} ditandai sebagai Deal.`);
+        setDealTarget(null);
       } else {
         toast.error(res.error ?? "Gagal mengubah status.");
       }
@@ -158,132 +133,6 @@ export function LeadsTable() {
   function handleMarkLost(lead: LeadItem) {
     if (lead.status.isFinal) { toast.info("Lead sudah berstatus final."); return; }
     setLostTarget(lead);
-  }
-
-  async function handleConfirmDeal(selection: DealSelection) {
-    if (!dealTarget) return;
-    if (!dealStatus) { toast.error("Status Deal tidak ditemukan."); return; }
-
-    const lead = dealTarget;
-    const category = lead.eventType?.category ?? lead.category;
-
-    setIsMarkingStatus(true);
-
-    // Check if lead already has a booking — reopen existing draft instead of creating duplicate
-    if (lead.convertedToBooking?.id) {
-      // Lead already converted — reopen existing booking drawer using the user's selection
-      const prefill = buildPrefill(lead, selection);
-      toast.info("Lead sudah punya booking. Membuka draft yang ada...");
-      if (category === "MICE") {
-        setMicePrefill(prefill);
-        setMiceInitialDraftId(lead.convertedToBooking.id);
-      } else {
-        setWeddingPrefill(prefill);
-        setWeddingInitialDraftId(lead.convertedToBooking.id);
-      }
-      setDealTarget(null);
-      setIsMarkingStatus(false);
-      return;
-    }
-
-    try {
-      // Atomic: flip status to Deal + create the draft booking in one server action
-      // (single db.$transaction). If booking creation fails, the status change rolls
-      // back — no "floating Deal with no booking" slot. Route by category to the
-      // matching permission (booking:create vs booking-mice:create).
-      const prefill = buildPrefill(lead, selection);
-
-      const draftRes =
-        category === "MICE"
-          ? await convertLeadToDraftMiceBooking({
-              leadId: lead.id,
-              eventDate: selection.eventDate,
-              venueId: selection.venueId,
-              miceSession: selection.session,
-            })
-          : await convertLeadToDraftBooking({
-              leadId: lead.id,
-              eventDate: selection.eventDate,
-              venueId: selection.venueId,
-              category,
-              weddingSession: selection.session,
-            });
-
-      if (!draftRes.success || !draftRes.draftId) {
-        // Failure → toast only. Do NOT open the drawer (no draft to resume).
-        toast.error(draftRes.error ?? "Gagal mengkonversi lead menjadi Deal.");
-        return;
-      }
-
-      toast.success(`${lead.name} ditandai sebagai Deal. Draft booking dibuat.`);
-
-      // Success → open matching drawer with prefill + initialDraftId
-      if (category === "MICE") {
-        setMicePrefill(prefill);
-        setMiceInitialDraftId(draftRes.draftId);
-      } else {
-        setWeddingPrefill(prefill);
-        setWeddingInitialDraftId(draftRes.draftId);
-      }
-
-      setDealTarget(null);
-    } catch {
-      toast.error("Terjadi kesalahan saat memproses Deal.");
-    } finally {
-      setIsMarkingStatus(false);
-    }
-  }
-
-  /**
-   * Build the BookingPrefillLead payload.
-   * When `selection` is provided (Deal flow), override venue/eventDate/weddingSession
-   * with the user's chosen values so the booking drawer opens in a consistent state.
-   */
-  function buildPrefill(lead: LeadItem, selection?: DealSelection): BookingPrefillLead {
-    // Resolve the venue object matching the selected venueId (could be primary or secondary)
-    let resolvedVenue = lead.venue;
-    if (selection) {
-      if (lead.venue?.id === selection.venueId) {
-        resolvedVenue = lead.venue;
-      } else if (lead.venueSecondary?.id === selection.venueId) {
-        resolvedVenue = lead.venueSecondary;
-      }
-    }
-
-    // Resolve bookingFeeDate: DB stores as DateTime, convert to "YYYY-MM-DD" string
-    const bookingFeeDateStr = lead.bookingFeeDate
-      ? (() => {
-          const d = new Date(lead.bookingFeeDate);
-          const y = d.getUTCFullYear();
-          const m = String(d.getUTCMonth() + 1).padStart(2, "0");
-          const day = String(d.getUTCDate()).padStart(2, "0");
-          return `${y}-${m}-${day}`;
-        })()
-      : null;
-
-    return {
-      leadId: lead.id,
-      name: lead.name,
-      contactNumbers: (lead.contactNumbers as ContactNumber[] | null) ?? [],
-      email: lead.email,
-      address: lead.address,
-      bitrixId: lead.bitrixId,
-      // Override with selection if provided, else fall back to lead values
-      eventDate: selection ? selection.eventDate : lead.eventDate,
-      time: lead.time,
-      estimatedPax: lead.estimatedPax,
-      notes: lead.notes,
-      weddingSession: selection ? selection.session : lead.weddingSession,
-      venue: resolvedVenue ?? null,
-      package: lead.package,
-      eventType: lead.eventType,
-      sourceOfInformation: lead.sourceOfInformation,
-      assignedTo: lead.assignedTo,
-      // Booking fee — only populated when lead has isDateLocked (received booking fee)
-      bookingFeeAmount: lead.bookingFeeAmount ?? null,
-      bookingFeeDate: bookingFeeDateStr,
-      bookingFeeEvidenceUrl: lead.bookingFeeEvidenceUrl ?? null,
-    };
   }
 
   async function handleConfirmLost() {
@@ -374,6 +223,11 @@ export function LeadsTable() {
     setCurrentPage(1);
   }
 
+  function handleSegmentChange(value: string) {
+    setSegmentFilter(value);
+    setCurrentPage(1);
+  }
+
   function handleRefresh() {
     // Show shimmer only for manual refresh (not for background refetches like
     // drag-and-drop optimistic settles).
@@ -405,6 +259,8 @@ export function LeadsTable() {
             onVenueChange={handleVenueChange}
             eventTypeFilter={eventTypeFilter}
             onEventTypeChange={handleEventTypeChange}
+            segmentFilter={segmentFilter}
+            onSegmentChange={handleSegmentChange}
             statusCounts={statusCounts}
             totalFiltered={leadsData?.total ?? 0}
             onAdd={handleAdd}
@@ -443,47 +299,6 @@ export function LeadsTable() {
         editLead={editLead}
       />
 
-      {/* Deal flow — wedding drawer (with initialDraftId injected) */}
-      {weddingPrefill && (
-        <BookingDrawer
-          open={!!weddingPrefill}
-          onOpenChange={(o) => {
-            if (!o) {
-              setWeddingPrefill(null);
-              setWeddingInitialDraftId(null);
-            }
-          }}
-          prefillLead={weddingPrefill}
-          initialDraftId={weddingInitialDraftId}
-          onSuccess={() => {
-            setWeddingPrefill(null);
-            setWeddingInitialDraftId(null);
-            void refetchLeads();
-          }}
-        />
-      )}
-
-      {/* Deal flow — MICE drawer (with initialDraftId injected) */}
-      {micePrefill && (
-        <MiceBookingDrawer
-          open={!!micePrefill}
-          onOpenChange={(o) => {
-            if (!o) {
-              setMicePrefill(null);
-              setMiceInitialDraftId(null);
-            }
-          }}
-          booking={null}
-          prefillLead={micePrefill}
-          initialDraftId={miceInitialDraftId}
-          onSuccess={() => {
-            setMicePrefill(null);
-            setMiceInitialDraftId(null);
-            void refetchLeads();
-          }}
-        />
-      )}
-
       {/* Lead detail modal — opens on row click */}
       <LeadDetailModal
         open={!!detailLead}
@@ -495,13 +310,24 @@ export function LeadsTable() {
         }}
       />
 
-      {/* Deal confirm modal — replaces simple AlertDialog */}
-      <DealConfirmModal
-        lead={dealTarget}
-        isProcessing={isMarkingStatus}
-        onConfirm={handleConfirmDeal}
-        onClose={() => setDealTarget(null)}
-      />
+      {/* Deal — plain status flip for wedding & MICE. Booking dibuat terpisah lewat
+          menu Booking (punya lead picker sendiri) atau lewat Quotation. */}
+      <AlertDialog open={!!dealTarget} onOpenChange={(open) => !open && setDealTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Tandai sebagai Deal</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tandai <strong>{dealTarget?.name}</strong> sebagai <strong>Deal</strong>? Status lead akan menjadi final. Booking tidak dibuat pada tahap ini — buat Booking lewat menu Booking (pilih lead ini) atau lewat Quotation.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isMarkingStatus}>Batal</AlertDialogCancel>
+            <AlertDialogAction onClick={handleConfirmDeal} disabled={isMarkingStatus}>
+              {isMarkingStatus ? "Memproses..." : "Tandai Deal"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
         <AlertDialogContent>
@@ -519,25 +345,6 @@ export function LeadsTable() {
               className={cn("bg-destructive", "text-destructive-foreground", "hover:bg-destructive/90")}
             >
               {isDeleting ? "Menghapus..." : "Hapus"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      {/* MICE Deal — flip status saja, tanpa buat booking. Booking MICE menyusul
-          lewat Quotation → Booking. */}
-      <AlertDialog open={!!dealMiceTarget} onOpenChange={(open) => !open && setDealMiceTarget(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Tandai sebagai Deal</AlertDialogTitle>
-            <AlertDialogDescription>
-              Tandai <strong>{dealMiceTarget?.name}</strong> sebagai <strong>Deal</strong>? Booking belum dibuat pada tahap ini — selanjutnya buat penawaran lewat Quotation, lalu Booking MICE dibuat saat client membayar.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={isMarkingStatus}>Batal</AlertDialogCancel>
-            <AlertDialogAction onClick={handleConfirmDealMice} disabled={isMarkingStatus}>
-              {isMarkingStatus ? "Memproses..." : "Tandai Deal"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

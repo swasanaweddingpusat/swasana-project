@@ -45,6 +45,7 @@ const leadSelect = {
   weddingSessionAlt: true,
   bitrixId: true,
   instansi: true,
+  segmentId: true,
   isDateLocked: true,
   bookingFeeAmount: true,
   bookingFeeDate: true,
@@ -68,6 +69,9 @@ const leadSelect = {
     select: { id: true, name: true, category: true, code: true },
   },
   sourceOfInformation: {
+    select: { id: true, name: true },
+  },
+  segment: {
     select: { id: true, name: true },
   },
   createdBy: {
@@ -137,7 +141,7 @@ export async function getLeads(
   // result set without a per-user cache key would leak data across callers.
   // Callers that need caching should cache at a higher layer with identity in key.
 
-  const { search, scope, statusId, venueId, eventTypeId, assignedToId, page, pageSize } = filter;
+  const { search, scope, statusId, venueId, eventTypeId, segmentId, assignedToId, page, pageSize } = filter;
 
   // Scope filter: active = isFinal:false, deal = isFinal&&isSystem, lost = isFinal&&!isSystem
   let scopeWhere: Prisma.LeadWhereInput = {};
@@ -167,6 +171,7 @@ export async function getLeads(
     ...(statusId && scope === "active" && { statusId }),
     ...(venueId && { venueId }),
     ...(eventTypeId && { eventTypeId }),
+    ...(segmentId && { segmentId }),
     // assignedToId from query param is an additional narrowing filter on top of dataScopeFilter
     ...(assignedToId && { assignedToId }),
   };

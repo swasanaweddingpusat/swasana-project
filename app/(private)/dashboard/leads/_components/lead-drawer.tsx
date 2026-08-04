@@ -47,7 +47,7 @@ import { getWeddingTimeRange } from "@/lib/constants/wedding-session-times";
 import { useVenues } from "@/hooks/use-venues";
 import { useEventTypes } from "@/hooks/use-event-types";
 import { useLeadStatuses } from "@/hooks/use-lead-statuses";
-import { useLeadSegments } from "@/hooks/use-lead-segments";
+import { useLeadSegments, useCreateLeadSegment } from "@/hooks/use-lead-segments";
 import { useSalesUsers } from "@/hooks/use-sales-users";
 import { useUpdateLead } from "@/hooks/use-leads";
 import { useCurrentUser } from "@/hooks/use-current-user";
@@ -92,7 +92,7 @@ interface EditLeadFormState {
   weddingSessionAlt: WeddingSession | "";
   miceSession: WeddingSession | "";
   miceSessionAlt: WeddingSession | "";
-  instansi: string;
+  segmentId: string;
   isDateLocked: boolean;
   bookingFeeAmount: number;
   bookingFeeDate: string;
@@ -182,7 +182,7 @@ export function LeadDrawer({ open, onOpenChange, editLead, onSuccess }: LeadDraw
     weddingSessionAlt: "",
     miceSession: "",
     miceSessionAlt: "",
-    instansi: "",
+    segmentId: "",
     isDateLocked: false,
     bookingFeeAmount: 0,
     bookingFeeDate: "",
@@ -193,17 +193,12 @@ export function LeadDrawer({ open, onOpenChange, editLead, onSuccess }: LeadDraw
   const [contactPopoverOpen, setContactPopoverOpen] = useState(false);
   const [contactInput, setContactInput] = useState({ name: "", phone: "" });
 
-  // ── MICE segment options (from master + local escape-hatch additions) ────────
+  // ── MICE segment options (normalized master, FK-backed) ──────────────────────
   const { data: masterSegments = [] } = useLeadSegments();
-  const [localSegmentAdditions, setLocalSegmentAdditions] = useState<{ id: string; name: string }[]>([]);
-  const miceSegments = [
-    ...masterSegments
-      .filter((s) => s.isActive)
-      .map((s) => ({ id: s.id, name: s.name })),
-    ...localSegmentAdditions.filter(
-      (la) => !masterSegments.some((ms) => ms.name === la.name),
-    ),
-  ];
+  const createSegment = useCreateLeadSegment();
+  const miceSegments = masterSegments
+    .filter((s) => s.isActive)
+    .map((s) => ({ id: s.id, name: s.name }));
 
   // ── UI toggles ─────────────────────────────────────────────────────────────
   const [showDateAlt, setShowDateAlt] = useState(false);
@@ -304,7 +299,7 @@ export function LeadDrawer({ open, onOpenChange, editLead, onSuccess }: LeadDraw
       weddingSessionAlt: isWed ? rawSessionAlt : "",
       miceSession: !isWed ? rawSession : "",
       miceSessionAlt: !isWed ? rawSessionAlt : "",
-      instansi: editLead.instansi ?? "",
+      segmentId: editLead.segmentId ?? "",
       isDateLocked: editLead.isDateLocked ?? false,
       bookingFeeAmount: editLead.bookingFeeAmount
         ? Number(editLead.bookingFeeAmount)
@@ -315,18 +310,6 @@ export function LeadDrawer({ open, onOpenChange, editLead, onSuccess }: LeadDraw
     setContactNumbers(editLead.contactNumbers ?? []);
     setExistingEvidenceUrl(editLead.bookingFeeEvidenceUrl ?? null);
     setBookingFeeEvidence(null);
-
-    // MICE: kalau segment existing (snapshot) belum ada di master, seed ke local additions
-    // biar tetap bisa kepilih di dropdown tanpa harus bikin master baru.
-    const existingSegment = editLead.instansi?.trim();
-    if (!isWed && existingSegment) {
-      setLocalSegmentAdditions((prev) =>
-        prev.some((s) => s.name === existingSegment) ||
-        masterSegments.some((ms) => ms.name === existingSegment)
-          ? prev
-          : [...prev, { id: existingSegment.toLowerCase().replace(/\s+/g, "-"), name: existingSegment }],
-      );
-    }
 
     // Tampilkan tombol alt date/secondary venue kalau data ada
     setShowDateAlt(!!editLead.eventDateAlt);
@@ -467,7 +450,7 @@ export function LeadDrawer({ open, onOpenChange, editLead, onSuccess }: LeadDraw
         estimatedPax: form.estimatedPax ? parseInt(form.estimatedPax, 10) : undefined,
         budgetRange: form.budgetRange || undefined,
         notes: form.notes || undefined,
-        instansi: isMice ? (form.instansi || undefined) : undefined,
+        segmentId: isMice ? (form.segmentId || undefined) : undefined,
         category: category!,
         venueId: form.venueId || undefined,
         venueSecondaryId: form.venueSecondaryId || null,
@@ -616,16 +599,15 @@ export function LeadDrawer({ open, onOpenChange, editLead, onSuccess }: LeadDraw
                   </label>
                   <SearchableSelect
                     options={miceSegments}
-                    value={miceSegments.find((s) => s.name === form.instansi)?.id ?? ""}
-                    onChange={(id) => {
-                      const matched = miceSegments.find((s) => s.id === id);
-                      setField("instansi", matched?.name ?? "");
-                    }}
-                    onAdd={(name) => {
-                      const id = name.toLowerCase().replace(/\s+/g, "-");
-                      const newOpt = { id, name };
-                      setLocalSegmentAdditions((prev) => [...prev, newOpt]);
-                      setField("instansi", name);
+                    value={form.segmentId}
+                    onChange={(id) => setField("segmentId", id)}
+                    onAdd={async (name) => {
+                      const created = await createSegment.mutateAsync({
+                        name: name.trim(),
+                        isActive: true,
+                        sortOrder: 0,
+                      });
+                      setField("segmentId", created.id);
                     }}
                     placeholder="Pilih atau tambah segment..."
                     searchPlaceholder="Cari segment..."

@@ -1760,6 +1760,7 @@ model LeadSegment {
   sortOrder Int      @default(0)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  leads     Lead[]
 
   @@index([sortOrder])
   @@map("lead_segments")
@@ -1789,7 +1790,8 @@ model Lead {
   weddingSessionAlt  WeddingSession? // Session untuk tanggal alternatif (per-date session)
 
   bitrixId       String?
-  instansi       String?
+  instansi       String? // DEPRECATED: legacy free-text segment (MICE). Digantikan segmentId; masih dibaca sebagai fallback sampai kolom di-drop.
+  segmentId      String? // FK ke LeadSegment (MICE segment ternormalisasi)
 
   // Date locking (booking fee)
   isDateLocked          Boolean   @default(false)
@@ -1820,6 +1822,7 @@ model Lead {
   package               Package?             @relation(fields: [packageId], references: [id], onDelete: SetNull)
   eventType             EventType?           @relation(fields: [eventTypeId], references: [id], onDelete: SetNull)
   sourceOfInformation   SourceOfInformation? @relation(fields: [sourceOfInformationId], references: [id], onDelete: SetNull)
+  segment               LeadSegment?         @relation(fields: [segmentId], references: [id], onDelete: SetNull)
   status                LeadStatus           @relation(fields: [statusId], references: [id], onDelete: Restrict)
   createdBy             Profile              @relation(fields: [createdById], references: [id], onDelete: Restrict)
   assignedTo            Profile?             @relation("LeadAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
@@ -1833,6 +1836,7 @@ model Lead {
   @@index([eventDate])
   @@index([venueId])
   @@index([venueSecondaryId])
+  @@index([segmentId])
   @@index([isDateLocked])
   // Composite index buat availability check: cari locked leads per venue+date+session
   @@index([venueId, eventDate, weddingSession, isDateLocked])

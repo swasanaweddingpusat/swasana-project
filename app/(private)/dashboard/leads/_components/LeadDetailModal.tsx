@@ -182,7 +182,9 @@ export function LeadDetailModal({ open, lead, onClose, onEdit }: Props) {
     if (lead.addressCpw) clientFields.push({ label: "Alamat CPW", value: lead.addressCpw, full: true });
   } else {
     if (lead.email) clientFields.push({ label: "Email", value: lead.email });
-    if (lead.instansi) clientFields.push({ label: "Segment / Kategori", value: lead.instansi });
+    if (lead.segment?.name ?? lead.instansi) {
+      clientFields.push({ label: "Segment / Kategori", value: lead.segment?.name ?? lead.instansi });
+    }
     if (lead.address) clientFields.push({ label: "Alamat", value: lead.address, full: true });
   }
 

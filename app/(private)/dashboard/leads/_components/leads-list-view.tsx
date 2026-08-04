@@ -267,16 +267,16 @@ function LeadCard({
           <StatusPill status={lead.status} className="shrink-0" />
         </div>
 
-        {/* Chips: category (+ segment/instansi for MICE) */}
+        {/* Chips: category (+ segment for MICE, instansi fallback for legacy) */}
         <div className="flex flex-wrap items-center gap-1.5">
           <CategoryChip category={lead.category} />
-          {isMice && lead.instansi && (
+          {isMice && (lead.segment?.name ?? lead.instansi) && (
             <span
               className="inline-flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-[11px] font-medium text-foreground/80 max-w-full"
-              title={lead.instansi}
+              title={lead.segment?.name ?? lead.instansi ?? undefined}
             >
               <Buildings2 weight="BoldDuotone" aria-hidden="true" className="h-3 w-3 shrink-0" />
-              <span className="truncate">{lead.instansi}</span>
+              <span className="truncate">{lead.segment?.name ?? lead.instansi}</span>
             </span>
           )}
           {lead.sourceOfInformation?.name && (
@@ -531,15 +531,15 @@ export function LeadsListView({
                     })()}
                   </TableCell>
 
-                  {/* Kategori — MICE shows instansi as sub-line */}
+                  {/* Kategori — MICE shows segment (instansi fallback) as sub-line */}
                   <TableCell className="px-4 py-3 align-top">
                     <CategoryChip category={lead.category} />
-                    {lead.category === "MICE" && lead.instansi && (
+                    {lead.category === "MICE" && (lead.segment?.name ?? lead.instansi) && (
                       <div
                         className="text-xs text-muted-foreground truncate max-w-40 mt-1"
-                        title={lead.instansi}
+                        title={lead.segment?.name ?? lead.instansi ?? undefined}
                       >
-                        {lead.instansi}
+                        {lead.segment?.name ?? lead.instansi}
                       </div>
                     )}
                   </TableCell>

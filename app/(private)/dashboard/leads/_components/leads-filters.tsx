@@ -16,6 +16,7 @@ import {
 } from "@solar-icons/react";
 import { useVenues } from "@/hooks/use-venues";
 import { useEventTypes } from "@/hooks/use-event-types";
+import { useLeadSegments } from "@/hooks/use-lead-segments";
 import { cn } from "@/lib/utils";
 import type { LeadScope } from "@/lib/validations/lead";
 
@@ -36,6 +37,8 @@ interface LeadsFiltersProps {
   onVenueChange: (value: string) => void;
   eventTypeFilter: string;
   onEventTypeChange: (value: string) => void;
+  segmentFilter: string;
+  onSegmentChange: (value: string) => void;
   statusCounts: StatusCount[];
   totalFiltered: number;
   onAdd: () => void;
@@ -52,6 +55,7 @@ const SCOPE_OPTIONS: { value: LeadScope; label: string }[] = [
 
 interface Venue { id: string; name: string; }
 interface EventType { id: string; name: string; category: string; }
+interface Segment { id: string; name: string; }
 
 // ─── Filter popover content (reused by mobile & desktop popover) ──────────────
 
@@ -64,9 +68,12 @@ function FilterPanelContent({
   onVenueChange,
   eventTypeFilter,
   onEventTypeChange,
+  segmentFilter,
+  onSegmentChange,
   statusCounts,
   venues,
   eventTypes,
+  segments,
   hasActive,
   onReset,
 }: {
@@ -78,9 +85,12 @@ function FilterPanelContent({
   onVenueChange: (v: string) => void;
   eventTypeFilter: string;
   onEventTypeChange: (v: string) => void;
+  segmentFilter: string;
+  onSegmentChange: (v: string) => void;
   statusCounts: StatusCount[];
   venues: Venue[];
   eventTypes: EventType[];
+  segments: Segment[];
   hasActive: boolean;
   onReset: () => void;
 }) {
@@ -177,6 +187,23 @@ function FilterPanelContent({
           className="h-9"
         />
       </div>
+
+      {/* Segment filter (MICE) */}
+      <div className="space-y-1">
+        <label className="text-xs font-medium text-muted-foreground">Segment</label>
+        <SearchableSelect
+          options={[
+            { id: "all", name: "Semua Segment" },
+            ...segments.map((s) => ({ id: s.id, name: s.name })),
+          ]}
+          value={segmentFilter}
+          onChange={onSegmentChange}
+          placeholder="Semua Segment"
+          searchPlaceholder="Cari segment..."
+          emptyText="Segment tidak ditemukan"
+          className="h-9"
+        />
+      </div>
     </div>
   );
 }
@@ -194,6 +221,8 @@ export function LeadsFilters({
   onVenueChange,
   eventTypeFilter,
   onEventTypeChange,
+  segmentFilter,
+  onSegmentChange,
   statusCounts,
   totalFiltered,
   onAdd,
@@ -202,17 +231,21 @@ export function LeadsFilters({
 }: LeadsFiltersProps) {
   const { data: venues = [] } = useVenues();
   const { data: eventTypes = [] } = useEventTypes();
+  const { data: segmentData = [] } = useLeadSegments();
+  const segments = segmentData.filter((s) => s.isActive).map((s) => ({ id: s.id, name: s.name }));
 
   const activeCount =
     (venueFilter !== "all" ? 1 : 0) +
     (scope === "active" && statusFilter !== "all" ? 1 : 0) +
-    (eventTypeFilter !== "all" ? 1 : 0);
+    (eventTypeFilter !== "all" ? 1 : 0) +
+    (segmentFilter !== "all" ? 1 : 0);
   const hasActive = activeCount > 0;
 
   function handleReset() {
     onVenueChange("all");
     onStatusChange("all");
     onEventTypeChange("all");
+    onSegmentChange("all");
   }
 
   // ── Shared filter badge indicator ──
@@ -271,9 +304,12 @@ export function LeadsFilters({
                 onVenueChange={onVenueChange}
                 eventTypeFilter={eventTypeFilter}
                 onEventTypeChange={onEventTypeChange}
+                segmentFilter={segmentFilter}
+                onSegmentChange={onSegmentChange}
                 statusCounts={statusCounts}
                 venues={venues}
                 eventTypes={eventTypes}
+                segments={segments}
                 hasActive={hasActive}
                 onReset={handleReset}
               />
@@ -351,9 +387,12 @@ export function LeadsFilters({
               onVenueChange={onVenueChange}
               eventTypeFilter={eventTypeFilter}
               onEventTypeChange={onEventTypeChange}
+              segmentFilter={segmentFilter}
+              onSegmentChange={onSegmentChange}
               statusCounts={statusCounts}
               venues={venues}
               eventTypes={eventTypes}
+              segments={segments}
               hasActive={hasActive}
               onReset={handleReset}
             />

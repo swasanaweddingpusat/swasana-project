@@ -48,7 +48,10 @@ const baseLeadSchema = z.object({
   estimatedPax: z.coerce.number().int().min(1).optional().nullable(),
   budgetRange: z.string().trim().max(100).optional(),
   notes: z.string().trim().max(2000).optional(),
+  // Legacy free-text MICE segment — dipertahankan sementara untuk kompat; UI baru pakai segmentId.
   instansi: z.string().trim().max(200).optional(),
+  // FK ke LeadSegment (MICE segment ternormalisasi). Null utk wedding.
+  segmentId: z.string().optional().nullable(),
   category: z.enum(["WEDDINGS", "MICE"]).default("WEDDINGS"),
   venueId: z.string().optional(),
   venueSecondaryId: z.string().optional().nullable(),
@@ -194,6 +197,7 @@ export const leadFilterSchema = z.object({
   statusId: z.string().optional(),
   venueId: z.string().optional(),
   eventTypeId: z.string().optional(),
+  segmentId: z.string().optional(),
   assignedToId: z.string().optional(),
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(20),

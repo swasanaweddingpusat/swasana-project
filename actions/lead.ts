@@ -12,7 +12,7 @@ import {
   updateLeadStatusSchema,
 } from "@/lib/validations/lead";
 import type { CreateLeadInput, UpdateLeadInput, UpdateLeadStatusInput } from "@/lib/validations/lead";
-import type { Prisma, WeddingSession } from "@prisma/client";
+import type { WeddingSession } from "@prisma/client";
 
 // ─── Slot conflict guard (locked leads only) ──────────────────────────────────
 
@@ -156,6 +156,7 @@ export async function createLead(data: CreateLeadInput) {
     weddingSession,
     weddingSessionAlt,
     instansi,
+    segmentId,
     venueId,
     venueSecondaryId,
     packageId,
@@ -205,6 +206,7 @@ export async function createLead(data: CreateLeadInput) {
           weddingSession,
           weddingSessionAlt: weddingSessionAlt ?? null,
           instansi: category === "MICE" ? (instansi?.trim() || null) : null,
+          segmentId: category === "MICE" ? (segmentId || null) : null,
           venueId: venueId || null,
           venueSecondaryId: venueSecondaryId || null,
           packageId: packageId || null,
@@ -316,6 +318,7 @@ export async function updateLead(data: UpdateLeadInput) {
           ...(fields.weddingSession !== undefined && { weddingSession: fields.weddingSession }),
           ...(fields.weddingSessionAlt !== undefined && { weddingSessionAlt: fields.weddingSessionAlt ?? null }),
           ...(fields.instansi !== undefined && { instansi: fields.instansi?.trim() || null }),
+          ...(fields.segmentId !== undefined && { segmentId: fields.segmentId || null }),
           ...(fields.assignedToId !== undefined && { assignedToId: fields.assignedToId || null }),
           ...(fields.statusId !== undefined && { statusId: fields.statusId }),
           ...(fields.bitrixId !== undefined && { bitrixId: fields.bitrixId || null }),
@@ -482,109 +485,5 @@ export async function updateLeadAssignee(leadId: string, assignedToId: string | 
   } catch (err) {
     console.error("[updateLeadAssignee]", err);
     return { success: false as const, error: "Gagal mengupdate assignee lead." };
-  }
-}
-
-// ─── Convert Lead to Customer ─────────────────────────────────────────────────
-// Called when lead reaches Deal status and admin clicks "Convert"
-
-export async function convertLead(leadId: string) {
-  const { session, error } = await requirePermission({ module: "leads", action: "edit" });
-  if (error) return { success: false as const, error };
-
-  if (!mutationLimiter.check(`convert-lead:${session!.user.id}`)) {
-    return { success: false as const, ...rateLimitError() };
-  }
-
-  const h = await headers();
-  const ip = h.get("x-forwarded-for") ?? h.get("x-real-ip") ?? "unknown";
-
-  const lead = await db.lead.findUnique({
-    where: { id: leadId },
-    select: {
-      id: true,
-      name: true,
-      email: true,
-      emailCpp: true,
-      emailCpw: true,
-      nikCpp: true,
-      nikCpw: true,
-      addressCpp: true,
-      addressCpw: true,
-      category: true,
-      contactNumbers: true,
-      convertedAt: true,
-      status: { select: { isFinal: true, isSystem: true, name: true } },
-    },
-  });
-
-  if (!lead) return { success: false as const, error: "Lead tidak ditemukan." };
-  if (lead.convertedAt) return { success: false as const, error: "Lead sudah pernah dikonversi." };
-  if (!lead.status.isSystem || !lead.status.isFinal) {
-    return { success: false as const, error: "Lead harus berstatus Deal untuk dikonversi." };
-  }
-
-  try {
-    const mobileNumberJson = JSON.parse(JSON.stringify(lead.contactNumbers)) as Prisma.InputJsonValue;
-
-    // Wedding: pakai emailCpp/emailCpw dari lead (field terpisah per pasangan)
-    // MICE: pakai lead.email (generic contact email) → dipetakan ke emailCpp customer
-    const isWeddingLead = lead.category === "WEDDINGS";
-    const customerEmailCpp = isWeddingLead ? (lead.emailCpp || null) : (lead.email || null);
-    const customerEmailCpw = isWeddingLead ? (lead.emailCpw || null) : null;
-
-    // NIK & Alamat hanya dipetakan untuk lead Wedding (MICE tidak punya field ini)
-    const customerCppNik = isWeddingLead ? (lead.nikCpp || null) : null;
-    const customerCpwNik = isWeddingLead ? (lead.nikCpw || null) : null;
-    const customerCppAddress = isWeddingLead ? (lead.addressCpp || null) : null;
-    const customerCpwAddress = isWeddingLead ? (lead.addressCpw || null) : null;
-
-    // Pre-generate customer id so both writes can share it in the same transaction array.
-    // Array-form transactions on Neon HTTP are atomic but cannot cross-reference results
-    // between elements — pre-gen id is the standard pattern for this in the codebase.
-    const customerId = crypto.randomUUID();
-
-    await db.$transaction([
-      db.customer.create({
-        data: {
-          id: customerId,
-          name: lead.name,
-          emailCpp: customerEmailCpp,
-          emailCpw: customerEmailCpw,
-          cppNik: customerCppNik,
-          cpwNik: customerCpwNik,
-          cppAddress: customerCppAddress,
-          cpwAddress: customerCpwAddress,
-          mobileNumber: mobileNumberJson,
-          type: "Personal",
-          memberStatus: "Non-Member",
-        },
-      }),
-      db.lead.update({
-        where: { id: leadId },
-        data: {
-          convertedAt: new Date(),
-          convertedToCustomerId: customerId,
-        },
-      }),
-    ]);
-
-    await logAudit({
-      userId: session!.user.profileId,
-      action: "lead.converted",
-      result: "success",
-      entityType: "Lead",
-      entityId: leadId,
-      changes: { customerId },
-      ipAddress: ip,
-    });
-
-    revalidateTag("leads", "max");
-    revalidateTag("customers", "max");
-
-    return { success: true as const, data: { customerId } };
-  } catch (err) {
-    console.error("[convertLead]", err);
-    return { success: false as const, error: "Gagal mengkonversi lead." };
   }
 }

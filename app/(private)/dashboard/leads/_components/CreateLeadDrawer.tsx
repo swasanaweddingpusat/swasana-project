@@ -43,7 +43,7 @@ import {
 import { useVenues } from "@/hooks/use-venues";
 import { useEventTypes } from "@/hooks/use-event-types";
 import { useLeadStatuses } from "@/hooks/use-lead-statuses";
-import { useLeadSegments } from "@/hooks/use-lead-segments";
+import { useLeadSegments, useCreateLeadSegment } from "@/hooks/use-lead-segments";
 import { useSalesUsers } from "@/hooks/use-sales-users";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { useCreateLead } from "@/hooks/use-leads";
@@ -92,7 +92,7 @@ interface CreateLeadFormState {
   weddingSession: WeddingSession | "";
   weddingSessionAlt: WeddingSession | "";
   packageId: string;
-  instansi: string;
+  segmentId: string;
   miceSession: WeddingSession | "";
   miceSessionAlt: WeddingSession | "";
   isDateLocked: boolean;
@@ -127,7 +127,7 @@ const DEFAULT_FORM: CreateLeadFormState = {
   weddingSession: "",
   weddingSessionAlt: "",
   packageId: "",
-  instansi: "",
+  segmentId: "",
   miceSession: "",
   miceSessionAlt: "",
   isDateLocked: false,
@@ -177,17 +177,12 @@ export function CreateLeadDrawer({ open, onOpenChange, onSuccess }: CreateLeadDr
   const [contactPopoverOpen, setContactPopoverOpen] = useState(false);
   const [contactInput, setContactInput] = useState({ name: "", phone: "" });
 
-  // ── MICE segment options (from master + local escape-hatch additions) ────────
+  // ── MICE segment options (normalized master, FK-backed) ──────────────────────
   const { data: masterSegments = [] } = useLeadSegments();
-  const [localSegmentAdditions, setLocalSegmentAdditions] = useState<{ id: string; name: string }[]>([]);
-  const miceSegments = [
-    ...masterSegments
-      .filter((s) => s.isActive)
-      .map((s) => ({ id: s.id, name: s.name })),
-    ...localSegmentAdditions.filter(
-      (la) => !masterSegments.some((ms) => ms.name === la.name),
-    ),
-  ];
+  const createSegment = useCreateLeadSegment();
+  const miceSegments = masterSegments
+    .filter((s) => s.isActive)
+    .map((s) => ({ id: s.id, name: s.name }));
 
   // ── UI toggles ─────────────────────────────────────────────────────────────
   const [showDateAlt, setShowDateAlt] = useState(false);
@@ -328,7 +323,7 @@ export function CreateLeadDrawer({ open, onOpenChange, onSuccess }: CreateLeadDr
       nikCpw: "",
       addressCpp: "",
       addressCpw: "",
-      instansi: "",
+      segmentId: "",
       miceSession: "",
       miceSessionAlt: "",
       time: "",
@@ -358,7 +353,6 @@ export function CreateLeadDrawer({ open, onOpenChange, onSuccess }: CreateLeadDr
     setShowDateAlt(false);
     setShowVenueSecondary(false);
     setBookingFeeEvidence(null);
-    setLocalSegmentAdditions([]);
     setSubmitError(null);
   }
 
@@ -408,7 +402,7 @@ export function CreateLeadDrawer({ open, onOpenChange, onSuccess }: CreateLeadDr
         estimatedPax: form.estimatedPax ? parseInt(form.estimatedPax, 10) : undefined,
         budgetRange: form.budgetRange || undefined,
         notes: form.notes || undefined,
-        instansi: isMice ? (form.instansi || undefined) : undefined,
+        segmentId: isMice ? (form.segmentId || undefined) : undefined,
         category: category!,
         venueId: form.venueId || undefined,
         venueSecondaryId: form.venueSecondaryId || null,
@@ -565,16 +559,15 @@ export function CreateLeadDrawer({ open, onOpenChange, onSuccess }: CreateLeadDr
                       </label>
                       <SearchableSelect
                         options={miceSegments}
-                        value={miceSegments.find((s) => s.name === form.instansi)?.id ?? ""}
-                        onChange={(id) => {
-                          const matched = miceSegments.find((s) => s.id === id);
-                          setField("instansi", matched?.name ?? "");
-                        }}
-                        onAdd={(name) => {
-                          const id = name.toLowerCase().replace(/\s+/g, "-");
-                          const newOpt = { id, name };
-                          setLocalSegmentAdditions((prev) => [...prev, newOpt]);
-                          setField("instansi", name);
+                        value={form.segmentId}
+                        onChange={(id) => setField("segmentId", id)}
+                        onAdd={async (name) => {
+                          const created = await createSegment.mutateAsync({
+                            name: name.trim(),
+                            isActive: true,
+                            sortOrder: 0,
+                          });
+                          setField("segmentId", created.id);
                         }}
                         placeholder="Pilih atau tambah segment..."
                         searchPlaceholder="Cari segment..."
