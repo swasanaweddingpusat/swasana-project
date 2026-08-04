@@ -702,7 +702,7 @@ export function QuotationsTable() {
                           <TableCell className="min-w-0 hidden lg:table-cell">
                             <div className="min-w-0">
                               <span className="block truncate text-sm">
-                                {formatDate(q.eventDate)}
+                                {q.eventDate ? formatDate(q.eventDate) : "—"}
                               </span>
                               <span
                                 title={q.eventType}

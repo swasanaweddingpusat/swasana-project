@@ -13,7 +13,7 @@ const quotationItemSchema = z.object({
 export const createQuotationSchema = z.object({
   // Step 1 — Informasi
   clientName: z.string().min(1, "Nama client wajib diisi"),
-  clientPhone: z.string().min(1, "No. HP client wajib diisi"),
+  clientPhone: z.string().optional().nullable(),
   instansi: z.string().optional().nullable(),
   salesId: z.string().min(1, "Sales wajib dipilih"),
   venueId: z.string().optional().nullable(),

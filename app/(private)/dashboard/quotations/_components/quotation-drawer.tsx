@@ -46,7 +46,7 @@ import {
 import { TimeRangePicker } from "@/components/shared/time-range-picker";
 import { SimpleEditor } from "@/components/shared/SimpleEditor";
 import { BankAccountSelect } from "@/components/shared/bank-account-select";
-import { PhoneInput, ContactEntry, parseStoredPhone } from "@/components/shared/PhoneInput";
+import { PhoneInput } from "@/components/shared/PhoneInput";
 import {
   AddCircle,
   TrashBinTrash,
@@ -55,7 +55,6 @@ import {
   AltArrowDown,
   Calendar as CalendarSolarIcon,
   AlignVerticalSpacing,
-  CloseCircle,
 } from "@solar-icons/react";
 import { cn } from "@/lib/utils";
 import { useVenues } from "@/hooks/use-venues";
@@ -85,6 +84,7 @@ interface QuotationItemForm {
 interface QuotationFormValues {
   // Step 1 — informasi
   clientName: string;
+  clientPhone: string;
   instansi: string;
   salesId: string;
   salesName: string;
@@ -155,6 +155,7 @@ const EMPTY_ITEM: QuotationItemForm = {
 
 const DEFAULT_VALUES: QuotationFormValues = {
   clientName: "",
+  clientPhone: "",
   instansi: "",
   salesId: "",
   salesName: "",
@@ -605,28 +606,6 @@ export function QuotationDrawer({
   const [signatureSales, setSignatureSales] = useState("");
   const [signingLocation, setSigningLocation] = useState("");
 
-  // ── Multi-contact state ──────────────────────────────────────────────────
-  interface ContactNumber { label: string; number: string; }
-  const [contactNumbers, setContactNumbers] = useState<ContactNumber[]>([]);
-  const [contactInput, setContactInput] = useState({ name: "", phone: "" });
-  const [contactPopoverOpen, setContactPopoverOpen] = useState(false);
-
-  function addContact() {
-    const label = contactInput.name.trim();
-    const stored = contactInput.phone.trim();
-    if (!label || !stored) return;
-    const { nationalNumber } = parseStoredPhone(stored);
-    if (nationalNumber.length < 7) return;
-    if (contactNumbers.some((c) => c.number === stored)) return;
-    setContactNumbers((prev) => [...prev, { label, number: stored }]);
-    setContactInput({ name: "", phone: "" });
-    setContactPopoverOpen(false);
-  }
-
-  function removeContact(idx: number) {
-    setContactNumbers((prev) => prev.filter((_, i) => i !== idx));
-  }
-
   function toggleItem(id: string) {
     setExpandedItems((prev) => {
       const next = new Set(prev);
@@ -865,10 +844,6 @@ export function QuotationDrawer({
     setInstansiSearch("");
     setDebouncedInstansi("");
     setInstansiDropdownOpen(false);
-    // Reset contact numbers
-    setContactNumbers([]);
-    setContactInput({ name: "", phone: "" });
-    setContactPopoverOpen(false);
 
     if (editQuotation) {
       const matchedVenue = venues.find((v) => v.name === editQuotation.venue);
@@ -888,6 +863,7 @@ export function QuotationDrawer({
       if (editQuotation.signingLocation) setSigningLocation(editQuotation.signingLocation);
       form.reset({
         clientName: editQuotation.leadName,
+        clientPhone: editQuotation.leadPhone?.trim() ?? "",
         instansi: editQuotation.instansi ?? "",
         salesId: matchedSales?.id ?? "",
         salesName: editQuotation.salesName,
@@ -910,10 +886,6 @@ export function QuotationDrawer({
       });
       // Sync instansi search input with existing value
       setInstansiSearch(editQuotation.instansi ?? "");
-      // Prefill contact numbers from stored phone
-      if (editQuotation.leadPhone?.trim()) {
-        setContactNumbers([{ label: "Client", number: editQuotation.leadPhone.trim() }]);
-      }
     } else {
       const draft = readQuotationDraft();
       if (draft?.values) {
@@ -1012,7 +984,7 @@ export function QuotationDrawer({
 
     const payload = {
       clientName: values.clientName,
-      clientPhone: contactNumbers[0]?.number ?? "",
+      clientPhone: values.clientPhone || null,
       instansi: values.instansi || null,
       salesId: values.salesId,
       venueId: values.venueId,
@@ -1165,67 +1137,27 @@ export function QuotationDrawer({
                     )}
                   />
 
-                  {/* No. Hp Client — multi-contact */}
-                  <div className="w-full">
-                    <p className={LABEL_CLASS}>No. HP / WA Client</p>
-                    <div className="mt-1.5 rounded-2xl bg-muted p-3 flex flex-col gap-2">
-                      {contactNumbers.map((entry, idx) => (
-                        <div
-                          key={idx}
-                          className="flex items-center gap-2 rounded-xl bg-background border border-border px-3 py-2.5 shadow-sm"
-                        >
-                          <div className="flex-1 min-w-0">
-                            <p className="text-xs text-muted-foreground font-medium">{entry.label}</p>
-                            <p className="text-sm font-semibold text-foreground">+{entry.number}</p>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => removeContact(idx)}
-                            className="shrink-0 rounded-full p-1 text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
-                            aria-label={`Hapus ${entry.label}`}
-                          >
-                            <CloseCircle weight="BoldDuotone" className="w-4 h-4" />
-                          </button>
-                        </div>
-                      ))}
-                      <Popover
-                        open={contactPopoverOpen}
-                        onOpenChange={(o) => {
-                          setContactPopoverOpen(o);
-                          if (!o) setContactInput({ name: "", phone: "" });
-                        }}
-                      >
-                        <PopoverTrigger
-                          render={
-                            <Button
-                              type="button"
-                              variant="outline"
-                              className="w-full rounded-xl text-xs h-9 border-dashed gap-1.5"
-                            >
-                              <AddCircle weight="BoldDuotone" className="h-3.5 w-3.5" />
-                              {contactNumbers.length === 0 ? "Tambah Nomor HP / WA" : "Tambah Nomor Lain"}
-                            </Button>
-                          }
-                        />
-                        <PopoverContent className="w-72 p-3" align="end">
-                          <p className="text-xs font-semibold mb-3">Tambah Nomor Kontak</p>
-                          <ContactEntry
-                            nameValue={contactInput.name}
-                            onNameChange={(v) => setContactInput((p) => ({ ...p, name: v }))}
-                            phoneValue={contactInput.phone}
-                            onPhoneChange={(v) => setContactInput((p) => ({ ...p, phone: v }))}
-                            onAdd={addContact}
-                            namePlaceholder="Label: PIC, Direktur, HRD..."
+                  {/* No. HP / WA Client */}
+                  <FormField
+                    control={form.control}
+                    name="clientPhone"
+                    render={({ field }) => (
+                      <FormItem className="w-full">
+                        <FormLabel className={LABEL_CLASS}>
+                          No. HP / WA Client{" "}
+                          <span className="font-normal text-muted-foreground">(opsional)</span>
+                        </FormLabel>
+                        <FormControl>
+                          <PhoneInput
+                            value={field.value}
+                            onChange={field.onChange}
+                            onBlur={field.onBlur}
                           />
-                        </PopoverContent>
-                      </Popover>
-                      {contactNumbers.length === 0 && (
-                        <p className="text-xs text-muted-foreground text-center">
-                          Opsional — tambah nomor jika perlu
-                        </p>
-                      )}
-                    </div>
-                  </div>
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
                 </div>
 
                 {/* ── Sales ───────────────────────────────────────── */}
@@ -1461,7 +1393,7 @@ export function QuotationDrawer({
                       render={({ field }) => (
                         <FormItem className="flex w-full flex-col">
                           <FormLabel className={LABEL_CLASS}>
-                            Time{" "}
+                            Waktu{" "}
                             <span className="font-normal text-muted-foreground">
                               (opsional)
                             </span>
@@ -1484,7 +1416,7 @@ export function QuotationDrawer({
                     name="details"
                     render={({ field }) => (
                       <FormItem className="w-full">
-                        <FormLabel className={LABEL_CLASS}>Details</FormLabel>
+                        <FormLabel className={LABEL_CLASS}>Detail Kebutuhan{" "}<span className="font-normal text-muted-foreground">(opsional)</span></FormLabel>
                         <FormControl>
                           <Textarea
                             {...field}
@@ -1695,7 +1627,7 @@ export function QuotationDrawer({
                     onChange={(e) => setSigningLocation(e.target.value)}
                   />
                 </div>
-                <div>
+                <div className="border-t border-border pt-6">
                   <FormLabel className={cn("text-sm", "font-medium", "text-foreground", "mb-2", "block")}>
                     Tanda Tangan Sales <span className="text-destructive">*</span>
                   </FormLabel>
@@ -1724,25 +1656,17 @@ export function QuotationDrawer({
                       />
                     )}
                   </div>
-                  <div className={cn("flex", "items-center", "justify-between", "mt-1.5")}>
-                    {!signatureSales && (
-                      <p className={cn("text-xs", "text-destructive")}>
-                        Tanda tangan sales wajib diisi
-                      </p>
-                    )}
+                  <div className="flex items-center justify-between mt-1.5">
+                    <p className={cn("text-xs", "text-destructive", signatureSales && "invisible")}>
+                      Tanda tangan sales wajib diisi
+                    </p>
                     <button
                       type="button"
                       onClick={() => {
                         sigSalesRef.current?.clear();
                         setSignatureSales("");
                       }}
-                      className={cn(
-                        "text-xs",
-                        "text-destructive",
-                        "hover:text-destructive",
-                        "underline",
-                        "ml-auto",
-                      )}
+                      className="text-xs text-destructive hover:text-destructive underline ml-auto"
                     >
                       Hapus tanda tangan
                     </button>

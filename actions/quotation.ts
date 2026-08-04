@@ -77,7 +77,7 @@ export async function createQuotation(
           category: input.category,
           status: "draft",
           clientName: input.clientName,
-          clientPhone: input.clientPhone,
+          clientPhone: input.clientPhone ?? "",
           instansi: input.instansi ?? null,
           salesId: input.salesId,
           venueId: input.venueId ?? null,
@@ -195,9 +195,16 @@ export async function updateQuotation(
     const existing = await db.quotation.findUnique({ where: { id: input.id }, select: { id: true } });
     if (!existing) return { success: false, error: "Quotation tidak ditemukan." };
 
+    const pricingUpdate =
+      input.items !== undefined
+        ? (() => {
+            const discount = input.discount ?? 0;
+            const { subtotal, totalPrice } = computePricing(input.items, discount);
+            return { subtotal, discount, totalPrice };
+          })()
+        : undefined;
+
     const items = input.items ?? [];
-    const discount = input.discount ?? 0;
-    const { subtotal, totalPrice } = computePricing(items, discount);
 
     const ops: Prisma.PrismaPromise<unknown>[] = [
       // 1. Update quotation
@@ -207,7 +214,7 @@ export async function updateQuotation(
           ...(input.category !== undefined && { category: input.category }),
           ...(input.status !== undefined && { status: input.status }),
           ...(input.clientName !== undefined && { clientName: input.clientName }),
-          ...(input.clientPhone !== undefined && { clientPhone: input.clientPhone }),
+          ...(input.clientPhone !== undefined && { clientPhone: input.clientPhone ?? "" }),
           instansi: input.instansi ?? null,
           ...(input.salesId !== undefined && { salesId: input.salesId }),
           ...(input.venueId !== undefined && { venueId: input.venueId }),
@@ -219,33 +226,38 @@ export async function updateQuotation(
           eventDate: input.eventDate ? new Date(input.eventDate) : null,
           time: input.time ?? null,
           details: input.details ?? null,
-          subtotal,
-          discount,
-          totalPrice,
+          ...(pricingUpdate !== undefined && {
+            subtotal: pricingUpdate.subtotal,
+            discount: pricingUpdate.discount,
+            totalPrice: pricingUpdate.totalPrice,
+          }),
           validUntil: input.validUntil ? new Date(input.validUntil) : undefined,
           notes: input.notes ?? null,
           signingLocation: input.signingLocation ?? null,
           signatureSales: input.signatureSales ?? null,
         },
       }),
-      // 2. Replace items — delete all then re-create
-      db.quotationItem.deleteMany({ where: { quotationId: input.id } }),
-      // 3. Re-create items
-      ...items.map((item, idx) =>
-        db.quotationItem.create({
-          data: {
-            id: crypto.randomUUID(),
-            quotationId: input.id,
-            title: item.title,
-            description: item.description ?? null,
-            qty: item.qty,
-            price: item.price,
-            total: item.total,
-            manualTotal: item.manualTotal,
-            sortOrder: idx,
-          },
-        }),
-      ),
+      // 2. Replace items — only when items payload is present
+      ...(input.items !== undefined
+        ? [
+            db.quotationItem.deleteMany({ where: { quotationId: input.id } }),
+            ...items.map((item, idx) =>
+              db.quotationItem.create({
+                data: {
+                  id: crypto.randomUUID(),
+                  quotationId: input.id,
+                  title: item.title,
+                  description: item.description ?? null,
+                  qty: item.qty,
+                  price: item.price,
+                  total: item.total,
+                  manualTotal: item.manualTotal,
+                  sortOrder: idx,
+                },
+              }),
+            ),
+          ]
+        : []),
     ];
 
     await db.$transaction(ops);
