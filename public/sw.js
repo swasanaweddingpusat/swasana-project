@@ -1,7 +1,7 @@
-const CACHE_NAME = "swasana-v1";
+const CACHE_NAME = "swasana-v2";
 const OFFLINE_URL = "/offline";
 
-const PRECACHE_URLS = [OFFLINE_URL];
+const PRECACHE_URLS = [OFFLINE_URL, "/swasana-logo.png"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(

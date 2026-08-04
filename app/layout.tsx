@@ -4,7 +4,6 @@ import "./globals.css";
 import { QueryProvider } from "@/components/providers/query-provider";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "sonner";
-import { ServiceWorkerRegister } from "@/components/shared/ServiceWorkerRegister";
 
 const jakarta = Plus_Jakarta_Sans({
   variable: "--font-jakarta",
@@ -34,10 +33,9 @@ const geistMono = Geist_Mono({
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  // Lock pinch-zoom so the app reads like a native shell on phones/tablets.
-  // (Desktop Ctrl +/- zoom is intentionally not blockable by the browser.)
-  maximumScale: 1,
-  userScalable: false,
+  // Pinch-zoom is intentionally left enabled: blocking it (maximumScale/
+  // userScalable:false) fails WCAG 1.4.4 and stops low-vision users from
+  // zooming. The installed PWA already reads as a native shell without it.
   themeColor: "#0F4159",
 };
 
@@ -101,7 +99,6 @@ export default function RootLayout({
           <TooltipProvider>
             {children}
             <Toaster richColors position="top-center" />
-            <ServiceWorkerRegister />
           </TooltipProvider>
         </QueryProvider>
       </body>

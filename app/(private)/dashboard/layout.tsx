@@ -11,6 +11,7 @@ import { MiceBookingDrawerProvider } from "@/components/providers/mice-booking-d
 import { ProcurementDrawerProvider } from "@/components/providers/procurement-drawer-provider";
 import { MobileBottomNav } from "./_components/mobile-bottom-nav/MobileBottomNav";
 import { PwaInstallPrompt } from "@/components/shared/PwaInstallPrompt";
+import { ServiceWorkerRegister } from "@/components/shared/ServiceWorkerRegister";
 
 export default function DashboardLayout({
   children,
@@ -41,6 +42,7 @@ export default function DashboardLayout({
                     <MobileBottomNav />
                   </Suspense>
                   <PwaInstallPrompt />
+                  <ServiceWorkerRegister />
                 </SidebarInset>
               </ProcurementDrawerProvider>
               </LeadDrawerProvider>
