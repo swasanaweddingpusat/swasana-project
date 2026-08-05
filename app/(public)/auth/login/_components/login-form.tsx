@@ -114,7 +114,7 @@ export function LoginForm({
               <div className={cn('flex', 'flex-col')}>
                 <h1 className={cn('text-2xl', 'font-bold')}>Welcome back</h1>
                 <p className={cn('text-muted-foreground', 'text-balance')}>
-                  Login to your Swasana account
+                  Login to your account
                 </p>
               </div>
               <div className={cn('grid', 'gap-3')}>
