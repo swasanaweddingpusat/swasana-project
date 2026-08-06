@@ -5,6 +5,7 @@ export interface FetchPackagesParams {
   page?: number;
   pageSize?: number;
   search?: string;
+  category?: "WEDDINGS" | "MICE";
 }
 
 export async function fetchPackages(params: FetchPackagesParams = {}): Promise<PackagesQueryResult> {
@@ -13,6 +14,7 @@ export async function fetchPackages(params: FetchPackagesParams = {}): Promise<P
   if (params.page) qs.set("page", String(params.page));
   if (params.pageSize) qs.set("pageSize", String(params.pageSize));
   if (params.search) qs.set("search", params.search);
+  if (params.category) qs.set("category", params.category);
   const query = qs.toString();
   const res = await fetch(`/api/packages${query ? `?${query}` : ""}`);
   if (!res.ok) throw new Error("Failed to fetch packages");

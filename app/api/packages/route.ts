@@ -9,6 +9,7 @@ const packagesQuerySchema = z.object({
   pageSize: z.coerce.number().int().min(1).max(100).default(10),
   search: z.string().optional(),
   forBooking: z.enum(["true", "false"]).optional(),
+  category: z.enum(["WEDDINGS", "MICE"]).optional(),
 });
 
 export async function GET(request: Request): Promise<Response> {
@@ -20,7 +21,7 @@ export async function GET(request: Request): Promise<Response> {
     return Response.json({ error: "Invalid query parameters" }, { status: 400 });
   }
 
-  const { venueId, page, pageSize, search, forBooking } = parsed.data;
+  const { venueId, page, pageSize, search, forBooking, category } = parsed.data;
   const isForBooking = forBooking === "true";
 
   let userId: string;
@@ -30,7 +31,8 @@ export async function GET(request: Request): Promise<Response> {
     if (!session?.user?.id) return Response.json({ error: "Unauthorized" }, { status: 401 });
     userId = session.user.id;
   } else {
-    const { session, response } = await requirePermissionForRoute({ module: "package", action: "view" });
+    const listModule = category === "MICE" ? "package-mice" : "package";
+    const { session, response } = await requirePermissionForRoute({ module: listModule, action: "view" });
     if (response) return response;
     userId = session.user.id;
   }
@@ -39,10 +41,10 @@ export async function GET(request: Request): Promise<Response> {
 
   try {
     if (isForBooking) {
-      const result = await getPackagesForBooking(venueId);
+      const result = await getPackagesForBooking(venueId, category ?? "WEDDINGS");
       return Response.json(result);
     }
-    const result = await getPackages({ venueId, page, limit: pageSize, search: search ?? undefined });
+    const result = await getPackages({ venueId, page, limit: pageSize, search: search ?? undefined, category: category ?? "WEDDINGS" });
     return Response.json(result);
   } catch (error) {
     console.error("[GET /api/packages]", error);

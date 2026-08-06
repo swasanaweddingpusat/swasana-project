@@ -39,6 +39,7 @@ import {
   BillList,
   BellBing,
   Wallet2,
+  Case,
 } from "@solar-icons/react";
 
 type SolarIcon = ForwardRefExoticComponent<Omit<IconProps, "ref"> & RefAttributes<SVGSVGElement>>;
@@ -166,10 +167,16 @@ export const navItems: NavItem[] = [
     permission: { module: "vendor-specialist", action: "view" },
   },
   {
-    name: "Package",
+    name: "Wedding Package",
     href: "/dashboard/packages",
     icon: Documents,
     permission: { module: "package", action: "view" },
+  },
+  {
+    name: "Mice Package",
+    href: "/dashboard/package-mice",
+    icon: Case,
+    permission: { module: "package-mice", action: "view" },
   },
   {
     name: "Complimentary",

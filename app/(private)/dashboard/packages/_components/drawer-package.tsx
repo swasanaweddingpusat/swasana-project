@@ -40,6 +40,7 @@ interface DrawerPackageProps {
   isOpen: boolean;
   onClose: () => void;
   editingPackage?: PackageQueryItem | null;
+  packageType?: "wedding" | "mice";
 }
 
 const stepperSteps = [
@@ -71,7 +72,7 @@ function SortableItemRow({ id, children }: { id: string; children: React.ReactNo
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export function DrawerPackage({ isOpen, onClose, editingPackage }: DrawerPackageProps) {
+export function DrawerPackage({ isOpen, onClose, editingPackage, packageType = "wedding" }: DrawerPackageProps) {
   const createPkg = useCreatePackage();
   const updatePkg = useUpdatePackage();
   const saveVendorItemsMut = useSaveVendorItems();
@@ -125,7 +126,8 @@ export function DrawerPackage({ isOpen, onClose, editingPackage }: DrawerPackage
   }, [isOpen, editingPackage]);
 
   // ─── LocalStorage draft (create mode only) ─────────────────────────────────
-  const DRAFT_KEY = "package-draft";
+  // Per-type so wedding & mice drafts don't collide in localStorage.
+  const DRAFT_KEY = packageType === "mice" ? "package-mice-draft" : "package-draft";
   const draftLoaded = useRef(false);
 
   useEffect(() => {
@@ -262,7 +264,8 @@ export function DrawerPackage({ isOpen, onClose, editingPackage }: DrawerPackage
         if (!res.success) { toast.error(res.error ?? "Gagal update"); return; }
         pkgId = editingPackage!.id;
       } else {
-        const res = await createPkg.mutateAsync({ packageName, available, venueId: venueId || null, notes: notes || null, pax, signature });
+        const category = packageType === "mice" ? "MICE" : "WEDDINGS";
+        const res = await createPkg.mutateAsync({ packageName, available, venueId: venueId || null, notes: notes || null, pax, signature, category });
         if (!res.success) { toast.error(res.error ?? "Gagal membuat paket"); return; }
         pkgId = res.data!.id;
       }

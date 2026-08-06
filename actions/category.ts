@@ -3,7 +3,7 @@
 import { revalidateTag } from "next/cache";
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { requirePermission } from "@/lib/permissions";
+import { requireAnyPermission } from "@/lib/permissions";
 import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
 import { logAudit } from "@/lib/audit";
 
@@ -14,7 +14,12 @@ const createCategorySchema = z.object({
 export async function createCategory(
   name: string,
 ): Promise<{ success: true; category: { id: string; name: string } } | { success: false; error: string }> {
-  const { session, error } = await requirePermission({ module: "package", action: "edit" });
+  // Categories are shared master-data for vendor items, created from BOTH the
+  // wedding package drawer and the MICE package drawer. Allow either editor.
+  const { session, error } = await requireAnyPermission([
+    { module: "package", action: "edit" },
+    { module: "package-mice", action: "edit" },
+  ]);
   if (error) return { success: false, error };
   if (!mutationLimiter.check(`create-category:${session!.user.id}`)) {
     return { success: false, ...rateLimitError() };

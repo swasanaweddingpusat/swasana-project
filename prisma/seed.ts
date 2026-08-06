@@ -3,6 +3,7 @@ import { seedRolesPermissions } from "./seeders/roles-permissions";
 import { seedReferenceData } from "./seeders/reference-data";
 import { seedBrandsVenues } from "./seeders/brands-venues";
 import { seedPackages } from "./seeders/packages";
+import { seedMicePackages } from "./seeders/packages-mice";
 import { seedVendors } from "./seeders/vendors";
 import { seedUsers } from "./seeders/users";
 import { seedGroups } from "./seeders/groups";
@@ -18,6 +19,7 @@ async function main() {
   await seedReferenceData();
   await seedBrandsVenues();
   await seedPackages();
+  await seedMicePackages();
   await seedVendors();
   await seedUsers();
   await seedGroups();

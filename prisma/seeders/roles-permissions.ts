@@ -46,6 +46,8 @@ const moduleActions: Record<string, string[]> = {
   "settings-lead-status": ["view", "create", "edit", "delete"],
   quotations: ["view", "create", "edit", "delete"],
   "booking-mice": ["view", "create", "edit", "delete", "print", "approve", "mark-lost", "restore", "transfer", "reject", "comment", "client-agreement"],
+  // NOTE: "term-&-condition" is intentionally absent — T&C is hidden for MICE via missing permission.
+  "package-mice": ["view", "create", "edit", "delete", "set-harga", "set-status"],
   // Maintenance modules
   maintenance: ["view", "create", "edit", "delete"],
   "settings-maintenance-category": ["view", "create", "edit", "delete"],
@@ -201,6 +203,8 @@ const rolePermissionMap: Record<string, Record<string, string[]>> = {
     leads: ["view", "create", "edit", "delete"],
     complimentary: ["view", "create"],
     promo: ["view"],
+    // sales-mice can view/create/edit packages but NOT set-harga and NOT delete
+    "package-mice": ["view", "create", "edit"],
   },
   "manager-mice": {
     "booking-mice": ["view", "create", "edit", "delete", "print", "approve", "mark-lost", "restore", "transfer", "reject", "comment", "client-agreement"],
@@ -211,6 +215,7 @@ const rolePermissionMap: Record<string, Record<string, string[]>> = {
     "settings-event-types": ["view", "create", "edit", "delete"],
     "settings-quotation-templates": ["view", "create", "edit", "delete"],
     promo: ["view"],
+    "package-mice": ["view", "create", "edit", "delete", "set-harga", "set-status"],
   },
   "procurement-manager": {
     procurement: ["view", "create", "edit", "delete", "approve"],

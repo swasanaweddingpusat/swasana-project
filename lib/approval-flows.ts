@@ -35,6 +35,13 @@ export const APPROVAL_FLOWS: Record<string, ApprovalFlowDef> = {
       { sortOrder: 2, approverType: "role", roleName: "finance" },
     ],
   },
+  // Single-step: only manager-mice/super-admin can approve MICE packages;
+  // finance is intentionally NOT in this flow since it can't see the menu.
+  "package-mice": {
+    steps: [
+      { sortOrder: 1, approverType: "role", roleName: "manager-mice" },
+    ],
+  },
   booking: {
     steps: [
       { sortOrder: 1, approverType: "role", roleName: "manager" },

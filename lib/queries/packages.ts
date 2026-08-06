@@ -4,6 +4,7 @@ const packageInclude = {
   venue: { select: { id: true, name: true, address: true, brandId: true } },
   vendorItems: { orderBy: { sortOrder: "asc" as const } },
   internalItems: { orderBy: { sortOrder: "asc" as const } },
+  miceItems: { orderBy: { sortOrder: "asc" as const } },
   categoryPrices: { orderBy: { sortOrder: "asc" as const } },
 } as const;
 
@@ -12,6 +13,7 @@ export interface GetPackagesParams {
   page?: number;
   limit?: number;
   search?: string;
+  category?: "WEDDINGS" | "MICE";
 }
 
 export async function getPackages({
@@ -19,8 +21,10 @@ export async function getPackages({
   page = 1,
   limit = 10,
   search,
+  category = "WEDDINGS",
 }: GetPackagesParams = {}) {
   const where = {
+    category,
     ...(venueId ? { venueId } : {}),
     ...(search
       ? {
@@ -47,9 +51,10 @@ export async function getPackages({
   return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
 }
 
-export async function getPackagesForBooking(venueId?: string) {
+export async function getPackagesForBooking(venueId?: string, category: "WEDDINGS" | "MICE" = "WEDDINGS") {
   const packages = await db.package.findMany({
     where: {
+      category,
       available: true,
       approvalStatus: "approved",
       ...(venueId ? { venueId } : {}),

@@ -88,8 +88,12 @@ export const ROUTE_META: Record<string, RouteMeta> = {
 
   // ─── Packages ──────────────────────────────────────────────────────────────
   "/dashboard/packages": {
-    title: "Packages",
+    title: "Wedding Package",
     subtitle: "Kelola paket wedding",
+  },
+  "/dashboard/package-mice": {
+    title: "Mice Package",
+    subtitle: "Kelola paket MICE per venue",
   },
 
   // ─── Complimentary ─────────────────────────────────────────────────────────
