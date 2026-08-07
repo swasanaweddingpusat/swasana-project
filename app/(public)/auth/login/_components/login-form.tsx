@@ -101,7 +101,7 @@ export function LoginForm({
               <div className={cn('flex', 'flex-col')}>
                 <h1 className={cn('text-2xl', 'font-bold')}>Welcome back</h1>
                 <p className={cn('text-muted-foreground', 'text-balance')}>
-                  Login to your Swasana account
+                  Login to your account
                 </p>
               </div>
               <div className={cn('grid', 'gap-3')}>
@@ -185,7 +185,7 @@ export function LoginForm({
         </CardContent>
       </Card>
       <div className={cn('text-muted-foreground', 'text-center', 'text-xs', 'text-balance')}>
-        By clicking continue, you agree to our{" "}
+        {" "}
         <Link href="#" className={cn('underline', 'underline-offset-4', 'hover:text-primary')}>
           Terms of Service
         </Link>{" "}
