@@ -52,7 +52,7 @@ import {
 import type { BookingInput } from "@/lib/validations/booking";
 import type { MobileNumberEntry } from "@/lib/validations/customer";
 import { validateBookingField, validateIdNumber, type BookingFieldKey } from "@/lib/validations/booking-form";
-import type { BookingPrefillLead } from "@/types/lead";
+import type { BookingPrefillLead } from "@/types/daily-activity";
 import {
   getWeddingTimeRange,
   type WeddingSession,
@@ -364,7 +364,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
 
   const { data: leadsResult } = useQuery({
     queryKey: ["leads-search", debouncedSearch],
-    queryFn: () => fetchJson<{ items: LeadOption[] }>(`/api/leads?search=${encodeURIComponent(debouncedSearch)}&pageSize=5`),
+    queryFn: () => fetchJson<{ items: LeadOption[] }>(`/api/daily-activity?search=${encodeURIComponent(debouncedSearch)}&pageSize=5`),
     enabled: debouncedSearch.length >= 1,
     staleTime: 30_000,
   });

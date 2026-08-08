@@ -23,7 +23,7 @@ import {
   GraphNew,
   TicketSale,
   Settings,
-  Volume,
+  ClipboardList,
   Bill,
   DocumentAdd,
   Sledgehammer,
@@ -109,10 +109,10 @@ export const navItems: NavItem[] = [
     permission: { module: "groups", action: "view" },
   },
   {
-    name: "Leads",
-    href: "/dashboard/leads",
-    icon: Volume,
-    permission: { module: "leads", action: "view" },
+    name: "Daily Activity",
+    href: "/dashboard/daily-activity",
+    icon: ClipboardList,
+    permission: { module: "daily-activity", action: "view" },
   },
   {
     name: "Quotations",

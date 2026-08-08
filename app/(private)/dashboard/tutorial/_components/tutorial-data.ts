@@ -149,7 +149,7 @@ export const TUTORIAL_CATEGORIES: TutorialCategory[] = [
   },
   {
     id: "crm",
-    name: "CRM — Leads & Quotation",
+    name: "CRM — Daily Activity & Quotation",
     icon: UsersGroupRounded,
     lessons: [
       {
@@ -159,8 +159,8 @@ export const TUTORIAL_CATEGORIES: TutorialCategory[] = [
         completed: true,
         steps: [
           {
-            title: "Buka Halaman Leads",
-            caption: 'Klik menu "Leads" di sidebar kiri. Halaman akan menampilkan tabel lead beserta statusnya.',
+            title: "Buka Halaman Daily Activity",
+            caption: 'Klik menu "Daily Activity" di sidebar kiri. Halaman akan menampilkan tabel lead beserta statusnya.',
           },
           {
             title: "Klik Tambah Lead",

@@ -22,7 +22,7 @@ export type ContactNumber = {
 
 // ─── Aggregated / joined types used in UI ────────────────────────────────────
 
-export type LeadWithRelations = Prisma.LeadGetPayload<{
+export type DailyActivityWithRelations = Prisma.DailyActivityGetPayload<{
   include: {
     status: true;
     venue: { select: { id: true; name: true } };
@@ -37,7 +37,7 @@ export type LeadWithRelations = Prisma.LeadGetPayload<{
 }>;
 
 // Lightweight list item for table/kanban rendering
-export type LeadListItem = {
+export type DailyActivityListItem = {
   id: string;
   name: string;
   contactNumbers: ContactNumber[];
@@ -108,8 +108,8 @@ export type BookingPrefillLead = {
 };
 
 // Paginated response
-export type PaginatedLeads = {
-  items: LeadListItem[];
+export type PaginatedDailyActivities = {
+  items: DailyActivityListItem[];
   total: number;
   page: number;
   pageSize: number;

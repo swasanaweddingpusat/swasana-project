@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import type { LeadSegmentItem } from "@/lib/queries/leads";
+import type { LeadSegmentItem } from "@/lib/queries/daily-activity";
 
 async function fetchLeadSegments(): Promise<LeadSegmentItem[]> {
   const res = await fetch("/api/lead-segments");

@@ -165,8 +165,8 @@ model Profile {
   bookingRevisions           BookingRevision[]
   userTargets                UserTarget[]               @relation("UserTargets")
   userTargetsSet             UserTarget[]               @relation("UserTargetsSetBy")
-  leadsCreated               Lead[]
-  leadsAssigned              Lead[]                     @relation("LeadAssignee")
+  leadsCreated               DailyActivity[]
+  leadsAssigned              DailyActivity[]            @relation("LeadAssignee")
   quotations                 Quotation[]
   ledgersCreated             Ledger[]                   @relation("LedgerCreator")
   ledgersAcknowledged        Ledger[]                   @relation("LedgerAcknowledger")
@@ -351,8 +351,8 @@ model Venue {
   packages           Package[]
   paymentMethods     PaymentMethod[]
   bookings           Booking[]
-  leads              Lead[]                   @relation("LeadPrimaryVenue")
-  leadsSecondary     Lead[]                   @relation("LeadSecondaryVenue")
+  leads              DailyActivity[]          @relation("LeadPrimaryVenue")
+  leadsSecondary     DailyActivity[]          @relation("LeadSecondaryVenue")
   quotations         Quotation[]
   quotationTemplates QuotationTemplate[]
   maintenanceTickets MaintenanceTicket[]
@@ -527,7 +527,7 @@ model Package {
   miceItems        PackageMiceItem[]
   categoryPrices   PackageCategoryPrice[]
   bookings         Booking[]
-  leads            Lead[]
+  leads            DailyActivity[]
 
   @@index([venueId])
   @@index([category])
@@ -640,7 +640,7 @@ model Customer {
   updatedAt             DateTime             @updatedAt
   bookings              Booking[]
   sourceOfInformation   SourceOfInformation? @relation(fields: [sourceOfInformationId], references: [id], onDelete: SetNull)
-  convertedFromLeads    Lead[]               @relation("LeadConvertedCustomer")
+  convertedFromLeads    DailyActivity[]      @relation("LeadConvertedCustomer")
 
   @@index([name])
   @@map("customers")
@@ -664,7 +664,7 @@ model SourceOfInformation {
   createdAt DateTime   @default(now())
   bookings  Booking[]
   customers Customer[]
-  leads     Lead[]
+  leads     DailyActivity[]
 
   @@map("source_of_informations")
 }
@@ -880,7 +880,7 @@ model Booking {
   paymentMethod       PaymentMethod?       @relation(fields: [paymentMethodId], references: [id], onDelete: SetNull)
   sourceOfInformation SourceOfInformation? @relation(fields: [sourceOfInformationId], references: [id], onDelete: SetNull)
   currentRevision     BookingRevision?     @relation("BookingCurrentRevision", fields: [currentRevisionId], references: [id], onDelete: SetNull)
-  lead                Lead?                @relation("BookingFromLead", fields: [leadId], references: [id], onDelete: SetNull)
+  lead                DailyActivity?       @relation("BookingFromLead", fields: [leadId], references: [id], onDelete: SetNull)
   recognizedBy        Profile?             @relation("BookingRecognizer", fields: [recognizedById], references: [id], onDelete: SetNull)
 
   // Snapshot relations (1:1)
@@ -908,7 +908,7 @@ model Booking {
   bookingComments    BookingComment[]
   commentReads       BookingCommentRead[]
   revisions          BookingRevision[]
-  convertedFromLeads Lead[]                     @relation("LeadConvertedBooking")
+  convertedFromLeads DailyActivity[]            @relation("LeadConvertedBooking")
   editDraft          BookingEditDraft?
   eventEvaluations   EventEvaluation[]
   creditBalance      CreditBalance?
@@ -1731,7 +1731,7 @@ model EventType {
   isActive   Boolean       @default(true)
   createdAt  DateTime      @default(now())
   updatedAt  DateTime      @updatedAt
-  leads      Lead[]
+  leads      DailyActivity[]
   quotations Quotation[]
 
   @@index([category])
@@ -1768,7 +1768,7 @@ model LeadStatus {
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  leads     Lead[]
+  leads     DailyActivity[]
 
   @@index([sortOrder])
   @@map("lead_statuses")
@@ -1781,13 +1781,13 @@ model LeadSegment {
   sortOrder Int      @default(0)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  leads     Lead[]
+  leads     DailyActivity[]
 
   @@index([sortOrder])
   @@map("lead_segments")
 }
 
-model Lead {
+model DailyActivity {
   id             String    @id @default(uuid())
   name           String
   contactNumbers Json      @default("[]") // Array of { label: string, number: string }

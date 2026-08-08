@@ -18,7 +18,7 @@ import { useVenues } from "@/hooks/use-venues";
 import { useEventTypes } from "@/hooks/use-event-types";
 import { useLeadSegments } from "@/hooks/use-lead-segments";
 import { cn } from "@/lib/utils";
-import type { LeadScope } from "@/lib/validations/lead";
+import type { DailyActivityScope } from "@/lib/validations/daily-activity";
 
 interface StatusCount {
   id: string;
@@ -27,8 +27,8 @@ interface StatusCount {
 }
 
 interface LeadsFiltersProps {
-  scope: LeadScope;
-  onScopeChange: (scope: LeadScope) => void;
+  scope: DailyActivityScope;
+  onScopeChange: (scope: DailyActivityScope) => void;
   search: string;
   onSearchChange: (value: string) => void;
   statusFilter: string;
@@ -47,7 +47,7 @@ interface LeadsFiltersProps {
 }
 
 
-const SCOPE_OPTIONS: { value: LeadScope; label: string }[] = [
+const SCOPE_OPTIONS: { value: DailyActivityScope; label: string }[] = [
   { value: "active", label: "Active" },
   { value: "deal", label: "Deal" },
   { value: "lost", label: "Lost" },
@@ -77,8 +77,8 @@ function FilterPanelContent({
   hasActive,
   onReset,
 }: {
-  scope: LeadScope;
-  onScopeChange: (s: LeadScope) => void;
+  scope: DailyActivityScope;
+  onScopeChange: (s: DailyActivityScope) => void;
   statusFilter: string;
   onStatusChange: (v: string) => void;
   venueFilter: string;
@@ -210,7 +210,7 @@ function FilterPanelContent({
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
-export function LeadsFilters({
+export function DailyActivityFilters({
   scope,
   onScopeChange,
   search,

@@ -1,7 +1,7 @@
 import { requirePermissionForRoute } from "@/lib/permissions";
 import { apiLimiter, mutationLimiter, rateLimitResponse } from "@/lib/rate-limit";
-import { getLeadById } from "@/lib/queries/leads";
-import { updateLeadSchema } from "@/lib/validations/lead";
+import { getDailyActivityById } from "@/lib/queries/daily-activity";
+import { updateDailyActivitySchema } from "@/lib/validations/daily-activity";
 import { db } from "@/lib/db";
 import { logAudit } from "@/lib/audit";
 import { revalidateTag } from "next/cache";
@@ -11,14 +11,14 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { session, response } = await requirePermissionForRoute({
-    module: "leads",
+    module: "daily-activity",
     action: "view",
   });
   if (response) return response;
-  if (!apiLimiter.check(`lead-detail:${session.user.id}`)) return rateLimitResponse();
+  if (!apiLimiter.check(`daily-activity-detail:${session.user.id}`)) return rateLimitResponse();
 
   const { id } = await params;
-  const lead = await getLeadById(id);
+  const lead = await getDailyActivityById(id);
   if (!lead) return Response.json({ error: "Lead tidak ditemukan" }, { status: 404 });
 
   return Response.json(lead);
@@ -29,11 +29,11 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { session, response } = await requirePermissionForRoute({
-    module: "leads",
+    module: "daily-activity",
     action: "edit",
   });
   if (response) return response;
-  if (!mutationLimiter.check(`update-lead:${session.user.id}`)) return rateLimitResponse();
+  if (!mutationLimiter.check(`update-daily-activity:${session.user.id}`)) return rateLimitResponse();
 
   const { id } = await params;
 
@@ -44,7 +44,7 @@ export async function PATCH(
     return Response.json({ error: "Request body tidak valid" }, { status: 400 });
   }
 
-  const parsed = updateLeadSchema.safeParse({ ...body, id });
+  const parsed = updateDailyActivitySchema.safeParse({ ...body, id });
   if (!parsed.success) {
     return Response.json(
       { error: parsed.error.issues[0].message },
@@ -57,7 +57,7 @@ export async function PATCH(
 
   try {
     const [lead] = await db.$transaction([
-      db.lead.update({
+      db.dailyActivity.update({
         where: { id },
         data: {
           ...(fields.name !== undefined && { name: fields.name }),
@@ -94,11 +94,11 @@ export async function PATCH(
       ipAddress: ip,
     });
 
-    revalidateTag("leads", "max");
+    revalidateTag("daily-activity", "max");
 
     return Response.json(lead);
   } catch {
-    return Response.json({ error: "Gagal mengupdate lead" }, { status: 500 });
+    return Response.json({ error: "Gagal mengupdate daily activity" }, { status: 500 });
   }
 }
 
@@ -107,18 +107,18 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { session, response } = await requirePermissionForRoute({
-    module: "leads",
+    module: "daily-activity",
     action: "delete",
   });
   if (response) return response;
-  if (!mutationLimiter.check(`delete-lead:${session.user.id}`)) return rateLimitResponse();
+  if (!mutationLimiter.check(`delete-daily-activity:${session.user.id}`)) return rateLimitResponse();
 
   const { id } = await params;
   const ip = req.headers.get("x-forwarded-for") ?? "unknown";
 
   try {
     await db.$transaction([
-      db.lead.delete({ where: { id } }),
+      db.dailyActivity.delete({ where: { id } }),
     ]);
 
     await logAudit({
@@ -130,10 +130,10 @@ export async function DELETE(
       ipAddress: ip,
     });
 
-    revalidateTag("leads", "max");
+    revalidateTag("daily-activity", "max");
 
     return new Response(null, { status: 204 });
   } catch {
-    return Response.json({ error: "Gagal menghapus lead" }, { status: 500 });
+    return Response.json({ error: "Gagal menghapus daily activity" }, { status: 500 });
   }
 }

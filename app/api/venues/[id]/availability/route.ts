@@ -78,7 +78,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       ...(excludeLeadId ? { id: { not: excludeLeadId } } : {}),
     };
 
-    const lockedLeads = await db.lead.findMany({
+    const lockedLeads = await db.dailyActivity.findMany({
       where: {
         ...lockedLeadWhere,
         eventDate: { gte: start, lte: end },
@@ -88,7 +88,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 
     // Also check eventDateAlt for locked leads — secondary date also blocks.
     // NOTE: alt-date uses weddingSessionAlt (per-date session), NOT weddingSession.
-    const lockedLeadsAlt = await db.lead.findMany({
+    const lockedLeadsAlt = await db.dailyActivity.findMany({
       where: {
         ...lockedLeadWhere,
         eventDateAlt: { gte: start, lte: end, not: null },

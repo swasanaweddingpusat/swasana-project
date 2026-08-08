@@ -36,7 +36,7 @@ import {
 } from "@solar-icons/react";
 import { PermissionGate } from "@/components/shared/permission-gate";
 import { cn } from "@/lib/utils";
-import type { LeadItem } from "@/lib/queries/leads";
+import type { DailyActivityItem } from "@/lib/queries/daily-activity";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -47,7 +47,7 @@ function formatShortDate(date: Date | string | null): string {
 
 /** First contact from the stored contactNumbers JSON, or null when empty. */
 function firstContactNumber(
-  contactNumbers: LeadItem["contactNumbers"],
+  contactNumbers: DailyActivityItem["contactNumbers"],
 ): { label: string; number: string } | null {
   if (!Array.isArray(contactNumbers) || contactNumbers.length === 0) return null;
   const c = contactNumbers[0] as { label?: string; number?: string };
@@ -66,7 +66,7 @@ function getInitials(name: string): string {
 }
 
 /** Sales PIC display name — prefer assignee nickname, fall back to creator. */
-function salesLabel(lead: LeadItem): string {
+function salesLabel(lead: DailyActivityItem): string {
   const src = lead.assignedTo ?? lead.createdBy;
   return src.nickName ?? src.fullName ?? "—";
 }
@@ -79,7 +79,7 @@ function StatusPill({
   status,
   className,
 }: {
-  status: LeadItem["status"];
+  status: DailyActivityItem["status"];
   className?: string;
 }) {
   return (
@@ -114,7 +114,7 @@ function CategoryChip({ category }: { category: string }) {
 }
 
 /** Sales PIC avatar + name. */
-function SalesChip({ lead, className }: { lead: LeadItem; className?: string }) {
+function SalesChip({ lead, className }: { lead: DailyActivityItem; className?: string }) {
   const name = salesLabel(lead);
   return (
     <span className={cn("flex items-center gap-2 min-w-0", className)}>
@@ -135,11 +135,11 @@ function LeadActionsMenu({
   onDelete,
   triggerLabel,
 }: {
-  lead: LeadItem;
-  onMarkDeal: (lead: LeadItem) => void;
-  onMarkLost: (lead: LeadItem) => void;
-  onReset: (lead: LeadItem) => void;
-  onDelete: (lead: LeadItem) => void;
+  lead: DailyActivityItem;
+  onMarkDeal: (lead: DailyActivityItem) => void;
+  onMarkLost: (lead: DailyActivityItem) => void;
+  onReset: (lead: DailyActivityItem) => void;
+  onDelete: (lead: DailyActivityItem) => void;
   triggerLabel: string;
 }) {
   return (
@@ -169,7 +169,7 @@ function LeadActionsMenu({
           </DropdownMenuItem>
         )}
         <DropdownMenuSeparator />
-        <PermissionGate module="leads" action="delete">
+        <PermissionGate module="daily-activity" action="delete">
           <DropdownMenuItem
             onClick={() => onDelete(lead)}
             className="text-destructive focus:text-destructive"
@@ -185,19 +185,19 @@ function LeadActionsMenu({
 
 // ─── Props ──────────────────────────────────────────────────────────────────
 
-interface LeadsListViewProps {
-  leads: LeadItem[];
+interface DailyActivityListViewProps {
+  leads: DailyActivityItem[];
   search: string;
   currentPage: number;
   pageSize: number;
   totalPages: number;
   onPageChange: (page: number) => void;
-  onEdit: (lead: LeadItem) => void;
-  onDelete: (lead: LeadItem) => void;
-  onMarkDeal: (lead: LeadItem) => void;
-  onMarkLost: (lead: LeadItem) => void;
-  onReset: (lead: LeadItem) => void;
-  onViewDetail: (lead: LeadItem) => void;
+  onEdit: (lead: DailyActivityItem) => void;
+  onDelete: (lead: DailyActivityItem) => void;
+  onMarkDeal: (lead: DailyActivityItem) => void;
+  onMarkLost: (lead: DailyActivityItem) => void;
+  onReset: (lead: DailyActivityItem) => void;
+  onViewDetail: (lead: DailyActivityItem) => void;
   isLoading?: boolean;
 }
 
@@ -212,13 +212,13 @@ function LeadCard({
   onReset,
   onViewDetail,
 }: {
-  lead: LeadItem;
-  onEdit: (lead: LeadItem) => void;
-  onDelete: (lead: LeadItem) => void;
-  onMarkDeal: (lead: LeadItem) => void;
-  onMarkLost: (lead: LeadItem) => void;
-  onReset: (lead: LeadItem) => void;
-  onViewDetail: (lead: LeadItem) => void;
+  lead: DailyActivityItem;
+  onEdit: (lead: DailyActivityItem) => void;
+  onDelete: (lead: DailyActivityItem) => void;
+  onMarkDeal: (lead: DailyActivityItem) => void;
+  onMarkLost: (lead: DailyActivityItem) => void;
+  onReset: (lead: DailyActivityItem) => void;
+  onViewDetail: (lead: DailyActivityItem) => void;
 }) {
   const contact = firstContactNumber(lead.contactNumbers);
   const isMice = lead.category === "MICE";
@@ -401,7 +401,7 @@ function PaginationBar({
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
-export function LeadsListView({
+export function DailyActivityListView({
   leads,
   search,
   currentPage,
@@ -415,7 +415,7 @@ export function LeadsListView({
   onReset,
   onViewDetail,
   isLoading,
-}: LeadsListViewProps) {
+}: DailyActivityListViewProps) {
   // ── Loading state ──
   if (isLoading) {
     return (

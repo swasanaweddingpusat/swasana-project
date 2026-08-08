@@ -64,7 +64,7 @@ export async function createDraftMiceBooking(data: unknown): Promise<MiceDraftRe
     } | null = null;
 
     if (input.leadId) {
-      leadRecord = await db.lead.findUnique({
+      leadRecord = await db.dailyActivity.findUnique({
         where: { id: input.leadId },
         select: {
           id: true,
@@ -104,14 +104,14 @@ export async function createDraftMiceBooking(data: unknown): Promise<MiceDraftRe
           },
         });
 
-        const lockResult = await db.lead.updateMany({
+        const lockResult = await db.dailyActivity.updateMany({
           where: { id: leadRecord.id, convertedToCustomerId: null },
           data: { convertedToCustomerId: customerId },
         });
 
         if (lockResult.count === 0) {
           await db.customer.delete({ where: { id: customerId } }).catch(() => undefined);
-          const refreshed = await db.lead.findUnique({
+          const refreshed = await db.dailyActivity.findUnique({
             where: { id: leadRecord.id },
             select: { convertedToCustomerId: true },
           });
@@ -487,7 +487,7 @@ export async function finalizeDraftMiceBooking(data: unknown): Promise<FinalizeM
         select: { id: true },
       });
       ops.push(
-        db.lead.update({
+        db.dailyActivity.update({
           where: { id: input.leadId },
           data: {
             convertedToBookingId: draftId,
@@ -516,7 +516,7 @@ export async function finalizeDraftMiceBooking(data: unknown): Promise<FinalizeM
 
     revalidateTag("bookings", "max");
     revalidateTag("customers", "max");
-    if (input.leadId) revalidateTag("leads", "max");
+    if (input.leadId) revalidateTag("daily-activity", "max");
 
     notifySuperAdmins(
       {

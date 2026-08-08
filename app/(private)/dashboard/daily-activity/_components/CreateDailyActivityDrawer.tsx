@@ -35,6 +35,11 @@ import {
   Banknote,
   FileText,
   Refresh,
+  Camera,
+  CalendarMark,
+  ChatRound,
+  Streets,
+  Case,
 } from "@solar-icons/react";
 import {
   getWeddingTimeRange,
@@ -46,7 +51,7 @@ import { useLeadStatuses } from "@/hooks/use-lead-statuses";
 import { useLeadSegments, useCreateLeadSegment } from "@/hooks/use-lead-segments";
 import { useSalesUsers } from "@/hooks/use-sales-users";
 import { useCurrentUser } from "@/hooks/use-current-user";
-import { useCreateLead } from "@/hooks/use-leads";
+import { useCreateDailyActivity } from "@/hooks/use-daily-activities";
 import {
   SectionHeader,
   SessionPillRadio,
@@ -54,7 +59,7 @@ import {
   CurrencyInput,
   fmtCurrency,
   mapCodeToWeddingEventType,
-} from "./lead-form-fields";
+} from "./daily-activity-form-fields";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -67,7 +72,21 @@ interface ContactNumber {
   number: string;
 }
 
-interface CreateLeadFormState {
+// MICE offering channel — cara sales melakukan penawaran ke prospek.
+// Menggantikan kolom "Milestone Client" di sheet yang isinya free-text campur aduk
+// (Penawaran Via DM / pitching by ig,email / Sudah isi gform / dll) → dinormalisasi
+// jadi pilihan konsisten yang bisa difilter.
+type OfferingChannel =
+  | "WHATSAPP"
+  | "INSTAGRAM_DM"
+  | "EMAIL"
+  | "TITIP_PROPOSAL"
+  | "GFORM"
+  | "LINKEDIN"
+  | "PHONE"
+  | "OTHER";
+
+interface CreateDailyActivityFormState {
   name: string;
   email: string;
   emailCpp: string;
@@ -76,6 +95,7 @@ interface CreateLeadFormState {
   nikCpw: string;
   addressCpp: string;
   addressCpw: string;
+  address: string;
   eventDate: string;
   eventDateAlt: string;
   venueId: string;
@@ -98,11 +118,16 @@ interface CreateLeadFormState {
   isDateLocked: boolean;
   bookingFeeAmount: number;
   bookingFeeDate: string;
+  // ── MICE prospecting fields (dipindah dari Google Sheet "Daily Activity MICE") ──
+  instagramUrl: string; // handle / URL IG prospek (dinormalisasi saat submit)
+  siteVisitDate: string; // "YYYY-MM-DD" jadwal kunjungan venue
+  offeringChannel: OfferingChannel | ""; // cara penawaran (enum bersih)
+  offeringNote: string; // detail penawaran bebas (mis. "req hard copy weekdays")
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const DEFAULT_FORM: CreateLeadFormState = {
+const DEFAULT_FORM: CreateDailyActivityFormState = {
   name: "",
   email: "",
   emailCpp: "",
@@ -111,6 +136,7 @@ const DEFAULT_FORM: CreateLeadFormState = {
   nikCpw: "",
   addressCpp: "",
   addressCpw: "",
+  address: "",
   eventDate: "",
   eventDateAlt: "",
   venueId: "",
@@ -133,7 +159,23 @@ const DEFAULT_FORM: CreateLeadFormState = {
   isDateLocked: false,
   bookingFeeAmount: 5000000,
   bookingFeeDate: "",
+  instagramUrl: "",
+  siteVisitDate: "",
+  offeringChannel: "",
+  offeringNote: "",
 };
+
+// ── Opsi channel penawaran (label ramah untuk dropdown) ──────────────────────
+const OFFERING_CHANNEL_OPTIONS: { id: OfferingChannel; name: string }[] = [
+  { id: "WHATSAPP", name: "WhatsApp" },
+  { id: "INSTAGRAM_DM", name: "Instagram DM" },
+  { id: "EMAIL", name: "Email" },
+  { id: "TITIP_PROPOSAL", name: "Titip Proposal / Hard Copy" },
+  { id: "GFORM", name: "Google Form Pengajuan" },
+  { id: "LINKEDIN", name: "LinkedIn" },
+  { id: "PHONE", name: "Telepon" },
+  { id: "OTHER", name: "Lainnya" },
+];
 
 // ─── Upload helper ────────────────────────────────────────────────────────────
 
@@ -157,7 +199,7 @@ async function uploadBookingFeeEvidence(file: File): Promise<string> {
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
-interface CreateLeadDrawerProps {
+interface CreateDailyActivityDrawerProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess?: () => void;
@@ -165,12 +207,12 @@ interface CreateLeadDrawerProps {
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
-export function CreateLeadDrawer({ open, onOpenChange, onSuccess }: CreateLeadDrawerProps) {
+export function CreateDailyActivityDrawer({ open, onOpenChange, onSuccess }: CreateDailyActivityDrawerProps) {
   // ── Step 0: tipe booking ────────────────────────────────────────────────────
   const [category, setCategory] = useState<BookingCategory | null>(null);
 
   // ── Form state ─────────────────────────────────────────────────────────────
-  const [form, setForm] = useState<CreateLeadFormState>(DEFAULT_FORM);
+  const [form, setForm] = useState<CreateDailyActivityFormState>(DEFAULT_FORM);
 
   // ── Multi-contact state ────────────────────────────────────────────────────
   const [contactNumbers, setContactNumbers] = useState<ContactNumber[]>([]);
@@ -195,6 +237,9 @@ export function CreateLeadDrawer({ open, onOpenChange, onSuccess }: CreateLeadDr
   // ── Booking fee date popover ───────────────────────────────────────────────
   const [bookingFeeDateOpen, setBookingFeeDateOpen] = useState(false);
 
+  // ── Site visit date popover (MICE) ─────────────────────────────────────────
+  const [siteVisitDateOpen, setSiteVisitDateOpen] = useState(false);
+
   // ── Submit state ───────────────────────────────────────────────────────────
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -205,7 +250,7 @@ export function CreateLeadDrawer({ open, onOpenChange, onSuccess }: CreateLeadDr
   const { data: leadStatuses = [] } = useLeadStatuses();
   const { users: salesUsers } = useSalesUsers();
   const { user: currentUser } = useCurrentUser();
-  const createLead = useCreateLead();
+  const createLead = useCreateDailyActivity();
 
   // ── Sales PIC lock ───────────────────────────────────────────────────────────
   // When the logged-in user is a sales rep, the PIC is forced to themselves and
@@ -302,9 +347,9 @@ export function CreateLeadDrawer({ open, onOpenChange, onSuccess }: CreateLeadDr
 
   // ── Handlers ───────────────────────────────────────────────────────────────
 
-  const setField = useCallback(<K extends keyof CreateLeadFormState>(
+  const setField = useCallback(<K extends keyof CreateDailyActivityFormState>(
     key: K,
-    value: CreateLeadFormState[K],
+    value: CreateDailyActivityFormState[K],
   ) => {
     setForm((prev) => ({ ...prev, [key]: value }));
   }, []);
@@ -327,6 +372,11 @@ export function CreateLeadDrawer({ open, onOpenChange, onSuccess }: CreateLeadDr
       miceSession: "",
       miceSessionAlt: "",
       time: "",
+      address: "",
+      instagramUrl: "",
+      siteVisitDate: "",
+      offeringChannel: "",
+      offeringNote: "",
     }));
   }
 
@@ -395,7 +445,9 @@ export function CreateLeadDrawer({ open, onOpenChange, onSuccess }: CreateLeadDr
         nikCpw: isWedding ? (form.nikCpw || undefined) : undefined,
         addressCpp: isWedding ? (form.addressCpp || undefined) : undefined,
         addressCpw: isWedding ? (form.addressCpw || undefined) : undefined,
-        address: undefined,
+        address: isMice ? (form.address || undefined) : undefined,
+        // NOTE(UI-first): instagramUrl / siteVisitDate / offeringChannel / offeringNote
+        // belum dikirim — field DB-nya belum ada. Menunggu UI di-acc lalu migration.
         eventDate: form.eventDate,
         eventDateAlt: form.eventDateAlt || null,
         time: form.time || undefined,
@@ -1169,6 +1221,156 @@ export function CreateLeadDrawer({ open, onOpenChange, onSuccess }: CreateLeadDr
                       value={form.budgetRange}
                       onChange={(e) => setField("budgetRange", e.target.value)}
                       placeholder="e.g. 50 - 75 juta (opsional)"
+                      className="rounded-xl"
+                    />
+                  </div>
+                </div>}
+
+                {/* ── SECTION: Prospek & Penawaran (MICE only) ──────────
+                    Field yang dipindahkan dari Google Sheet "Daily Activity
+                    MICE": lokasi kantor, Instagram, jadwal site visit, dan
+                    cara/channel penawaran. ─────────────────────────────── */}
+                {isMice && <div className="flex flex-col gap-4">
+                  <SectionHeader icon={Case} title="Prospek & Penawaran" />
+
+                  {/* Lokasi / Alamat kantor prospek */}
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-sm font-medium text-foreground flex items-center gap-1.5">
+                      <Streets weight="BoldDuotone" className="h-3.5 w-3.5 text-muted-foreground" />
+                      Lokasi / Alamat Kantor
+                    </label>
+                    <Textarea
+                      value={form.address}
+                      onChange={(e) => setField("address", e.target.value)}
+                      placeholder="e.g. Cibis 9, Cilandak, Jakarta Selatan (opsional)"
+                      rows={2}
+                      className="rounded-xl resize-none"
+                    />
+                  </div>
+
+                  {/* Instagram prospek */}
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-sm font-medium text-foreground flex items-center gap-1.5">
+                      <Camera weight="BoldDuotone" className="h-3.5 w-3.5 text-muted-foreground" />
+                      Instagram
+                    </label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground pointer-events-none">
+                        @
+                      </span>
+                      <Input
+                        value={form.instagramUrl}
+                        onChange={(e) => setField("instagramUrl", e.target.value)}
+                        placeholder="username atau link instagram (opsional)"
+                        className="rounded-xl pl-7"
+                      />
+                    </div>
+                    <p className="text-[10px] text-muted-foreground">
+                      Boleh isi username (mis. cosmaxindonesia) atau tempel link lengkap.
+                    </p>
+                  </div>
+
+                  {/* Jadwal Site Visit */}
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-sm font-medium text-foreground flex items-center gap-1.5">
+                      <CalendarMark weight="BoldDuotone" className="h-3.5 w-3.5 text-muted-foreground" />
+                      Jadwal Site Visit
+                    </label>
+                    <Popover open={siteVisitDateOpen} onOpenChange={setSiteVisitDateOpen}>
+                      <PopoverTrigger
+                        render={
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className={cn(
+                              "w-full justify-start text-left font-normal rounded-xl",
+                              !form.siteVisitDate && "text-muted-foreground",
+                            )}
+                          >
+                            <CalendarDate weight="BoldDuotone" className="mr-2 h-4 w-4 shrink-0" />
+                            {form.siteVisitDate
+                              ? format(
+                                  new Date(form.siteVisitDate + "T00:00:00"),
+                                  "d MMMM yyyy",
+                                  { locale: localeId },
+                                )
+                              : "Pilih tanggal kunjungan... (opsional)"}
+                          </Button>
+                        }
+                      />
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <Calendar
+                          mode="single"
+                          captionLayout="dropdown"
+                          selected={
+                            form.siteVisitDate
+                              ? new Date(form.siteVisitDate + "T00:00:00")
+                              : undefined
+                          }
+                          onSelect={(date) => {
+                            if (date) {
+                              const y = date.getFullYear();
+                              const m = String(date.getMonth() + 1).padStart(2, "0");
+                              const d = String(date.getDate()).padStart(2, "0");
+                              setField("siteVisitDate", `${y}-${m}-${d}`);
+                            } else {
+                              setField("siteVisitDate", "");
+                            }
+                            setSiteVisitDateOpen(false);
+                          }}
+                          fromYear={new Date().getFullYear() - 1}
+                          toYear={new Date().getFullYear() + 5}
+                          defaultMonth={
+                            form.siteVisitDate
+                              ? new Date(form.siteVisitDate + "T00:00:00")
+                              : new Date()
+                          }
+                        />
+                        {form.siteVisitDate && (
+                          <div className="border-t p-2">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="w-full text-xs text-muted-foreground"
+                              onClick={() => {
+                                setField("siteVisitDate", "");
+                                setSiteVisitDateOpen(false);
+                              }}
+                            >
+                              Hapus tanggal
+                            </Button>
+                          </div>
+                        )}
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+
+                  {/* Channel Penawaran */}
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-sm font-medium text-foreground flex items-center gap-1.5">
+                      <ChatRound weight="BoldDuotone" className="h-3.5 w-3.5 text-muted-foreground" />
+                      Cara Penawaran
+                    </label>
+                    <SearchableSelect
+                      options={OFFERING_CHANNEL_OPTIONS}
+                      value={form.offeringChannel}
+                      onChange={(v) => setField("offeringChannel", v as OfferingChannel)}
+                      placeholder="Pilih cara penawaran... (opsional)"
+                      searchPlaceholder="Cari channel..."
+                      emptyText="Tidak ada opsi"
+                    />
+                  </div>
+
+                  {/* Catatan Penawaran */}
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-sm font-medium text-foreground">
+                      Catatan Penawaran
+                    </label>
+                    <Input
+                      value={form.offeringNote}
+                      onChange={(e) => setField("offeringNote", e.target.value)}
+                      placeholder="e.g. req kirim proposal hard copy weekdays (opsional)"
                       className="rounded-xl"
                     />
                   </div>

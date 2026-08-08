@@ -20,6 +20,7 @@
     "db:seed:bookings-2026": "tsx prisma/seeders/seed-bookings-2026.ts",
     "db:seed:users": "tsx prisma/seeders/users.ts",
     "db:seed:test-users": "tsx prisma/seeders/test-users.ts",
+    "db:seed:role-users": "tsx prisma/seeders/role-users.ts",
     "db:seed:venue-tc": "tsx prisma/seeders/venue-term-conditions.ts",
     "db:seed:vendors": "tsx prisma/seeders/vendors.ts",
     "db:seed:brands-venues": "tsx prisma/seeders/brands-venues.ts",

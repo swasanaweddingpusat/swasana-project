@@ -1,7 +1,7 @@
 import { requirePermissionForRoute } from "@/lib/permissions";
 import { apiLimiter, mutationLimiter, rateLimitResponse } from "@/lib/rate-limit";
-import { getLeads } from "@/lib/queries/leads";
-import { leadFilterSchema, createLeadSchema } from "@/lib/validations/lead";
+import { getDailyActivities } from "@/lib/queries/daily-activity";
+import { dailyActivityFilterSchema, createDailyActivitySchema } from "@/lib/validations/daily-activity";
 import { db } from "@/lib/db";
 import { logAudit } from "@/lib/audit";
 import { revalidateTag } from "next/cache";
@@ -9,11 +9,11 @@ import type { DataScope } from "@/types/user";
 
 export async function GET(req: Request) {
   const { session, response } = await requirePermissionForRoute({
-    module: "leads",
+    module: "daily-activity",
     action: "view",
   });
   if (response) return response;
-  if (!apiLimiter.check(`leads-list:${session.user.id}`)) return rateLimitResponse();
+  if (!apiLimiter.check(`daily-activity-list:${session.user.id}`)) return rateLimitResponse();
 
   const { searchParams } = new URL(req.url);
   const raw = {
@@ -27,7 +27,7 @@ export async function GET(req: Request) {
     pageSize: searchParams.get("pageSize") ?? "20",
   };
 
-  const parsed = leadFilterSchema.safeParse(raw);
+  const parsed = dailyActivityFilterSchema.safeParse(raw);
   if (!parsed.success) {
     return Response.json({ error: "Parameter tidak valid" }, { status: 400 });
   }
@@ -43,20 +43,20 @@ export async function GET(req: Request) {
       profileId: session.user.profileId,
       dataScope: (profile?.dataScope ?? "own") as DataScope,
     };
-    const result = await getLeads(parsed.data, caller);
+    const result = await getDailyActivities(parsed.data, caller);
     return Response.json(result);
   } catch {
-    return Response.json({ error: "Gagal mengambil data leads" }, { status: 500 });
+    return Response.json({ error: "Gagal mengambil data daily activity" }, { status: 500 });
   }
 }
 
 export async function POST(req: Request) {
   const { session, response } = await requirePermissionForRoute({
-    module: "leads",
+    module: "daily-activity",
     action: "create",
   });
   if (response) return response;
-  if (!mutationLimiter.check(`create-lead:${session.user.id}`)) return rateLimitResponse();
+  if (!mutationLimiter.check(`create-daily-activity:${session.user.id}`)) return rateLimitResponse();
 
   let body: unknown;
   try {
@@ -65,7 +65,7 @@ export async function POST(req: Request) {
     return Response.json({ error: "Request body tidak valid" }, { status: 400 });
   }
 
-  const parsed = createLeadSchema.safeParse(body);
+  const parsed = createDailyActivitySchema.safeParse(body);
   if (!parsed.success) {
     return Response.json(
       { error: parsed.error.issues[0].message },
@@ -98,7 +98,7 @@ export async function POST(req: Request) {
 
   try {
     const [lead] = await db.$transaction([
-      db.lead.create({
+      db.dailyActivity.create({
         data: {
           name,
           instansi: instansi || null,
@@ -133,10 +133,10 @@ export async function POST(req: Request) {
       ipAddress: ip,
     });
 
-    revalidateTag("leads", "max");
+    revalidateTag("daily-activity", "max");
 
     return Response.json(lead, { status: 201 });
   } catch {
-    return Response.json({ error: "Gagal menyimpan lead" }, { status: 500 });
+    return Response.json({ error: "Gagal menyimpan daily activity" }, { status: 500 });
   }
 }

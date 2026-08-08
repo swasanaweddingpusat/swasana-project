@@ -11,7 +11,7 @@ export async function GET(req: Request) {
   const { session, response } = await requireAnyPermissionForRoute([
     { module: "booking", action: "view" },
     { module: "booking-mice", action: "view" },
-    { module: "leads", action: "view" },
+    { module: "daily-activity", action: "view" },
     { module: "quotations", action: "view" },
   ]);
   if (response) return response;

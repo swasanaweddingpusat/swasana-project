@@ -163,10 +163,10 @@ export const ROUTE_META: Record<string, RouteMeta> = {
     subtitle: "Semua notifikasi",
   },
 
-  // ─── Leads ─────────────────────────────────────────────────────────────────
-  "/dashboard/leads": {
-    title: "Leads",
-    subtitle: "Kelola data lead dan pipeline penjualan",
+  // ─── Daily Activity ────────────────────────────────────────────────────────
+  "/dashboard/daily-activity": {
+    title: "Daily Activity",
+    subtitle: "Kelola data daily activity dan pipeline penjualan",
   },
 
   // ─── Quotations ───────────────────────────────────────────────────────────

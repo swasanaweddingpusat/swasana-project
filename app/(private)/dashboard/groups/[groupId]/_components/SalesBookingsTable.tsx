@@ -1075,6 +1075,7 @@ export function SalesBookingsTable({ salesId }: SalesBookingsTableProps): React.
           packageName={approvalDialogTarget.snapCustomer?.name ?? "Booking"}
           userProfileId={user.profileId}
           userRoleId={user.roleId}
+          canReset={can("booking", "reset-approval")}
           module="booking"
         />
       )}

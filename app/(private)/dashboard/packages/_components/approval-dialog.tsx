@@ -39,10 +39,14 @@ interface ApprovalDialogProps {
   userProfileId: string;
   userRoleId: string | null;
   isSuperAdmin?: boolean;
+  /** Explicit reset permission override (booking callers use this via can("booking","reset-approval")).
+   *  When provided, takes precedence over isSuperAdmin for the Reset button.
+   *  Package/MICE callers omit this and rely on isSuperAdmin as before. */
+  canReset?: boolean;
   module?: string;
 }
 
-export function ApprovalDialog({ open, onClose, packageId, packageName, userProfileId: _userProfileId, userRoleId: _userRoleId, isSuperAdmin, module = "package" }: ApprovalDialogProps) {
+export function ApprovalDialog({ open, onClose, packageId, packageName, userProfileId: _userProfileId, userRoleId: _userRoleId, isSuperAdmin, canReset, module = "package" }: ApprovalDialogProps) {
   const [record, setRecord] = useState<ApprovalRecord | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -160,7 +164,7 @@ export function ApprovalDialog({ open, onClose, packageId, packageName, userProf
                       </div>
                     )}
                   </div>
-                  {isSuperAdmin && step.approverType === "client" && step.status === "approved" && (
+                  {(canReset ?? isSuperAdmin) && step.status === "approved" && (
                     <button type="button" onClick={() => handleResetStep(step.id)} disabled={submitting} className={cn('text-xs', 'text-muted-foreground', 'hover:text-destructive', 'underline', 'shrink-0')}>
                       Reset
                     </button>

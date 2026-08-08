@@ -44,7 +44,7 @@ import {
   useUpdateLeadSegment,
   useDeleteLeadSegment,
 } from "@/hooks/use-lead-segments";
-import type { LeadSegmentItem } from "@/lib/queries/leads";
+import type { LeadSegmentItem } from "@/lib/queries/daily-activity";
 
 // ─── Component ────────────────────────────────────────────────────────────────
 

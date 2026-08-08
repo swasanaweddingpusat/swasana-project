@@ -2,7 +2,7 @@ import { cacheTag, cacheLife } from "next/cache";
 import { db } from "@/lib/db";
 import { resolveAvatarUrl } from "@/lib/storage";
 import type { Prisma } from "@prisma/client";
-import type { LeadFilterInput } from "@/lib/validations/lead";
+import type { DailyActivityFilterInput } from "@/lib/validations/daily-activity";
 import type { DataScope } from "@/types/user";
 
 /**
@@ -86,7 +86,7 @@ const leadSelect = {
   convertedToBooking: {
     select: { id: true },
   },
-} satisfies Prisma.LeadSelect;
+} satisfies Prisma.DailyActivitySelect;
 
 /**
  * Resolve the set of profileIds the caller is allowed to see leads for,
@@ -98,7 +98,7 @@ const leadSelect = {
 async function resolveLeadScopeFilter(
   callerProfileId: string,
   dataScope: DataScope,
-): Promise<Prisma.LeadWhereInput> {
+): Promise<Prisma.DailyActivityWhereInput> {
   if (dataScope === "all") return {};
   if (dataScope === "own") return { assignedToId: callerProfileId };
 
@@ -132,8 +132,8 @@ async function resolveLeadScopeFilter(
   return { assignedToId: { in: [...allowedIds] } };
 }
 
-export async function getLeads(
-  filter: LeadFilterInput,
+export async function getDailyActivities(
+  filter: DailyActivityFilterInput,
   caller?: { profileId: string; dataScope: DataScope },
 ) {
   // NOTE: "use cache" intentionally removed — this function may receive an
@@ -144,7 +144,7 @@ export async function getLeads(
   const { search, scope, statusId, venueId, eventTypeId, segmentId, assignedToId, page, pageSize } = filter;
 
   // Scope filter: active = isFinal:false, deal = isFinal&&isSystem, lost = isFinal&&!isSystem
-  let scopeWhere: Prisma.LeadWhereInput = {};
+  let scopeWhere: Prisma.DailyActivityWhereInput = {};
   if (scope === "active") {
     scopeWhere = { status: { isFinal: false } };
   } else if (scope === "deal") {
@@ -158,7 +158,7 @@ export async function getLeads(
     ? await resolveLeadScopeFilter(caller.profileId, caller.dataScope)
     : {};
 
-  const where: Prisma.LeadWhereInput = {
+  const where: Prisma.DailyActivityWhereInput = {
     ...scopeWhere,
     ...dataScopeFilter,
     ...(search?.trim() && {
@@ -179,14 +179,14 @@ export async function getLeads(
   const skip = (page - 1) * pageSize;
 
   const [items, total] = await Promise.all([
-    db.lead.findMany({
+    db.dailyActivity.findMany({
       where,
       select: leadSelect,
       orderBy: { createdAt: "desc" },
       skip,
       take: pageSize,
     }),
-    db.lead.count({ where }),
+    db.dailyActivity.count({ where }),
   ]);
 
   return {
@@ -198,12 +198,12 @@ export async function getLeads(
   };
 }
 
-export async function getLeadById(id: string) {
+export async function getDailyActivityById(id: string) {
   "use cache";
-  cacheTag("leads");
+  cacheTag("daily-activity");
   cacheLife("seconds");
 
-  const lead = await db.lead.findUnique({
+  const lead = await db.dailyActivity.findUnique({
     where: { id },
     select: leadSelect,
   });
@@ -249,7 +249,7 @@ export async function getLeadSegments() {
   });
 }
 
-export type LeadsResult = Awaited<ReturnType<typeof getLeads>>;
-export type LeadItem = LeadsResult["items"][number];
+export type DailyActivitiesResult = Awaited<ReturnType<typeof getDailyActivities>>;
+export type DailyActivityItem = DailyActivitiesResult["items"][number];
 export type LeadStatusItem = Awaited<ReturnType<typeof getLeadStatuses>>[number];
 export type LeadSegmentItem = Awaited<ReturnType<typeof getLeadSegments>>[number];

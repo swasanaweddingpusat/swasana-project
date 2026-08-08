@@ -45,7 +45,7 @@ import {
   useUpdateLeadStatus,
   useDeleteLeadStatus,
 } from "@/hooks/use-lead-statuses";
-import type { LeadStatusItem } from "@/lib/queries/leads";
+import type { LeadStatusItem } from "@/lib/queries/daily-activity";
 
 // ─── Preset Colors (monochrome + 1 destructive) ───────────────────────────────
 

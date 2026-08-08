@@ -54,6 +54,7 @@ import {
   AltArrowDown,
   Calendar as CalendarSolarIcon,
   AlignVerticalSpacing,
+  Box,
 } from "@solar-icons/react";
 import { cn } from "@/lib/utils";
 import { useVenues } from "@/hooks/use-venues";
@@ -128,6 +129,30 @@ function formatRupiah(amount: number): string {
     minimumFractionDigits: 0,
     maximumFractionDigits: 0,
   });
+}
+
+/** Escape HTML-sensitive chars so raw package text is safe inside TipTap. */
+function escapeHtml(raw: string): string {
+  return raw
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+/**
+ * Convert a PackageMiceItem.itemDescription (newline-separated bullets) into the
+ * rich HTML shape SimpleEditor/TipTap expects. Multi-line → <ul>; single line →
+ * <p>; empty → "".
+ */
+function miceDescriptionToHtml(raw: string): string {
+  const lines = (raw ?? "")
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0)
+    .map((l) => escapeHtml(l));
+  if (lines.length === 0) return "";
+  if (lines.length === 1) return `<p>${lines[0]}</p>`;
+  return `<ul>${lines.map((l) => `<li>${l}</li>`).join("")}</ul>`;
 }
 
 const LABEL_CLASS = cn("text-sm", "font-medium", "text-foreground");
@@ -663,7 +688,7 @@ export function QuotationDrawer({
   const { data: leadsSearchResult } = useQuery({
     queryKey: ["leads-instansi-search", debouncedInstansi],
     queryFn: async () => {
-      const res = await fetch(`/api/leads?search=${encodeURIComponent(debouncedInstansi)}&pageSize=8`);
+      const res = await fetch(`/api/daily-activity?search=${encodeURIComponent(debouncedInstansi)}&pageSize=8`);
       if (!res.ok) return { items: [] as LeadSearchOption[] };
       const data = (await res.json()) as { items?: LeadSearchOption[] };
       return data;
@@ -672,6 +697,10 @@ export function QuotationDrawer({
     staleTime: 30_000,
   });
   const leadInstansiOptions: LeadSearchOption[] = leadsSearchResult?.items ?? [];
+
+  // ── MICE package picker (Step 2 — explode into line items) ───────────────
+  const [selectedPackageId, setSelectedPackageId] = useState("");
+  const [paxInput, setPaxInput] = useState("");
 
   // ── Form ─────────────────────────────────────────────────────────────────
   const form = useForm<QuotationFormValues>({
@@ -743,6 +772,76 @@ export function QuotationDrawer({
   const watchedDiscount = form.watch("discount");
   const watchedEventTypeId = form.watch("eventTypeId");
   const watchedEventDate = form.watch("eventDate");
+
+  // ── MICE packages available for this quotation ───────────────────────────
+  interface MicePackageQuotationOption {
+    id: string;
+    packageName: string;
+    pax: number;
+    venue: { id: string; name: string } | null;
+    miceItems: Array<{
+      id: string;
+      itemName: string;
+      itemDescription: string;
+      itemType: "PAX" | "NOMINAL";
+      itemPrice: number;
+      sortOrder: number;
+    }>;
+  }
+  const { data: micePackagesData } = useQuery({
+    queryKey: ["mice-packages-quotation", watchedVenueId],
+    queryFn: async () => {
+      const qs = `/api/packages?forQuotation=true&category=MICE${
+        watchedVenueId ? `&venueId=${encodeURIComponent(watchedVenueId)}` : ""
+      }`;
+      const res = await fetch(qs);
+      if (!res.ok) return [] as MicePackageQuotationOption[];
+      return (await res.json()) as MicePackageQuotationOption[];
+    },
+    enabled: open,
+    staleTime: 30_000,
+  });
+  const micePackages: MicePackageQuotationOption[] = micePackagesData ?? [];
+  const selectedPackage = micePackages.find((p) => p.id === selectedPackageId) ?? null;
+
+  /**
+   * Explode the selected package's items into editable quotation line items and
+   * append them (does not overwrite existing template/manual items). PAX items
+   * multiply by pax; NOMINAL items are flat.
+   */
+  function handleAddPackageItems() {
+    const pkg = micePackages.find((p) => p.id === selectedPackageId);
+    if (!pkg) return;
+    if (pkg.miceItems.length === 0) {
+      toast.error("Paket ini belum punya item.");
+      return;
+    }
+    const pax = parseNumericInput(paxInput);
+    for (const item of pkg.miceItems) {
+      let qty: string;
+      let total: number;
+      if (item.itemType === "PAX") {
+        qty = String(pax);
+        total = pax * item.itemPrice;
+      } else {
+        qty = "1";
+        total = item.itemPrice;
+      }
+      appendItem({
+        title: item.itemName,
+        description: miceDescriptionToHtml(item.itemDescription),
+        qty,
+        price: item.itemPrice > 0 ? formatNumericDisplay(item.itemPrice) : "",
+        total: total > 0 ? formatNumericDisplay(total) : "",
+        manualTotal: false,
+      });
+    }
+    toast.success(
+      `${pkg.miceItems.length} item dari paket "${pkg.packageName}" ditambahkan.`,
+    );
+    setSelectedPackageId("");
+    setPaxInput("");
+  }
 
   const isStep1Incomplete =
     !watchedClientName?.trim() ||
@@ -855,6 +954,9 @@ export function QuotationDrawer({
     setInstansiSearch("");
     setDebouncedInstansi("");
     setInstansiDropdownOpen(false);
+    // Reset MICE package picker state
+    setSelectedPackageId("");
+    setPaxInput("");
 
     if (editQuotation) {
       const matchedVenue = venues.find((v) => v.name === editQuotation.venue);
@@ -1462,6 +1564,75 @@ export function QuotationDrawer({
 
               {/* ════════════════ STEP 2 — ITEMS + RINGKASAN ════════════════ */}
               <div className={cn(step !== 2 && "hidden", "space-y-3")}>
+                {/* ── Ambil dari Paket MICE ─────────────────────────── */}
+                <div className="rounded-xl border border-border bg-muted/30 p-3 space-y-2.5">
+                  <div className="flex items-center gap-1.5">
+                    <Box weight="BoldDuotone" className="h-4 w-4 text-primary" />
+                    <p className={LABEL_CLASS}>Ambil dari Paket MICE</p>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {!watchedVenueId
+                      ? "Menampilkan semua paket MICE. Pilih venue di step 1 untuk memfilter."
+                      : micePackages.length === 0
+                        ? "Belum ada paket MICE approved untuk venue ini."
+                        : "Pilih paket lalu isi jumlah pax — item paket akan ditambahkan ke daftar di bawah (bisa diedit)."}
+                  </p>
+
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_auto]">
+                    <div className="min-w-0">
+                      <FormLabel className="text-xs text-muted-foreground">
+                        Paket
+                      </FormLabel>
+                      <SearchableSelect
+                        options={micePackages.map((p) => ({
+                          id: p.id,
+                          name: p.venue?.name
+                            ? `${p.packageName} — ${p.venue.name}`
+                            : p.packageName,
+                        }))}
+                        value={selectedPackageId}
+                        onChange={(id) => {
+                          setSelectedPackageId(id);
+                          const pkg = micePackages.find((p) => p.id === id);
+                          if (pkg && pkg.pax > 0) setPaxInput(String(pkg.pax));
+                        }}
+                        placeholder="Pilih paket MICE..."
+                        searchPlaceholder="Cari paket..."
+                        emptyText="Tidak ada paket MICE"
+                      />
+                    </div>
+                    <div className="w-full sm:w-28">
+                      <FormLabel className="text-xs text-muted-foreground">
+                        Jumlah Pax
+                      </FormLabel>
+                      <Input
+                        value={paxInput}
+                        onChange={(e) => setPaxInput(e.target.value.replace(/\D/g, ""))}
+                        placeholder="0"
+                        inputMode="numeric"
+                        className="w-full"
+                      />
+                    </div>
+                  </div>
+
+                  {selectedPackage && (
+                    <p className="text-xs text-muted-foreground">
+                      {selectedPackage.miceItems.length} item akan ditambahkan.
+                    </p>
+                  )}
+
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleAddPackageItems}
+                    disabled={!selectedPackageId}
+                    className="w-full rounded-xl"
+                  >
+                    <AddCircle weight="BoldDuotone" className="h-4 w-4 mr-1" />
+                    Tambah item dari paket
+                  </Button>
+                </div>
+
                 {/* ── Items ─────────────────────────────────────────── */}
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">

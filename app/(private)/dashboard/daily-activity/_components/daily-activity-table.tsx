@@ -14,41 +14,41 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
-import { LeadDrawer } from "./lead-drawer";
-import { CreateLeadDrawer } from "./CreateLeadDrawer";
-import { LeadsFilters } from "./leads-filters";
-import { LeadsListView } from "./leads-list-view";
-import { useLeads, useUpdateLeadStatus, useDeleteLead } from "@/hooks/use-leads";
-import { LeadDetailModal } from "./LeadDetailModal";
+import { DailyActivityDrawer } from "./daily-activity-drawer";
+import { CreateDailyActivityDrawer } from "./CreateDailyActivityDrawer";
+import { DailyActivityFilters } from "./daily-activity-filters";
+import { DailyActivityListView } from "./daily-activity-list-view";
+import { useDailyActivities, useUpdateDailyActivityStatus, useDeleteDailyActivity } from "@/hooks/use-daily-activities";
+import { DailyActivityDetailModal } from "./DailyActivityDetailModal";
 import { useLeadStatuses } from "@/hooks/use-lead-statuses";
-import type { LeadItem } from "@/lib/queries/leads";
-import type { LeadListItem } from "@/types/lead";
-import type { LeadScope } from "@/lib/validations/lead";
+import type { DailyActivityItem } from "@/lib/queries/daily-activity";
+import type { DailyActivityListItem } from "@/types/daily-activity";
+import type { DailyActivityScope } from "@/lib/validations/daily-activity";
 
-export type { LeadItem };
+export type { DailyActivityItem };
 
 // ─── Main orchestrator ────────────────────────────────────────────────────────
 
-export function LeadsTable() {
+export function DailyActivityTable() {
   const [search, setSearch] = useState("");
-  const [scope, setScope] = useState<LeadScope>("active");
+  const [scope, setScope] = useState<DailyActivityScope>("active");
   const [statusFilter, setStatusFilter] = useState("all");
   const [venueFilter, setVenueFilter] = useState("all");
   const [eventTypeFilter, setEventTypeFilter] = useState("all");
   const [segmentFilter, setSegmentFilter] = useState("all");
   const [currentPage, setCurrentPage] = useState(1);
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [editLead, setEditLead] = useState<LeadListItem | null>(null);
+  const [editLead, setEditLead] = useState<DailyActivityListItem | null>(null);
   // CreateLeadDrawer — new redesigned create flow (frontend-only for now)
   const [createDrawerOpen, setCreateDrawerOpen] = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState<LeadItem | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<DailyActivityItem | null>(null);
   // Deal / Lost / Reset are pure pipeline status flips. Leads carry no booking:
   // a Deal only marks the pipeline outcome; the actual Booking is created later
   // from the Booking menu (with its own in-drawer lead picker) or via Quotation.
-  const [dealTarget, setDealTarget] = useState<LeadItem | null>(null);
-  const [lostTarget, setLostTarget] = useState<LeadItem | null>(null);
-  const [resetTarget, setResetTarget] = useState<LeadItem | null>(null);
-  const [detailLead, setDetailLead] = useState<LeadItem | null>(null);
+  const [dealTarget, setDealTarget] = useState<DailyActivityItem | null>(null);
+  const [lostTarget, setLostTarget] = useState<DailyActivityItem | null>(null);
+  const [resetTarget, setResetTarget] = useState<DailyActivityItem | null>(null);
+  const [detailLead, setDetailLead] = useState<DailyActivityItem | null>(null);
   const [isMarkingStatus, setIsMarkingStatus] = useState(false);
   const [isManualRefresh, setIsManualRefresh] = useState(false);
 
@@ -70,11 +70,11 @@ export function LeadsTable() {
     [search, scope, statusFilter, venueFilter, eventTypeFilter, segmentFilter, currentPage, pageSize],
   );
 
-  const { data: leadsData, isLoading: leadsLoading, refetch: refetchLeads } = useLeads(leadsFilter);
+  const { data: leadsData, isLoading: leadsLoading, refetch: refetchLeads } = useDailyActivities(leadsFilter);
 
   const { data: statuses = [] } = useLeadStatuses();
-  const { mutateAsync: updateStatus } = useUpdateLeadStatus();
-  const { mutateAsync: deleteLeadMut, isPending: isDeleting } = useDeleteLead();
+  const { mutateAsync: updateStatus } = useUpdateDailyActivityStatus();
+  const { mutateAsync: deleteLeadMut, isPending: isDeleting } = useDeleteDailyActivity();
 
   const leads = useMemo(() => leadsData?.items ?? [], [leadsData?.items]);
   const totalPages = leadsData?.totalPages ?? 1;
@@ -85,8 +85,8 @@ export function LeadsTable() {
     setCreateDrawerOpen(true);
   }
 
-  function handleEdit(lead: LeadItem) {
-    setEditLead(lead as unknown as LeadListItem);
+  function handleEdit(lead: DailyActivityItem) {
+    setEditLead(lead as unknown as DailyActivityListItem);
     setDrawerOpen(true);
   }
 
@@ -103,7 +103,7 @@ export function LeadsTable() {
 
   // Open confirmation modal; the actual mutation runs on confirm.
   // Deal is a plain status flip for both wedding & MICE — no booking is created here.
-  function handleMarkDeal(lead: LeadItem) {
+  function handleMarkDeal(lead: DailyActivityItem) {
     if (lead.status.isFinal) {
       toast.info("Lead sudah berstatus final.");
       return;
@@ -130,7 +130,7 @@ export function LeadsTable() {
     }
   }
 
-  function handleMarkLost(lead: LeadItem) {
+  function handleMarkLost(lead: DailyActivityItem) {
     if (lead.status.isFinal) { toast.info("Lead sudah berstatus final."); return; }
     setLostTarget(lead);
   }
@@ -161,7 +161,7 @@ export function LeadsTable() {
     statuses.find((s) => !s.isFinal && !s.isSystem);
 
   // Open the Reset confirmation (only meaningful for final leads).
-  function handleReset(lead: LeadItem) {
+  function handleReset(lead: DailyActivityItem) {
     if (!lead.status.isFinal) { toast.info("Lead belum final, tidak perlu di-reset."); return; }
     setResetTarget(lead);
   }
@@ -196,7 +196,7 @@ export function LeadsTable() {
     }
   }
 
-  function handleScopeChange(value: LeadScope) {
+  function handleScopeChange(value: DailyActivityScope) {
     setScope(value);
     setCurrentPage(1);
     // Reset status filter when switching scope (status filter only applies in active)
@@ -248,7 +248,7 @@ export function LeadsTable() {
     <>
       <Card>
         <CardContent className="p-0">
-          <LeadsFilters
+          <DailyActivityFilters
             scope={scope}
             onScopeChange={handleScopeChange}
             search={search}
@@ -268,7 +268,7 @@ export function LeadsTable() {
             isRefreshing={isManualRefresh}
           />
 
-          <LeadsListView
+          <DailyActivityListView
             leads={leads}
             search={search}
             currentPage={currentPage}
@@ -287,20 +287,20 @@ export function LeadsTable() {
       </Card>
 
       {/* New create drawer — redesigned UI with step-0 category selection */}
-      <CreateLeadDrawer
+      <CreateDailyActivityDrawer
         open={createDrawerOpen}
         onOpenChange={setCreateDrawerOpen}
       />
 
       {/* Edit drawer — existing LeadDrawer (edit mode only) */}
-      <LeadDrawer
+      <DailyActivityDrawer
         open={drawerOpen}
         onOpenChange={setDrawerOpen}
         editLead={editLead}
       />
 
       {/* Lead detail modal — opens on row click */}
-      <LeadDetailModal
+      <DailyActivityDetailModal
         open={!!detailLead}
         lead={detailLead}
         onClose={() => setDetailLead(null)}

@@ -17,8 +17,8 @@ import {
   type IconProps,
 } from "@solar-icons/react";
 import { cn } from "@/lib/utils";
-import type { LeadItem } from "@/lib/queries/leads";
-import type { ContactNumber } from "@/types/lead";
+import type { DailyActivityItem } from "@/lib/queries/daily-activity";
+import type { ContactNumber } from "@/types/daily-activity";
 
 /* ─── Field styling tokens ─────────────────────────────────────────────────── */
 
@@ -117,14 +117,14 @@ function InfoSection({
 
 interface Props {
   open: boolean;
-  lead: LeadItem | null;
+  lead: DailyActivityItem | null;
   onClose: () => void;
-  onEdit?: (lead: LeadItem) => void;
+  onEdit?: (lead: DailyActivityItem) => void;
 }
 
 /* ─── Component ────────────────────────────────────────────────────────────── */
 
-export function LeadDetailModal({ open, lead, onClose, onEdit }: Props) {
+export function DailyActivityDetailModal({ open, lead, onClose, onEdit }: Props) {
   // Escape-to-close — hook must run unconditionally (before any early return).
   useEffect(() => {
     if (!open) return;

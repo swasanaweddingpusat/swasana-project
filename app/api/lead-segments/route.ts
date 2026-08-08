@@ -3,7 +3,7 @@ import { apiLimiter, mutationLimiter, rateLimitResponse } from "@/lib/rate-limit
 import { logAudit } from "@/lib/audit";
 import { db } from "@/lib/db";
 import { revalidateTag } from "next/cache";
-import { getLeadSegments } from "@/lib/queries/leads";
+import { getLeadSegments } from "@/lib/queries/daily-activity";
 import { createLeadSegmentSchema } from "@/lib/validations/lead-segment";
 
 // ─── GET /api/lead-segments ───────────────────────────────────────────────────

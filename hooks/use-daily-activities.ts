@@ -1,16 +1,16 @@
 "use client";
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { createLead, updateLead, deleteLead, updateLeadStatus } from "@/actions/lead";
-import type { CreateLeadInput, UpdateLeadInput, UpdateLeadStatusInput, LeadScope } from "@/lib/validations/lead";
-import type { LeadsResult, LeadStatusItem } from "@/lib/queries/leads";
+import { createDailyActivity, updateDailyActivity, deleteDailyActivity, updateDailyActivityStatus } from "@/actions/daily-activity";
+import type { CreateDailyActivityInput, UpdateDailyActivityInput, UpdateDailyActivityStatusInput, DailyActivityScope } from "@/lib/validations/daily-activity";
+import type { DailyActivitiesResult, LeadStatusItem } from "@/lib/queries/daily-activity";
 
 // Re-export so consumers can import from here without touching the validation schema directly
-export type { LeadScope };
+export type { DailyActivityScope };
 
-interface LeadFilter {
+interface DailyActivityFilter {
   search?: string;
-  scope?: LeadScope;
+  scope?: DailyActivityScope;
   statusId?: string;
   venueId?: string;
   eventTypeId?: string;
@@ -19,7 +19,7 @@ interface LeadFilter {
   pageSize?: number;
 }
 
-async function fetchLeads(filter: LeadFilter = {}): Promise<LeadsResult> {
+async function fetchDailyActivities(filter: DailyActivityFilter = {}): Promise<DailyActivitiesResult> {
   const params = new URLSearchParams();
   if (filter.search) params.set("search", filter.search);
   if (filter.scope) params.set("scope", filter.scope);
@@ -30,64 +30,64 @@ async function fetchLeads(filter: LeadFilter = {}): Promise<LeadsResult> {
   if (filter.page) params.set("page", String(filter.page));
   if (filter.pageSize) params.set("pageSize", String(filter.pageSize));
 
-  const res = await fetch(`/api/leads?${params.toString()}`);
-  if (!res.ok) throw new Error("Failed to fetch leads");
+  const res = await fetch(`/api/daily-activity?${params.toString()}`);
+  if (!res.ok) throw new Error("Failed to fetch daily activities");
   return res.json();
 }
 
-export function useLeads(filter: LeadFilter = {}) {
+export function useDailyActivities(filter: DailyActivityFilter = {}) {
   return useQuery({
-    queryKey: ["leads", filter] as const,
-    queryFn: () => fetchLeads(filter),
+    queryKey: ["daily-activity", filter] as const,
+    queryFn: () => fetchDailyActivities(filter),
     staleTime: 0,
     refetchOnMount: true,
     refetchOnWindowFocus: false,
   });
 }
 
-export function useCreateLead() {
+export function useCreateDailyActivity() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (data: CreateLeadInput) => createLead(data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["leads"] }),
+    mutationFn: (data: CreateDailyActivityInput) => createDailyActivity(data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["daily-activity"] }),
   });
 }
 
-export function useUpdateLead() {
+export function useUpdateDailyActivity() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (data: UpdateLeadInput) => updateLead(data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["leads"] }),
+    mutationFn: (data: UpdateDailyActivityInput) => updateDailyActivity(data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["daily-activity"] }),
   });
 }
 
-export function useDeleteLead() {
+export function useDeleteDailyActivity() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => deleteLead(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["leads"] }),
+    mutationFn: (id: string) => deleteDailyActivity(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["daily-activity"] }),
   });
 }
 
-export function useUpdateLeadStatus() {
+export function useUpdateDailyActivityStatus() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (data: UpdateLeadStatusInput) => updateLeadStatus(data),
+    mutationFn: (data: UpdateDailyActivityStatusInput) => updateDailyActivityStatus(data),
     // Optimistic: move the card immediately, before the API responds.
     onMutate: async ({ id, statusId }) => {
-      await qc.cancelQueries({ queryKey: ["leads"] });
+      await qc.cancelQueries({ queryKey: ["daily-activity"] });
 
       // Resolve the target status object from the cached statuses list.
       const statuses = qc.getQueryData<LeadStatusItem[]>(["lead-statuses"]);
       const nextStatus = statuses?.find((s) => s.id === statusId);
-      if (!nextStatus) return { snapshots: [] as [readonly unknown[], LeadsResult | undefined][] };
+      if (!nextStatus) return { snapshots: [] as [readonly unknown[], DailyActivitiesResult | undefined][] };
 
-      // Snapshot every cached leads query so we can roll back on error.
-      const snapshots = qc.getQueriesData<LeadsResult>({ queryKey: ["leads"] });
+      // Snapshot every cached daily-activity query so we can roll back on error.
+      const snapshots = qc.getQueriesData<DailyActivitiesResult>({ queryKey: ["daily-activity"] });
 
       for (const [key, data] of snapshots) {
         if (!data) continue;
-        qc.setQueryData<LeadsResult>(key, {
+        qc.setQueryData<DailyActivitiesResult>(key, {
           ...data,
           items: data.items.map((lead) =>
             lead.id === id
@@ -114,6 +114,6 @@ export function useUpdateLeadStatus() {
         qc.setQueryData(key, data);
       });
     },
-    onSettled: () => qc.invalidateQueries({ queryKey: ["leads"] }),
+    onSettled: () => qc.invalidateQueries({ queryKey: ["daily-activity"] }),
   });
 }

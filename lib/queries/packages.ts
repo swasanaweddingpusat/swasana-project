@@ -69,6 +69,35 @@ export async function getPackagesForBooking(venueId?: string, category: "WEDDING
   );
 }
 
+/**
+ * MICE packages consumable by the quotation drawer. Deliberately NOT reusing
+ * getPackagesForBooking: that filters on Σ categoryPrices.basePrice > 0, but MICE
+ * packages carry their price on miceItems.itemPrice (categoryPrices is often empty),
+ * so valid MICE packages would be filtered out. Here we filter on having miceItems
+ * instead, and only include the minimal shape the quotation explode needs.
+ */
+export async function getMicePackagesForQuotation(venueId?: string) {
+  const packages = await db.package.findMany({
+    where: {
+      category: "MICE",
+      available: true,
+      approvalStatus: "approved",
+      ...(venueId ? { venueId } : {}),
+    },
+    orderBy: { createdAt: "desc" },
+    include: {
+      venue: { select: { id: true, name: true } },
+      miceItems: { orderBy: { sortOrder: "asc" as const } },
+    },
+  });
+
+  return packages.filter((pkg) => (pkg.miceItems ?? []).length > 0);
+}
+
+export type MicePackageForQuotationItem = Awaited<
+  ReturnType<typeof getMicePackagesForQuotation>
+>[number];
+
 export async function getApprovalRecord(module: string, entityId: string) {
   return db.approvalRecord.findUnique({
     where: { module_entityId: { module, entityId } },

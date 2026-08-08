@@ -49,7 +49,7 @@ import { useEventTypes } from "@/hooks/use-event-types";
 import { useLeadStatuses } from "@/hooks/use-lead-statuses";
 import { useLeadSegments, useCreateLeadSegment } from "@/hooks/use-lead-segments";
 import { useSalesUsers } from "@/hooks/use-sales-users";
-import { useUpdateLead } from "@/hooks/use-leads";
+import { useUpdateDailyActivity } from "@/hooks/use-daily-activities";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import {
   SectionHeader,
@@ -58,8 +58,8 @@ import {
   CurrencyInput,
   fmtCurrency,
   mapCodeToWeddingEventType,
-} from "./lead-form-fields";
-import type { LeadListItem, ContactNumber } from "@/types/lead";
+} from "./daily-activity-form-fields";
+import type { DailyActivityListItem, ContactNumber } from "@/types/daily-activity";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -130,10 +130,10 @@ function extractStorageKey(fullUrl: string): string {
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
-interface LeadDrawerProps {
+interface DailyActivityDrawerProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  editLead: LeadListItem | null;
+  editLead: DailyActivityListItem | null;
   onSuccess?: () => void;
 }
 
@@ -151,7 +151,7 @@ function dateToString(d: Date | string | null | undefined): string {
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
-export function LeadDrawer({ open, onOpenChange, editLead, onSuccess }: LeadDrawerProps) {
+export function DailyActivityDrawer({ open, onOpenChange, editLead, onSuccess }: DailyActivityDrawerProps) {
   // ── Category (fixed once set from lead) ──────────────────────────────────────
   const [category, setCategory] = useState<BookingCategory | null>(null);
 
@@ -223,7 +223,7 @@ export function LeadDrawer({ open, onOpenChange, editLead, onSuccess }: LeadDraw
   const { data: leadStatuses = [] } = useLeadStatuses();
   const { users: salesUsers } = useSalesUsers();
   const { user: currentUser } = useCurrentUser();
-  const updateLead = useUpdateLead();
+  const updateLead = useUpdateDailyActivity();
 
   const isMiceOnly = currentUser?.roleName === "sales-mice";
 

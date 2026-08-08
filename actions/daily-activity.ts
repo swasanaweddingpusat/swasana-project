@@ -7,11 +7,11 @@ import { logAudit } from "@/lib/audit";
 import { requirePermission } from "@/lib/permissions";
 import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
 import {
-  createLeadSchema,
-  updateLeadSchema,
-  updateLeadStatusSchema,
-} from "@/lib/validations/lead";
-import type { CreateLeadInput, UpdateLeadInput, UpdateLeadStatusInput } from "@/lib/validations/lead";
+  createDailyActivitySchema,
+  updateDailyActivitySchema,
+  updateDailyActivityStatusSchema,
+} from "@/lib/validations/daily-activity";
+import type { CreateDailyActivityInput, UpdateDailyActivityInput, UpdateDailyActivityStatusInput } from "@/lib/validations/daily-activity";
 import type { WeddingSession } from "@prisma/client";
 
 // ─── Slot conflict guard (locked leads only) ──────────────────────────────────
@@ -86,7 +86,7 @@ async function findLeadSlotConflict(params: {
   // Both must be checked separately because they use different session fields.
   const sessionIn = overlapOr ? overlapOr.map((o) => o.weddingSession) : undefined;
 
-  const leadConflict = await db.lead.findFirst({
+  const leadConflict = await db.dailyActivity.findFirst({
     where: {
       ...(excludeLeadId ? { id: { not: excludeLeadId } } : {}),
       isDateLocked: true,
@@ -119,8 +119,8 @@ async function findLeadSlotConflict(params: {
 
 // ─── Create Lead ──────────────────────────────────────────────────────────────
 
-export async function createLead(data: CreateLeadInput) {
-  const { session, error } = await requirePermission({ module: "leads", action: "create" });
+export async function createDailyActivity(data: CreateDailyActivityInput) {
+  const { session, error } = await requirePermission({ module: "daily-activity", action: "create" });
   if (error) return { success: false as const, error };
 
   const h = await headers();
@@ -130,7 +130,7 @@ export async function createLead(data: CreateLeadInput) {
     return { success: false as const, ...rateLimitError() };
   }
 
-  const parsed = createLeadSchema.safeParse(data);
+  const parsed = createDailyActivitySchema.safeParse(data);
   if (!parsed.success) {
     return { success: false as const, error: parsed.error.issues[0].message };
   }
@@ -184,7 +184,7 @@ export async function createLead(data: CreateLeadInput) {
 
   try {
     const [lead] = await db.$transaction([
-      db.lead.create({
+      db.dailyActivity.create({
         data: {
           name,
           contactNumbers,
@@ -234,7 +234,7 @@ export async function createLead(data: CreateLeadInput) {
       ipAddress: ip,
     });
 
-    revalidateTag("leads", "max");
+    revalidateTag("daily-activity", "max");
 
     return { success: true as const, data: lead };
   } catch (err) {
@@ -245,8 +245,8 @@ export async function createLead(data: CreateLeadInput) {
 
 // ─── Update Lead ──────────────────────────────────────────────────────────────
 
-export async function updateLead(data: UpdateLeadInput) {
-  const { session, error } = await requirePermission({ module: "leads", action: "edit" });
+export async function updateDailyActivity(data: UpdateDailyActivityInput) {
+  const { session, error } = await requirePermission({ module: "daily-activity", action: "edit" });
   if (error) return { success: false as const, error };
 
   const h = await headers();
@@ -256,7 +256,7 @@ export async function updateLead(data: UpdateLeadInput) {
     return { success: false as const, ...rateLimitError() };
   }
 
-  const parsed = updateLeadSchema.safeParse(data);
+  const parsed = updateDailyActivitySchema.safeParse(data);
   if (!parsed.success) {
     return { success: false as const, error: parsed.error.issues[0].message };
   }
@@ -284,7 +284,7 @@ export async function updateLead(data: UpdateLeadInput) {
 
   try {
     const [lead] = await db.$transaction([
-      db.lead.update({
+      db.dailyActivity.update({
         where: { id },
         data: {
           ...(fields.name !== undefined && { name: fields.name }),
@@ -344,7 +344,7 @@ export async function updateLead(data: UpdateLeadInput) {
       ipAddress: ip,
     });
 
-    revalidateTag("leads", "max");
+    revalidateTag("daily-activity", "max");
 
     return { success: true as const, data: lead };
   } catch (err) {
@@ -355,8 +355,8 @@ export async function updateLead(data: UpdateLeadInput) {
 
 // ─── Delete Lead ──────────────────────────────────────────────────────────────
 
-export async function deleteLead(id: string) {
-  const { session, error } = await requirePermission({ module: "leads", action: "delete" });
+export async function deleteDailyActivity(id: string) {
+  const { session, error } = await requirePermission({ module: "daily-activity", action: "delete" });
   if (error) return { success: false as const, error };
 
   const h = await headers();
@@ -368,7 +368,7 @@ export async function deleteLead(id: string) {
 
   try {
     await db.$transaction([
-      db.lead.delete({ where: { id } }),
+      db.dailyActivity.delete({ where: { id } }),
     ]);
 
     await logAudit({
@@ -380,7 +380,7 @@ export async function deleteLead(id: string) {
       ipAddress: ip,
     });
 
-    revalidateTag("leads", "max");
+    revalidateTag("daily-activity", "max");
 
     return { success: true as const };
   } catch (err) {
@@ -391,15 +391,15 @@ export async function deleteLead(id: string) {
 
 // ─── Update Lead Status (Kanban drag) ────────────────────────────────────────
 
-export async function updateLeadStatus(data: UpdateLeadStatusInput) {
-  const { session, error } = await requirePermission({ module: "leads", action: "edit" });
+export async function updateDailyActivityStatus(data: UpdateDailyActivityStatusInput) {
+  const { session, error } = await requirePermission({ module: "daily-activity", action: "edit" });
   if (error) return { success: false as const, error };
 
   if (!mutationLimiter.check(`update-lead-status:${session!.user.id}`)) {
     return { success: false as const, ...rateLimitError() };
   }
 
-  const parsed = updateLeadStatusSchema.safeParse(data);
+  const parsed = updateDailyActivityStatusSchema.safeParse(data);
   if (!parsed.success) {
     return { success: false as const, error: parsed.error.issues[0].message };
   }
@@ -422,7 +422,7 @@ export async function updateLeadStatus(data: UpdateLeadStatusInput) {
     const isLostTransition = targetStatus.isFinal && !targetStatus.isSystem;
 
     await db.$transaction([
-      db.lead.update({
+      db.dailyActivity.update({
         where: { id: parsed.data.id },
         data: {
           statusId: parsed.data.statusId,
@@ -440,7 +440,7 @@ export async function updateLeadStatus(data: UpdateLeadStatusInput) {
       ipAddress: ip,
     });
 
-    revalidateTag("leads", "max");
+    revalidateTag("daily-activity", "max");
 
     return { success: true as const };
   } catch (err) {
@@ -451,8 +451,8 @@ export async function updateLeadStatus(data: UpdateLeadStatusInput) {
 
 // ─── Update Lead Assignee ────────────────────────────────────────────────────
 
-export async function updateLeadAssignee(leadId: string, assignedToId: string | null) {
-  const { session, error } = await requirePermission({ module: "leads", action: "edit" });
+export async function updateDailyActivityAssignee(leadId: string, assignedToId: string | null) {
+  const { session, error } = await requirePermission({ module: "daily-activity", action: "edit" });
   if (error) return { success: false as const, error };
 
   if (!mutationLimiter.check(`update-lead-assignee:${session!.user.id}`)) {
@@ -464,7 +464,7 @@ export async function updateLeadAssignee(leadId: string, assignedToId: string | 
 
   try {
     await db.$transaction([
-      db.lead.update({
+      db.dailyActivity.update({
         where: { id: leadId },
         data: { assignedToId },
       }),
@@ -479,7 +479,7 @@ export async function updateLeadAssignee(leadId: string, assignedToId: string | 
       ipAddress: ip,
     });
 
-    revalidateTag("leads", "max");
+    revalidateTag("daily-activity", "max");
 
     return { success: true as const };
   } catch (err) {

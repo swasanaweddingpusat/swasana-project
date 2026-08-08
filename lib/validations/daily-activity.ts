@@ -12,9 +12,9 @@ export const contactNumberSchema = z.object({
     .regex(/^\d+$/, "Nomor hanya boleh berisi angka"),
 });
 
-// ─── Lead Schemas ─────────────────────────────────────────────────────────────
+// ─── Daily Activity Schemas ───────────────────────────────────────────────────
 
-const baseLeadSchema = z.object({
+const baseDailyActivitySchema = z.object({
   name: z.string().trim().min(1, "Nama wajib diisi").max(200),
   contactNumbers: z
     .array(contactNumberSchema)
@@ -175,14 +175,14 @@ const requireDistinctEventDates = (
   }
 };
 
-export const createLeadSchema = baseLeadSchema
+export const createDailyActivitySchema = baseDailyActivitySchema
   .superRefine(requireWeddingSession)
   .superRefine(requireWeddingEventFields)
   .superRefine(requireAltSession)
   .superRefine(requireBookingFeeWhenLocked)
   .superRefine(requireDistinctEventDates);
 
-export const updateLeadSchema = baseLeadSchema
+export const updateDailyActivitySchema = baseDailyActivitySchema
   .partial()
   .extend({ id: z.string().min(1) })
   .superRefine(requireWeddingSession)
@@ -191,7 +191,7 @@ export const updateLeadSchema = baseLeadSchema
   .superRefine(requireBookingFeeWhenLocked)
   .superRefine(requireDistinctEventDates);
 
-export const leadFilterSchema = z.object({
+export const dailyActivityFilterSchema = z.object({
   search: z.string().optional(),
   scope: z.enum(["active", "deal", "lost"]).default("active"),
   statusId: z.string().optional(),
@@ -203,12 +203,12 @@ export const leadFilterSchema = z.object({
   pageSize: z.coerce.number().int().min(1).max(100).default(20),
 });
 
-export const updateLeadStatusSchema = z.object({
+export const updateDailyActivityStatusSchema = z.object({
   id: z.string().min(1),
   statusId: z.string().min(1),
 });
 
-// ─── LeadStatus Schemas ───────────────────────────────────────────────────────
+// ─── LeadStatus Schemas (settings-lead-status — kept as-is) ───────────────────
 
 export const createLeadStatusSchema = z.object({
   name: z.string().trim().min(1, "Nama wajib diisi").max(100),
@@ -227,13 +227,13 @@ export const updateLeadStatusSchema2 = createLeadStatusSchema.partial().extend({
 
 // ─── Inferred Types ───────────────────────────────────────────────────────────
 
-export type LeadScope = "active" | "deal" | "lost";
+export type DailyActivityScope = "active" | "deal" | "lost";
 
-export type CreateLeadInput = z.infer<typeof createLeadSchema>;
-export type UpdateLeadInput = z.infer<typeof updateLeadSchema>;
-export type LeadFilterInput = z.infer<typeof leadFilterSchema>;
-export type UpdateLeadStatusInput = z.infer<typeof updateLeadStatusSchema>;
+export type CreateDailyActivityInput = z.infer<typeof createDailyActivitySchema>;
+export type UpdateDailyActivityInput = z.infer<typeof updateDailyActivitySchema>;
+export type DailyActivityFilterInput = z.infer<typeof dailyActivityFilterSchema>;
+export type UpdateDailyActivityStatusInput = z.infer<typeof updateDailyActivityStatusSchema>;
 export type CreateLeadStatusInput = z.infer<typeof createLeadStatusSchema>;
 export type UpdateLeadStatusInput2 = z.infer<typeof updateLeadStatusSchema2>;
-export type BaseLeadInput = z.infer<typeof baseLeadSchema>;
+export type BaseDailyActivityInput = z.infer<typeof baseDailyActivitySchema>;
 export type WeddingSessionAltInput = "morning" | "evening" | "fullday" | null | undefined;
