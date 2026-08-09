@@ -9,7 +9,7 @@ type BrandOption = {
 };
 
 async function fetchBrands(): Promise<BrandOption[]> {
-  const res = await fetch("/api/brands");
+  const res = await fetch("/api/hr/brands");
   if (!res.ok) throw new Error("Failed to fetch brands");
   const data = await res.json() as Array<{ id: string; name: string; code: string }>;
   return data;

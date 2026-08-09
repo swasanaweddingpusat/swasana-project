@@ -2,10 +2,12 @@
 
 import { revalidateTag } from "next/cache";
 import { db } from "@/lib/db";
+import { Prisma } from "@prisma/client";
 import { requirePermission } from "@/lib/permissions";
 import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
 import { logAudit } from "@/lib/audit";
 import { createJobPostingSchema, updateJobPostingSchema } from "@/lib/validations/jobPosting";
+import { deleteFromStorage, extractKeyFromUrl } from "@/lib/storage";
 
 // ─── Create Job Posting ───────────────────────────────────────────────────────
 
@@ -53,40 +55,36 @@ export async function createJobPosting(
       return { success: false, error: "Gaji minimum tidak boleh lebih tinggi dari gaji maksimum" };
     }
 
-    const createData: Record<string, unknown> = {
-      title: parsed.data.title,
-      description: parsed.data.description || null,
-      requirements: parsed.data.requirements || null,
-      location: parsed.data.location || null,
-      employmentType: parsed.data.employmentType || null,
-      salaryRangeMin: parsed.data.salaryRangeMin ?? null,
-      salaryRangeMax: parsed.data.salaryRangeMax ?? null,
-      departmentId: parsed.data.departmentId || null,
-      positionId: parsed.data.positionId || null,
-      isWalkInInterview: parsed.data.isWalkInInterview ?? false,
-      brandId: parsed.data.brandId || null,
-      submissionDate: parsed.data.submissionDate ?? null,
-      interviewDate: parsed.data.interviewDate ?? null,
-      level: parsed.data.level || null,
-      quota: parsed.data.quota ?? null,
-      interviewLocation: parsed.data.interviewLocation || null,
-      startDate: parsed.data.startDate ?? null,
-      minEducation: parsed.data.minEducation || null,
-      minExperience: parsed.data.minExperience || null,
-      otherQualifications: parsed.data.otherQualifications || null,
-      additionalNotes: parsed.data.additionalNotes || null,
-      approverId: parsed.data.approverId || null,
-      submittedBySignature: parsed.data.submittedBySignature || null,
-      createdBy: session!.user.profileId,
-    };
-
-    // Only include jobDescriptions if provided (JSON field doesn't accept null)
-    if (parsed.data.jobDescriptions) {
-      createData.jobDescriptions = parsed.data.jobDescriptions;
-    }
-
     const posting = await db.jobPosting.create({
-      data: createData as Parameters<typeof db.jobPosting.create>[0]["data"],
+      data: {
+        title: parsed.data.title,
+        description: parsed.data.description || null,
+        requirements: parsed.data.requirements || null,
+        location: parsed.data.location || null,
+        employmentType: parsed.data.employmentType || null,
+        salaryRangeMin: parsed.data.salaryRangeMin ?? null,
+        salaryRangeMax: parsed.data.salaryRangeMax ?? null,
+        departmentId: parsed.data.departmentId || null,
+        positionId: parsed.data.positionId || null,
+        isWalkInInterview: parsed.data.isWalkInInterview ?? false,
+        brandId: parsed.data.brandId || null,
+        submissionDate: parsed.data.submissionDate ?? null,
+        interviewDate: parsed.data.interviewDate ?? null,
+        level: parsed.data.level || null,
+        quota: parsed.data.quota ?? null,
+        interviewLocation: parsed.data.interviewLocation || null,
+        startDate: parsed.data.startDate ?? null,
+        minEducation: parsed.data.minEducation || null,
+        minExperience: parsed.data.minExperience || null,
+        otherQualifications: parsed.data.otherQualifications || null,
+        jobDescriptions: parsed.data.jobDescriptions
+          ? (parsed.data.jobDescriptions as Prisma.InputJsonValue)
+          : Prisma.DbNull,
+        additionalNotes: parsed.data.additionalNotes || null,
+        approverId: parsed.data.approverId || null,
+        submittedBySignature: parsed.data.submittedBySignature || null,
+        createdBy: session!.user.profileId,
+      },
     });
 
     await logAudit({
@@ -103,7 +101,7 @@ export async function createJobPosting(
     const errorMessage = e instanceof Error ? e.message : String(e);
     console.error("[createJobPosting] Error:", {
       message: errorMessage,
-      data: parsed.data,
+      title: parsed.data.title,
       timestamp: new Date().toISOString(),
       stack: e instanceof Error ? e.stack : undefined,
     });
@@ -126,7 +124,7 @@ export async function updateJobPosting(
 
   try {
     // Build update data object, only including fields that are explicitly provided
-    const updateData: Record<string, unknown> = {};
+    const updateData: Prisma.JobPostingUncheckedUpdateInput = {};
 
     if (parsed.data.title !== undefined) updateData.title = parsed.data.title;
     if (parsed.data.description !== undefined) updateData.description = parsed.data.description;
@@ -148,15 +146,16 @@ export async function updateJobPosting(
     if (parsed.data.minEducation !== undefined) updateData.minEducation = parsed.data.minEducation;
     if (parsed.data.minExperience !== undefined) updateData.minExperience = parsed.data.minExperience;
     if (parsed.data.otherQualifications !== undefined) updateData.otherQualifications = parsed.data.otherQualifications;
-    // Only include jobDescriptions if it's not null (JSON field)
-    if (parsed.data.jobDescriptions !== undefined && parsed.data.jobDescriptions !== null) {
-      updateData.jobDescriptions = parsed.data.jobDescriptions;
+    if (parsed.data.jobDescriptions !== undefined) {
+      updateData.jobDescriptions = parsed.data.jobDescriptions
+        ? (parsed.data.jobDescriptions as Prisma.InputJsonValue)
+        : Prisma.DbNull;
     }
     if (parsed.data.additionalNotes !== undefined) updateData.additionalNotes = parsed.data.additionalNotes;
     if (parsed.data.approverId !== undefined) updateData.approverId = parsed.data.approverId;
     if (parsed.data.submittedBySignature !== undefined) updateData.submittedBySignature = parsed.data.submittedBySignature;
 
-    const posting = await db.jobPosting.update({ where: { id }, data: updateData as Parameters<typeof db.jobPosting.update>[0]["data"] });
+    const posting = await db.jobPosting.update({ where: { id }, data: updateData });
 
     await logAudit({
       userId: session!.user.profileId,
@@ -186,7 +185,7 @@ export async function deleteJobPosting(
   try {
     const posting = await db.jobPosting.findUnique({
       where: { id },
-      select: { title: true, _count: { select: { candidates: true } } },
+      select: { title: true, submittedBySignature: true, _count: { select: { candidates: true } } },
     });
     if (!posting) return { success: false, error: "Lowongan tidak ditemukan." };
     if (posting._count.candidates > 0) {
@@ -194,6 +193,11 @@ export async function deleteJobPosting(
         success: false,
         error: "Tidak bisa menghapus lowongan yang sudah memiliki kandidat.",
       };
+    }
+
+    if (posting.submittedBySignature) {
+      const key = extractKeyFromUrl(posting.submittedBySignature);
+      await deleteFromStorage(key).catch(() => {});
     }
 
     await db.jobPosting.delete({ where: { id } });

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { AddCircle, TrashBinTrash } from "@solar-icons/react";
 import SignatureCanvas from "react-signature-canvas";
@@ -14,8 +15,12 @@ import { useCreateJobPosting } from "@/hooks/use-job-postings";
 import { useBrands } from "@/hooks/use-brands";
 import { useDepartments } from "@/hooks/use-departments";
 import { usePositions } from "@/hooks/use-positions";
-import { useUsers } from "@/hooks/use-users";
 import { useMyProfile } from "@/hooks/use-my-profile";
+
+type ApproverOption = {
+  id: string;
+  fullName: string;
+};
 
 type JobPostingForm = {
   title: string;
@@ -104,10 +109,16 @@ export function JobPostingDrawer({ isOpen, onClose }: JobPostingDrawerProps) {
   const { data: brands = [] } = useBrands();
   const { data: departments = [] } = useDepartments();
   const { data: positions = [] } = usePositions(form.departmentId || undefined);
-  const { data: usersData } = useUsers(undefined, { status: "active", limit: 200 });
+  const { data: approvers = [] } = useQuery<ApproverOption[]>({
+    queryKey: ["hr-approvers"],
+    queryFn: async () => {
+      const res = await fetch("/api/hr/approvers");
+      if (!res.ok) throw new Error("Failed to fetch approvers");
+      return res.json() as Promise<ApproverOption[]>;
+    },
+    staleTime: 10 * 60 * 1000,
+  });
   const { data: myProfile } = useMyProfile();
-
-  const activeUsers = usersData?.users ?? [];
 
   function setField<K extends keyof JobPostingForm>(key: K, value: JobPostingForm[K]): void {
     setForm((current) => ({ ...current, [key]: value }));
@@ -467,9 +478,9 @@ export function JobPostingDrawer({ isOpen, onClose }: JobPostingDrawerProps) {
               className="h-10 w-full rounded-xl border border-input bg-background px-3 text-sm outline-none"
             >
               <option value="">Pilih penyetuju</option>
-              {activeUsers.map((u) => (
-                <option key={u.id} value={u.profile?.id ?? ""}>
-                  {u.profile?.fullName ?? u.name}
+              {approvers.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.fullName}
                 </option>
               ))}
             </select>
