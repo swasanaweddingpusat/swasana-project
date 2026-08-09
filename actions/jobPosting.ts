@@ -41,19 +41,40 @@ export async function createJobPosting(
       return { success: false, error: "Gaji minimum tidak boleh lebih tinggi dari gaji maksimum" };
     }
 
+    const createData: Record<string, unknown> = {
+      title: parsed.data.title,
+      description: parsed.data.description || null,
+      requirements: parsed.data.requirements || null,
+      location: parsed.data.location || null,
+      employmentType: parsed.data.employmentType || null,
+      salaryRangeMin: parsed.data.salaryRangeMin ?? null,
+      salaryRangeMax: parsed.data.salaryRangeMax ?? null,
+      departmentId: parsed.data.departmentId || null,
+      positionId: parsed.data.positionId || null,
+      isWalkInInterview: parsed.data.isWalkInInterview ?? false,
+      brandId: parsed.data.brandId || null,
+      submissionDate: parsed.data.submissionDate || null,
+      interviewDate: parsed.data.interviewDate || null,
+      level: parsed.data.level || null,
+      quota: parsed.data.quota ?? null,
+      interviewLocation: parsed.data.interviewLocation || null,
+      startDate: parsed.data.startDate || null,
+      minEducation: parsed.data.minEducation || null,
+      minExperience: parsed.data.minExperience || null,
+      otherQualifications: parsed.data.otherQualifications || null,
+      additionalNotes: parsed.data.additionalNotes || null,
+      approverId: parsed.data.approverId || null,
+      submittedBySignature: parsed.data.submittedBySignature || null,
+      createdBy: session!.user.profileId,
+    };
+
+    // Only include jobDescriptions if provided (JSON field doesn't accept null)
+    if (parsed.data.jobDescriptions) {
+      createData.jobDescriptions = parsed.data.jobDescriptions;
+    }
+
     const posting = await db.jobPosting.create({
-      data: {
-        title: parsed.data.title,
-        description: parsed.data.description || null,
-        requirements: parsed.data.requirements || null,
-        location: parsed.data.location || null,
-        employmentType: parsed.data.employmentType || null,
-        salaryRangeMin: parsed.data.salaryRangeMin ?? null,
-        salaryRangeMax: parsed.data.salaryRangeMax ?? null,
-        departmentId: parsed.data.departmentId || null,
-        positionId: parsed.data.positionId || null,
-        createdBy: session!.user.profileId,
-      },
+      data: createData as Parameters<typeof db.jobPosting.create>[0]["data"],
     });
 
     await logAudit({
@@ -92,13 +113,38 @@ export async function updateJobPosting(
   if (!parsed.success) return { success: false, error: parsed.error.issues[0].message };
 
   try {
-    const updateData = {
-      ...parsed.data,
-      ...(parsed.data.departmentId !== undefined ? { departmentId: parsed.data.departmentId || null } : {}),
-      ...(parsed.data.positionId !== undefined ? { positionId: parsed.data.positionId || null } : {}),
-    };
+    // Build update data object, only including fields that are explicitly provided
+    const updateData: Record<string, unknown> = {};
 
-    const posting = await db.jobPosting.update({ where: { id }, data: updateData });
+    if (parsed.data.title !== undefined) updateData.title = parsed.data.title;
+    if (parsed.data.description !== undefined) updateData.description = parsed.data.description;
+    if (parsed.data.requirements !== undefined) updateData.requirements = parsed.data.requirements;
+    if (parsed.data.location !== undefined) updateData.location = parsed.data.location;
+    if (parsed.data.employmentType !== undefined) updateData.employmentType = parsed.data.employmentType;
+    if (parsed.data.salaryRangeMin !== undefined) updateData.salaryRangeMin = parsed.data.salaryRangeMin;
+    if (parsed.data.salaryRangeMax !== undefined) updateData.salaryRangeMax = parsed.data.salaryRangeMax;
+    if (parsed.data.departmentId !== undefined) updateData.departmentId = parsed.data.departmentId;
+    if (parsed.data.positionId !== undefined) updateData.positionId = parsed.data.positionId;
+    if (parsed.data.isWalkInInterview !== undefined) updateData.isWalkInInterview = parsed.data.isWalkInInterview;
+    if (parsed.data.brandId !== undefined) updateData.brandId = parsed.data.brandId;
+    if (parsed.data.submissionDate !== undefined) updateData.submissionDate = parsed.data.submissionDate;
+    if (parsed.data.interviewDate !== undefined) updateData.interviewDate = parsed.data.interviewDate;
+    if (parsed.data.level !== undefined) updateData.level = parsed.data.level;
+    if (parsed.data.quota !== undefined) updateData.quota = parsed.data.quota;
+    if (parsed.data.interviewLocation !== undefined) updateData.interviewLocation = parsed.data.interviewLocation;
+    if (parsed.data.startDate !== undefined) updateData.startDate = parsed.data.startDate;
+    if (parsed.data.minEducation !== undefined) updateData.minEducation = parsed.data.minEducation;
+    if (parsed.data.minExperience !== undefined) updateData.minExperience = parsed.data.minExperience;
+    if (parsed.data.otherQualifications !== undefined) updateData.otherQualifications = parsed.data.otherQualifications;
+    // Only include jobDescriptions if it's not null (JSON field)
+    if (parsed.data.jobDescriptions !== undefined && parsed.data.jobDescriptions !== null) {
+      updateData.jobDescriptions = parsed.data.jobDescriptions;
+    }
+    if (parsed.data.additionalNotes !== undefined) updateData.additionalNotes = parsed.data.additionalNotes;
+    if (parsed.data.approverId !== undefined) updateData.approverId = parsed.data.approverId;
+    if (parsed.data.submittedBySignature !== undefined) updateData.submittedBySignature = parsed.data.submittedBySignature;
+
+    const posting = await db.jobPosting.update({ where: { id }, data: updateData as Parameters<typeof db.jobPosting.update>[0]["data"] });
 
     await logAudit({
       userId: session!.user.profileId,
