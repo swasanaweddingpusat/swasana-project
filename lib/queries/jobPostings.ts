@@ -28,6 +28,8 @@ export async function getJobPostingById(id: string) {
     include: {
       department: { select: { id: true, name: true } },
       position: { select: { id: true, name: true } },
+      brand: { select: { id: true, name: true } },
+      approver: { select: { id: true, fullName: true } },
       creator: { select: { id: true, fullName: true } },
       candidates: {
         select: {
