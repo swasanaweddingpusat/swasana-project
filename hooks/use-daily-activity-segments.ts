@@ -64,7 +64,20 @@ export function useCreateDailyActivitySegment() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: createDailyActivitySegment,
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["daily-activity-segments"] }),
+    onSuccess: (created) => {
+      // Inject the authoritative row straight into the cache instead of relying on
+      // a refetch. The GET route reads a server "use cache" helper, so an immediate
+      // refetch can race the tag revalidation and re-hydrate a stale snapshot —
+      // which is why the new segment only appeared after a hard refresh.
+      qc.setQueryData<DailyActivitySegmentItem[]>(["daily-activity-segments"], (prev) => {
+        const list = prev ?? [];
+        if (list.some((s) => s.id === created.id)) return list;
+        return [...list, created].sort((a, b) => a.sortOrder - b.sortOrder);
+      });
+      // Mark stale so the ordering reconciles on the next natural refetch,
+      // but do not refetch now (would clobber the fresh row with a stale read).
+      qc.invalidateQueries({ queryKey: ["daily-activity-segments"], refetchType: "none" });
+    },
   });
 }
 

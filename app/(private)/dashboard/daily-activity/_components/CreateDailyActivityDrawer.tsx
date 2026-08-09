@@ -13,6 +13,7 @@ import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { TimeRangePicker } from "@/components/shared/time-range-picker";
+import { PhoneInput } from "@/components/shared/PhoneInput";
 import { cn } from "@/lib/utils";
 import {
   CalendarDate,
@@ -263,6 +264,22 @@ export function CreateDailyActivityDrawer({ open, onOpenChange, onSuccess }: Cre
       .then((data) => { if (Array.isArray(data)) setSources(data); })
       .catch(() => {});
   }, []);
+
+  // Inline-add a new source of information from the drawer (sales users included).
+  async function handleAddSource(name: string) {
+    const res = await fetch("/api/source-of-informations", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: name.trim() }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({})) as { error?: string };
+      throw new Error(err.error ?? "Gagal menambah sumber informasi");
+    }
+    const created = await res.json() as { id: string; name: string };
+    setSources((prev) => (prev.some((s) => s.id === created.id) ? prev : [created, ...prev]));
+    setField("sourceOfInformationId", created.id);
+  }
 
   const isBitrixSource =
     sources.find((s) => s.id === form.sourceOfInformationId)
@@ -675,7 +692,7 @@ export function CreateDailyActivityDrawer({ open, onOpenChange, onSuccess }: Cre
 
                   <div className="flex flex-col gap-1.5">
                     <label className="text-sm font-medium text-foreground">
-                      Nama PIC <span className="text-destructive">*</span>
+                      Nama PIC / Client <span className="text-destructive">*</span>
                     </label>
                     <Input
                       value={form.picName}
@@ -689,13 +706,11 @@ export function CreateDailyActivityDrawer({ open, onOpenChange, onSuccess }: Cre
                     <label className="text-sm font-medium text-foreground">
                       No. HP / WA <span className="text-destructive">*</span>
                     </label>
-                    <Input
-                      type="tel"
-                      inputMode="numeric"
+                    <PhoneInput
                       value={form.picPhone}
-                      onChange={(e) => setField("picPhone", e.target.value.replace(/\D/g, ""))}
-                      placeholder="e.g. 08123456789"
-                      className="rounded-xl"
+                      onChange={(v) => setField("picPhone", v)}
+                      maxNationalDigits={14}
+                      wrapperClassName="rounded-xl"
                     />
                   </div>
                 </div>
@@ -1275,9 +1290,11 @@ export function CreateDailyActivityDrawer({ open, onOpenChange, onSuccess }: Cre
                             .includes("bitrix") ?? false;
                         if (!isBitrix) setField("bitrixId", "");
                       }}
-                      placeholder="Pilih sumber informasi..."
-                      searchPlaceholder="Cari sumber..."
-                      emptyText="Tidak ada data"
+                      onAdd={handleAddSource}
+                      placeholder="Pilih atau tambah sumber..."
+                      searchPlaceholder="Cari atau tambah sumber..."
+                      emptyText="Belum ada sumber"
+                      addingLabel="Menambahkan..."
                     />
                   </div>
 
