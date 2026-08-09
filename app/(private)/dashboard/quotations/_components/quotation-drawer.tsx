@@ -39,6 +39,13 @@ import {
   SearchableSelect,
 } from "@/components/ui/searchable-select";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Collapsible,
   CollapsibleTrigger,
   CollapsibleContent,
@@ -46,6 +53,7 @@ import {
 import { SimpleEditor } from "@/components/shared/SimpleEditor";
 import { BankAccountSelect } from "@/components/shared/bank-account-select";
 import { PhoneInput } from "@/components/shared/PhoneInput";
+import { TimeRangePicker } from "@/components/shared/time-range-picker";
 import {
   AddCircle,
   TrashBinTrash,
@@ -81,6 +89,8 @@ interface QuotationItemForm {
   manualTotal: boolean;
 }
 
+type QuotationStatusValue = "draft" | "sent" | "revised" | "accepted" | "rejected";
+
 interface QuotationFormValues {
   // Step 1 — informasi
   clientName: string;
@@ -97,6 +107,7 @@ interface QuotationFormValues {
   venueId: string;
   venue: string;
   eventDate: string;
+  status: QuotationStatusValue;
   // Step 2 — items + ringkasan
   items: QuotationItemForm[];
   discount: string;
@@ -179,6 +190,14 @@ const EMPTY_ITEM: QuotationItemForm = {
   manualTotal: false,
 };
 
+const STATUS_OPTIONS: { value: QuotationStatusValue; label: string }[] = [
+  { value: "draft", label: "Draft" },
+  { value: "sent", label: "Sent" },
+  { value: "revised", label: "Revised" },
+  { value: "accepted", label: "Dealing" },
+  { value: "rejected", label: "Rejected" },
+];
+
 const DEFAULT_VALUES: QuotationFormValues = {
   clientName: "",
   clientPhone: "",
@@ -194,6 +213,7 @@ const DEFAULT_VALUES: QuotationFormValues = {
   venueId: "",
   venue: "",
   eventDate: "",
+  status: "draft",
   items: DEFAULT_ITEMS.map((it) => ({ ...it })),
   discount: "",
   bookingFee: "",
@@ -989,6 +1009,7 @@ export function QuotationDrawer({
         venueId: matchedVenue?.id ?? "",
         venue: editQuotation.venue,
         eventDate: editQuotation.eventDate,
+        status: (editQuotation.status as QuotationStatusValue) ?? "draft",
         items,
         discount:
           editQuotation.discount > 0
@@ -1124,6 +1145,7 @@ export function QuotationDrawer({
       paymentMethodId: values.paymentMethodId || null,
       signingLocation: signingLocation || null,
       signatureSales: signatureSales || null,
+      ...(isEdit && { status: values.status }),
     };
 
     let result: { success: boolean; error?: string };
@@ -1168,15 +1190,43 @@ export function QuotationDrawer({
             <form className="space-y-3 pb-2">
 
               {/* ════════════════ STEP 1 — INFORMASI ════════════════ */}
-              <div className={cn(step !== 1 && "hidden", "space-y-3")}>
+              <div className={cn(step !== 1 && "hidden", "space-y-4")}>
 
-                {/* ── Info Client ─────────────────────────────────── */}
-                <div className="space-y-3">
+                {/* ── Status banner (edit mode only) ──────────────── */}
+                {isEdit && (
+                  <FormField
+                    control={form.control}
+                    name="status"
+                    render={({ field }) => (
+                      <FormItem className="w-full">
+                        <FormLabel className={LABEL_CLASS}>Status Quotation</FormLabel>
+                        <Select value={field.value} onValueChange={field.onChange}>
+                          <FormControl>
+                            <SelectTrigger className="w-full">
+                              <SelectValue placeholder="Pilih status..." />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {STATUS_OPTIONS.map((opt) => (
+                              <SelectItem key={opt.value} value={opt.value}>
+                                {opt.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                )}
+
+                {/* ── Klien ───────────────────────────────────────── */}
+                <div className={cn("space-y-3", isEdit && "border-t pt-4")}>
                   <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                    Info Client
+                    Klien
                   </p>
 
-                  {/* Perusahaan / Instansi — combobox lookup dari leads */}
+                  {/* Perusahaan / Instansi */}
                   <div ref={instansiDropdownRef} className="w-full">
                     <FormField
                       control={form.control}
@@ -1185,9 +1235,7 @@ export function QuotationDrawer({
                         <FormItem className="w-full">
                           <FormLabel className={LABEL_CLASS}>
                             Perusahaan / Instansi{" "}
-                            <span className="font-normal text-muted-foreground">
-                              (opsional)
-                            </span>
+                            <span className="font-normal text-muted-foreground">(opsional)</span>
                           </FormLabel>
                           <FormControl>
                             <div className="relative">
@@ -1208,7 +1256,7 @@ export function QuotationDrawer({
                               {instansiDropdownOpen && debouncedInstansi.trim().length >= 1 && leadInstansiOptions.length > 0 && (
                                 <div className="absolute z-50 w-full mt-1 max-h-64 overflow-auto rounded-xl border bg-background shadow-md">
                                   <p className="px-3 pt-2 pb-1 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                                    Dari Leads
+                                    Dari Daily Activity
                                   </p>
                                   {leadInstansiOptions.map((lead) => (
                                     <div
@@ -1238,42 +1286,36 @@ export function QuotationDrawer({
                     />
                   </div>
 
-                  {/* PIC / Client (To) — input teks biasa */}
+                  {/* PIC / Nama Kontak */}
                   <FormField
                     control={form.control}
                     name="clientName"
-                    rules={{ required: "Nama client wajib diisi" }}
+                    rules={{ required: "Nama PIC wajib diisi" }}
                     render={({ field }) => (
                       <FormItem className="w-full">
-                        <FormLabel className={LABEL_CLASS}>PIC / Client (To) <span className="text-destructive">*</span></FormLabel>
+                        <FormLabel className={LABEL_CLASS}>
+                          Nama PIC <span className="text-destructive">*</span>
+                        </FormLabel>
                         <FormControl>
-                          <Input
-                            {...field}
-                            placeholder="Nama client / PIC..."
-                            className="w-full"
-                          />
+                          <Input {...field} placeholder="Nama kontak / PIC klien..." className="w-full" />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
                     )}
                   />
 
-                  {/* No. HP / WA Client */}
+                  {/* No. HP / WA */}
                   <FormField
                     control={form.control}
                     name="clientPhone"
                     render={({ field }) => (
                       <FormItem className="w-full">
                         <FormLabel className={LABEL_CLASS}>
-                          No. HP / WA Client{" "}
+                          No. HP / WA{" "}
                           <span className="font-normal text-muted-foreground">(opsional)</span>
                         </FormLabel>
                         <FormControl>
-                          <PhoneInput
-                            value={field.value}
-                            onChange={field.onChange}
-                            onBlur={field.onBlur}
-                          />
+                          <PhoneInput value={field.value} onChange={field.onChange} onBlur={field.onBlur} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -1286,15 +1328,17 @@ export function QuotationDrawer({
                   <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                     Sales
                   </p>
+
                   {currentUserIsSales ? (
-                    /* Logged-in user is a sales → locked to themselves */
                     <div className="w-full">
-                      <FormLabel className={LABEL_CLASS}>Sales <span className="text-destructive">*</span></FormLabel>
-                      <div className="mt-1 flex h-9 w-full items-center rounded-md border border-input bg-muted/40 px-3 text-sm text-foreground cursor-not-allowed select-none">
+                      <FormLabel className={LABEL_CLASS}>
+                        Nama Sales <span className="text-destructive">*</span>
+                      </FormLabel>
+                      <div className="mt-1.5 flex h-9 w-full items-center rounded-md border border-input bg-muted/40 px-3 text-sm text-foreground cursor-not-allowed select-none">
                         {lockedSalesName}
                       </div>
                       <p className="mt-1.5 text-xs text-muted-foreground">
-                        Quotation ini akan tercatat atas nama Anda.
+                        Tercatat atas nama Anda.
                       </p>
                     </div>
                   ) : (
@@ -1304,13 +1348,12 @@ export function QuotationDrawer({
                       rules={{ required: "Sales wajib dipilih" }}
                       render={({ field }) => (
                         <FormItem className="w-full">
-                          <FormLabel className={LABEL_CLASS}>Sales <span className="text-destructive">*</span></FormLabel>
+                          <FormLabel className={LABEL_CLASS}>
+                            Nama Sales <span className="text-destructive">*</span>
+                          </FormLabel>
                           <FormControl>
                             <SearchableSelect
-                              options={salesUsers.map((u) => ({
-                                id: u.id,
-                                name: u.fullName ?? "",
-                              }))}
+                              options={salesUsers.map((u) => ({ id: u.id, name: u.fullName ?? "" }))}
                               value={field.value}
                               onChange={field.onChange}
                               placeholder="Pilih sales..."
@@ -1323,214 +1366,50 @@ export function QuotationDrawer({
                       )}
                     />
                   )}
-                  {/* No. Hp Sales — read-only; diambil dari profil sales terpilih.
-                      Bukan input editable karena tidak disimpan di quotation
-                      (preview membacanya dari Profile.phoneNumber). */}
-                  <div className="w-full">
-                    <FormLabel className={LABEL_CLASS}>No. Hp Sales</FormLabel>
-                    <div className="mt-1 flex h-9 w-full items-center rounded-md border border-input bg-muted/40 px-3 text-sm text-foreground cursor-not-allowed select-none">
-                      {watchedSalesPhone?.trim() ? watchedSalesPhone : "—"}
-                    </div>
-                  </div>
+
+                  {/* No. HP Sales */}
+                  <FormField
+                    control={form.control}
+                    name="salesPhone"
+                    render={({ field }) => (
+                      <FormItem className="w-full">
+                        <FormLabel className={LABEL_CLASS}>No. HP Sales</FormLabel>
+                        {watchedSalesPhone?.trim() ? (
+                          <div className="mt-1.5 flex h-9 w-full items-center rounded-md border border-input bg-muted/40 px-3 text-sm text-foreground cursor-not-allowed select-none">
+                            {watchedSalesPhone}
+                          </div>
+                        ) : (
+                          <>
+                            <FormControl>
+                              <PhoneInput
+                                value={field.value}
+                                onChange={field.onChange}
+                                onBlur={field.onBlur}
+                                placeholder="Isi nomor HP sales..."
+                              />
+                            </FormControl>
+                            <p className="text-xs text-muted-foreground">
+                              Profil sales belum punya nomor — isi manual.
+                            </p>
+                          </>
+                        )}
+                      </FormItem>
+                    )}
+                  />
                 </div>
 
-                {/* ── Detail Event ─────────────────────────────────── */}
-                {/* Urutan sesuai dokumen QUO: Event → Detail → Time → Place → Date → Venue */}
+                {/* ── Event ───────────────────────────────────────── */}
                 <div className="border-t pt-4 space-y-3">
                   <div className="flex items-center justify-between">
                     <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                       Detail Event
                     </p>
-                    {/* MICE context pill — quotation is MICE-only */}
                     <span className="inline-flex items-center rounded-full border border-primary/25 bg-primary/10 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary">
                       MICE
                     </span>
                   </div>
 
-                  {/* Event Type — MICE event types */}
-                  <FormField
-                    control={form.control}
-                    name="eventTypeId"
-                    rules={{ required: "Event type wajib dipilih" }}
-                    render={({ field }) => (
-                      <FormItem className="w-full">
-                        <FormLabel className={LABEL_CLASS}>Event <span className="text-destructive">*</span></FormLabel>
-                        <FormControl>
-                          <SearchableSelect
-                            options={filteredEventTypes.map((et) => ({ id: et.id, name: et.name }))}
-                            value={field.value}
-                            onChange={(v) => {
-                              field.onChange(v);
-                              const matched = filteredEventTypes.find((et) => et.id === v);
-                              form.setValue("eventTypeName", matched?.name ?? "");
-                            }}
-                            placeholder="Pilih event type..."
-                            searchPlaceholder="Cari / ketik nama baru..."
-                            emptyText="Tidak ada event type MICE"
-                            onAdd={handleAddEventType}
-                            addingLabel="Menambahkan event type..."
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  {/* Details */}
-                  <FormField
-                    control={form.control}
-                    name="details"
-                    render={({ field }) => (
-                      <FormItem className="w-full">
-                        <FormLabel className={LABEL_CLASS}>
-                          Details{" "}
-                          <span className="font-normal text-muted-foreground">(opsional)</span>
-                        </FormLabel>
-                        <FormControl>
-                          <Input
-                            {...field}
-                            placeholder="mis. Venue Only, Meeting Only..."
-                            className="w-full"
-                          />
-                        </FormControl>
-                      </FormItem>
-                    )}
-                  />
-
-                  {/* Time */}
-                  <FormField
-                    control={form.control}
-                    name="time"
-                    render={({ field }) => (
-                      <FormItem className="w-full">
-                        <FormLabel className={LABEL_CLASS}>
-                          Time{" "}
-                          <span className="font-normal text-muted-foreground">(opsional)</span>
-                        </FormLabel>
-                        <FormControl>
-                          <Input
-                            {...field}
-                            placeholder="mis. Half Day, Full Day, Evening..."
-                            className="w-full"
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  {/* Place */}
-                  <FormField
-                    control={form.control}
-                    name="place"
-                    render={({ field }) => (
-                      <FormItem className="w-full">
-                        <FormLabel className={LABEL_CLASS}>
-                          Place{" "}
-                          <span className="font-normal text-muted-foreground">(opsional)</span>
-                        </FormLabel>
-                        <FormControl>
-                          <Input
-                            {...field}
-                            placeholder="mis. Ballroom, Outdoor, Gazebo..."
-                            className="w-full"
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  {/* Tanggal Event + Availability */}
-                  <FormField
-                    control={form.control}
-                    name="eventDate"
-                    rules={{ required: "Tanggal event wajib diisi" }}
-                    render={({ field }) => (
-                      <FormItem className="w-full">
-                        <FormLabel className={LABEL_CLASS}>Date <span className="text-destructive">*</span></FormLabel>
-                        <Popover>
-                          <PopoverTrigger
-                            render={
-                              <Button
-                                variant="outline"
-                                className={cn(
-                                  "w-full justify-start text-left font-normal",
-                                  !field.value && "text-muted-foreground",
-                                )}
-                              >
-                                <CalendarSolarIcon
-                                  weight="BoldDuotone"
-                                  className="mr-2 h-4 w-4"
-                                />
-                                {field.value
-                                  ? format(
-                                      new Date(field.value + "T00:00:00"),
-                                      "PPP",
-                                    )
-                                  : "Pilih tanggal event"}
-                              </Button>
-                            }
-                          />
-                          <PopoverContent className="w-auto p-0" align="start">
-                            <Calendar
-                              mode="single"
-                              captionLayout="dropdown"
-                              selected={
-                                field.value
-                                  ? new Date(field.value + "T00:00:00")
-                                  : undefined
-                              }
-                              onSelect={(date) => {
-                                if (date) {
-                                  const y = date.getFullYear();
-                                  const m = String(date.getMonth() + 1).padStart(
-                                    2,
-                                    "0",
-                                  );
-                                  const d = String(date.getDate()).padStart(2, "0");
-                                  field.onChange(`${y}-${m}-${d}`);
-                                } else {
-                                  field.onChange("");
-                                }
-                              }}
-                              disabled={(d) => getDateStatus(d) === "unavailable"}
-                              fromYear={new Date().getFullYear() - 10}
-                              toYear={new Date().getFullYear() + 5}
-                              defaultMonth={
-                                field.value
-                                  ? new Date(field.value + "T00:00:00")
-                                  : new Date()
-                              }
-                              onMonthChange={setVisibleMonth}
-                              modifiers={{
-                                available: (d) =>
-                                  !!watchedVenueId && getDateStatus(d) === "available",
-                                partial: (d) =>
-                                  !!watchedVenueId && getDateStatus(d) === "partial",
-                                unavailable: (d) =>
-                                  !!watchedVenueId &&
-                                  getDateStatus(d) === "unavailable",
-                              }}
-                              modifiersClassNames={{
-                                available: "day-available",
-                                partial: "day-partial",
-                                unavailable: "day-unavailable",
-                              }}
-                            />
-                          </PopoverContent>
-                        </Popover>
-                        {availLoading && (
-                          <p className="text-xs text-muted-foreground mt-1">
-                            Mengecek ketersediaan...
-                          </p>
-                        )}
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  {/* Venue */}
+                  {/* Venue — PERTAMA karena availability kalender bergantung venue */}
                   <FormField
                     control={form.control}
                     name="venueId"
@@ -1545,9 +1424,7 @@ export function QuotationDrawer({
                               field.onChange(id);
                               const matched = venues.find((v) => v.id === id);
                               form.setValue("venue", matched?.name ?? "");
-                              // Reset date when venue changes
                               form.setValue("eventDate", "");
-                              // Auto-load per-venue template (create mode only).
                               void loadVenueTemplate(id);
                             }}
                             placeholder="Pilih / cari venue..."
@@ -1556,6 +1433,165 @@ export function QuotationDrawer({
                           />
                         </FormControl>
                         <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  {/* Jenis Event */}
+                  <FormField
+                    control={form.control}
+                    name="eventTypeId"
+                    rules={{ required: "Jenis event wajib dipilih" }}
+                    render={({ field }) => (
+                      <FormItem className="w-full">
+                        <FormLabel className={LABEL_CLASS}>
+                          Jenis Event <span className="text-destructive">*</span>
+                        </FormLabel>
+                        <FormControl>
+                          <SearchableSelect
+                            options={filteredEventTypes.map((et) => ({ id: et.id, name: et.name }))}
+                            value={field.value}
+                            onChange={(v) => {
+                              field.onChange(v);
+                              const matched = filteredEventTypes.find((et) => et.id === v);
+                              form.setValue("eventTypeName", matched?.name ?? "");
+                            }}
+                            placeholder="Pilih jenis event..."
+                            searchPlaceholder="Cari / ketik nama baru..."
+                            emptyText="Belum ada jenis event MICE"
+                            onAdd={handleAddEventType}
+                            addingLabel="Menambahkan jenis event..."
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  {/* Tanggal Event */}
+                  <FormField
+                    control={form.control}
+                    name="eventDate"
+                    rules={{ required: "Tanggal event wajib diisi" }}
+                    render={({ field }) => (
+                      <FormItem className="w-full">
+                        <FormLabel className={LABEL_CLASS}>
+                          Tanggal Event <span className="text-destructive">*</span>
+                        </FormLabel>
+                        <Popover>
+                          <PopoverTrigger
+                            render={
+                              <Button
+                                variant="outline"
+                                className={cn(
+                                  "w-full justify-start text-left font-normal",
+                                  !field.value && "text-muted-foreground",
+                                )}
+                              >
+                                <CalendarSolarIcon weight="BoldDuotone" className="mr-2 h-4 w-4" />
+                                {field.value
+                                  ? format(new Date(field.value + "T00:00:00"), "PPP")
+                                  : "Pilih tanggal event"}
+                              </Button>
+                            }
+                          />
+                          <PopoverContent className="w-auto p-0" align="start">
+                            <Calendar
+                              mode="single"
+                              captionLayout="dropdown"
+                              selected={field.value ? new Date(field.value + "T00:00:00") : undefined}
+                              onSelect={(date) => {
+                                if (date) {
+                                  const y = date.getFullYear();
+                                  const m = String(date.getMonth() + 1).padStart(2, "0");
+                                  const d = String(date.getDate()).padStart(2, "0");
+                                  field.onChange(`${y}-${m}-${d}`);
+                                } else {
+                                  field.onChange("");
+                                }
+                              }}
+                              disabled={(d) => getDateStatus(d) === "unavailable"}
+                              fromYear={new Date().getFullYear() - 10}
+                              toYear={new Date().getFullYear() + 5}
+                              defaultMonth={field.value ? new Date(field.value + "T00:00:00") : new Date()}
+                              onMonthChange={setVisibleMonth}
+                              modifiers={{
+                                available: (d) => !!watchedVenueId && getDateStatus(d) === "available",
+                                partial: (d) => !!watchedVenueId && getDateStatus(d) === "partial",
+                                unavailable: (d) => !!watchedVenueId && getDateStatus(d) === "unavailable",
+                              }}
+                              modifiersClassNames={{
+                                available: "day-available",
+                                partial: "day-partial",
+                                unavailable: "day-unavailable",
+                              }}
+                            />
+                          </PopoverContent>
+                        </Popover>
+                        {availLoading && (
+                          <p className="text-xs text-muted-foreground mt-1">Mengecek ketersediaan...</p>
+                        )}
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  {/* Waktu */}
+                  <FormField
+                    control={form.control}
+                    name="time"
+                    render={({ field }) => (
+                      <FormItem className="w-full">
+                        <FormLabel className={LABEL_CLASS}>
+                          Waktu{" "}
+                          <span className="font-normal text-muted-foreground">(opsional)</span>
+                        </FormLabel>
+                        <FormControl>
+                          <TimeRangePicker
+                            value={field.value}
+                            onChange={field.onChange}
+                            placeholder="Pilih waktu (bisa rentang)..."
+                          />
+                        </FormControl>
+                      </FormItem>
+                    )}
+                  />
+
+                  {/* Tempat */}
+                  <FormField
+                    control={form.control}
+                    name="place"
+                    render={({ field }) => (
+                      <FormItem className="w-full">
+                        <FormLabel className={LABEL_CLASS}>
+                          Tempat{" "}
+                          <span className="font-normal text-muted-foreground">(opsional)</span>
+                        </FormLabel>
+                        <FormControl>
+                          <Input {...field} placeholder="mis. Ballroom, Outdoor..." className="w-full" />
+                        </FormControl>
+                      </FormItem>
+                    )}
+                  />
+
+                  {/* Keterangan / Details */}
+                  <FormField
+                    control={form.control}
+                    name="details"
+                    render={({ field }) => (
+                      <FormItem className="w-full">
+                        <FormLabel className={LABEL_CLASS}>
+                          Keterangan{" "}
+                          <span className="font-normal text-muted-foreground">(opsional)</span>
+                        </FormLabel>
+                        <FormControl>
+                          <Textarea
+                            {...field}
+                            rows={3}
+                            placeholder="mis. Venue Only, Full Service, catatan khusus..."
+                            className="w-full"
+                          />
+                        </FormControl>
                       </FormItem>
                     )}
                   />

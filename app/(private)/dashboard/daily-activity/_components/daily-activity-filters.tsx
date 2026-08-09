@@ -16,7 +16,7 @@ import {
 } from "@solar-icons/react";
 import { useVenues } from "@/hooks/use-venues";
 import { useEventTypes } from "@/hooks/use-event-types";
-import { useLeadSegments } from "@/hooks/use-lead-segments";
+import { useDailyActivitySegments } from "@/hooks/use-daily-activity-segments";
 import { cn } from "@/lib/utils";
 import type { DailyActivityScope } from "@/lib/validations/daily-activity";
 
@@ -231,7 +231,7 @@ export function DailyActivityFilters({
 }: LeadsFiltersProps) {
   const { data: venues = [] } = useVenues();
   const { data: eventTypes = [] } = useEventTypes();
-  const { data: segmentData = [] } = useLeadSegments();
+  const { data: segmentData = [] } = useDailyActivitySegments();
   const segments = segmentData.filter((s) => s.isActive).map((s) => ({ id: s.id, name: s.name }));
 
   const activeCount =
@@ -262,7 +262,7 @@ export function DailyActivityFilters({
       variant="outline"
       size="icon"
       className={cn("shrink-0 relative", hasActive && "border-primary/50")}
-      aria-label="Filter leads"
+      aria-label="Filter activity"
     >
       <Filter weight="BoldDuotone" aria-hidden="true" className="h-4 w-4" />
       {hasActive && (
@@ -323,7 +323,7 @@ export function DailyActivityFilters({
             size="icon"
             onClick={onRefresh}
             disabled={isRefreshing}
-            aria-label="Muat ulang data lead"
+            aria-label="Muat ulang data activity"
             className="shrink-0"
           >
             <Refresh
@@ -333,7 +333,7 @@ export function DailyActivityFilters({
             />
           </Button>
 
-          <Button onClick={onAdd} size="icon" className="shrink-0" aria-label="Tambah lead">
+          <Button onClick={onAdd} size="icon" className="shrink-0" aria-label="Tambah activity">
             <AddCircle weight="BoldDuotone" aria-hidden="true" className="h-4 w-4" />
           </Button>
         </div>
@@ -347,8 +347,8 @@ export function DailyActivityFilters({
           />
           <Input
             type="search"
-            aria-label="Cari lead"
-            placeholder="Cari lead..."
+            aria-label="Cari activity"
+            placeholder="Cari activity..."
             value={search}
             onChange={(e) => onSearchChange(e.target.value)}
             className="pl-9 w-full"
@@ -369,7 +369,7 @@ export function DailyActivityFilters({
                 type="button"
                 variant="outline"
                 className={cn("h-9 gap-1.5 shrink-0", hasActive && "border-primary/50")}
-                aria-label="Filter leads"
+                aria-label="Filter activity"
               >
                 <Filter weight="BoldDuotone" aria-hidden="true" className="h-4 w-4" />
                 Filter
@@ -408,8 +408,8 @@ export function DailyActivityFilters({
           />
           <Input
             type="search"
-            aria-label="Cari lead"
-            placeholder="Cari lead..."
+            aria-label="Cari activity"
+            placeholder="Cari activity..."
             value={search}
             onChange={(e) => onSearchChange(e.target.value)}
             className="pl-9 w-48"
@@ -423,7 +423,7 @@ export function DailyActivityFilters({
           size="icon"
           onClick={onRefresh}
           disabled={isRefreshing}
-          aria-label="Muat ulang data lead"
+          aria-label="Muat ulang data activity"
           title="Muat ulang"
           className="shrink-0"
         >
@@ -436,7 +436,7 @@ export function DailyActivityFilters({
 
         <Button onClick={onAdd} className="ml-auto shrink-0">
           <AddCircle weight="BoldDuotone" aria-hidden="true" className="h-4 w-4" />
-          Tambah Lead
+          Tambah Activity
         </Button>
       </div>
     </div>

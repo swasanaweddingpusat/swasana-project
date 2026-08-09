@@ -44,6 +44,7 @@ const moduleActions: Record<string, string[]> = {
   // CRM modules
   "daily-activity": ["view", "create", "edit", "delete"],
   "settings-lead-status": ["view", "create", "edit", "delete"],
+  "settings-daily-activity-segment": ["view", "create", "edit", "delete"],
   quotations: ["view", "create", "edit", "delete"],
   "booking-mice": ["view", "create", "edit", "delete", "print", "approve", "mark-lost", "restore", "transfer", "reject", "comment", "client-agreement"],
   // NOTE: "term-&-condition" is intentionally absent — T&C is hidden for MICE via missing permission.
@@ -86,6 +87,7 @@ const rolePermissionMap: Record<string, Record<string, string[]>> = {
     // daily-activity:delete is intentionally reserved for super-admin & manager only.
     "daily-activity": ["view", "create", "edit"],
     "settings-lead-status": ["view", "create", "edit", "delete"],
+    "settings-daily-activity-segment": ["view", "create", "edit", "delete"],
     quotations: ["view", "create", "edit", "delete"],
     "settings-quotation-templates": ["view", "create", "edit", "delete"],
     complimentary: ["view", "create", "edit", "delete"],
@@ -143,6 +145,7 @@ const rolePermissionMap: Record<string, Record<string, string[]>> = {
     "settings-education-level": ["view", "create", "edit", "delete"],
     "settings-event-types": ["view", "create", "edit", "delete"],
     "settings-lead-status": ["view", "create", "edit", "delete"],
+    "settings-daily-activity-segment": ["view", "create", "edit", "delete"],
     "settings-maintenance-category": ["view", "create", "edit", "delete"],
     "settings-maintenance-priority": ["view", "create", "edit", "delete"],
     "settings-maintenance-status": ["view", "create", "edit", "delete"],
@@ -202,7 +205,7 @@ const rolePermissionMap: Record<string, Record<string, string[]>> = {
     quotations: ["view", "create", "edit"],
     "daily-activity": ["view", "create", "edit", "delete"],
     complimentary: ["view", "create"],
-    promo: ["view"],
+    "settings-daily-activity-segment": ["view"],
     // sales-mice can view/create/edit packages but NOT set-harga and NOT delete
     "package-mice": ["view", "create", "edit"],
   },
@@ -214,7 +217,7 @@ const rolePermissionMap: Record<string, Record<string, string[]>> = {
     customers: ["view", "create", "edit", "delete"],
     "settings-event-types": ["view", "create", "edit", "delete"],
     "settings-quotation-templates": ["view", "create", "edit", "delete"],
-    promo: ["view"],
+    "settings-daily-activity-segment": ["view", "create", "edit", "delete"],
     "package-mice": ["view", "create", "edit", "delete", "set-harga", "set-status"],
   },
   "procurement-manager": {
@@ -240,6 +243,7 @@ const REMOVED_MODULES = [
   "approval", // approve/reject authorization handled by role-matching in approval flow (manager → finance), not a permission toggle
   "settings-complimentary", // renamed → "complimentary" (now a top-level module, not under settings)
   "leads", // renamed → "daily-activity" (feature renamed; grants migrated via 20260807120000 migration)
+  "settings-lead-segment", // renamed → "settings-daily-activity-segment" (grants migrated via 20260809160000 migration)
 ];
 
 // ── Main Seeder ──────────────────────────────────────────────────────

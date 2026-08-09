@@ -1,11 +1,11 @@
-import { requirePermissionForRoute } from "@/lib/permissions";
+import { requireAnyPermissionForRoute } from "@/lib/permissions";
 import { mutationLimiter, rateLimitResponse } from "@/lib/rate-limit";
 import { logAudit } from "@/lib/audit";
 import { db } from "@/lib/db";
 import { revalidateTag } from "next/cache";
-import { updateLeadSegmentSchema } from "@/lib/validations/lead-segment";
+import { updateDailyActivitySegmentSchema } from "@/lib/validations/daily-activity-segment";
 
-// ─── PATCH /api/lead-segments/[id] ───────────────────────────────────────────
+// ─── PATCH /api/daily-activity-segments/[id] ─────────────────────────────────
 
 export async function PATCH(
   req: Request,
@@ -13,20 +13,20 @@ export async function PATCH(
 ) {
   const { id } = await params;
 
-  const { session, response } = await requirePermissionForRoute({
-    module: "settings-lead-segment",
-    action: "edit",
-  });
+  const { session, response } = await requireAnyPermissionForRoute([
+    { module: "settings-daily-activity-segment", action: "edit" },
+    { module: "daily-activity", action: "edit" },
+  ]);
   if (response) return response;
-  if (!mutationLimiter.check(`patch-lead-segment:${session.user.id}`)) return rateLimitResponse();
+  if (!mutationLimiter.check(`patch-daily-activity-segment:${session.user.id}`)) return rateLimitResponse();
 
   const body = await req.json() as Record<string, unknown>;
-  const parsed = updateLeadSegmentSchema.safeParse({ ...body, id });
+  const parsed = updateDailyActivitySegmentSchema.safeParse({ ...body, id });
   if (!parsed.success) {
     return Response.json({ error: parsed.error.issues[0].message }, { status: 400 });
   }
 
-  const existing = await db.leadSegment.findUnique({ where: { id } });
+  const existing = await db.dailyActivitySegment.findUnique({ where: { id } });
   if (!existing) {
     return Response.json({ error: "Segment tidak ditemukan." }, { status: 404 });
   }
@@ -35,7 +35,7 @@ export async function PATCH(
     const { id: _id, ...fields } = parsed.data;
 
     const [updated] = await db.$transaction([
-      db.leadSegment.update({
+      db.dailyActivitySegment.update({
         where: { id },
         data: {
           ...(fields.name !== undefined && { name: fields.name }),
@@ -48,13 +48,13 @@ export async function PATCH(
 
     await logAudit({
       userId: session.user.id,
-      action: "lead_segment.updated",
+      action: "daily_activity_segment.updated",
       result: "success",
-      entityType: "LeadSegment",
+      entityType: "DailyActivitySegment",
       entityId: id,
     });
 
-    revalidateTag("lead-segments", "max");
+    revalidateTag("daily-activity-segments", "max");
 
     return Response.json(updated);
   } catch {
@@ -62,7 +62,7 @@ export async function PATCH(
   }
 }
 
-// ─── DELETE /api/lead-segments/[id] ──────────────────────────────────────────
+// ─── DELETE /api/daily-activity-segments/[id] ────────────────────────────────
 
 export async function DELETE(
   req: Request,
@@ -70,14 +70,14 @@ export async function DELETE(
 ) {
   const { id } = await params;
 
-  const { session, response } = await requirePermissionForRoute({
-    module: "settings-lead-segment",
-    action: "delete",
-  });
+  const { session, response } = await requireAnyPermissionForRoute([
+    { module: "settings-daily-activity-segment", action: "delete" },
+    { module: "daily-activity", action: "delete" },
+  ]);
   if (response) return response;
-  if (!mutationLimiter.check(`delete-lead-segment:${session.user.id}`)) return rateLimitResponse();
+  if (!mutationLimiter.check(`delete-daily-activity-segment:${session.user.id}`)) return rateLimitResponse();
 
-  const existing = await db.leadSegment.findUnique({
+  const existing = await db.dailyActivitySegment.findUnique({
     where: { id },
     select: { name: true },
   });
@@ -88,18 +88,18 @@ export async function DELETE(
 
   try {
     await db.$transaction([
-      db.leadSegment.delete({ where: { id } }),
+      db.dailyActivitySegment.delete({ where: { id } }),
     ]);
 
     await logAudit({
       userId: session.user.id,
-      action: "lead_segment.deleted",
+      action: "daily_activity_segment.deleted",
       result: "success",
-      entityType: "LeadSegment",
+      entityType: "DailyActivitySegment",
       entityId: id,
     });
 
-    revalidateTag("lead-segments", "max");
+    revalidateTag("daily-activity-segments", "max");
 
     return Response.json({ success: true });
   } catch {

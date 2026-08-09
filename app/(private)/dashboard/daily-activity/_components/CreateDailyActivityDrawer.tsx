@@ -12,7 +12,6 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
-import { ContactEntry, parseStoredPhone } from "@/components/shared/PhoneInput";
 import { TimeRangePicker } from "@/components/shared/time-range-picker";
 import { cn } from "@/lib/utils";
 import {
@@ -37,7 +36,6 @@ import {
   Refresh,
   Camera,
   CalendarMark,
-  ChatRound,
   Streets,
   Case,
 } from "@solar-icons/react";
@@ -48,7 +46,7 @@ import {
 import { useVenues } from "@/hooks/use-venues";
 import { useEventTypes } from "@/hooks/use-event-types";
 import { useLeadStatuses } from "@/hooks/use-lead-statuses";
-import { useLeadSegments, useCreateLeadSegment } from "@/hooks/use-lead-segments";
+import { useDailyActivitySegments, useCreateDailyActivitySegment } from "@/hooks/use-daily-activity-segments";
 import { useSalesUsers } from "@/hooks/use-sales-users";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { useCreateDailyActivity } from "@/hooks/use-daily-activities";
@@ -66,25 +64,6 @@ import {
 type BookingCategory = "WEDDINGS" | "MICE";
 type WeddingSession = "morning" | "evening" | "fullday";
 
-
-interface ContactNumber {
-  label: string;
-  number: string;
-}
-
-// MICE offering channel — cara sales melakukan penawaran ke prospek.
-// Menggantikan kolom "Milestone Client" di sheet yang isinya free-text campur aduk
-// (Penawaran Via DM / pitching by ig,email / Sudah isi gform / dll) → dinormalisasi
-// jadi pilihan konsisten yang bisa difilter.
-type OfferingChannel =
-  | "WHATSAPP"
-  | "INSTAGRAM_DM"
-  | "EMAIL"
-  | "TITIP_PROPOSAL"
-  | "GFORM"
-  | "LINKEDIN"
-  | "PHONE"
-  | "OTHER";
 
 interface CreateDailyActivityFormState {
   name: string;
@@ -115,14 +94,14 @@ interface CreateDailyActivityFormState {
   segmentId: string;
   miceSession: WeddingSession | "";
   miceSessionAlt: WeddingSession | "";
+  picName: string;
+  picPhone: string;
   isDateLocked: boolean;
   bookingFeeAmount: number;
   bookingFeeDate: string;
   // ── MICE prospecting fields (dipindah dari Google Sheet "Daily Activity MICE") ──
   instagramUrl: string; // handle / URL IG prospek (dinormalisasi saat submit)
   siteVisitDate: string; // "YYYY-MM-DD" jadwal kunjungan venue
-  offeringChannel: OfferingChannel | ""; // cara penawaran (enum bersih)
-  offeringNote: string; // detail penawaran bebas (mis. "req hard copy weekdays")
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -156,26 +135,14 @@ const DEFAULT_FORM: CreateDailyActivityFormState = {
   segmentId: "",
   miceSession: "",
   miceSessionAlt: "",
+  picName: "",
+  picPhone: "",
   isDateLocked: false,
   bookingFeeAmount: 5000000,
   bookingFeeDate: "",
   instagramUrl: "",
   siteVisitDate: "",
-  offeringChannel: "",
-  offeringNote: "",
 };
-
-// ── Opsi channel penawaran (label ramah untuk dropdown) ──────────────────────
-const OFFERING_CHANNEL_OPTIONS: { id: OfferingChannel; name: string }[] = [
-  { id: "WHATSAPP", name: "WhatsApp" },
-  { id: "INSTAGRAM_DM", name: "Instagram DM" },
-  { id: "EMAIL", name: "Email" },
-  { id: "TITIP_PROPOSAL", name: "Titip Proposal / Hard Copy" },
-  { id: "GFORM", name: "Google Form Pengajuan" },
-  { id: "LINKEDIN", name: "LinkedIn" },
-  { id: "PHONE", name: "Telepon" },
-  { id: "OTHER", name: "Lainnya" },
-];
 
 // ─── Upload helper ────────────────────────────────────────────────────────────
 
@@ -214,14 +181,9 @@ export function CreateDailyActivityDrawer({ open, onOpenChange, onSuccess }: Cre
   // ── Form state ─────────────────────────────────────────────────────────────
   const [form, setForm] = useState<CreateDailyActivityFormState>(DEFAULT_FORM);
 
-  // ── Multi-contact state ────────────────────────────────────────────────────
-  const [contactNumbers, setContactNumbers] = useState<ContactNumber[]>([]);
-  const [contactPopoverOpen, setContactPopoverOpen] = useState(false);
-  const [contactInput, setContactInput] = useState({ name: "", phone: "" });
-
   // ── MICE segment options (normalized master, FK-backed) ──────────────────────
-  const { data: masterSegments = [] } = useLeadSegments();
-  const createSegment = useCreateLeadSegment();
+  const { data: masterSegments = [] } = useDailyActivitySegments();
+  const createSegment = useCreateDailyActivitySegment();
   const miceSegments = masterSegments
     .filter((s) => s.isActive)
     .map((s) => ({ id: s.id, name: s.name }));
@@ -315,7 +277,7 @@ export function CreateDailyActivityDrawer({ open, onOpenChange, onSuccess }: Cre
   const isIncomplete =
     !category ||
     !form.name.trim() ||
-    contactNumbers.length === 0 ||
+    !form.picName.trim() || !form.picPhone.trim() ||
     (!isMice && !form.eventDate) ||
     (!isMice && !form.eventTypeId) ||
     !form.sourceOfInformationId ||
@@ -375,31 +337,12 @@ export function CreateDailyActivityDrawer({ open, onOpenChange, onSuccess }: Cre
       address: "",
       instagramUrl: "",
       siteVisitDate: "",
-      offeringChannel: "",
-      offeringNote: "",
     }));
-  }
-
-  function addContact() {
-    const label = contactInput.name.trim();
-    const stored = contactInput.phone.trim();
-    if (!label || !stored) return;
-    const { nationalNumber } = parseStoredPhone(stored);
-    if (nationalNumber.length < 7) return;
-    if (contactNumbers.some((c) => c.number === stored)) return;
-    setContactNumbers((prev) => [...prev, { label, number: stored }]);
-    setContactInput({ name: "", phone: "" });
-    setContactPopoverOpen(false);
-  }
-
-  function removeContact(idx: number) {
-    setContactNumbers((prev) => prev.filter((_, i) => i !== idx));
   }
 
   function resetForm() {
     setCategory(null);
     setForm(DEFAULT_FORM);
-    setContactNumbers([]);
     setShowDateAlt(false);
     setShowVenueSecondary(false);
     setBookingFeeEvidence(null);
@@ -437,7 +380,7 @@ export function CreateDailyActivityDrawer({ open, onOpenChange, onSuccess }: Cre
       // 3. Call createLead server action
       const result = await createLead.mutateAsync({
         name: form.name.trim(),
-        contactNumbers,
+        contactNumbers: [{ label: form.picName.trim(), number: form.picPhone.trim().replace(/\D/g, "") }],
         email: isWedding ? undefined : (form.email || undefined),
         emailCpp: isWedding ? (form.emailCpp || undefined) : undefined,
         emailCpw: isWedding ? (form.emailCpw || undefined) : undefined,
@@ -446,8 +389,7 @@ export function CreateDailyActivityDrawer({ open, onOpenChange, onSuccess }: Cre
         addressCpp: isWedding ? (form.addressCpp || undefined) : undefined,
         addressCpw: isWedding ? (form.addressCpw || undefined) : undefined,
         address: isMice ? (form.address || undefined) : undefined,
-        // NOTE(UI-first): instagramUrl / siteVisitDate / offeringChannel / offeringNote
-        // belum dikirim — field DB-nya belum ada. Menunggu UI di-acc lalu migration.
+        // NOTE(UI-first): instagramUrl / siteVisitDate belum dikirim — field DB-nya belum ada.
         eventDate: form.eventDate,
         eventDateAlt: form.eventDateAlt || null,
         time: form.time || undefined,
@@ -495,7 +437,7 @@ export function CreateDailyActivityDrawer({ open, onOpenChange, onSuccess }: Cre
     <Drawer
       isOpen={open}
       onClose={handleClose}
-      title="Tambah Lead Baru"
+      title="Tambah Activity Baru"
       maxWidth="sm:max-w-lg"
     >
       <div className="flex flex-col h-full">
@@ -731,64 +673,30 @@ export function CreateDailyActivityDrawer({ open, onOpenChange, onSuccess }: Cre
                 <div className="flex flex-col gap-4">
                   <SectionHeader icon={Phone} title="Kontak (HP / WA)" />
 
-                  <div className="rounded-2xl bg-muted p-4 flex flex-col gap-2">
-                    {contactNumbers.map((entry, idx) => (
-                      <div
-                        key={idx}
-                        className="flex items-center gap-2 rounded-xl bg-background border border-border px-3 py-2.5 shadow-sm"
-                      >
-                        <div className="flex-1 min-w-0">
-                          <p className="text-xs text-muted-foreground font-medium">{entry.label}</p>
-                          <p className="text-sm font-semibold text-foreground">+{entry.number}</p>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => removeContact(idx)}
-                          className="shrink-0 rounded-full p-1 text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
-                          aria-label={`Hapus ${entry.label}`}
-                        >
-                          <CloseCircle weight="BoldDuotone" className="w-4 h-4" />
-                        </button>
-                      </div>
-                    ))}
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-sm font-medium text-foreground">
+                      Nama PIC <span className="text-destructive">*</span>
+                    </label>
+                    <Input
+                      value={form.picName}
+                      onChange={(e) => setField("picName", e.target.value)}
+                      placeholder={isMice ? "Nama penanggung jawab..." : "e.g. Nama CPP / CPW..."}
+                      className="rounded-xl"
+                    />
+                  </div>
 
-                    <Popover
-                      open={contactPopoverOpen}
-                      onOpenChange={(o) => {
-                        setContactPopoverOpen(o);
-                        if (!o) setContactInput({ name: "", phone: "" });
-                      }}
-                    >
-                      <PopoverTrigger
-                        render={
-                          <Button
-                            type="button"
-                            variant="outline"
-                            className="w-full rounded-xl text-xs h-9 border-dashed gap-1.5"
-                          >
-                            <AddCircle weight="BoldDuotone" className="h-3.5 w-3.5" />
-                            {contactNumbers.length === 0 ? "Tambah Nomor HP/WA *" : "Tambah Nomor Lain"}
-                          </Button>
-                        }
-                      />
-                      <PopoverContent className="w-72 p-3" align="end">
-                        <p className="text-xs font-semibold mb-3">Tambah Nomor Kontak</p>
-                        <ContactEntry
-                          nameValue={contactInput.name}
-                          onNameChange={(v) => setContactInput((p) => ({ ...p, name: v }))}
-                          phoneValue={contactInput.phone}
-                          onPhoneChange={(v) => setContactInput((p) => ({ ...p, phone: v }))}
-                          onAdd={addContact}
-                          namePlaceholder={isMice ? "Nama PIC..." : "Label wajib: cpw, cpp, ortu..."}
-                        />
-                      </PopoverContent>
-                    </Popover>
-
-                    {contactNumbers.length === 0 && (
-                      <p className="text-xs text-muted-foreground text-center">
-                        Minimal 1 nomor wajib diisi
-                      </p>
-                    )}
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-sm font-medium text-foreground">
+                      No. HP / WA <span className="text-destructive">*</span>
+                    </label>
+                    <Input
+                      type="tel"
+                      inputMode="numeric"
+                      value={form.picPhone}
+                      onChange={(e) => setField("picPhone", e.target.value.replace(/\D/g, ""))}
+                      placeholder="e.g. 08123456789"
+                      className="rounded-xl"
+                    />
                   </div>
                 </div>
 
@@ -1346,34 +1254,6 @@ export function CreateDailyActivityDrawer({ open, onOpenChange, onSuccess }: Cre
                     </Popover>
                   </div>
 
-                  {/* Channel Penawaran */}
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-sm font-medium text-foreground flex items-center gap-1.5">
-                      <ChatRound weight="BoldDuotone" className="h-3.5 w-3.5 text-muted-foreground" />
-                      Cara Penawaran
-                    </label>
-                    <SearchableSelect
-                      options={OFFERING_CHANNEL_OPTIONS}
-                      value={form.offeringChannel}
-                      onChange={(v) => setField("offeringChannel", v as OfferingChannel)}
-                      placeholder="Pilih cara penawaran... (opsional)"
-                      searchPlaceholder="Cari channel..."
-                      emptyText="Tidak ada opsi"
-                    />
-                  </div>
-
-                  {/* Catatan Penawaran */}
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-sm font-medium text-foreground">
-                      Catatan Penawaran
-                    </label>
-                    <Input
-                      value={form.offeringNote}
-                      onChange={(e) => setField("offeringNote", e.target.value)}
-                      placeholder="e.g. req kirim proposal hard copy weekdays (opsional)"
-                      className="rounded-xl"
-                    />
-                  </div>
                 </div>}
 
                 {/* ── SECTION: Sales & Pipeline ─────────────────────── */}
@@ -1493,7 +1373,7 @@ export function CreateDailyActivityDrawer({ open, onOpenChange, onSuccess }: Cre
                   Menyimpan...
                 </span>
               ) : (
-                "Simpan Lead"
+                "Simpan Activity"
               )}
             </Button>
           </div>

@@ -232,12 +232,12 @@ export async function getLeadStatuses() {
   });
 }
 
-export async function getLeadSegments() {
+export async function getDailyActivitySegments() {
   "use cache";
-  cacheTag("lead-segments");
+  cacheTag("daily-activity-segments");
   cacheLife("minutes");
 
-  return db.leadSegment.findMany({
+  return db.dailyActivitySegment.findMany({
     select: {
       id: true,
       name: true,
@@ -252,4 +252,4 @@ export async function getLeadSegments() {
 export type DailyActivitiesResult = Awaited<ReturnType<typeof getDailyActivities>>;
 export type DailyActivityItem = DailyActivitiesResult["items"][number];
 export type LeadStatusItem = Awaited<ReturnType<typeof getLeadStatuses>>[number];
-export type LeadSegmentItem = Awaited<ReturnType<typeof getLeadSegments>>[number];
+export type DailyActivitySegmentItem = Awaited<ReturnType<typeof getDailyActivitySegments>>[number];

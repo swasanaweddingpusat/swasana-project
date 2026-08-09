@@ -39,26 +39,26 @@ import {
 } from "@solar-icons/react";
 import { cn } from "@/lib/utils";
 import {
-  useLeadSegments,
-  useCreateLeadSegment,
-  useUpdateLeadSegment,
-  useDeleteLeadSegment,
-} from "@/hooks/use-lead-segments";
-import type { LeadSegmentItem } from "@/lib/queries/daily-activity";
+  useDailyActivitySegments,
+  useCreateDailyActivitySegment,
+  useUpdateDailyActivitySegment,
+  useDeleteDailyActivitySegment,
+} from "@/hooks/use-daily-activity-segments";
+import type { DailyActivitySegmentItem } from "@/lib/queries/daily-activity";
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export function LeadSegmentManager() {
-  const { data: segments = [], isLoading } = useLeadSegments();
-  const { mutateAsync: createSegment, isPending: isCreating } = useCreateLeadSegment();
-  const { mutateAsync: updateSegment, isPending: isUpdating } = useUpdateLeadSegment();
-  const { mutateAsync: deleteSegment, isPending: isDeleting } = useDeleteLeadSegment();
+export function DailyActivitySegmentManager() {
+  const { data: segments = [], isLoading } = useDailyActivitySegments();
+  const { mutateAsync: createSegment, isPending: isCreating } = useCreateDailyActivitySegment();
+  const { mutateAsync: updateSegment, isPending: isUpdating } = useUpdateDailyActivitySegment();
+  const { mutateAsync: deleteSegment, isPending: isDeleting } = useDeleteDailyActivitySegment();
 
   const [formOpen, setFormOpen] = useState(false);
-  const [editingItem, setEditingItem] = useState<LeadSegmentItem | null>(null);
+  const [editingItem, setEditingItem] = useState<DailyActivitySegmentItem | null>(null);
   const [formName, setFormName] = useState("");
   const [formIsActive, setFormIsActive] = useState(true);
-  const [deleteTarget, setDeleteTarget] = useState<LeadSegmentItem | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<DailyActivitySegmentItem | null>(null);
 
   const isSaving = isCreating || isUpdating;
   const sortedItems = [...segments].sort((a, b) => a.sortOrder - b.sortOrder);
@@ -70,7 +70,7 @@ export function LeadSegmentManager() {
     setFormOpen(true);
   }
 
-  function handleOpenEdit(item: LeadSegmentItem) {
+  function handleOpenEdit(item: DailyActivitySegmentItem) {
     setEditingItem(item);
     setFormName(item.name);
     setFormIsActive(item.isActive);
@@ -119,11 +119,11 @@ export function LeadSegmentManager() {
             <div className="flex items-start justify-between px-6 py-4 border-b">
               <div className="flex flex-col gap-0.5">
                 <div className="flex items-center gap-2">
-                  <h2 className="text-base font-bold text-foreground">MICE Segment</h2>
+                  <h2 className="text-base font-bold text-foreground">Segment / Kategori Activity</h2>
                   <span className="text-sm text-muted-foreground">({segments.length})</span>
                 </div>
                 <p className="text-sm text-muted-foreground">
-                  Kelola master segment/kategori untuk lead MICE. Segment dipilih saat input lead dan disimpan sebagai snapshot.
+                  Kelola master segment/kategori untuk daily activity MICE. Segment dipilih saat input activity dan disimpan sebagai snapshot.
                 </p>
               </div>
               <Button onClick={handleOpenAdd} className="cursor-pointer shrink-0">
@@ -221,7 +221,7 @@ export function LeadSegmentManager() {
                 <Label htmlFor="form-is-active" className="text-sm font-medium cursor-pointer">
                   Aktif
                 </Label>
-                <p className="text-xs text-muted-foreground">Tampilkan segment ini sebagai pilihan di form lead</p>
+                <p className="text-xs text-muted-foreground">Tampilkan segment ini sebagai pilihan di form activity</p>
               </div>
               <Switch id="form-is-active" checked={formIsActive} onCheckedChange={setFormIsActive} />
             </div>
@@ -243,7 +243,7 @@ export function LeadSegmentManager() {
           <AlertDialogHeader>
             <AlertDialogTitle>Hapus Segment</AlertDialogTitle>
             <AlertDialogDescription>
-              Apakah Anda yakin ingin menghapus segment <strong>{deleteTarget?.name}</strong>? Tindakan ini tidak dapat dibatalkan. Lead yang sudah menyimpan nama segment ini tidak akan terpengaruh.
+              Apakah Anda yakin ingin menghapus segment <strong>{deleteTarget?.name}</strong>? Tindakan ini tidak dapat dibatalkan. Activity yang sudah menyimpan nama segment ini tidak akan terpengaruh.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

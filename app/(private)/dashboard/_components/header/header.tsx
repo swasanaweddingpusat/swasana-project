@@ -95,7 +95,7 @@ export function Header() {
                     <UserPlus weight="BoldDuotone" className="h-4 w-4 text-foreground" />
                   </div>
                   <div className="min-w-0">
-                    <p className="text-sm font-medium leading-none">Tambah Lead</p>
+                    <p className="text-sm font-medium leading-none">Tambah Activity</p>
                     <p className="mt-0.5 text-xs text-muted-foreground">Catat prospek baru</p>
                   </div>
                 </DropdownMenuItem>

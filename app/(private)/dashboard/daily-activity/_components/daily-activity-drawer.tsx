@@ -18,7 +18,6 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
-import { ContactEntry, parseStoredPhone } from "@/components/shared/PhoneInput";
 import { TimeRangePicker } from "@/components/shared/time-range-picker";
 import { cn } from "@/lib/utils";
 import {
@@ -42,12 +41,16 @@ import {
   FileText,
   Refresh,
   LinkMinimalistic,
+  Camera,
+  CalendarMark,
+  Streets,
+  Case,
 } from "@solar-icons/react";
 import { getWeddingTimeRange } from "@/lib/constants/wedding-session-times";
 import { useVenues } from "@/hooks/use-venues";
 import { useEventTypes } from "@/hooks/use-event-types";
 import { useLeadStatuses } from "@/hooks/use-lead-statuses";
-import { useLeadSegments, useCreateLeadSegment } from "@/hooks/use-lead-segments";
+import { useDailyActivitySegments, useCreateDailyActivitySegment } from "@/hooks/use-daily-activity-segments";
 import { useSalesUsers } from "@/hooks/use-sales-users";
 import { useUpdateDailyActivity } from "@/hooks/use-daily-activities";
 import { useCurrentUser } from "@/hooks/use-current-user";
@@ -93,9 +96,14 @@ interface EditLeadFormState {
   miceSession: WeddingSession | "";
   miceSessionAlt: WeddingSession | "";
   segmentId: string;
+  picName: string;
+  picPhone: string;
   isDateLocked: boolean;
   bookingFeeAmount: number;
   bookingFeeDate: string;
+  address: string;
+  instagramUrl: string;
+  siteVisitDate: string;
 }
 
 // ─── Upload helper ────────────────────────────────────────────────────────────
@@ -183,19 +191,19 @@ export function DailyActivityDrawer({ open, onOpenChange, editLead, onSuccess }:
     miceSession: "",
     miceSessionAlt: "",
     segmentId: "",
+    picName: "",
+    picPhone: "",
     isDateLocked: false,
     bookingFeeAmount: 0,
     bookingFeeDate: "",
+    address: "",
+    instagramUrl: "",
+    siteVisitDate: "",
   });
 
-  // ── Multi-contact state ────────────────────────────────────────────────────
-  const [contactNumbers, setContactNumbers] = useState<ContactNumber[]>([]);
-  const [contactPopoverOpen, setContactPopoverOpen] = useState(false);
-  const [contactInput, setContactInput] = useState({ name: "", phone: "" });
-
   // ── MICE segment options (normalized master, FK-backed) ──────────────────────
-  const { data: masterSegments = [] } = useLeadSegments();
-  const createSegment = useCreateLeadSegment();
+  const { data: masterSegments = [] } = useDailyActivitySegments();
+  const createSegment = useCreateDailyActivitySegment();
   const miceSegments = masterSegments
     .filter((s) => s.isActive)
     .map((s) => ({ id: s.id, name: s.name }));
@@ -212,6 +220,7 @@ export function DailyActivityDrawer({ open, onOpenChange, editLead, onSuccess }:
 
   // ── Booking fee date popover ───────────────────────────────────────────────
   const [bookingFeeDateOpen, setBookingFeeDateOpen] = useState(false);
+  const [siteVisitDateOpen, setSiteVisitDateOpen] = useState(false);
 
   // ── Submit state ───────────────────────────────────────────────────────────
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -300,14 +309,19 @@ export function DailyActivityDrawer({ open, onOpenChange, editLead, onSuccess }:
       miceSession: !isWed ? rawSession : "",
       miceSessionAlt: !isWed ? rawSessionAlt : "",
       segmentId: editLead.segmentId ?? "",
+      picName: editLead.contactNumbers?.[0]?.label ?? "",
+      picPhone: editLead.contactNumbers?.[0]?.number ?? "",
       isDateLocked: editLead.isDateLocked ?? false,
       bookingFeeAmount: editLead.bookingFeeAmount
         ? Number(editLead.bookingFeeAmount)
         : 0,
       bookingFeeDate: dateToString(editLead.bookingFeeDate),
+      address: editLead.address ?? "",
+      // NOTE(UI-first): instagramUrl / siteVisitDate belum dikirim — field DB-nya belum ada.
+      instagramUrl: "",
+      siteVisitDate: "",
     });
 
-    setContactNumbers(editLead.contactNumbers ?? []);
     setExistingEvidenceUrl(editLead.bookingFeeEvidenceUrl ?? null);
     setBookingFeeEvidence(null);
 
@@ -315,8 +329,6 @@ export function DailyActivityDrawer({ open, onOpenChange, editLead, onSuccess }:
     setShowDateAlt(!!editLead.eventDateAlt);
     setShowVenueSecondary(!!editLead.venueSecondary?.id);
     setSubmitError(null);
-    setContactInput({ name: "", phone: "" });
-    setContactPopoverOpen(false);
     setBookingFeeDateOpen(false);
   }, [open, editLead]);
 
@@ -357,7 +369,7 @@ export function DailyActivityDrawer({ open, onOpenChange, editLead, onSuccess }:
   const isIncomplete =
     !category ||
     !form.name.trim() ||
-    contactNumbers.length === 0 ||
+    !form.picName.trim() || !form.picPhone.trim() ||
     (!isMice && !form.eventDate) ||
     (!isMice && !form.eventTypeId) ||
     !form.sourceOfInformationId ||
@@ -377,22 +389,6 @@ export function DailyActivityDrawer({ open, onOpenChange, editLead, onSuccess }:
   ) => {
     setForm((prev) => ({ ...prev, [key]: value }));
   }, []);
-
-  function addContact() {
-    const label = contactInput.name.trim();
-    const stored = contactInput.phone.trim();
-    if (!label || !stored) return;
-    const { nationalNumber } = parseStoredPhone(stored);
-    if (nationalNumber.length < 7) return;
-    if (contactNumbers.some((c) => c.number === stored)) return;
-    setContactNumbers((prev) => [...prev, { label, number: stored }]);
-    setContactInput({ name: "", phone: "" });
-    setContactPopoverOpen(false);
-  }
-
-  function removeContact(idx: number) {
-    setContactNumbers((prev) => prev.filter((_, i) => i !== idx));
-  }
 
   function handleClose() {
     onOpenChange(false);
@@ -435,7 +431,7 @@ export function DailyActivityDrawer({ open, onOpenChange, editLead, onSuccess }:
       const result = await updateLead.mutateAsync({
         id: editLead.id,
         name: form.name.trim(),
-        contactNumbers,
+        contactNumbers: [{ label: form.picName.trim(), number: form.picPhone.trim().replace(/\D/g, "") }],
         email: isWedding ? undefined : (form.email || undefined),
         emailCpp: isWedding ? (form.emailCpp || undefined) : undefined,
         emailCpw: isWedding ? (form.emailCpw || undefined) : undefined,
@@ -443,7 +439,7 @@ export function DailyActivityDrawer({ open, onOpenChange, editLead, onSuccess }:
         nikCpw: isWedding ? (form.nikCpw || undefined) : undefined,
         addressCpp: isWedding ? (form.addressCpp || undefined) : undefined,
         addressCpw: isWedding ? (form.addressCpw || undefined) : undefined,
-        address: undefined,
+        address: isMice ? (form.address || undefined) : undefined,
         eventDate: form.eventDate,
         eventDateAlt: form.eventDateAlt || null,
         time: form.time || undefined,
@@ -491,7 +487,7 @@ export function DailyActivityDrawer({ open, onOpenChange, editLead, onSuccess }:
     <Drawer
       isOpen={open}
       onClose={handleClose}
-      title="Edit Lead"
+      title="Edit Activity"
       maxWidth="sm:max-w-lg"
     >
       <div className="flex flex-col h-full">
@@ -721,64 +717,30 @@ export function DailyActivityDrawer({ open, onOpenChange, editLead, onSuccess }:
             <div className="flex flex-col gap-4">
               <SectionHeader icon={Phone} title="Kontak (HP / WA)" />
 
-              <div className="rounded-2xl bg-muted p-4 flex flex-col gap-2">
-                {contactNumbers.map((entry, idx) => (
-                  <div
-                    key={idx}
-                    className="flex items-center gap-2 rounded-xl bg-background border border-border px-3 py-2.5 shadow-sm"
-                  >
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs text-muted-foreground font-medium">{entry.label}</p>
-                      <p className="text-sm font-semibold text-foreground">+{entry.number}</p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => removeContact(idx)}
-                      className="shrink-0 rounded-full p-1 text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
-                      aria-label={`Hapus ${entry.label}`}
-                    >
-                      <CloseCircle weight="BoldDuotone" className="w-4 h-4" />
-                    </button>
-                  </div>
-                ))}
+              <div className="flex flex-col gap-1.5">
+                <label className="text-sm font-medium text-foreground">
+                  Nama PIC <span className="text-destructive">*</span>
+                </label>
+                <Input
+                  value={form.picName}
+                  onChange={(e) => setField("picName", e.target.value)}
+                  placeholder={isMice ? "Nama penanggung jawab..." : "e.g. Nama CPP / CPW..."}
+                  className="rounded-xl"
+                />
+              </div>
 
-                <Popover
-                  open={contactPopoverOpen}
-                  onOpenChange={(o) => {
-                    setContactPopoverOpen(o);
-                    if (!o) setContactInput({ name: "", phone: "" });
-                  }}
-                >
-                  <PopoverTrigger
-                    render={
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="w-full rounded-xl text-xs h-9 border-dashed gap-1.5"
-                      >
-                        <AddCircle weight="BoldDuotone" className="h-3.5 w-3.5" />
-                        {contactNumbers.length === 0 ? "Tambah Nomor HP/WA *" : "Tambah Nomor Lain"}
-                      </Button>
-                    }
-                  />
-                  <PopoverContent className="w-72 p-3" align="end">
-                    <p className="text-xs font-semibold mb-3">Tambah Nomor Kontak</p>
-                    <ContactEntry
-                      nameValue={contactInput.name}
-                      onNameChange={(v) => setContactInput((p) => ({ ...p, name: v }))}
-                      phoneValue={contactInput.phone}
-                      onPhoneChange={(v) => setContactInput((p) => ({ ...p, phone: v }))}
-                      onAdd={addContact}
-                      namePlaceholder={isMice ? "Nama PIC..." : "Label wajib: cpw, cpp, ortu..."}
-                    />
-                  </PopoverContent>
-                </Popover>
-
-                {contactNumbers.length === 0 && (
-                  <p className="text-xs text-muted-foreground text-center">
-                    Minimal 1 nomor wajib diisi
-                  </p>
-                )}
+              <div className="flex flex-col gap-1.5">
+                <label className="text-sm font-medium text-foreground">
+                  No. HP / WA <span className="text-destructive">*</span>
+                </label>
+                <Input
+                  type="tel"
+                  inputMode="numeric"
+                  value={form.picPhone}
+                  onChange={(e) => setField("picPhone", e.target.value.replace(/\D/g, ""))}
+                  placeholder="e.g. 08123456789"
+                  className="rounded-xl"
+                />
               </div>
             </div>
 
@@ -1238,6 +1200,126 @@ export function DailyActivityDrawer({ open, onOpenChange, editLead, onSuccess }:
                   placeholder="e.g. 50 - 75 juta (opsional)"
                   className="rounded-xl"
                 />
+              </div>
+            </div>}
+
+            {/* ════════════════════════════════════════════════════════
+                SECTION: Prospek & Penawaran (MICE only)
+            ════════════════════════════════════════════════════════ */}
+            {isMice && <div className="flex flex-col gap-4">
+              <SectionHeader icon={Case} title="Prospek & Penawaran" />
+
+              {/* Lokasi / Alamat kantor prospek */}
+              <div className="flex flex-col gap-1.5">
+                <label className="text-sm font-medium text-foreground flex items-center gap-1.5">
+                  <Streets weight="BoldDuotone" className="h-3.5 w-3.5 text-muted-foreground" />
+                  Lokasi / Alamat Kantor
+                </label>
+                <Textarea
+                  value={form.address}
+                  onChange={(e) => setField("address", e.target.value)}
+                  placeholder="e.g. Cibis 9, Cilandak, Jakarta Selatan (opsional)"
+                  rows={2}
+                  className="rounded-xl resize-none"
+                />
+              </div>
+
+              {/* Instagram prospek */}
+              <div className="flex flex-col gap-1.5">
+                <label className="text-sm font-medium text-foreground flex items-center gap-1.5">
+                  <Camera weight="BoldDuotone" className="h-3.5 w-3.5 text-muted-foreground" />
+                  Instagram
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground pointer-events-none">
+                    @
+                  </span>
+                  <Input
+                    value={form.instagramUrl}
+                    onChange={(e) => setField("instagramUrl", e.target.value)}
+                    placeholder="username atau link instagram (opsional)"
+                    className="rounded-xl pl-7"
+                  />
+                </div>
+                <p className="text-[10px] text-muted-foreground">
+                  Boleh isi username (mis. cosmaxindonesia) atau tempel link lengkap.
+                </p>
+              </div>
+
+              {/* Jadwal Site Visit */}
+              <div className="flex flex-col gap-1.5">
+                <label className="text-sm font-medium text-foreground flex items-center gap-1.5">
+                  <CalendarMark weight="BoldDuotone" className="h-3.5 w-3.5 text-muted-foreground" />
+                  Jadwal Site Visit
+                </label>
+                <Popover open={siteVisitDateOpen} onOpenChange={setSiteVisitDateOpen}>
+                  <PopoverTrigger
+                    render={
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className={cn(
+                          "w-full justify-start text-left font-normal rounded-xl",
+                          !form.siteVisitDate && "text-muted-foreground",
+                        )}
+                      >
+                        <CalendarDate weight="BoldDuotone" className="mr-2 h-4 w-4 shrink-0" />
+                        {form.siteVisitDate
+                          ? format(
+                              new Date(form.siteVisitDate + "T00:00:00"),
+                              "d MMMM yyyy",
+                              { locale: localeId },
+                            )
+                          : "Pilih tanggal kunjungan... (opsional)"}
+                      </Button>
+                    }
+                  />
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      mode="single"
+                      captionLayout="dropdown"
+                      selected={
+                        form.siteVisitDate
+                          ? new Date(form.siteVisitDate + "T00:00:00")
+                          : undefined
+                      }
+                      onSelect={(date) => {
+                        if (date) {
+                          const y = date.getFullYear();
+                          const m = String(date.getMonth() + 1).padStart(2, "0");
+                          const d = String(date.getDate()).padStart(2, "0");
+                          setField("siteVisitDate", `${y}-${m}-${d}`);
+                        } else {
+                          setField("siteVisitDate", "");
+                        }
+                        setSiteVisitDateOpen(false);
+                      }}
+                      fromYear={new Date().getFullYear() - 1}
+                      toYear={new Date().getFullYear() + 5}
+                      defaultMonth={
+                        form.siteVisitDate
+                          ? new Date(form.siteVisitDate + "T00:00:00")
+                          : new Date()
+                      }
+                    />
+                    {form.siteVisitDate && (
+                      <div className="border-t p-2">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="w-full text-xs text-muted-foreground"
+                          onClick={() => {
+                            setField("siteVisitDate", "");
+                            setSiteVisitDateOpen(false);
+                          }}
+                        >
+                          Hapus tanggal
+                        </Button>
+                      </div>
+                    )}
+                  </PopoverContent>
+                </Popover>
               </div>
             </div>}
 

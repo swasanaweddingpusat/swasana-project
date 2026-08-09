@@ -14,6 +14,7 @@ interface DailyActivityFilter {
   statusId?: string;
   venueId?: string;
   eventTypeId?: string;
+  segmentId?: string;
   assignedToId?: string;
   page?: number;
   pageSize?: number;
@@ -26,6 +27,7 @@ async function fetchDailyActivities(filter: DailyActivityFilter = {}): Promise<D
   if (filter.statusId) params.set("statusId", filter.statusId);
   if (filter.venueId) params.set("venueId", filter.venueId);
   if (filter.eventTypeId) params.set("eventTypeId", filter.eventTypeId);
+  if (filter.segmentId) params.set("segmentId", filter.segmentId);
   if (filter.assignedToId) params.set("assignedToId", filter.assignedToId);
   if (filter.page) params.set("page", String(filter.page));
   if (filter.pageSize) params.set("pageSize", String(filter.pageSize));

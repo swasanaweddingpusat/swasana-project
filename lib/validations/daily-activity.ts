@@ -50,7 +50,7 @@ const baseDailyActivitySchema = z.object({
   notes: z.string().trim().max(2000).optional(),
   // Legacy free-text MICE segment — dipertahankan sementara untuk kompat; UI baru pakai segmentId.
   instansi: z.string().trim().max(200).optional(),
-  // FK ke LeadSegment (MICE segment ternormalisasi). Null utk wedding.
+  // FK ke DailyActivitySegment (MICE segment ternormalisasi). Null utk wedding.
   segmentId: z.string().optional().nullable(),
   category: z.enum(["WEDDINGS", "MICE"]).default("WEDDINGS"),
   venueId: z.string().optional(),
