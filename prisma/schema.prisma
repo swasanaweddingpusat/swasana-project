@@ -199,6 +199,7 @@ model Profile {
   payrollsGenerated          PayrollPeriod[]            @relation("PayrollGenerator")
   payrollsFinalized          PayrollPeriod[]            @relation("PayrollFinalizer")
   jobPostingsCreated         JobPosting[]               @relation("JobPostingCreator")
+  jobPostingApprovals        JobPosting[]               @relation("JobPostingApprover")
   hiredFromCandidate         Candidate[]                @relation("HiredCandidate")
   candidateNotesCreated      CandidateNote[]            @relation("CandidateNoteCreator")
   onboardingAssignments      OnboardingAssignment[]
@@ -344,6 +345,7 @@ model Brand {
   code      String   @unique
   createdAt DateTime @default(now())
   venues    Venue[]
+  jobPostings JobPosting[]
 
   @@map("brands")
 }
@@ -773,6 +775,22 @@ enum JobPostingStatus {
   draft
   open
   closed
+}
+
+enum PositionLevel {
+  entry
+  junior
+  mid
+  senior
+  lead
+  manager
+  director
+}
+
+enum InterviewLocationType {
+  online
+  offline
+  hybrid
 }
 
 enum CandidateStage {
@@ -2669,30 +2687,49 @@ model PayslipItem {
 // ─── Recruitment & Onboarding ────────────────────────────────────────────────
 
 model JobPosting {
-  id             String           @id @default(uuid())
-  title          String
-  departmentId   String?
-  positionId     String?
-  description    String?
-  requirements   String?
-  employmentType EmploymentType?
-  location       String?
-  salaryRangeMin Decimal?         @db.Decimal(15, 2)
-  salaryRangeMax Decimal?         @db.Decimal(15, 2)
-  status         JobPostingStatus @default(draft)
-  openDate       DateTime?
-  closeDate      DateTime?
-  createdBy      String?
-  createdAt      DateTime         @default(now())
-  updatedAt      DateTime         @updatedAt
+  id                   String                  @id @default(uuid())
+  title                String
+  departmentId         String?
+  positionId           String?
+  description          String?
+  requirements         String?
+  employmentType       EmploymentType?
+  location             String?
+  salaryRangeMin       Decimal?                @db.Decimal(15, 2)
+  salaryRangeMax       Decimal?                @db.Decimal(15, 2)
+  status               JobPostingStatus        @default(draft)
+  openDate             DateTime?
+  closeDate            DateTime?
+  isWalkInInterview    Boolean                 @default(false)
+  brandId              String?
+  submissionDate       DateTime?
+  interviewDate        DateTime?
+  level                PositionLevel?
+  quota                Int?
+  interviewLocation    InterviewLocationType?
+  startDate            DateTime?
+  minEducation         String?
+  minExperience        String?
+  otherQualifications  String?
+  jobDescriptions      Json?
+  additionalNotes      String?
+  approverId           String?
+  submittedBySignature String?
+  createdBy            String?
+  createdAt            DateTime                @default(now())
+  updatedAt            DateTime                @updatedAt
 
   department Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
   position   Position?   @relation(fields: [positionId], references: [id], onDelete: SetNull)
   creator    Profile?    @relation("JobPostingCreator", fields: [createdBy], references: [id], onDelete: SetNull)
+  brand      Brand?      @relation(fields: [brandId], references: [id], onDelete: SetNull)
+  approver   Profile?    @relation("JobPostingApprover", fields: [approverId], references: [id], onDelete: SetNull)
   candidates Candidate[]
 
   @@index([departmentId])
   @@index([status])
+  @@index([brandId])
+  @@index([approverId])
   @@map("job_postings")
 }
 
