@@ -32,6 +32,18 @@ export async function createJobPosting(
       if (!pos) return { success: false, error: "Posisi tidak ditemukan" };
     }
 
+    // Validate brand exists if provided
+    if (parsed.data.brandId) {
+      const brand = await db.brand.findUnique({ where: { id: parsed.data.brandId } });
+      if (!brand) return { success: false, error: "Perusahaan tidak ditemukan" };
+    }
+
+    // Validate approver exists if provided
+    if (parsed.data.approverId) {
+      const approver = await db.profile.findUnique({ where: { id: parsed.data.approverId } });
+      if (!approver) return { success: false, error: "Penyetuju tidak ditemukan" };
+    }
+
     // Ensure salary min <= salary max if both provided
     if (
       parsed.data.salaryRangeMin != null &&
@@ -53,12 +65,12 @@ export async function createJobPosting(
       positionId: parsed.data.positionId || null,
       isWalkInInterview: parsed.data.isWalkInInterview ?? false,
       brandId: parsed.data.brandId || null,
-      submissionDate: parsed.data.submissionDate || null,
-      interviewDate: parsed.data.interviewDate || null,
+      submissionDate: parsed.data.submissionDate ?? null,
+      interviewDate: parsed.data.interviewDate ?? null,
       level: parsed.data.level || null,
       quota: parsed.data.quota ?? null,
       interviewLocation: parsed.data.interviewLocation || null,
-      startDate: parsed.data.startDate || null,
+      startDate: parsed.data.startDate ?? null,
       minEducation: parsed.data.minEducation || null,
       minExperience: parsed.data.minExperience || null,
       otherQualifications: parsed.data.otherQualifications || null,
