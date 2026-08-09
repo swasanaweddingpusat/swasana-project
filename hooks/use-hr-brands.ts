@@ -8,17 +8,17 @@ type BrandOption = {
   code: string;
 };
 
-async function fetchBrands(): Promise<BrandOption[]> {
-  const res = await fetch("/api/brands");
+async function fetchHrBrands(): Promise<BrandOption[]> {
+  const res = await fetch("/api/hr/brands");
   if (!res.ok) throw new Error("Failed to fetch brands");
   const data = await res.json() as Array<{ id: string; name: string; code: string }>;
   return data;
 }
 
-export function useBrands() {
+export function useHrBrands() {
   return useQuery({
-    queryKey: ["brands"],
-    queryFn: fetchBrands,
+    queryKey: ["hr-brands"],
+    queryFn: fetchHrBrands,
     staleTime: 10 * 60 * 1000,
   });
 }

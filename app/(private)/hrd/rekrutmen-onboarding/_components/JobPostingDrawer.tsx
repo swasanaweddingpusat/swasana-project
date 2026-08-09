@@ -12,7 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Drawer } from "@/components/shared/drawer";
 import { useCreateJobPosting } from "@/hooks/use-job-postings";
-import { useBrands } from "@/hooks/use-brands";
+import { useHrBrands } from "@/hooks/use-hr-brands";
 import { useDepartments } from "@/hooks/use-departments";
 import { usePositions } from "@/hooks/use-positions";
 import { useMyProfile } from "@/hooks/use-my-profile";
@@ -106,7 +106,7 @@ export function JobPostingDrawer({ isOpen, onClose }: JobPostingDrawerProps) {
   const sigCanvasRef = useRef<SignatureCanvas>(null);
   const createJobPostingMutation = useCreateJobPosting();
 
-  const { data: brands = [] } = useBrands();
+  const { data: brands = [] } = useHrBrands();
   const { data: departments = [] } = useDepartments();
   const { data: positions = [] } = usePositions(form.departmentId || undefined);
   const { data: approvers = [] } = useQuery<ApproverOption[]>({
