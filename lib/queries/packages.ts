@@ -4,6 +4,7 @@ const packageInclude = {
   venue: { select: { id: true, name: true, address: true, brandId: true } },
   vendorItems: { orderBy: { sortOrder: "asc" as const } },
   internalItems: { orderBy: { sortOrder: "asc" as const } },
+  miceItems: { orderBy: { sortOrder: "asc" as const } },
   categoryPrices: { orderBy: { sortOrder: "asc" as const } },
 } as const;
 
@@ -12,6 +13,7 @@ export interface GetPackagesParams {
   page?: number;
   limit?: number;
   search?: string;
+  category?: "WEDDINGS" | "MICE";
 }
 
 export async function getPackages({
@@ -19,8 +21,10 @@ export async function getPackages({
   page = 1,
   limit = 10,
   search,
+  category = "WEDDINGS",
 }: GetPackagesParams = {}) {
   const where = {
+    category,
     ...(venueId ? { venueId } : {}),
     ...(search
       ? {
@@ -47,9 +51,10 @@ export async function getPackages({
   return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
 }
 
-export async function getPackagesForBooking(venueId?: string) {
+export async function getPackagesForBooking(venueId?: string, category: "WEDDINGS" | "MICE" = "WEDDINGS") {
   const packages = await db.package.findMany({
     where: {
+      category,
       available: true,
       approvalStatus: "approved",
       ...(venueId ? { venueId } : {}),
@@ -64,12 +69,41 @@ export async function getPackagesForBooking(venueId?: string) {
   );
 }
 
+/**
+ * MICE packages consumable by the quotation drawer. Deliberately NOT reusing
+ * getPackagesForBooking: that filters on Σ categoryPrices.basePrice > 0, but MICE
+ * packages carry their price on miceItems.itemPrice (categoryPrices is often empty),
+ * so valid MICE packages would be filtered out. Here we filter on having miceItems
+ * instead, and only include the minimal shape the quotation explode needs.
+ */
+export async function getMicePackagesForQuotation(venueId?: string) {
+  const packages = await db.package.findMany({
+    where: {
+      category: "MICE",
+      available: true,
+      approvalStatus: "approved",
+      ...(venueId ? { venueId } : {}),
+    },
+    orderBy: { createdAt: "desc" },
+    include: {
+      venue: { select: { id: true, name: true } },
+      miceItems: { orderBy: { sortOrder: "asc" as const } },
+    },
+  });
+
+  return packages.filter((pkg) => (pkg.miceItems ?? []).length > 0);
+}
+
+export type MicePackageForQuotationItem = Awaited<
+  ReturnType<typeof getMicePackagesForQuotation>
+>[number];
+
 export async function getApprovalRecord(module: string, entityId: string) {
   return db.approvalRecord.findUnique({
     where: { module_entityId: { module, entityId } },
     include: {
       steps: {
-        orderBy: { stepOrder: "asc" },
+        orderBy: [{ createdAt: "asc" }, { stepOrder: "asc" }],
         include: {
           approverRole: { select: { id: true, name: true } },
           approverUser: { select: { id: true, fullName: true } },

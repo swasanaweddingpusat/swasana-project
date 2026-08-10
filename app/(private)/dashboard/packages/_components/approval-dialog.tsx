@@ -14,6 +14,7 @@ interface ApprovalStep {
   approverType: string;
   approverRoleId: string | null;
   approverUserId: string | null;
+  revisionId: string | null;
   status: string;
   signature: string | null;
   decidedAt: string | null;
@@ -39,10 +40,14 @@ interface ApprovalDialogProps {
   userProfileId: string;
   userRoleId: string | null;
   isSuperAdmin?: boolean;
+  /** Explicit reset permission override (booking callers use this via can("booking","reset-approval")).
+   *  When provided, takes precedence over isSuperAdmin for the Reset button.
+   *  Package/MICE callers omit this and rely on isSuperAdmin as before. */
+  canReset?: boolean;
   module?: string;
 }
 
-export function ApprovalDialog({ open, onClose, packageId, packageName, userProfileId: _userProfileId, userRoleId: _userRoleId, isSuperAdmin, module = "package" }: ApprovalDialogProps) {
+export function ApprovalDialog({ open, onClose, packageId, packageName, userProfileId: _userProfileId, userRoleId: _userRoleId, isSuperAdmin, canReset, module = "package" }: ApprovalDialogProps) {
   const [record, setRecord] = useState<ApprovalRecord | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -71,7 +76,23 @@ export function ApprovalDialog({ open, onClose, packageId, packageName, userProf
     return () => { cancelled = true; };
   }, [open, module, packageId]);
 
-  const activeStep = record?.steps.find((s) => s.status === "pending");
+  // Group steps by revisionId (null = initial round), pick the latest round.
+  const latestRoundSteps = (() => {
+    if (!record?.steps.length) return [];
+    const groups = new Map<string, ApprovalStep[]>();
+    for (const s of record.steps) {
+      const key = s.revisionId ?? "__initial__";
+      const g = groups.get(key) ?? [];
+      g.push(s);
+      groups.set(key, g);
+    }
+    // Last inserted group = latest revision (steps are sorted by createdAt asc)
+    const keys = [...groups.keys()];
+    const latestKey = keys[keys.length - 1];
+    return (groups.get(latestKey) ?? []).sort((a, b) => a.stepOrder - b.stepOrder);
+  })();
+
+  const activeStep = latestRoundSteps.find((s) => s.status === "pending");
 
   async function handleResetStep(stepId: string) {
     setSubmitting(true);
@@ -118,22 +139,7 @@ export function ApprovalDialog({ open, onClose, packageId, packageName, userProf
 
             {/* Steps timeline — only show latest round */}
             <div className="space-y-2">
-              {(() => {
-                const steps = record.steps;
-                if (steps.length === 0) return [];
-                // Each approval round appends N steps (same as flow template).
-                // Detect round size: find the first step whose approverType+approverRoleId
-                // matches step[0] (indicating a new round started).
-                const firstStep = steps[0];
-                let roundSize = steps.length;
-                for (let i = 1; i < steps.length; i++) {
-                  if (steps[i].approverType === firstStep.approverType && steps[i].approverRoleId === firstStep.approverRoleId && steps[i].approverUserId === firstStep.approverUserId) {
-                    roundSize = i;
-                    break;
-                  }
-                }
-                return steps.slice(-roundSize);
-              })().map((step) => (
+              {latestRoundSteps.map((step) => (
                 <div key={step.id} className={cn("flex items-center gap-3 p-3 rounded-lg border", step.status === "approved" && "bg-muted/50", step.status === "rejected" && "bg-destructive/5 border-destructive/20")}>
                   <div className={cn(
                     "flex items-center justify-center h-7 w-7 rounded-full shrink-0",
@@ -160,7 +166,7 @@ export function ApprovalDialog({ open, onClose, packageId, packageName, userProf
                       </div>
                     )}
                   </div>
-                  {isSuperAdmin && step.approverType === "client" && step.status === "approved" && (
+                  {(canReset ?? isSuperAdmin) && step.status === "approved" && (
                     <button type="button" onClick={() => handleResetStep(step.id)} disabled={submitting} className={cn('text-xs', 'text-muted-foreground', 'hover:text-destructive', 'underline', 'shrink-0')}>
                       Reset
                     </button>

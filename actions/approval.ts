@@ -64,7 +64,7 @@ export async function approveStep(stepId: string, signature?: string | null) {
       ? [db.approvalRecord.update({ where: { id: step.recordId }, data: { status: "approved" } })]
       : [];
 
-    const entityUpdate: Prisma.PrismaPromise<unknown>[] = allApprovedAfter && step.record.module === "package"
+    const entityUpdate: Prisma.PrismaPromise<unknown>[] = allApprovedAfter && (step.record.module === "package" || step.record.module === "package-mice")
       ? [db.package.update({ where: { id: step.record.entityId }, data: { approvalStatus: "approved" } })]
       : allApprovedAfter && (step.record.module === "booking" || step.record.module === "booking-mice")
         ? [db.booking.update({ where: { id: step.record.entityId }, data: { bookingStatus: "Confirmed" } })]
@@ -119,7 +119,7 @@ export async function rejectStep(stepId: string, notes: string) {
     const canApprove = await checkApprover(step, session.user.profileId, session.user.roleId);
     if (!canApprove) return { success: false as const, error: "Anda tidak berhak reject step ini" };
 
-    const entityRejectUpdate: Prisma.PrismaPromise<unknown>[] = step.record.module === "package"
+    const entityRejectUpdate: Prisma.PrismaPromise<unknown>[] = (step.record.module === "package" || step.record.module === "package-mice")
       ? [db.package.update({ where: { id: step.record.entityId }, data: { approvalStatus: "rejected" } })]
       : (step.record.module === "booking" || step.record.module === "booking-mice")
         ? [db.booking.update({ where: { id: step.record.entityId }, data: { bookingStatus: "Rejected" } })]

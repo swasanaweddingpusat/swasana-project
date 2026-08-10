@@ -70,3 +70,14 @@ export function useDeleteQuotation() {
     },
   });
 }
+
+export function useUpdateQuotationStatus() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, status }: { id: string; status: string }) =>
+      updateQuotation({ id, status } as UpdateQuotationInput),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["quotations"] });
+    },
+  });
+}

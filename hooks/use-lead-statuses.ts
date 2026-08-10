@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import type { LeadStatusItem } from "@/lib/queries/leads";
+import type { LeadStatusItem } from "@/lib/queries/daily-activity";
 
 async function fetchLeadStatuses(): Promise<LeadStatusItem[]> {
   const res = await fetch("/api/lead-statuses");

@@ -63,7 +63,7 @@ export async function createBooking(data: unknown) {
     let didLockLeadConversion = false;
 
     if (leadId) {
-      leadRecord = await db.lead.findUnique({
+      leadRecord = await db.dailyActivity.findUnique({
         where: { id: leadId },
         select: {
           id: true,
@@ -123,7 +123,7 @@ export async function createBooking(data: unknown) {
         });
 
         // Step 2: claim the conversion lock — FK is now valid.
-        const lockResult = await db.lead.updateMany({
+        const lockResult = await db.dailyActivity.updateMany({
           where: { id: leadRecord.id, convertedToCustomerId: null },
           data: { convertedToCustomerId: customerId },
         });
@@ -134,7 +134,7 @@ export async function createBooking(data: unknown) {
           await db.customer.delete({ where: { id: customerId } }).catch(() => {
             // Deletion is best-effort; if it fails the row stays as a harmless orphan.
           });
-          const refreshed = await db.lead.findUnique({
+          const refreshed = await db.dailyActivity.findUnique({
             where: { id: leadRecord.id },
             select: { convertedToCustomerId: true },
           });
@@ -461,7 +461,7 @@ export async function createBooking(data: unknown) {
         leadUpdateData.statusId = convertedStatus.id;
       }
       ops.push(
-        db.lead.update({
+        db.dailyActivity.update({
           where: { id: leadRecord.id },
           data: leadUpdateData,
         })
@@ -659,7 +659,7 @@ export async function createBooking(data: unknown) {
 
     revalidateTag("bookings", "max");
     revalidateTag("customers", "max");
-    if (leadRecord) revalidateTag("leads", "max");
+    if (leadRecord) revalidateTag("daily-activity", "max");
 
     // Notify all super admins about new booking (exclude creator)
     notifySuperAdmins({

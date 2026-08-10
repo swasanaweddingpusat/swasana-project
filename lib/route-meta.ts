@@ -55,9 +55,9 @@ export const ROUTE_META: Record<string, RouteMeta> = {
     subtitle: "Kelola status pipeline lead",
     parent: "/dashboard/settings",
   },
-  "/dashboard/settings/lead-segment": {
-    title: "Lead Segment",
-    subtitle: "Kelola master segment/kategori untuk lead MICE",
+  "/dashboard/settings/daily-activity-segment": {
+    title: "Segment Activity",
+    subtitle: "Kelola master segment/kategori untuk daily activity MICE",
     parent: "/dashboard/settings",
   },
   "/dashboard/settings/education-level": {
@@ -88,8 +88,12 @@ export const ROUTE_META: Record<string, RouteMeta> = {
 
   // ─── Packages ──────────────────────────────────────────────────────────────
   "/dashboard/packages": {
-    title: "Packages",
+    title: "Wedding Package",
     subtitle: "Kelola paket wedding",
+  },
+  "/dashboard/package-mice": {
+    title: "Mice Package",
+    subtitle: "Kelola paket MICE per venue",
   },
 
   // ─── Complimentary ─────────────────────────────────────────────────────────
@@ -159,10 +163,10 @@ export const ROUTE_META: Record<string, RouteMeta> = {
     subtitle: "Semua notifikasi",
   },
 
-  // ─── Leads ─────────────────────────────────────────────────────────────────
-  "/dashboard/leads": {
-    title: "Leads",
-    subtitle: "Kelola data lead dan pipeline penjualan",
+  // ─── Daily Activity ────────────────────────────────────────────────────────
+  "/dashboard/daily-activity": {
+    title: "Daily Activity",
+    subtitle: "Kelola data daily activity dan pipeline penjualan",
   },
 
   // ─── Quotations ───────────────────────────────────────────────────────────

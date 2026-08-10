@@ -3,7 +3,7 @@ import { apiLimiter, mutationLimiter, rateLimitResponse } from "@/lib/rate-limit
 import { logAudit } from "@/lib/audit";
 import { db } from "@/lib/db";
 import { revalidateTag } from "next/cache";
-import { updateLeadStatusSchema2 } from "@/lib/validations/lead";
+import { updateLeadStatusSchema2 } from "@/lib/validations/daily-activity";
 
 // ─── PATCH /api/lead-statuses/[id] ───────────────────────────────────────────
 

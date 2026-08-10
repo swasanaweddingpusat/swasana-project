@@ -13,14 +13,25 @@ import {
   updatePackageSchema,
   createVendorItemSchema,
   createInternalItemSchema,
+  miceItemSchema,
 } from "@/lib/validations/package";
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+type PkgCategory = "WEDDINGS" | "MICE";
+
+function permModuleFor(category: PkgCategory): "package" | "package-mice" {
+  return category === "MICE" ? "package-mice" : "package";
+}
 
 // ─── Package CRUD ────────────────────────────────────────────────────────────
 
 export async function getPackageCreatedBy(packageId: string): Promise<string | null> {
   try {
+    const pkg = await db.package.findUnique({ where: { id: packageId }, select: { category: true } });
+    const mod = pkg ? permModuleFor(pkg.category as PkgCategory) : "package";
     const record = await db.approvalRecord.findUnique({
-      where: { module_entityId: { module: "package", entityId: packageId } },
+      where: { module_entityId: { module: mod, entityId: packageId } },
       select: { createdBy: { select: { fullName: true } } },
     });
     return record?.createdBy?.fullName ?? null;
@@ -33,18 +44,20 @@ export async function getPackageCreatedBy(packageId: string): Promise<string | n
 export async function createPackage(data: unknown): Promise<
   { success: true; data: { id: string; packageName: string } } | { success: false; error: string }
 > {
-  const { session, error } = await requirePermission({ module: "package", action: "create" });
-  if (error) return { success: false, error };
-  if (!mutationLimiter.check(`pkg-create:${session!.user.id}`)) return { success: false, ...rateLimitError() };
-
   const parsed = createPackageSchema.safeParse(data);
   if (!parsed.success) return { success: false, error: parsed.error.issues[0].message };
+
+  const category = parsed.data.category as PkgCategory;
+  const mod = permModuleFor(category);
+
+  const { session, error } = await requirePermission({ module: mod, action: "create" });
+  if (error) return { success: false, error };
+  if (!mutationLimiter.check(`pkg-create:${session!.user.id}`)) return { success: false, ...rateLimitError() };
 
   try {
     const { signature, ...pkgData } = parsed.data;
 
-    // Hardcoded flow: Manager (step 1) → Finance (step 2)
-    const steps = await resolveApprovalSteps("package");
+    const steps = await resolveApprovalSteps(mod);
 
     const packageId = crypto.randomUUID();
     const recordId = crypto.randomUUID();
@@ -66,7 +79,7 @@ export async function createPackage(data: unknown): Promise<
             db.approvalRecord.create({
               data: {
                 id: recordId,
-                module: "package",
+                module: mod,
                 entityId: packageId,
                 status: "pending",
                 createdById: session!.user.profileId!,
@@ -110,7 +123,7 @@ export async function createPackage(data: unknown): Promise<
     await logAudit({
       userId: session!.user.id,
       action: "packages.create",
-      entityType: "package",
+      entityType: mod,
       entityId: packageId,
       description: `Created package "${pkgData.packageName}"`,
     });
@@ -126,24 +139,26 @@ export async function createPackage(data: unknown): Promise<
 export async function updatePackage(id: string, data: unknown): Promise<
   { success: true; data: { id: string } } | { success: false; error: string }
 > {
-  const { session, error } = await requirePermission({ module: "package", action: "edit" });
-  if (error) return { success: false, error };
-  if (!mutationLimiter.check(`pkg-update:${session!.user.id}`)) return { success: false, ...rateLimitError() };
-
   const parsed = updatePackageSchema.safeParse(data);
   if (!parsed.success) return { success: false, error: parsed.error.issues[0].message };
 
-  const { signature, ...pkgData } = parsed.data;
+  // Strip category — editing must never flip a package between wedding/mice
+  const { signature, category: _ignoredCategory, ...pkgData } = parsed.data;
 
-  // Detect pax change (triggers approval reset)
-  const existing = await db.package.findUnique({ where: { id }, select: { pax: true, approvalStatus: true } });
+  // Detect pax change (triggers approval reset) + fetch category for permission module
+  const existing = await db.package.findUnique({ where: { id }, select: { pax: true, approvalStatus: true, category: true } });
   const paxChanged = pkgData.pax !== undefined && existing?.pax !== pkgData.pax;
+  const mod = permModuleFor((existing?.category ?? "WEDDINGS") as PkgCategory);
+
+  const { session, error } = await requirePermission({ module: mod, action: "edit" });
+  if (error) return { success: false, error };
+  if (!mutationLimiter.check(`pkg-update:${session!.user.id}`)) return { success: false, ...rateLimitError() };
 
   // Read-only queries before transaction
   const [steps, existingApproval] = await Promise.all([
-    resolveApprovalSteps("package"),
+    resolveApprovalSteps(mod),
     db.approvalRecord.findUnique({
-      where: { module_entityId: { module: "package", entityId: id } },
+      where: { module_entityId: { module: mod, entityId: id } },
       select: { id: true },
     }),
   ]);
@@ -177,7 +192,7 @@ export async function updatePackage(id: string, data: unknown): Promise<
               : db.approvalRecord.create({
                   data: {
                     id: recordId,
-                    module: "package",
+                    module: mod,
                     entityId: id,
                     status: "pending",
                     createdById: session!.user.profileId!,
@@ -222,7 +237,7 @@ export async function updatePackage(id: string, data: unknown): Promise<
       await logAudit({
         userId: session!.user.id,
         action: "package.approval_reset",
-        entityType: "package",
+        entityType: mod,
         entityId: id,
         description: `Approval reset: pax berubah pada package`,
       });
@@ -231,7 +246,7 @@ export async function updatePackage(id: string, data: unknown): Promise<
     await logAudit({
       userId: session!.user.id,
       action: "packages.update",
-      entityType: "package",
+      entityType: mod,
       entityId: id,
       description: `Updated package`,
     });
@@ -247,15 +262,12 @@ export async function updatePackage(id: string, data: unknown): Promise<
 export async function duplicatePackage(id: string): Promise<
   { success: true; data: { id: string; packageName: string } } | { success: false; error: string }
 > {
-  const { session, error } = await requirePermission({ module: "package", action: "create" });
-  if (error) return { success: false, error };
-  if (!mutationLimiter.check(`pkg-duplicate:${session!.user.id}`)) return { success: false, ...rateLimitError() };
-
   try {
     const source = await db.package.findUnique({
       where: { id },
       select: {
         packageName: true,
+        category: true,
         venueId: true,
         notes: true,
         pax: true,
@@ -268,6 +280,11 @@ export async function duplicatePackage(id: string): Promise<
       },
     });
     if (!source) return { success: false, error: "Package tidak ditemukan." };
+
+    const mod = permModuleFor(source.category as PkgCategory);
+    const { session, error } = await requirePermission({ module: mod, action: "create" });
+    if (error) return { success: false, error };
+    if (!mutationLimiter.check(`pkg-duplicate:${session!.user.id}`)) return { success: false, ...rateLimitError() };
 
     const newId = crypto.randomUUID();
     const newName = `${source.packageName} (Copy)`;
@@ -293,6 +310,7 @@ export async function duplicatePackage(id: string): Promise<
         data: {
           id: newId,
           packageName: newName,
+          category: source.category,
           venueId: source.venueId,
           notes: source.notes,
           pax: source.pax,
@@ -325,7 +343,7 @@ export async function duplicatePackage(id: string): Promise<
     await logAudit({
       userId: session!.user.id,
       action: "packages.duplicate",
-      entityType: "package",
+      entityType: mod,
       entityId: newId,
       description: `Duplicated package "${source.packageName}" → "${newName}"`,
     });
@@ -341,17 +359,20 @@ export async function duplicatePackage(id: string): Promise<
 export async function deletePackage(id: string): Promise<
   { success: true } | { success: false; error: string }
 > {
-  const { session, error } = await requirePermission({ module: "package", action: "delete" });
-  if (error) return { success: false, error };
-  if (!mutationLimiter.check(`pkg-delete:${session!.user.id}`)) return { success: false, ...rateLimitError() };
-
   try {
+    const existing = await db.package.findUnique({ where: { id }, select: { category: true } });
+    const mod = permModuleFor((existing?.category ?? "WEDDINGS") as PkgCategory);
+
+    const { session, error } = await requirePermission({ module: mod, action: "delete" });
+    if (error) return { success: false, error };
+    if (!mutationLimiter.check(`pkg-delete:${session!.user.id}`)) return { success: false, ...rateLimitError() };
+
     const [pkg] = await db.$transaction([db.package.delete({ where: { id } })]);
 
     await logAudit({
       userId: session!.user.id,
       action: "packages.delete",
-      entityType: "package",
+      entityType: mod,
       entityId: id,
       description: `Deleted package "${pkg.packageName}"`,
     });
@@ -367,17 +388,24 @@ export async function deletePackage(id: string): Promise<
 export async function deleteBulkPackages(ids: string[]): Promise<
   { success: true } | { success: false; error: string }
 > {
-  const { session: sessionBulk, error: errorBulk } = await requirePermission({ module: "package", action: "delete" });
-  if (errorBulk) return { success: false, error: errorBulk };
-  if (!mutationLimiter.check(`pkg-bulk-delete:${sessionBulk!.user.id}`)) return { success: false, ...rateLimitError() };
-
   try {
+    // Look up categories to determine which permission module is required.
+    // If ALL packages are MICE → require package-mice:delete.
+    // Otherwise (all wedding or mixed) → require package:delete (wedding is the stricter default).
+    const pkgs = await db.package.findMany({ where: { id: { in: ids } }, select: { category: true } });
+    const allMice = pkgs.length > 0 && pkgs.every((p) => p.category === "MICE");
+    const mod = allMice ? "package-mice" : "package";
+
+    const { session: sessionBulk, error: errorBulk } = await requirePermission({ module: mod, action: "delete" });
+    if (errorBulk) return { success: false, error: errorBulk };
+    if (!mutationLimiter.check(`pkg-bulk-delete:${sessionBulk!.user.id}`)) return { success: false, ...rateLimitError() };
+
     await db.$transaction([db.package.deleteMany({ where: { id: { in: ids } } })]);
 
     await logAudit({
       userId: sessionBulk!.user.id,
       action: "packages.bulk_delete",
-      entityType: "package",
+      entityType: mod,
       entityId: ids.join(","),
       description: `Deleted ${ids.length} packages`,
     });
@@ -396,7 +424,9 @@ export async function saveVendorItems(
   packageId: string,
   items: { categoryId?: string | null; categoryName: string; itemText: string }[]
 ): Promise<{ success: true } | { success: false; error: string }> {
-  const { session, error } = await requirePermission({ module: "package", action: "edit" });
+  const pkg = await db.package.findUnique({ where: { id: packageId }, select: { category: true } });
+  const mod = permModuleFor((pkg?.category ?? "WEDDINGS") as PkgCategory);
+  const { session, error } = await requirePermission({ module: mod, action: "edit" });
   if (error) return { success: false, error };
   if (!mutationLimiter.check(`vendor-items:${session!.user.id}`)) return { success: false, ...rateLimitError() };
 
@@ -429,7 +459,9 @@ export async function saveInternalItems(
   packageId: string,
   items: { itemName: string; itemDescription: string }[]
 ): Promise<{ success: true } | { success: false; error: string }> {
-  const { session, error } = await requirePermission({ module: "package", action: "edit" });
+  const pkg = await db.package.findUnique({ where: { id: packageId }, select: { category: true } });
+  const mod = permModuleFor((pkg?.category ?? "WEDDINGS") as PkgCategory);
+  const { session, error } = await requirePermission({ module: mod, action: "edit" });
   if (error) return { success: false, error };
   if (!mutationLimiter.check(`internal-items:${session!.user.id}`)) return { success: false, ...rateLimitError() };
 
@@ -456,6 +488,56 @@ export async function saveInternalItems(
   }
 }
 
+// ─── MICE Items ───────────────────────────────────────────────────────────────
+
+export async function saveMiceItems(
+  packageId: string,
+  items: { itemName: string; itemDescription: string; itemType: string; itemPrice: number }[]
+): Promise<{ success: true } | { success: false; error: string }> {
+  const pkg = await db.package.findUnique({ where: { id: packageId }, select: { category: true } });
+  const mod = permModuleFor((pkg?.category ?? "MICE") as PkgCategory);
+  const { session, error } = await requirePermission({ module: mod, action: "edit" });
+  if (error) return { success: false, error };
+  if (!mutationLimiter.check(`mice-items:${session!.user.id}`)) return { success: false, ...rateLimitError() };
+
+  for (const item of items) {
+    const parsed = miceItemSchema.safeParse(item);
+    if (!parsed.success) return { success: false, error: parsed.error.issues[0].message };
+  }
+
+  try {
+    await db.$transaction([
+      db.packageMiceItem.deleteMany({ where: { packageId } }),
+      ...items.map((item, i) =>
+        db.packageMiceItem.create({
+          data: {
+            packageId,
+            itemName: item.itemName,
+            itemDescription: item.itemDescription ?? "",
+            itemType: item.itemType as "PAX" | "NOMINAL",
+            itemPrice: item.itemPrice,
+            sortOrder: i,
+          },
+        })
+      ),
+    ]);
+
+    await logAudit({
+      userId: session!.user.id,
+      action: "package.save_mice_items",
+      entityType: mod,
+      entityId: packageId,
+      description: `Saved ${items.length} MICE item(s) for package ${packageId}`,
+    });
+
+    revalidateTag("packages", "max");
+    return { success: true };
+  } catch (e) {
+    console.error("[saveMiceItems]", e);
+    return { success: false, error: "Terjadi kesalahan." };
+  }
+}
+
 // ─── Package Prices ───────────────────────────────────────────────────────────
 
 export async function savePackagePrices(
@@ -464,16 +546,17 @@ export async function savePackagePrices(
   margin: number,
   sellingPrice: number
 ): Promise<{ success: true } | { success: false; error: string }> {
-  const { session, error } = await requirePermission({ module: "package", action: "set-harga" });
-  if (error) return { success: false, error };
-  if (!mutationLimiter.check(`pkg-prices:${session!.user.id}`)) return { success: false, ...rateLimitError() };
-
   try {
     const pkg = await db.package.findUnique({
       where: { id: packageId },
-      select: { approvalStatus: true },
+      select: { approvalStatus: true, category: true },
     });
     if (!pkg) return { success: false, error: "Package tidak ditemukan." };
+
+    const mod = permModuleFor(pkg.category as PkgCategory);
+    const { session, error } = await requirePermission({ module: mod, action: "set-harga" });
+    if (error) return { success: false, error };
+    if (!mutationLimiter.check(`pkg-prices:${session!.user.id}`)) return { success: false, ...rateLimitError() };
 
     // Set-harga does NOT re-trigger approval regardless of current status.
     // Prices can be updated freely; approval state is managed separately.
@@ -495,7 +578,7 @@ export async function savePackagePrices(
     await logAudit({
       userId: session!.user.id,
       action: "package.set_harga",
-      entityType: "package",
+      entityType: mod,
       entityId: packageId,
       description: `Set harga package (sellingPrice: ${sellingPrice}, margin: ${margin})`,
     });
@@ -513,7 +596,11 @@ export async function savePackagePrices(
 export async function updatePackageTC(packageId: string, termAndCondition: string | null): Promise<
   { success: true } | { success: false; error: string }
 > {
-  const { session, error } = await requirePermission({ module: "package", action: "term-&-condition" });
+  const pkg = await db.package.findUnique({ where: { id: packageId }, select: { category: true } });
+  const mod = permModuleFor((pkg?.category ?? "WEDDINGS") as PkgCategory);
+  // For MICE, "term-&-condition" permission doesn't exist → requirePermission returns error.
+  // This is intentional — the UI won't expose T&C for MICE anyway (can(permModule, "term-&-condition") is false).
+  const { session, error } = await requirePermission({ module: mod, action: "term-&-condition" });
   if (error) return { success: false, error };
   if (!mutationLimiter.check(`pkg-tc:${session!.user.id}`)) return { success: false, ...rateLimitError() };
 
@@ -542,13 +629,14 @@ export async function updatePackageTC(packageId: string, termAndCondition: strin
 export async function togglePackageAvailable(id: string): Promise<
   { success: true; available: boolean } | { success: false; error: string }
 > {
-  const { session, error } = await requirePermission({ module: "package", action: "edit" });
-  if (error) return { success: false, error };
-  if (!mutationLimiter.check(`pkg-toggle:${session!.user.id}`)) return { success: false, ...rateLimitError() };
-
   try {
-    const pkg = await db.package.findUnique({ where: { id }, select: { available: true } });
+    const pkg = await db.package.findUnique({ where: { id }, select: { available: true, category: true } });
     if (!pkg) return { success: false, error: "Package not found" };
+
+    const mod = permModuleFor(pkg.category as PkgCategory);
+    const { session, error } = await requirePermission({ module: mod, action: "set-status" });
+    if (error) return { success: false, error };
+    if (!mutationLimiter.check(`pkg-toggle:${session!.user.id}`)) return { success: false, ...rateLimitError() };
 
     const [updated] = await db.$transaction([
       db.package.update({ where: { id }, data: { available: !pkg.available } }),
@@ -557,7 +645,7 @@ export async function togglePackageAvailable(id: string): Promise<
     // Notify approvers about soft-delete scenario (available toggled on approved package)
     if (!updated.available) {
       const approvalRecord = await db.approvalRecord.findUnique({
-        where: { module_entityId: { module: "package", entityId: id } },
+        where: { module_entityId: { module: mod, entityId: id } },
         select: {
           steps: {
             where: { status: "approved" },
@@ -600,19 +688,20 @@ export async function togglePackageAvailable(id: string): Promise<
 export async function unverifyPackage(id: string): Promise<
   { success: true } | { success: false; error: string }
 > {
-  const { session, error } = await requirePermission({ module: "package", action: "set-status" });
-  if (error) return { success: false, error };
-  if (!mutationLimiter.check(`pkg-unverify:${session!.user.id}`)) return { success: false, ...rateLimitError() };
-
   try {
     const pkg = await db.package.findUnique({
       where: { id },
-      select: { approvalStatus: true, packageName: true },
+      select: { approvalStatus: true, packageName: true, category: true },
     });
     if (!pkg) return { success: false, error: "Package tidak ditemukan." };
     if (pkg.approvalStatus !== "approved") {
       return { success: false, error: "Hanya package dengan status Approved yang dapat di-unverify." };
     }
+
+    const mod = permModuleFor(pkg.category as PkgCategory);
+    const { session, error } = await requirePermission({ module: mod, action: "set-status" });
+    if (error) return { success: false, error };
+    if (!mutationLimiter.check(`pkg-unverify:${session!.user.id}`)) return { success: false, ...rateLimitError() };
 
     await db.$transaction([
       db.package.update({ where: { id }, data: { approvalStatus: "draft" } }),
@@ -621,7 +710,7 @@ export async function unverifyPackage(id: string): Promise<
     await logAudit({
       userId: session!.user.id,
       action: "package.unverify",
-      entityType: "package",
+      entityType: mod,
       entityId: id,
       description: `Package "${pkg.packageName}" di-reset dari approved ke draft`,
     });

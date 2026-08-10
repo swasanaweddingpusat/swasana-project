@@ -48,7 +48,7 @@ import {
 import { createMiceBookingSchema } from "@/lib/validations/booking-mice";
 import { createMiceDraftStep1Schema } from "@/lib/validations/booking-mice-draft";
 import type { MiceBookingItem } from "./types";
-import type { BookingPrefillLead } from "@/types/lead";
+import type { BookingPrefillLead } from "@/types/daily-activity";
 import { cn, toDateOnly, parseDateOnly } from "@/lib/utils";
 import { safeRandomUUID } from "@/lib/uuid";
 import { PhoneInput } from "@/components/shared/PhoneInput";
@@ -248,7 +248,7 @@ export function MiceBookingDrawer({
 
   const { data: leadsResult } = useQuery({
     queryKey: ["leads-search", debouncedSearch],
-    queryFn: () => fetchJson<{ items: LeadOption[] }>(`/api/leads?search=${encodeURIComponent(debouncedSearch)}&pageSize=5`),
+    queryFn: () => fetchJson<{ items: LeadOption[] }>(`/api/daily-activity?search=${encodeURIComponent(debouncedSearch)}&pageSize=5`),
     enabled: open && debouncedSearch.trim().length > 0,
   });
   const leadOptions = leadsResult?.items ?? [];

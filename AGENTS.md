@@ -449,6 +449,7 @@ Permission `(module, action)` tuples — kebab-case format:
 | `finance-ar` | `view`, `create`, `edit`, `delete` |
 | `groups` | `view`, `view-all`, `create`, `edit`, `delete` |
 | `package` | `view`, `create`, `edit`, `delete`, `set-harga`, `term-&-condition`, `set-status` |
+| `package-mice` | `view`, `create`, `edit`, `delete`, `set-harga`, `set-status` |
 | `vendor` | `view`, `create`, `edit`, `delete` |
 | `vendor-specialist` | `view`, `create`, `edit`, `delete` |
 | `settings-brands` | `view`, `create`, `edit`, `delete` |

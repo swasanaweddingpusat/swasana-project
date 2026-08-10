@@ -3,14 +3,14 @@ import { apiLimiter, mutationLimiter, rateLimitResponse } from "@/lib/rate-limit
 import { logAudit } from "@/lib/audit";
 import { db } from "@/lib/db";
 import { revalidateTag } from "next/cache";
-import { getLeadStatuses } from "@/lib/queries/leads";
-import { createLeadStatusSchema } from "@/lib/validations/lead";
+import { getLeadStatuses } from "@/lib/queries/daily-activity";
+import { createLeadStatusSchema } from "@/lib/validations/daily-activity";
 
 // ─── GET /api/lead-statuses ───────────────────────────────────────────────────
 
 export async function GET(_req: Request) {
   const { session, response } = await requirePermissionForRoute({
-    module: "leads",
+    module: "daily-activity",
     action: "view",
   });
   if (response) return response;

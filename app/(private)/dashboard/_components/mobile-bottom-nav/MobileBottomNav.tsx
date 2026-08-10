@@ -29,7 +29,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { usePermissions } from "@/hooks/use-permissions";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn, getInitials } from "@/lib/utils";
-import { useLeadDrawer } from "@/components/providers/lead-drawer-provider";
+import { useDailyActivityDrawer } from "@/components/providers/daily-activity-drawer-provider";
 import { useBookingDrawer } from "@/components/providers/booking-drawer-provider";
 import { useMiceBookingDrawer } from "@/components/providers/mice-booking-drawer-provider";
 import { useQuotationDrawer } from "@/components/providers/quotation-drawer-provider";
@@ -96,12 +96,12 @@ const NAV_ITEMS: BottomNavItem[] = [
 const CREATE_SHEET_ITEMS: CreateSheetItem[] = [
   {
     key: "lead",
-    label: "Tambah Lead",
+    label: "Tambah Daily Activity",
     description: "Catat prospek baru",
-    href: "/dashboard/leads",
+    href: "/dashboard/daily-activity",
     Icon: UserPlus,
     drawerKey: "lead",
-    visible: (can) => can("leads", "create"),
+    visible: (can) => can("daily-activity", "create"),
   },
   {
     key: "quotation",
@@ -165,13 +165,13 @@ export function MobileBottomNav(): React.JSX.Element | null {
   const { can, isLoading, isGroupMember } = usePermissions();
   const [createSheetOpen, setCreateSheetOpen] = useState(false);
   const [profileSheetOpen, setProfileSheetOpen] = useState(false);
-  const { openLeadDrawer } = useLeadDrawer();
+  const { openDailyActivityDrawer } = useDailyActivityDrawer();
   const { openBookingDrawer } = useBookingDrawer();
   const { openMiceBookingDrawer } = useMiceBookingDrawer();
   const { openQuotationDrawer } = useQuotationDrawer();
 
   const drawerOpeners: Record<DrawerKey, (opts?: OpenDrawerOptions) => void> = {
-    lead: openLeadDrawer,
+    lead: openDailyActivityDrawer,
     quotation: openQuotationDrawer,
     booking: openBookingDrawer,
     mice: openMiceBookingDrawer,

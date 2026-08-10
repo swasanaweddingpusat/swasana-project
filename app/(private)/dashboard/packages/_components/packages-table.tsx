@@ -173,7 +173,13 @@ function SkeletonTable() {
   );
 }
 
-export function PackagesTable() {
+export function PackagesTable({ packageType = "wedding" }: { packageType?: "wedding" | "mice" } = {}) {
+  const category = packageType === "mice" ? "MICE" : "WEDDINGS";
+  const permModule = packageType === "mice" ? "package-mice" : "package";
+  const approvalModule = permModule;
+  const titleLabel = packageType === "mice" ? "Mice Packages" : "Packages";
+  const addLabel = packageType === "mice" ? "Add New Mice Package" : "Add New Package";
+
   const [currentPage, setCurrentPage] = useState(1);
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -194,6 +200,7 @@ export function PackagesTable() {
     pageSize: ROWS_PER_PAGE,
     search: debouncedSearch || undefined,
     venueId: selectedVenueId,
+    category,
   });
 
   const packages = packagesResult?.data ?? [];
@@ -238,7 +245,7 @@ export function PackagesTable() {
     packageId: string;
     packageName: string;
   } | null>(null);
-  const { data: approvals = [], isLoading: approvalsLoading } = usePackageApprovals();
+  const { data: approvals = [], isLoading: approvalsLoading } = usePackageApprovals(approvalModule);
 
   // Map approvals by entityId for quick lookup
   const approvalMap = useMemo(() => {
@@ -330,7 +337,7 @@ export function PackagesTable() {
   function renderPackageActions(pkg: PackageQueryItem) {
     return (
       <>
-        {can("package", "term-&-condition") && (
+        {can(permModule,"term-&-condition") && (
           <Tooltip>
             <TooltipTrigger
               className={cn('p-1.5', 'rounded-md', 'hover:bg-muted', 'cursor-pointer')}
@@ -346,6 +353,7 @@ export function PackagesTable() {
                     pageSize: ROWS_PER_PAGE,
                     search: debouncedSearch || undefined,
                     venueId: selectedVenueId,
+                    category,
                   });
                   const updated = fresh.data.find((p) => p.id === pkg.id);
                   if (updated) setTcPkg(updated);
@@ -359,7 +367,7 @@ export function PackagesTable() {
             <TooltipContent>Term & Condition</TooltipContent>
           </Tooltip>
         )}
-        {can("package", "set-harga") && (
+        {can(permModule,"set-harga") && (
           <Tooltip>
             <TooltipTrigger
               className={cn('p-1.5', 'rounded-md', 'hover:bg-muted', 'cursor-pointer')}
@@ -418,7 +426,7 @@ export function PackagesTable() {
             </DropdownMenu>
           );
         })()}
-        {can("package", "edit") && (
+        {can(permModule,"edit") && (
           <Tooltip>
             <TooltipTrigger
               className={cn('p-1.5', 'rounded-md', 'hover:bg-muted', 'cursor-pointer', 'hidden', 'sm:flex')}
@@ -429,7 +437,7 @@ export function PackagesTable() {
             <TooltipContent>Edit</TooltipContent>
           </Tooltip>
         )}
-        {(can("package", "view") || can("package", "create") || can("package", "delete") || (can("package", "set-status") && pkg.approvalStatus === "approved")) && (
+        {(can(permModule,"view") || can(permModule,"create") || can(permModule,"delete") || (can(permModule,"set-status") && pkg.approvalStatus === "approved")) && (
           <DropdownMenu>
             <Tooltip>
               <DropdownMenuTrigger asChild>
@@ -442,7 +450,7 @@ export function PackagesTable() {
               <TooltipContent>Lainnya</TooltipContent>
             </Tooltip>
             <DropdownMenuContent align="end">
-              {can("package", "view") && (
+              {can(permModule,"view") && (
                 <DropdownMenuItem
                   onSelect={() => { setDetailPkg(pkg); setDetailOpen(true); }}
                 >
@@ -450,7 +458,7 @@ export function PackagesTable() {
                   Lihat Detail
                 </DropdownMenuItem>
               )}
-              {can("package", "view") && (
+              {can(permModule,"view") && (
                 <DropdownMenuItem
                   onSelect={() => {
                     setPreviewTarget({ packageId: pkg.id, packageName: pkg.packageName });
@@ -461,7 +469,7 @@ export function PackagesTable() {
                   Preview PO
                 </DropdownMenuItem>
               )}
-              {can("package", "create") && (
+              {can(permModule,"create") && (
                 <DropdownMenuItem
                   onSelect={() => { setPkgToDuplicate(pkg); setDuplicateConfirmOpen(true); }}
                 >
@@ -469,9 +477,9 @@ export function PackagesTable() {
                   Duplikat
                 </DropdownMenuItem>
               )}
-              {can("package", "set-status") && pkg.approvalStatus === "approved" && (
+              {can(permModule,"set-status") && pkg.approvalStatus === "approved" && (
                 <>
-                  {can("package", "view") && <DropdownMenuSeparator />}
+                  {can(permModule,"view") && <DropdownMenuSeparator />}
                   <DropdownMenuItem
                     disabled={unverifyMutation.isPending}
                     onSelect={async () => {
@@ -486,9 +494,9 @@ export function PackagesTable() {
                   </DropdownMenuItem>
                 </>
               )}
-              {can("package", "delete") && (
+              {can(permModule,"delete") && (
                 <>
-                  {can("package", "view") && <DropdownMenuSeparator />}
+                  {can(permModule,"view") && <DropdownMenuSeparator />}
                   <DropdownMenuItem
                     onSelect={() => { setPkgToDelete(pkg.id); setDeleteConfirmOpen(true); }}
                     className="text-destructive focus:text-destructive"
@@ -507,17 +515,17 @@ export function PackagesTable() {
 
   // Mobile actions — compact single dropdown "..." with all secondary actions
   function renderMobileActions(pkg: PackageQueryItem) {
-    const hasTc = can("package", "term-&-condition");
-    const hasSetHarga = can("package", "set-harga");
-    const hasPreview = can("package", "view");
-    const hasDuplicate = can("package", "create");
-    const hasDelete = can("package", "delete");
+    const hasTc = can(permModule,"term-&-condition");
+    const hasSetHarga = can(permModule,"set-harga");
+    const hasPreview = can(permModule,"view");
+    const hasDuplicate = can(permModule,"create");
+    const hasDelete = can(permModule,"delete");
 
     const approvalRecord = approvalMap.get(pkg.id);
     const hasApproval = !!approvalRecord &&
       approvalRecord.status !== "approved" &&
       pkg.approvalStatus !== "approved";
-    const hasUnverify = can("package", "set-status") && pkg.approvalStatus === "approved";
+    const hasUnverify = can(permModule,"set-status") && pkg.approvalStatus === "approved";
 
     const hasAnySecondary = hasTc || hasSetHarga || hasPreview || hasDuplicate || hasDelete || hasApproval || hasUnverify;
     if (!hasAnySecondary) return null;
@@ -545,6 +553,7 @@ export function PackagesTable() {
                     pageSize: ROWS_PER_PAGE,
                     search: debouncedSearch || undefined,
                     venueId: selectedVenueId,
+                    category,
                   });
                   const updated = fresh.data.find((p) => p.id === pkg.id);
                   if (updated) setTcPkg(updated);
@@ -661,7 +670,7 @@ export function PackagesTable() {
           <div className="flex flex-col gap-2 px-4 pt-0 pb-3 border-b sm:hidden">
             {/* Row 1 */}
             <div className="flex items-center gap-2">
-              <h2 className={cn('text-base', 'font-bold', 'text-foreground')}>Packages</h2>
+              <h2 className={cn('text-base', 'font-bold', 'text-foreground')}>{titleLabel}</h2>
               <span className={cn('text-sm', 'text-muted-foreground')}>({total})</span>
               <button onClick={handleRefresh} disabled={refreshing} className={cn('p-1', 'rounded-md', 'hover:bg-muted', 'cursor-pointer', 'text-muted-foreground')}>
                 <Refresh weight="BoldDuotone" className={cn("h-3.5 w-3.5", refreshing && "animate-spin")} />
@@ -689,13 +698,13 @@ export function PackagesTable() {
                   ))}
                 </SelectContent>
               </Select>
-              {selectedIds.size > 0 && can("package", "delete") && (
+              {selectedIds.size > 0 && can(permModule,"delete") && (
                 <Button variant="destructive" size="icon" onClick={() => setBulkDeleteOpen(true)} aria-label={`Hapus ${selectedIds.size} paket`} className="shrink-0">
                   <TrashBinTrash weight="BoldDuotone" className="h-4 w-4" />
                 </Button>
               )}
-              {canCreate("package") && (
-                <Button size="icon" onClick={openAdd} aria-label="Add New Package" className="shrink-0">
+              {canCreate(permModule) && (
+                <Button size="icon" onClick={openAdd} aria-label={addLabel} className="shrink-0">
                   <AddCircle weight="BoldDuotone" className="h-4 w-4" />
                 </Button>
               )}
@@ -716,7 +725,7 @@ export function PackagesTable() {
           {/* ── Desktop toolbar (sm+) ── */}
           <div className={cn('hidden', 'sm:flex', 'flex-row', 'items-center', 'justify-between', 'gap-3', 'px-6', 'pt-0', 'pb-4', 'border-b')}>
             <div className={cn('flex', 'items-center', 'gap-2')}>
-              <h2 className={cn('text-base', 'font-bold', 'text-foreground')}>Packages</h2>
+              <h2 className={cn('text-base', 'font-bold', 'text-foreground')}>{titleLabel}</h2>
               <span className={cn('text-sm', 'text-muted-foreground')}>({total})</span>
               <button onClick={handleRefresh} disabled={refreshing} className={cn('p-1', 'rounded-md', 'hover:bg-muted', 'cursor-pointer', 'text-muted-foreground')}>
                 <Refresh weight="BoldDuotone" className={cn("h-3.5 w-3.5", refreshing && "animate-spin")} />
@@ -750,14 +759,14 @@ export function PackagesTable() {
                   ))}
                 </SelectContent>
               </Select>
-              {selectedIds.size > 0 && can("package", "delete") && (
+              {selectedIds.size > 0 && can(permModule,"delete") && (
                 <Button variant="destructive" onClick={() => setBulkDeleteOpen(true)} className={cn('cursor-pointer', 'flex', 'items-center', 'gap-2')}>
                   <TrashBinTrash weight="BoldDuotone" className={cn('h-4', 'w-4')} /> Delete ({selectedIds.size})
                 </Button>
               )}
-              {canCreate("package") && (
+              {canCreate(permModule) && (
                 <Button onClick={openAdd} className={cn('cursor-pointer', 'flex', 'items-center', 'gap-2')}>
-                  <AddCircle weight="BoldDuotone" className={cn('h-4', 'w-4')} /> Add New Package
+                  <AddCircle weight="BoldDuotone" className={cn('h-4', 'w-4')} /> {addLabel}
                 </Button>
               )}
             </div>
@@ -816,7 +825,7 @@ export function PackagesTable() {
                         <TableCell className={cn('hidden', 'lg:table-cell')}>{pkg.pax ?? 0}</TableCell>
                         <TableCell className={cn('hidden', 'lg:table-cell')}>{getPackagePrice(pkg)}</TableCell>
                         <TableCell>
-                          {can("package", "set-status") ? (
+                          {can(permModule,"set-status") ? (
                             <button
                               type="button"
                               onClick={async () => {
@@ -893,7 +902,7 @@ export function PackagesTable() {
                             {rowNumber}. {pkg.packageName}
                           </span>
                         </div>
-                        {can("package", "set-status") ? (
+                        {can(permModule,"set-status") ? (
                           <button
                             type="button"
                             onClick={async () => {
@@ -956,7 +965,7 @@ export function PackagesTable() {
 
                       {/* Footer: action buttons — primary CTAs + compact secondary dropdown */}
                       <div className={cn('flex', 'items-center', 'gap-1.5', 'pt-2', 'border-t', 'border-border')}>
-                        {can("package", "edit") && (
+                        {can(permModule,"edit") && (
                           <Button
                             variant="outline"
                             className={cn('h-9', 'flex-1', 'text-xs', 'rounded-xl')}
@@ -966,7 +975,7 @@ export function PackagesTable() {
                             <PenNewSquare weight="BoldDuotone" aria-hidden="true" className={cn('h-3.5', 'w-3.5', 'mr-1', 'text-muted-foreground')} /> Edit
                           </Button>
                         )}
-                        {can("package", "view") && (
+                        {can(permModule,"view") && (
                           <Button
                             variant="outline"
                             className={cn('h-9', 'flex-1', 'text-xs', 'rounded-xl')}
@@ -1023,6 +1032,7 @@ export function PackagesTable() {
         isOpen={drawerOpen}
         onClose={() => { setDrawerOpen(false); setEditingPkg(null); }}
         editingPackage={editingPkg}
+        packageType={packageType}
       />
 
       {/* Detail Modal */}
@@ -1053,6 +1063,7 @@ export function PackagesTable() {
           userProfileId={user.profileId}
           userRoleId={user.roleId}
           isSuperAdmin={user.isSuperAdmin}
+          module={approvalModule}
         />
       )}
 

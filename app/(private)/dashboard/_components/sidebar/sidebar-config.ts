@@ -23,7 +23,7 @@ import {
   GraphNew,
   TicketSale,
   Settings,
-  Volume,
+  ClipboardList,
   Bill,
   DocumentAdd,
   Sledgehammer,
@@ -39,6 +39,7 @@ import {
   BillList,
   BellBing,
   Wallet2,
+  Case,
 } from "@solar-icons/react";
 
 type SolarIcon = ForwardRefExoticComponent<Omit<IconProps, "ref"> & RefAttributes<SVGSVGElement>>;
@@ -81,7 +82,7 @@ export const SETTINGS_MODULES = [
   "settings-role-permission",
   "settings-source-of-information",
   "settings-lead-status",
-  "settings-lead-segment",
+  "settings-daily-activity-segment",
   "settings-maintenance-category",
   "settings-maintenance-priority",
   "settings-maintenance-status",
@@ -108,10 +109,10 @@ export const navItems: NavItem[] = [
     permission: { module: "groups", action: "view" },
   },
   {
-    name: "Leads",
-    href: "/dashboard/leads",
-    icon: Volume,
-    permission: { module: "leads", action: "view" },
+    name: "Daily Activity",
+    href: "/dashboard/daily-activity",
+    icon: ClipboardList,
+    permission: { module: "daily-activity", action: "view" },
   },
   {
     name: "Quotations",
@@ -166,10 +167,16 @@ export const navItems: NavItem[] = [
     permission: { module: "vendor-specialist", action: "view" },
   },
   {
-    name: "Package",
+    name: "Wedding Package",
     href: "/dashboard/packages",
     icon: Documents,
     permission: { module: "package", action: "view" },
+  },
+  {
+    name: "Mice Package",
+    href: "/dashboard/package-mice",
+    icon: Case,
+    permission: { module: "package-mice", action: "view" },
   },
   {
     name: "Complimentary",

@@ -5,7 +5,7 @@ import { Header } from "./_components/header/header";
 import { AuthGate } from "../_components/auth-gate";
 import { HeaderActionProvider } from "@/components/providers/header-action-provider";
 import { BookingDrawerProvider } from "@/components/providers/booking-drawer-provider";
-import { LeadDrawerProvider } from "@/components/providers/lead-drawer-provider";
+import { DailyActivityDrawerProvider } from "@/components/providers/daily-activity-drawer-provider";
 import { QuotationDrawerProvider } from "@/components/providers/quotation-drawer-provider";
 import { MiceBookingDrawerProvider } from "@/components/providers/mice-booking-drawer-provider";
 import { ProcurementDrawerProvider } from "@/components/providers/procurement-drawer-provider";
@@ -24,7 +24,7 @@ export default function DashboardLayout({
         <BookingDrawerProvider>
           <MiceBookingDrawerProvider>
             <QuotationDrawerProvider>
-              <LeadDrawerProvider>
+              <DailyActivityDrawerProvider>
                 <ProcurementDrawerProvider>
                 <Suspense fallback={null}>
                   <SwasanaSidebar />
@@ -45,7 +45,7 @@ export default function DashboardLayout({
                   <ServiceWorkerRegister />
                 </SidebarInset>
               </ProcurementDrawerProvider>
-              </LeadDrawerProvider>
+              </DailyActivityDrawerProvider>
             </QuotationDrawerProvider>
           </MiceBookingDrawerProvider>
         </BookingDrawerProvider>

@@ -12,6 +12,7 @@ import {
   deleteBulkPackages,
   saveVendorItems,
   saveInternalItems,
+  saveMiceItems,
   savePackagePrices,
   updatePackageTC,
   togglePackageAvailable,
@@ -24,7 +25,7 @@ import type { ApprovalRecordWithSteps } from "@/lib/queries/packages";
 
 export function usePackages(params: FetchPackagesParams = {}) {
   return useQuery<PackagesQueryResult>({
-    queryKey: ["packages", params.page ?? 1, params.pageSize ?? 10, params.search ?? "", params.venueId ?? ""],
+    queryKey: ["packages", params.page ?? 1, params.pageSize ?? 10, params.search ?? "", params.venueId ?? "", params.category ?? "WEDDINGS"],
     queryFn: () => fetchPackages(params),
     placeholderData: keepPreviousData,
     staleTime: 60 * 1000,
@@ -100,11 +101,25 @@ export function useSaveInternalItems() {
   });
 }
 
-export function usePackageApprovals() {
+export function useSaveMiceItems() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      packageId,
+      items,
+    }: {
+      packageId: string;
+      items: { itemName: string; itemDescription: string; itemType: string; itemPrice: number }[];
+    }) => saveMiceItems(packageId, items),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["packages"] }),
+  });
+}
+
+export function usePackageApprovals(module: string = "package") {
   return useQuery<ApprovalRecordWithSteps[]>({
-    queryKey: ["package-approvals"],
+    queryKey: ["package-approvals", module],
     queryFn: async () => {
-      const res = await fetch("/api/approval-records?module=package");
+      const res = await fetch(`/api/approval-records?module=${module}`);
       if (!res.ok) throw new Error("Failed to fetch");
       const json = await res.json();
       return json.data ?? json;

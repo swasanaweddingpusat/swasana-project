@@ -40,7 +40,7 @@ export interface CheckSlotResult {
  */
 export async function checkSlotAvailability(data: unknown): Promise<CheckSlotResult> {
   const { session: authSession, error } = await requirePermission({
-    module: "leads",
+    module: "daily-activity",
     action: "edit",
   });
   if (error) return { success: false, error };

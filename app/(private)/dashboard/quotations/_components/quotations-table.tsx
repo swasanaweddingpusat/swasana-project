@@ -22,6 +22,10 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  DropdownMenuSub,
+  DropdownMenuSubTrigger,
+  DropdownMenuSubContent,
+  DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import {
   AddCircle,
@@ -36,6 +40,8 @@ import {
   TrashBinTrash,
   Refresh,
   Filter,
+  CheckCircle,
+  AltArrowRight,
 } from "@solar-icons/react";
 import {
   Popover,
@@ -43,7 +49,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
-import { useQuotations, useDeleteQuotation } from "@/hooks/use-quotations";
+import { useQuotations, useDeleteQuotation, useUpdateQuotationStatus } from "@/hooks/use-quotations";
 import type { QuotationListRow } from "@/lib/queries/quotations";
 import { QuotationDrawer } from "./quotation-drawer";
 import { QuotationPreview } from "./quotation-preview";
@@ -245,7 +251,7 @@ const STATUS_META: Record<QuotationStatus, StatusMeta> = {
     badgeVariant: "secondary",
   },
   accepted: {
-    label: "Accepted",
+    label: "Dealing",
     dotClass: "bg-foreground border border-foreground",
     badgeVariant: "default",
   },
@@ -331,6 +337,8 @@ export function QuotationsTable() {
   });
 
   const deleteQuotation = useDeleteQuotation();
+  const updateStatus = useUpdateQuotationStatus();
+  const [updatingStatusId, setUpdatingStatusId] = useState<string | null>(null);
 
   const rawRows = quotationsResult?.data ?? [];
   const total = quotationsResult?.total ?? 0;
@@ -354,6 +362,18 @@ export function QuotationsTable() {
 
   function handleConvertToBooking(q: QuotationItem) {
     toast.info(`Convert ke Booking untuk ${q.leadName} — coming soon.`);
+  }
+
+  async function handleStatusChange(q: QuotationItem, status: QuotationStatus) {
+    if (q.status === status) return;
+    setUpdatingStatusId(q.id);
+    const result = await updateStatus.mutateAsync({ id: q.id, status });
+    setUpdatingStatusId(null);
+    if (result.success) {
+      toast.success(`Status diubah ke "${STATUS_META[status].label}".`);
+    } else {
+      toast.error(result.error ?? "Gagal mengubah status.");
+    }
   }
 
   async function handleDelete(q: QuotationItem) {
@@ -609,25 +629,23 @@ export function QuotationsTable() {
                 <Table className="w-full table-fixed">
                   <TableHeader>
                     <TableRow>
-                      {/* # — 4% — always visible */}
-                      <TableHead className="w-[4%] text-center">#</TableHead>
-                      {/* Customer — 18% — always visible */}
+                      {/* # — 3% */}
+                      <TableHead className="w-[3%] text-center">#</TableHead>
+                      {/* Customer — 18% */}
                       <TableHead className="w-[18%]">Customer</TableHead>
-                      {/* Venue — 18% — always visible */}
-                      <TableHead className="w-[18%]">Venue</TableHead>
-                      {/* Sales — 16% — hidden on xs, visible sm+ */}
-                      <TableHead className="w-[16%] hidden sm:table-cell">
-                        Sales
-                      </TableHead>
-                      {/* Event — 18% — hidden until lg */}
-                      <TableHead className="w-[18%] hidden lg:table-cell">
-                        Event
-                      </TableHead>
-                      {/* Total — 14% — always visible, right-aligned */}
-                      <TableHead className="w-[14%] text-right">Total</TableHead>
-                      {/* Status — 9% — always visible */}
-                      <TableHead className="w-[9%]">Status</TableHead>
-                      {/* Actions — 5% — always visible */}
+                      {/* Venue — 15% */}
+                      <TableHead className="w-[15%]">Venue</TableHead>
+                      {/* Sales — 14% — hidden xs */}
+                      <TableHead className="w-[14%] hidden sm:table-cell">Sales</TableHead>
+                      {/* Submit Date — 11% — hidden until md */}
+                      <TableHead className="w-[11%] hidden md:table-cell">Submit</TableHead>
+                      {/* Event Date — 11% — hidden until xl */}
+                      <TableHead className="w-[11%] hidden xl:table-cell">Event</TableHead>
+                      {/* Total — 13% — right-aligned */}
+                      <TableHead className="w-[13%] text-right">Total</TableHead>
+                      {/* Status — 10% */}
+                      <TableHead className="w-[10%]">Status</TableHead>
+                      {/* Actions — 5% */}
                       <TableHead className="w-[5%]" />
                     </TableRow>
                   </TableHeader>
@@ -700,19 +718,18 @@ export function QuotationsTable() {
                             </div>
                           </TableCell>
 
-                          {/* Event — hidden until lg */}
-                          <TableCell className="min-w-0 hidden lg:table-cell">
-                            <div className="min-w-0">
-                              <span className="block truncate text-sm">
-                                {q.eventDate ? formatDate(q.eventDate) : "—"}
-                              </span>
-                              <span
-                                title={q.eventType}
-                                className="block truncate text-xs text-muted-foreground"
-                              >
-                                {q.eventType}
-                              </span>
-                            </div>
+                          {/* Submit Date — hidden until md */}
+                          <TableCell className="min-w-0 hidden md:table-cell">
+                            <span className="block text-sm tabular-nums text-muted-foreground">
+                              {q.createdAt ? formatDate(q.createdAt) : "—"}
+                            </span>
+                          </TableCell>
+
+                          {/* Event Date — hidden until xl */}
+                          <TableCell className="min-w-0 hidden xl:table-cell">
+                            <span className="block text-sm tabular-nums">
+                              {q.eventDate ? formatDate(q.eventDate) : "—"}
+                            </span>
                           </TableCell>
 
                           {/* Total */}
@@ -746,40 +763,50 @@ export function QuotationsTable() {
                               </DropdownMenuTrigger>
                               <DropdownMenuContent align="end">
                                 <DropdownMenuItem onClick={() => handlePreview(q)}>
-                                  <Eye
-                                    weight="BoldDuotone"
-                                    aria-hidden="true"
-                                    className="h-4 w-4 mr-2 text-primary"
-                                  />
+                                  <Eye weight="BoldDuotone" aria-hidden="true" className="h-4 w-4 mr-2 text-primary" />
                                   Lihat / Cetak
                                 </DropdownMenuItem>
                                 <DropdownMenuItem onClick={() => handleEdit(q)}>
-                                  <Pen
-                                    weight="BoldDuotone"
-                                    aria-hidden="true"
-                                    className="h-4 w-4 mr-2 text-primary"
-                                  />
+                                  <Pen weight="BoldDuotone" aria-hidden="true" className="h-4 w-4 mr-2 text-primary" />
                                   Edit
                                 </DropdownMenuItem>
+                                {/* ── Ubah Status sub-menu ── */}
+                                <DropdownMenuSub>
+                                  <DropdownMenuSubTrigger>
+                                    <AltArrowRight weight="BoldDuotone" aria-hidden="true" className="h-4 w-4 mr-2 text-primary" />
+                                    Ubah Status
+                                  </DropdownMenuSubTrigger>
+                                  <DropdownMenuSubContent>
+                                    {ALL_STATUSES.map((s) => (
+                                      <DropdownMenuItem
+                                        key={s}
+                                        disabled={q.status === s || updatingStatusId === q.id}
+                                        onClick={(e) => { e.stopPropagation(); void handleStatusChange(q, s); }}
+                                      >
+                                        <StatusDot className={cn("mr-2", q.status === s ? "bg-foreground border border-foreground" : STATUS_META[s].dotClass)} />
+                                        {STATUS_META[s].label}
+                                        {q.status === s && (
+                                          <CheckCircle weight="BoldDuotone" className="h-3.5 w-3.5 ml-auto text-primary" />
+                                        )}
+                                      </DropdownMenuItem>
+                                    ))}
+                                  </DropdownMenuSubContent>
+                                </DropdownMenuSub>
                                 {q.status === "accepted" && (
-                                  <DropdownMenuItem onClick={() => handleConvertToBooking(q)}>
-                                    <CalendarMark
-                                      weight="BoldDuotone"
-                                      aria-hidden="true"
-                                      className="h-4 w-4 mr-2 text-primary"
-                                    />
-                                    Convert ke Booking
-                                  </DropdownMenuItem>
+                                  <>
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuItem onClick={() => handleConvertToBooking(q)}>
+                                      <CalendarMark weight="BoldDuotone" aria-hidden="true" className="h-4 w-4 mr-2 text-primary" />
+                                      Convert ke Booking
+                                    </DropdownMenuItem>
+                                  </>
                                 )}
+                                <DropdownMenuSeparator />
                                 <DropdownMenuItem
                                   onClick={() => handleDelete(q)}
                                   className="text-destructive focus:text-destructive"
                                 >
-                                  <TrashBinTrash
-                                    weight="BoldDuotone"
-                                    aria-hidden="true"
-                                    className="h-4 w-4 mr-2"
-                                  />
+                                  <TrashBinTrash weight="BoldDuotone" aria-hidden="true" className="h-4 w-4 mr-2" />
                                   Hapus
                                 </DropdownMenuItem>
                               </DropdownMenuContent>
