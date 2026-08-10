@@ -103,7 +103,7 @@ export async function getApprovalRecord(module: string, entityId: string) {
     where: { module_entityId: { module, entityId } },
     include: {
       steps: {
-        orderBy: { stepOrder: "asc" },
+        orderBy: [{ createdAt: "asc" }, { stepOrder: "asc" }],
         include: {
           approverRole: { select: { id: true, name: true } },
           approverUser: { select: { id: true, fullName: true } },
