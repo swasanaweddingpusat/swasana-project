@@ -13,6 +13,31 @@ import {
 } from "@/lib/validations/daily-activity";
 import type { CreateDailyActivityInput, UpdateDailyActivityInput, UpdateDailyActivityStatusInput } from "@/lib/validations/daily-activity";
 import type { WeddingSession } from "@prisma/client";
+import type { z } from "zod";
+
+// ─── Field-level error mapping ────────────────────────────────────────────────
+
+/**
+ * Flatten a ZodError into a { fieldName: message } map keyed by the FE form's
+ * field names, so the drawer can render inline errors under the right input.
+ * The nested contactNumbers[i].{label,number} paths map back to the flat
+ * picName / picPhone inputs the drawer actually uses.
+ */
+function buildFieldErrors(error: z.ZodError): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const issue of error.issues) {
+    const [head, , sub] = issue.path;
+    let key: string;
+    if (head === "contactNumbers") {
+      key = sub === "label" ? "picName" : "picPhone";
+    } else {
+      key = String(head);
+    }
+    // Keep the first message per field (Zod emits most-specific first).
+    if (key && !out[key]) out[key] = issue.message;
+  }
+  return out;
+}
 
 // ─── Slot conflict guard (locked leads only) ──────────────────────────────────
 
@@ -132,7 +157,11 @@ export async function createDailyActivity(data: CreateDailyActivityInput) {
 
   const parsed = createDailyActivitySchema.safeParse(data);
   if (!parsed.success) {
-    return { success: false as const, error: parsed.error.issues[0].message };
+    return {
+      success: false as const,
+      error: parsed.error.issues[0].message,
+      fieldErrors: buildFieldErrors(parsed.error),
+    };
   }
 
   const {
@@ -157,6 +186,8 @@ export async function createDailyActivity(data: CreateDailyActivityInput) {
     weddingSessionAlt,
     instansi,
     segmentId,
+    instagramUrl,
+    siteVisitDate,
     venueId,
     venueSecondaryId,
     packageId,
@@ -207,6 +238,8 @@ export async function createDailyActivity(data: CreateDailyActivityInput) {
           weddingSessionAlt: weddingSessionAlt ?? null,
           instansi: category === "MICE" ? (instansi?.trim() || null) : null,
           segmentId: category === "MICE" ? (segmentId || null) : null,
+          instagramUrl: category === "MICE" ? (instagramUrl?.trim() || null) : null,
+          siteVisitDate: category === "MICE" && siteVisitDate ? new Date(siteVisitDate) : null,
           venueId: venueId || null,
           venueSecondaryId: venueSecondaryId || null,
           packageId: packageId || null,
@@ -258,7 +291,11 @@ export async function updateDailyActivity(data: UpdateDailyActivityInput) {
 
   const parsed = updateDailyActivitySchema.safeParse(data);
   if (!parsed.success) {
-    return { success: false as const, error: parsed.error.issues[0].message };
+    return {
+      success: false as const,
+      error: parsed.error.issues[0].message,
+      fieldErrors: buildFieldErrors(parsed.error),
+    };
   }
 
   const { id, ...fields } = parsed.data;
@@ -319,6 +356,10 @@ export async function updateDailyActivity(data: UpdateDailyActivityInput) {
           ...(fields.weddingSessionAlt !== undefined && { weddingSessionAlt: fields.weddingSessionAlt ?? null }),
           ...(fields.instansi !== undefined && { instansi: fields.instansi?.trim() || null }),
           ...(fields.segmentId !== undefined && { segmentId: fields.segmentId || null }),
+          ...(fields.instagramUrl !== undefined && { instagramUrl: fields.instagramUrl?.trim() || null }),
+          ...(fields.siteVisitDate !== undefined && {
+            siteVisitDate: fields.siteVisitDate ? new Date(fields.siteVisitDate) : null,
+          }),
           ...(fields.assignedToId !== undefined && { assignedToId: fields.assignedToId || null }),
           ...(fields.statusId !== undefined && { statusId: fields.statusId }),
           ...(fields.bitrixId !== undefined && { bitrixId: fields.bitrixId || null }),

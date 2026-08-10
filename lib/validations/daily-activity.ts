@@ -52,6 +52,10 @@ const baseDailyActivitySchema = z.object({
   instansi: z.string().trim().max(200).optional(),
   // FK ke DailyActivitySegment (MICE segment ternormalisasi). Null utk wedding.
   segmentId: z.string().optional().nullable(),
+  // MICE prospecting: IG boleh username saja ATAU full URL (disimpan apa adanya, tak dinormalisasi).
+  instagramUrl: z.string().trim().max(200, "Instagram terlalu panjang").optional().or(z.literal("")),
+  // MICE prospecting: jadwal site visit ("YYYY-MM-DD"). Opsional.
+  siteVisitDate: z.string().optional().or(z.literal("")),
   category: z.enum(["WEDDINGS", "MICE"]).default("WEDDINGS"),
   venueId: z.string().optional(),
   venueSecondaryId: z.string().optional().nullable(),

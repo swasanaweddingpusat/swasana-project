@@ -226,6 +226,8 @@ export function DailyActivityDrawer({ open, onOpenChange, editLead, onSuccess }:
   // ── Submit state ───────────────────────────────────────────────────────────
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  // Per-field validation errors returned by the server action (Zod fieldErrors).
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   // ── Data hooks ─────────────────────────────────────────────────────────────
   const { data: venues = [] } = useVenues();
@@ -334,9 +336,8 @@ export function DailyActivityDrawer({ open, onOpenChange, editLead, onSuccess }:
         : 0,
       bookingFeeDate: dateToString(editLead.bookingFeeDate),
       address: editLead.address ?? "",
-      // NOTE(UI-first): instagramUrl / siteVisitDate belum dikirim — field DB-nya belum ada.
-      instagramUrl: "",
-      siteVisitDate: "",
+      instagramUrl: editLead.instagramUrl ?? "",
+      siteVisitDate: dateToString(editLead.siteVisitDate),
     });
 
     setExistingEvidenceUrl(editLead.bookingFeeEvidenceUrl ?? null);
@@ -405,6 +406,13 @@ export function DailyActivityDrawer({ open, onOpenChange, editLead, onSuccess }:
     value: EditLeadFormState[K],
   ) => {
     setForm((prev) => ({ ...prev, [key]: value }));
+    // Clear this field's inline error as soon as the user edits it.
+    setFieldErrors((prev) => {
+      if (!prev[key as string]) return prev;
+      const next = { ...prev };
+      delete next[key as string];
+      return next;
+    });
   }, []);
 
   function handleClose() {
@@ -415,6 +423,7 @@ export function DailyActivityDrawer({ open, onOpenChange, editLead, onSuccess }:
     if (isIncomplete || isSubmitting || !editLead) return;
     setIsSubmitting(true);
     setSubmitError(null);
+    setFieldErrors({});
 
     try {
       // 1. Upload bukti bayar baru jika ada (replace existing)
@@ -457,6 +466,8 @@ export function DailyActivityDrawer({ open, onOpenChange, editLead, onSuccess }:
         addressCpp: isWedding ? (form.addressCpp || undefined) : undefined,
         addressCpw: isWedding ? (form.addressCpw || undefined) : undefined,
         address: isMice ? (form.address || undefined) : undefined,
+        instagramUrl: isMice ? (form.instagramUrl || undefined) : undefined,
+        siteVisitDate: isMice ? (form.siteVisitDate || undefined) : undefined,
         eventDate: form.eventDate,
         eventDateAlt: form.eventDateAlt || null,
         time: form.time || undefined,
@@ -482,6 +493,9 @@ export function DailyActivityDrawer({ open, onOpenChange, editLead, onSuccess }:
 
       if (!result.success) {
         setSubmitError(result.error ?? "Gagal menyimpan lead.");
+        if ("fieldErrors" in result && result.fieldErrors) {
+          setFieldErrors(result.fieldErrors);
+        }
         return;
       }
 
@@ -602,6 +616,9 @@ export function DailyActivityDrawer({ open, onOpenChange, editLead, onSuccess }:
                   placeholder={isMice ? "e.g. PT Maju Bersama" : "e.g. Budi & Siti"}
                   className="rounded-xl"
                 />
+                {fieldErrors.name && (
+                  <p className="text-xs text-destructive">{fieldErrors.name}</p>
+                )}
               </div>
 
               {isMice && (
@@ -744,6 +761,9 @@ export function DailyActivityDrawer({ open, onOpenChange, editLead, onSuccess }:
                   placeholder={isMice ? "Nama penanggung jawab..." : "e.g. Nama CPP / CPW..."}
                   className="rounded-xl"
                 />
+                {fieldErrors.picName && (
+                  <p className="text-xs text-destructive">{fieldErrors.picName}</p>
+                )}
               </div>
 
               <div className="flex flex-col gap-1.5">
@@ -753,9 +773,12 @@ export function DailyActivityDrawer({ open, onOpenChange, editLead, onSuccess }:
                 <PhoneInput
                   value={form.picPhone}
                   onChange={(v) => setField("picPhone", v)}
-                  maxNationalDigits={14}
+                  maxNationalDigits={13}
                   wrapperClassName="rounded-xl"
                 />
+                {fieldErrors.picPhone && (
+                  <p className="text-xs text-destructive">{fieldErrors.picPhone}</p>
+                )}
               </div>
             </div>
 
@@ -1256,6 +1279,9 @@ export function DailyActivityDrawer({ open, onOpenChange, editLead, onSuccess }:
                     className="rounded-xl pl-7"
                   />
                 </div>
+                {fieldErrors.instagramUrl && (
+                  <p className="text-xs text-destructive">{fieldErrors.instagramUrl}</p>
+                )}
                 <p className="text-[10px] text-muted-foreground">
                   Boleh isi username (mis. cosmaxindonesia) atau tempel link lengkap.
                 </p>

@@ -61,6 +61,8 @@ export type DailyActivityListItem = {
   bitrixId: string | null;
   instansi: string | null; // legacy free-text segment fallback (MICE)
   segmentId: string | null;
+  instagramUrl: string | null; // MICE: username atau full URL
+  siteVisitDate: Date | null; // MICE: jadwal kunjungan venue
   isDateLocked: boolean;
   bookingFeeAmount: number | null;
   bookingFeeDate: Date | null;

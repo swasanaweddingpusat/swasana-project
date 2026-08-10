@@ -46,6 +46,8 @@ const leadSelect = {
   bitrixId: true,
   instansi: true,
   segmentId: true,
+  instagramUrl: true,
+  siteVisitDate: true,
   isDateLocked: true,
   bookingFeeAmount: true,
   bookingFeeDate: true,

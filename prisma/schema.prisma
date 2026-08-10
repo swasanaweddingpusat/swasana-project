@@ -1774,7 +1774,7 @@ model LeadStatus {
   @@map("lead_statuses")
 }
 
-model LeadSegment {
+model DailyActivitySegment {
   id        String   @id @default(uuid())
   name      String
   isActive  Boolean  @default(true)
@@ -1783,6 +1783,7 @@ model LeadSegment {
   updatedAt DateTime @updatedAt
   leads     DailyActivity[]
 
+  // Physical table kept as "lead_segments" — no data migration needed.
   @@index([sortOrder])
   @@map("lead_segments")
 }
@@ -1812,7 +1813,11 @@ model DailyActivity {
 
   bitrixId  String?
   instansi  String? // DEPRECATED: legacy free-text segment (MICE). Digantikan segmentId; masih dibaca sebagai fallback sampai kolom di-drop.
-  segmentId String? // FK ke LeadSegment (MICE segment ternormalisasi)
+  segmentId String? // FK ke DailyActivitySegment (MICE segment ternormalisasi)
+
+  // MICE prospecting fields (dipindah dari Google Sheet "Daily Activity MICE")
+  instagramUrl  String? // handle/username ATAU full URL IG prospek — disimpan apa adanya
+  siteVisitDate DateTime? // jadwal kunjungan venue (site visit)
 
   // Date locking (booking fee)
   isDateLocked          Boolean   @default(false)
@@ -1843,7 +1848,7 @@ model DailyActivity {
   package             Package?             @relation(fields: [packageId], references: [id], onDelete: SetNull)
   eventType           EventType?           @relation(fields: [eventTypeId], references: [id], onDelete: SetNull)
   sourceOfInformation SourceOfInformation? @relation(fields: [sourceOfInformationId], references: [id], onDelete: SetNull)
-  segment             LeadSegment?         @relation(fields: [segmentId], references: [id], onDelete: SetNull)
+  segment             DailyActivitySegment? @relation(fields: [segmentId], references: [id], onDelete: SetNull)
   status              LeadStatus           @relation(fields: [statusId], references: [id], onDelete: Restrict)
   createdBy           Profile              @relation(fields: [createdById], references: [id], onDelete: Restrict)
   assignedTo          Profile?             @relation("LeadAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
