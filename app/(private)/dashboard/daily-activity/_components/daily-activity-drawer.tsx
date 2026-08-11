@@ -63,7 +63,7 @@ import {
   fmtCurrency,
   mapCodeToWeddingEventType,
 } from "./daily-activity-form-fields";
-import type { DailyActivityListItem, ContactNumber } from "@/types/daily-activity";
+import type { DailyActivityListItem } from "@/types/daily-activity";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 

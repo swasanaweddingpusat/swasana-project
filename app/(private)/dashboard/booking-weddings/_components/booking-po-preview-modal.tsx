@@ -29,6 +29,8 @@ export interface BookingPOPreviewTarget {
   revisionId?: string;
   /** Label shown in the dialog title (e.g. customer name + "Rev 2"). */
   label: string;
+  /** Render endpoint. Defaults to the V1 PO route. */
+  endpoint?: string;
 }
 
 interface BookingPOPreviewModalProps {
@@ -66,7 +68,7 @@ export function BookingPOPreviewModal({
       setBlobUrl(null);
 
       try {
-        const res = await fetch("/api/render-po", {
+        const res = await fetch(target!.endpoint ?? "/api/render-po", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
