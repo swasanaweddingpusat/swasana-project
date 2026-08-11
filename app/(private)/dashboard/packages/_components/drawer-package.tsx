@@ -155,7 +155,7 @@ export function DrawerPackage({ isOpen, onClose, editingPackage, packageType = "
       if (d.internalItems?.length) setInternalItems(d.internalItems);
       if (d.currentStep) setCurrentStep(d.currentStep);
     } catch { /* ignore corrupt data */ }
-  }, [isOpen, isEdit]);
+  }, [isOpen, isEdit, DRAFT_KEY]);
 
   useEffect(() => {
     if (!isOpen) draftLoaded.current = false;
@@ -169,7 +169,7 @@ export function DrawerPackage({ isOpen, onClose, editingPackage, packageType = "
       } catch { /* storage full */ }
     }, 500);
     return () => clearTimeout(timer);
-  }, [isOpen, isEdit, packageName, available, venueId, notes, pax, vendorItems, internalItems, currentStep]);
+  }, [isOpen, isEdit, DRAFT_KEY, packageName, available, venueId, notes, pax, vendorItems, internalItems, currentStep]);
 
   function clearDraft() {
     localStorage.removeItem(DRAFT_KEY);
