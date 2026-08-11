@@ -239,6 +239,16 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
     });
   }
 
+  // New PDF (theme V2 Kediaman) — ungated dropdown action, renders via /api/render-po/v2.
+  function previewNewPdf(booking: BookingListItem) {
+    const base = booking.snapCustomer?.name ?? "Booking";
+    setPoPreviewTarget({
+      bookingId: booking.id,
+      label: `${base} · New PDF`,
+      endpoint: "/api/render-po/v2",
+    });
+  }
+
   function fetchRevisions(bookingId: string) {
     fetch(`/api/bookings/${bookingId}/revisions`).then((r) => r.json()).then((res) => {
       const items = Array.isArray(res) ? res : Array.isArray(res?.data) ? res.data : [];
@@ -355,6 +365,10 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
           </DropdownMenuItem>
         ))}
         <DropdownMenuSeparator />
+        <DropdownMenuItem className="cursor-pointer" onClick={() => previewNewPdf(booking)}>
+          <DocumentText weight="BoldDuotone" className="mr-2 h-4 w-4 text-primary" />
+          New PDF
+        </DropdownMenuItem>
         <DropdownMenuItem className="cursor-pointer" onClick={() => setRevisionHistoryTarget(booking)}>
           <ClockCircle weight="BoldDuotone" className="mr-2 h-4 w-4" />
           Kelola Versi…
