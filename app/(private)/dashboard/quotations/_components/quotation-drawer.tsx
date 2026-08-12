@@ -1374,24 +1374,18 @@ export function QuotationDrawer({
                     render={({ field }) => (
                       <FormItem className="w-full">
                         <FormLabel className={LABEL_CLASS}>No. HP Sales</FormLabel>
-                        {watchedSalesPhone?.trim() ? (
-                          <div className="mt-1.5 flex h-9 w-full items-center rounded-md border border-input bg-muted/40 px-3 text-sm text-foreground cursor-not-allowed select-none">
-                            {watchedSalesPhone}
-                          </div>
-                        ) : (
-                          <>
-                            <FormControl>
-                              <PhoneInput
-                                value={field.value}
-                                onChange={field.onChange}
-                                onBlur={field.onBlur}
-                                placeholder="Isi nomor HP sales..."
-                              />
-                            </FormControl>
-                            <p className="text-xs text-muted-foreground">
-                              Profil sales belum punya nomor — isi manual.
-                            </p>
-                          </>
+                        <FormControl>
+                          <PhoneInput
+                            value={field.value}
+                            onChange={field.onChange}
+                            onBlur={field.onBlur}
+                            placeholder="Isi nomor HP sales..."
+                          />
+                        </FormControl>
+                        {!watchedSalesPhone?.trim() && (
+                          <p className="text-xs text-muted-foreground">
+                            Profil sales belum punya nomor — isi manual.
+                          </p>
                         )}
                       </FormItem>
                     )}

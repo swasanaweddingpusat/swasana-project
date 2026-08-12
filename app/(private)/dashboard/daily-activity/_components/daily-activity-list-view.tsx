@@ -286,12 +286,18 @@ function LeadCard({
           )}
         </div>
 
-        {/* Meta: aging + pax */}
+        {/* Meta: aging + eventDate + pax */}
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
           <span className="flex items-center gap-1.5">
             <CalendarMark weight="BoldDuotone" aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
             Masuk {formatShortDate(lead.createdAt)}
           </span>
+          {lead.eventDate && (
+            <span className="flex items-center gap-1.5">
+              <CalendarMark weight="BoldDuotone" aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
+              {formatShortDate(lead.eventDate)}
+            </span>
+          )}
           {lead.estimatedPax != null && (
             <span className="flex items-center gap-1.5">
               <UsersGroupRounded weight="BoldDuotone" aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
@@ -513,11 +519,17 @@ export function DailyActivityListView({
                     {rowNumber}
                   </TableCell>
 
-                  {/* Client — name (editorial) + sub: pax · sumber */}
+                  {/* Client — name (editorial) + sub: eventDate · pax · sumber */}
                   <TableCell className="px-4 py-3 max-w-52 align-top" title={lead.name}>
                     <div className="font-heading font-semibold text-foreground truncate">
                       {lead.name}
                     </div>
+                    {lead.eventDate && (
+                      <div className="flex items-center gap-1 text-xs text-muted-foreground mt-0.5">
+                        <CalendarMark weight="BoldDuotone" aria-hidden="true" className="h-3 w-3 shrink-0" />
+                        {formatShortDate(lead.eventDate)}
+                      </div>
+                    )}
                     {(() => {
                       const subParts: string[] = [];
                       if (lead.estimatedPax) subParts.push(`${lead.estimatedPax.toLocaleString("id-ID")} pax`);
