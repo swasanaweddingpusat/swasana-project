@@ -29,7 +29,6 @@ import {
   CloseCircle,
   MenuDots,
   Refresh,
-  Heart,
   Suitcase,
   Phone,
   Buildings2,
@@ -100,15 +99,13 @@ function StatusPill({
   );
 }
 
-/** Category chip — Wedding vs MICE, icon-led to match the create drawer's
- *  visual language. Token-only colors. */
-function CategoryChip({ category }: { category: string }) {
-  const isMice = category === "MICE";
-  const Icon = isMice ? Suitcase : Heart;
+/** Category chip — Daily Activity is MICE-only, so this always renders MICE.
+ *  Kept as a chip for visual parity with the create drawer. Token-only colors. */
+function CategoryChip() {
   return (
     <span className="inline-flex items-center gap-1 rounded-full bg-secondary px-2 py-0.5 text-[11px] font-medium text-secondary-foreground">
-      <Icon weight="BoldDuotone" aria-hidden="true" className="h-3 w-3" />
-      {isMice ? "MICE" : "Wedding"}
+      <Suitcase weight="BoldDuotone" aria-hidden="true" className="h-3 w-3" />
+      MICE
     </span>
   );
 }
@@ -221,7 +218,6 @@ function LeadCard({
   onViewDetail: (lead: DailyActivityItem) => void;
 }) {
   const contact = firstContactNumber(lead.contactNumbers);
-  const isMice = lead.category === "MICE";
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
     if (e.key === "Enter" || e.key === " ") {
@@ -267,10 +263,10 @@ function LeadCard({
           <StatusPill status={lead.status} className="shrink-0" />
         </div>
 
-        {/* Chips: category (+ segment for MICE, instansi fallback for legacy) */}
+        {/* Chips: category (+ segment, instansi fallback for legacy) */}
         <div className="flex flex-wrap items-center gap-1.5">
-          <CategoryChip category={lead.category} />
-          {isMice && (lead.segment?.name ?? lead.instansi) && (
+          <CategoryChip />
+          {(lead.segment?.name ?? lead.instansi) && (
             <span
               className="inline-flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-[11px] font-medium text-foreground/80 max-w-full"
               title={lead.segment?.name ?? lead.instansi ?? undefined}
@@ -286,12 +282,18 @@ function LeadCard({
           )}
         </div>
 
-        {/* Meta: aging + pax */}
+        {/* Meta: aging + eventDate + pax */}
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
           <span className="flex items-center gap-1.5">
             <CalendarMark weight="BoldDuotone" aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
             Masuk {formatShortDate(lead.createdAt)}
           </span>
+          {lead.eventDate && (
+            <span className="flex items-center gap-1.5">
+              <CalendarMark weight="BoldDuotone" aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
+              {formatShortDate(lead.eventDate)}
+            </span>
+          )}
           {lead.estimatedPax != null && (
             <span className="flex items-center gap-1.5">
               <UsersGroupRounded weight="BoldDuotone" aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
@@ -513,11 +515,17 @@ export function DailyActivityListView({
                     {rowNumber}
                   </TableCell>
 
-                  {/* Client — name (editorial) + sub: pax · sumber */}
+                  {/* Client — name (editorial) + sub: eventDate · pax · sumber */}
                   <TableCell className="px-4 py-3 max-w-52 align-top" title={lead.name}>
                     <div className="font-heading font-semibold text-foreground truncate">
                       {lead.name}
                     </div>
+                    {lead.eventDate && (
+                      <div className="flex items-center gap-1 text-xs text-muted-foreground mt-0.5">
+                        <CalendarMark weight="BoldDuotone" aria-hidden="true" className="h-3 w-3 shrink-0" />
+                        {formatShortDate(lead.eventDate)}
+                      </div>
+                    )}
                     {(() => {
                       const subParts: string[] = [];
                       if (lead.estimatedPax) subParts.push(`${lead.estimatedPax.toLocaleString("id-ID")} pax`);
@@ -531,10 +539,10 @@ export function DailyActivityListView({
                     })()}
                   </TableCell>
 
-                  {/* Kategori — MICE shows segment (instansi fallback) as sub-line */}
+                  {/* Kategori — shows segment (instansi fallback) as sub-line */}
                   <TableCell className="px-4 py-3 align-top">
-                    <CategoryChip category={lead.category} />
-                    {lead.category === "MICE" && (lead.segment?.name ?? lead.instansi) && (
+                    <CategoryChip />
+                    {(lead.segment?.name ?? lead.instansi) && (
                       <div
                         className="text-xs text-muted-foreground truncate max-w-40 mt-1"
                         title={lead.segment?.name ?? lead.instansi ?? undefined}

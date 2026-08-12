@@ -12,7 +12,6 @@ import {
   ClockCircle,
   Pen,
   LinkMinimalistic,
-  Heart,
   Suitcase,
   type IconProps,
 } from "@solar-icons/react";
@@ -137,8 +136,6 @@ export function DailyActivityDetailModal({ open, lead, onClose, onEdit }: Props)
 
   if (!open || !lead) return null;
 
-  const isWedding = lead.category !== "MICE";
-  const CategoryIcon = isWedding ? Heart : Suitcase;
   const salesName = lead.assignedTo
     ? (lead.assignedTo.nickName ?? lead.assignedTo.fullName ?? "-")
     : (lead.createdBy.nickName ?? lead.createdBy.fullName ?? "-");
@@ -173,19 +170,26 @@ export function DailyActivityDetailModal({ open, lead, onClose, onEdit }: Props)
       ),
     });
   }
-  if (isWedding) {
-    if (lead.emailCpp) clientFields.push({ label: "Email CPP", value: lead.emailCpp });
-    if (lead.emailCpw) clientFields.push({ label: "Email CPW", value: lead.emailCpw });
-    if (lead.nikCpp) clientFields.push({ label: "NIK CPP", value: <span className="font-mono">{lead.nikCpp}</span> });
-    if (lead.nikCpw) clientFields.push({ label: "NIK CPW", value: <span className="font-mono">{lead.nikCpw}</span> });
-    if (lead.addressCpp) clientFields.push({ label: "Alamat CPP", value: lead.addressCpp, full: true });
-    if (lead.addressCpw) clientFields.push({ label: "Alamat CPW", value: lead.addressCpw, full: true });
-  } else {
-    if (lead.email) clientFields.push({ label: "Email", value: lead.email });
-    if (lead.segment?.name ?? lead.instansi) {
-      clientFields.push({ label: "Segment / Kategori", value: lead.segment?.name ?? lead.instansi });
-    }
-    if (lead.address) clientFields.push({ label: "Alamat", value: lead.address, full: true });
+  if (lead.email) clientFields.push({ label: "Email", value: lead.email });
+  if (lead.segment?.name ?? lead.instansi) {
+    clientFields.push({ label: "Segment / Kategori", value: lead.segment?.name ?? lead.instansi });
+  }
+  if (lead.address) clientFields.push({ label: "Alamat", value: lead.address, full: true });
+  if (lead.instagramUrl) {
+    clientFields.push({
+      label: "Instagram",
+      value: (
+        <a
+          href={`https://instagram.com/${lead.instagramUrl.replace(/^@/, "")}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1 font-medium text-primary hover:underline"
+        >
+          <LinkMinimalistic weight="BoldDuotone" aria-hidden className="h-3.5 w-3.5" />
+          {lead.instagramUrl}
+        </a>
+      ),
+    });
   }
 
   // ── Event ──
@@ -201,8 +205,8 @@ export function DailyActivityDetailModal({ open, lead, onClose, onEdit }: Props)
       ),
     });
   }
-  if (isWedding && lead.weddingSession) {
-    eventFields.push({ label: "Sesi (Utama)", value: fmtSession(lead.weddingSession) });
+  if (lead.weddingSession) {
+    eventFields.push({ label: "Sesi", value: fmtSession(lead.weddingSession) });
   }
   if (lead.eventDateAlt) {
     eventFields.push({
@@ -210,7 +214,7 @@ export function DailyActivityDetailModal({ open, lead, onClose, onEdit }: Props)
       value: (
         <>
           {fmtDate(lead.eventDateAlt)}
-          {isWedding && lead.weddingSessionAlt ? (
+          {lead.weddingSessionAlt ? (
             <span className="text-muted-foreground"> · {fmtSession(lead.weddingSessionAlt)}</span>
           ) : null}
         </>
@@ -222,6 +226,9 @@ export function DailyActivityDetailModal({ open, lead, onClose, onEdit }: Props)
     eventFields.push({ label: "Estimasi Tamu", value: `${lead.estimatedPax.toLocaleString("id-ID")} pax` });
   }
   if (lead.budgetRange) eventFields.push({ label: "Budget Range", value: lead.budgetRange });
+  if (lead.siteVisitDate) {
+    eventFields.push({ label: "Tanggal Site Visit", value: fmtDate(lead.siteVisitDate) });
+  }
 
   // ── Venue ──
   const venueFields: FieldDef[] = [];
@@ -255,6 +262,9 @@ export function DailyActivityDetailModal({ open, lead, onClose, onEdit }: Props)
   if (lead.updatedAt) pipelineFields.push({ label: "Diperbarui", value: fmtDateTime(lead.updatedAt) });
   if (lead.convertedAt) pipelineFields.push({ label: "Converted", value: fmtDateTime(lead.convertedAt) });
   if (lead.convertedToCustomer) pipelineFields.push({ label: "Customer", value: lead.convertedToCustomer.name });
+  if (lead.bitrixId) {
+    pipelineFields.push({ label: "Bitrix ID", value: <span className="font-mono text-sm">{lead.bitrixId}</span> });
+  }
   if (lead.notes) pipelineFields.push({ label: "Catatan", value: lead.notes, full: true });
 
   return (
@@ -294,8 +304,8 @@ export function DailyActivityDetailModal({ open, lead, onClose, onEdit }: Props)
                 {lead.status.name}
               </span>
               <span className="inline-flex items-center gap-1 rounded-full bg-secondary px-2 py-0.5 text-[11px] font-medium text-secondary-foreground">
-                <CategoryIcon weight="BoldDuotone" aria-hidden className="h-3 w-3" />
-                {isWedding ? "Wedding" : "MICE"}
+                <Suitcase weight="BoldDuotone" aria-hidden className="h-3 w-3" />
+                MICE
               </span>
             </div>
           </div>

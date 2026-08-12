@@ -122,6 +122,11 @@ export const ROUTE_META: Record<string, RouteMeta> = {
     title: "Finance",
     subtitle: "Overview keuangan",
   },
+  "/dashboard/finance/report-analytics": {
+    title: "Report & Analytics",
+    subtitle: "Laporan dan analitik performa keuangan",
+    parent: "/dashboard/finance",
+  },
   "/dashboard/finance/accounts-receivable": {
     title: "AR",
     subtitle: "Status termin pembayaran per booking",

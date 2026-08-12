@@ -102,7 +102,7 @@ export function DailyActivityTable() {
     statuses.find((s) => s.isFinal && !s.isSystem);
 
   // Open confirmation modal; the actual mutation runs on confirm.
-  // Deal is a plain status flip for both wedding & MICE — no booking is created here.
+  // Deal is a plain status flip — no booking is created here.
   function handleMarkDeal(lead: DailyActivityItem) {
     if (lead.status.isFinal) {
       toast.info("Lead sudah berstatus final.");
@@ -310,7 +310,7 @@ export function DailyActivityTable() {
         }}
       />
 
-      {/* Deal — plain status flip for wedding & MICE. Booking dibuat terpisah lewat
+      {/* Deal — plain status flip. Booking dibuat terpisah lewat
           menu Booking (punya lead picker sendiri) atau lewat Quotation. */}
       <AlertDialog open={!!dealTarget} onOpenChange={(open) => !open && setDealTarget(null)}>
         <AlertDialogContent>

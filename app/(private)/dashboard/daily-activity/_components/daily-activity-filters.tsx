@@ -167,17 +167,15 @@ function FilterPanelContent({
         </div>
       )}
 
-      {/* Event Type filter */}
+      {/* Event Type filter — MICE only */}
       <div className="space-y-1">
         <label className="text-xs font-medium text-muted-foreground">Event Type</label>
         <SearchableSelect
           options={[
             { id: "all", name: "Semua Event Type" },
-            ...eventTypes.map((et) => ({
-              id: et.id,
-              name: et.name,
-              badge: et.category === "MICE" ? "MICE" : "Wedding",
-            })),
+            ...eventTypes
+              .filter((et) => et.category === "MICE")
+              .map((et) => ({ id: et.id, name: et.name })),
           ]}
           value={eventTypeFilter}
           onChange={onEventTypeChange}

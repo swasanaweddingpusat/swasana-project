@@ -40,6 +40,7 @@ import {
   BellBing,
   Wallet2,
   Case,
+  Chart2,
 } from "@solar-icons/react";
 
 type SolarIcon = ForwardRefExoticComponent<Omit<IconProps, "ref"> & RefAttributes<SVGSVGElement>>;
@@ -199,6 +200,15 @@ export const navItems: NavItem[] = [
       { module: "finance-ap", action: "view" },
     ],
     submenu: [
+      {
+        name: "Report & Analytics",
+        href: "/dashboard/finance/report-analytics",
+        icon: Chart2,
+        anyPermission: [
+          { module: "finance-ar", action: "view" },
+          { module: "finance-ap", action: "view" },
+        ],
+      },
       {
         name: "Overview",
         href: "/dashboard/finance",
