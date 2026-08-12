@@ -373,7 +373,7 @@ export function POPdfDocumentV2({ booking, logoBase64 }: { booking: POPdfBooking
         {/* Riwayat Pembayaran — total, discount (kalau ada), cash-in ber-flag showInPo, sisa bayar */}
         <View style={s.sumTable}>
           <View style={s.th}>
-            <Text style={[s.thCell, { width: "70%" }]}>RIWAYAT PEMBAYARAN</Text>
+            <Text style={[s.thCell, { width: "70%" }]}>SUMMARY PAYMENT</Text>
             <Text style={[s.thCellLast, { width: "30%" }]}>NOMINAL</Text>
           </View>
           <View style={s.sumRow}>
