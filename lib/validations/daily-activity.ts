@@ -56,7 +56,9 @@ const baseDailyActivitySchema = z.object({
   instagramUrl: z.string().trim().max(200, "Instagram terlalu panjang").optional().or(z.literal("")),
   // MICE prospecting: jadwal site visit ("YYYY-MM-DD"). Opsional.
   siteVisitDate: z.string().optional().or(z.literal("")),
-  category: z.enum(["WEDDINGS", "MICE"]).default("WEDDINGS"),
+  // Daily Activity kini MICE-only. Enum "WEDDINGS" & superRefine wedding
+  // dipertahankan sebagai kompat data lama (row wedding historis), bukan jalur input aktif.
+  category: z.enum(["WEDDINGS", "MICE"]).default("MICE"),
   venueId: z.string().optional(),
   venueSecondaryId: z.string().optional().nullable(),
   packageId: z.string().optional().nullable(),
