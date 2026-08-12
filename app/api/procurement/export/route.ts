@@ -62,6 +62,7 @@ export async function GET(req: Request): Promise<Response> {
         jumlahBarang: true,
         sisaBarang: true,
         picPenerima: true,
+        linkBarang: true,
         harga: true,
         pettyCash: true,
         total: true,
@@ -84,6 +85,7 @@ export async function GET(req: Request): Promise<Response> {
       "Jumlah",
       "Sisa",
       "PIC",
+      "Link Barang",
       "Harga",
       "Petty Cash",
       "Total",
@@ -102,6 +104,7 @@ export async function GET(req: Request): Promise<Response> {
       toSafeText(item.jumlahBarang),
       toSafeText(item.sisaBarang),
       toSafeText(item.picPenerima),
+      toSafeText(item.linkBarang ?? ""),
       toSafeText(item.harga != null && Number(item.harga) > 0 ? item.harga : ""),
       toSafeText(item.pettyCash != null && Number(item.pettyCash) > 0 ? item.pettyCash : ""),
       toSafeText(item.total ?? ""),
@@ -161,7 +164,7 @@ export async function GET(req: Request): Promise<Response> {
         const pageWidth = doc.internal.pageSize.getWidth();
         const pageHeight = doc.internal.pageSize.getHeight();
         const margin = 24;
-        const colWidths = [42, 34, 60, 30, 30, 42, 42, 42, 42, 38, 34, 55, 70, 55, 55];
+        const colWidths = [42, 34, 60, 30, 30, 42, 70, 38, 38, 38, 34, 30, 50, 60, 48, 48];
         const tableTop = 70;
         const tableLeft = margin;
         const tableWidth = pageWidth - margin * 2;
@@ -233,7 +236,7 @@ export async function GET(req: Request): Promise<Response> {
           doc.setDrawColor(235, 238, 242);
           doc.rect(tableLeft, y - 2, tableWidth, currentHeight, "S");
           x = tableLeft;
-          row.forEach((value, cellIndex) => {
+          row.forEach((_value, cellIndex) => {
             const width = colWidths[cellIndex] ?? 60;
             const lines = cellLines[cellIndex] ?? [];
             const textY = y + 2;

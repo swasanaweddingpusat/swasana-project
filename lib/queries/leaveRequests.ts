@@ -1,5 +1,12 @@
 import { db } from "@/lib/db";
-import type { Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
+
+function isTableMissing(e: unknown): boolean {
+  if (!(e instanceof Prisma.PrismaClientKnownRequestError)) return false;
+  if (e.code === "P2021") return true;
+  if (e.code === "P2010" && String(e.message).includes("does not exist")) return true;
+  return false;
+}
 
 const requestSelect = {
   id: true,
@@ -52,33 +59,48 @@ export async function getLeaveRequests(params?: {
     where.profile = { departmentId: params.departmentId };
   }
 
-  return db.leaveRequest.findMany({
-    where,
-    select: requestSelect,
-    orderBy: { createdAt: "desc" },
-    take: 500,
-  });
+  try {
+    return await db.leaveRequest.findMany({
+      where,
+      select: requestSelect,
+      orderBy: { createdAt: "desc" },
+      take: 500,
+    });
+  } catch (e) {
+    if (isTableMissing(e)) return [];
+    throw e;
+  }
 }
 
 export async function getMyLeaveRequests(profileId: string) {
-  return db.leaveRequest.findMany({
-    where: { profileId },
-    select: requestSelect,
-    orderBy: { createdAt: "desc" },
-    take: 100,
-  });
+  try {
+    return await db.leaveRequest.findMany({
+      where: { profileId },
+      select: requestSelect,
+      orderBy: { createdAt: "desc" },
+      take: 100,
+    });
+  } catch (e) {
+    if (isTableMissing(e)) return [];
+    throw e;
+  }
 }
 
 export async function getPendingForManager(managerId: string) {
-  return db.leaveRequest.findMany({
-    where: {
-      status: "pending",
-      profile: { managerId },
-    },
-    select: requestSelect,
-    orderBy: { createdAt: "asc" },
-    take: 100,
-  });
+  try {
+    return await db.leaveRequest.findMany({
+      where: {
+        status: "pending",
+        profile: { managerId },
+      },
+      select: requestSelect,
+      orderBy: { createdAt: "asc" },
+      take: 100,
+    });
+  } catch (e) {
+    if (isTableMissing(e)) return [];
+    throw e;
+  }
 }
 
 export async function getLeaveCalendar(params: {
@@ -95,19 +117,24 @@ export async function getLeaveCalendar(params: {
     where.profile = { departmentId: params.departmentId };
   }
 
-  return db.leaveRequest.findMany({
-    where,
-    select: {
-      id: true,
-      startDate: true,
-      endDate: true,
-      totalDays: true,
-      profile: { select: { id: true, fullName: true, avatarUrl: true } },
-      leaveType: { select: { id: true, name: true, code: true } },
-    },
-    orderBy: { startDate: "asc" },
-    take: 500,
-  });
+  try {
+    return await db.leaveRequest.findMany({
+      where,
+      select: {
+        id: true,
+        startDate: true,
+        endDate: true,
+        totalDays: true,
+        profile: { select: { id: true, fullName: true, avatarUrl: true } },
+        leaveType: { select: { id: true, name: true, code: true } },
+      },
+      orderBy: { startDate: "asc" },
+      take: 500,
+    });
+  } catch (e) {
+    if (isTableMissing(e)) return [];
+    throw e;
+  }
 }
 
 export type LeaveRequestItem = Awaited<ReturnType<typeof getLeaveRequests>>[number];

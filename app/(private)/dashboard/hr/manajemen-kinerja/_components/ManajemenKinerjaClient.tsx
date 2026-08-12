@@ -492,7 +492,7 @@ export function ManajemenKinerjaClient() {
             </Button>
             <Sheet open={reviewDrawerOpen} onOpenChange={setReviewDrawerOpen}>
               <SheetContent side="right" className="w-full max-w-xl overflow-y-auto sm:max-w-xl">
-                <SheetHeader className="space-y-2 px-1 pt-2">
+                <SheetHeader className="space-y-2 px-5 pt-4">
                   <SheetTitle className="text-xl font-heading">
                     {editingReviewId ? "Edit review kinerja" : "Tambah review kinerja"}
                   </SheetTitle>
@@ -502,7 +502,7 @@ export function ManajemenKinerjaClient() {
                       : "Isi form untuk menambahkan review kinerja karyawan."}
                   </SheetDescription>
                 </SheetHeader>
-                <div className="mt-6 space-y-4 px-1 pb-6">
+                <div className="mt-6 space-y-4 px-5 pb-6">
                   <div className="space-y-2">
                     <Label htmlFor="review-employee">Karyawan</Label>
                     <select
@@ -765,7 +765,7 @@ export function ManajemenKinerjaClient() {
             </Button>
             <Sheet open={kpiDrawerOpen} onOpenChange={setKpiDrawerOpen}>
               <SheetContent side="right" className="w-full max-w-xl overflow-y-auto sm:max-w-xl">
-                <SheetHeader className="space-y-2 px-1 pt-2">
+                <SheetHeader className="space-y-2 px-5 pt-4">
                   <SheetTitle className="text-xl font-heading">
                     {editingKpiId ? "Edit KPI" : "Tambah KPI"}
                   </SheetTitle>
@@ -775,7 +775,7 @@ export function ManajemenKinerjaClient() {
                       : "Isi form untuk menambahkan KPI baru."}
                   </SheetDescription>
                 </SheetHeader>
-                <div className="mt-6 space-y-4 px-1 pb-6">
+                <div className="mt-6 space-y-4 px-5 pb-6">
                   <div className="space-y-2">
                     <Label htmlFor="kpi-name">Nama KPI</Label>
                     <Input

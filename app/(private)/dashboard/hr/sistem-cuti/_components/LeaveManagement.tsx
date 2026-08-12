@@ -12,9 +12,23 @@ import { LeaveApprovalTable } from "./LeaveApprovalTable";
 import { LeaveTypeManager } from "./LeaveTypeManager";
 import { LeaveBalanceManager } from "./LeaveBalanceManager";
 
-export function LeaveManagement() {
+interface LeaveManagementProps {
+  mode?: "self-service" | "hr";
+}
+
+export function LeaveManagement({ mode = "hr" }: LeaveManagementProps) {
   const { can } = usePermissions();
   const { data: pendingRequests } = usePendingForManager();
+
+  if (mode === "self-service") {
+    return (
+      <div className="space-y-6">
+        <LeaveBalanceCards />
+        <LeaveRequestForm />
+        <LeaveRequestHistory />
+      </div>
+    );
+  }
 
   const showApproval =
     (pendingRequests && pendingRequests.length > 0) ||

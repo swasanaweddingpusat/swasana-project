@@ -256,6 +256,22 @@ export const navItems: NavItem[] = [
     ],
   },
   {
+    name: "Guestbook",
+    href: "/dashboard/guestbook",
+    icon: Notebook,
+    permission: { module: "guestbook", action: "view" },
+  },
+  {
+    name: "Cuti",
+    href: "/dashboard/cuti",
+    icon: CalendarDate,
+  },
+  {
+    name: "Slip Gaji",
+    href: "/dashboard/slip-gaji",
+    icon: FileText,
+  },
+  {
     name: "Absensi",
     href: "/dashboard/hr/absensi",
     icon: CheckSquare,
