@@ -25,6 +25,7 @@ import { toast } from "sonner";
 import { useGuestbookEntries, useCheckOutGuestbookEntry } from "@/hooks/use-guestbook";
 import type { GuestbookEntryItem } from "@/lib/queries/guestbookEntries";
 import { GuestbookDrawer } from "./GuestbookDrawer";
+import { GuestbookDetailDrawer } from "./GuestbookDetailDrawer";
 
 function resolvePhotoUrl(key: string | null | undefined): string | null {
   if (!key) return null;
@@ -116,14 +117,19 @@ function MobileCard({
   entry,
   onCheckOut,
   isCheckingOut,
+  onSelect,
 }: {
   entry: GuestbookEntryItem;
   onCheckOut: (id: string) => void;
   isCheckingOut: boolean;
+  onSelect: (entry: GuestbookEntryItem) => void;
 }) {
   const isActive = entry.checkOutAt === null;
   return (
-    <div className="rounded-2xl border bg-card p-4 space-y-3 shadow-sm">
+    <div
+      className="rounded-2xl border bg-card p-4 space-y-3 shadow-sm cursor-pointer transition-shadow hover:shadow-md"
+      onClick={() => onSelect(entry)}
+    >
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-center gap-2.5">
           {(() => {
@@ -194,7 +200,10 @@ function MobileCard({
           size="sm"
           variant="outline"
           className="w-full rounded-full text-xs gap-1.5"
-          onClick={() => onCheckOut(entry.id)}
+          onClick={(e) => {
+            e.stopPropagation();
+            onCheckOut(entry.id);
+          }}
           disabled={isCheckingOut}
         >
           <Logout2 weight="BoldDuotone" className="h-3.5 w-3.5" />
@@ -207,6 +216,7 @@ function MobileCard({
 
 export function GuestbookClient() {
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [selectedEntry, setSelectedEntry] = useState<GuestbookEntryItem | null>(null);
   const { data: entries = [], isLoading } = useGuestbookEntries();
   const checkOutMutation = useCheckOutGuestbookEntry();
 
@@ -315,7 +325,11 @@ export function GuestbookClient() {
                   {entries.map((entry) => {
                     const isActive = entry.checkOutAt === null;
                     return (
-                      <TableRow key={entry.id}>
+                      <TableRow
+                        key={entry.id}
+                        className="cursor-pointer hover:bg-muted/50 transition-colors"
+                        onClick={() => setSelectedEntry(entry)}
+                      >
                         <TableCell>
                           <div className="flex items-center gap-2.5">
                             {(() => {
@@ -386,7 +400,10 @@ export function GuestbookClient() {
                               size="sm"
                               variant="outline"
                               className="rounded-full text-xs gap-1.5"
-                              onClick={() => handleCheckOut(entry.id)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleCheckOut(entry.id);
+                              }}
                               disabled={checkOutMutation.isPending}
                             >
                               <Logout2 weight="BoldDuotone" className="h-3.5 w-3.5" />
@@ -432,6 +449,7 @@ export function GuestbookClient() {
               entry={entry}
               onCheckOut={handleCheckOut}
               isCheckingOut={checkOutMutation.isPending}
+              onSelect={setSelectedEntry}
             />
           ))}
       </div>
@@ -439,6 +457,16 @@ export function GuestbookClient() {
       <GuestbookDrawer
         isOpen={drawerOpen}
         onClose={() => setDrawerOpen(false)}
+      />
+
+      <GuestbookDetailDrawer
+        open={selectedEntry !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setSelectedEntry(null);
+          }
+        }}
+        entry={selectedEntry}
       />
     </div>
   );
