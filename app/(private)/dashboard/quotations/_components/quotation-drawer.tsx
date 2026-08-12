@@ -226,7 +226,11 @@ const DEFAULT_VALUES: QuotationFormValues = {
 
 const QUOTATION_DRAFT_KEY = "quotation-draft-v1";
 
-type QuotationDraft = { values: Partial<QuotationFormValues>; signingLocation?: string };
+type QuotationDraft = {
+  values: Partial<QuotationFormValues>;
+  signingLocation?: string;
+  signatureSales?: string;
+};
 
 function readQuotationDraft(): QuotationDraft | null {
   if (typeof window === "undefined") return null;
@@ -241,6 +245,7 @@ function readQuotationDraft(): QuotationDraft | null {
 function persistQuotationDraft(
   values: Partial<QuotationFormValues>,
   signingLocation?: string,
+  signatureSales?: string,
 ) {
   if (typeof window === "undefined") return;
   const { ...rest } = values;
@@ -248,9 +253,10 @@ function persistQuotationDraft(
     if (Array.isArray(v)) return v.some((item: QuotationItemForm) => item.title?.trim());
     return typeof v === "string" && v.trim() !== "";
   });
-  if (hasContent) {
+  if (hasContent || signingLocation?.trim() || signatureSales) {
     const draft: QuotationDraft = { values: rest };
     if (signingLocation !== undefined) draft.signingLocation = signingLocation;
+    if (signatureSales !== undefined) draft.signatureSales = signatureSales;
     localStorage.setItem(QUOTATION_DRAFT_KEY, JSON.stringify(draft));
   } else {
     localStorage.removeItem(QUOTATION_DRAFT_KEY);
@@ -655,6 +661,14 @@ export function QuotationDrawer({
   const sigSalesRef = useRef<SignatureCanvas>(null);
   const [signatureSales, setSignatureSales] = useState("");
   const [signingLocation, setSigningLocation] = useState("");
+  // Signature dataURL pending repaint onto the canvas once it mounts (step 3 only).
+  const pendingSignatureRestoreRef = useRef<string | null>(null);
+
+  // Package MICE picker (Step 2 — explode into line items, filtered by venue)
+  const [selectedPackageId, setSelectedPackageId] = useState("");
+  // Guards the auto-apply-on-first-open behavior from re-firing on every
+  // micePackages refetch, and from overriding items the user already edited.
+  const autoAppliedPackageRef = useRef(false);
 
   function toggleItem(id: string) {
     setExpandedItems((prev) => {
@@ -717,10 +731,6 @@ export function QuotationDrawer({
     staleTime: 30_000,
   });
   const leadInstansiOptions: LeadSearchOption[] = leadsSearchResult?.items ?? [];
-
-  // ── MICE package picker (Step 2 — explode into line items) ───────────────
-  const [selectedPackageId, setSelectedPackageId] = useState("");
-  const [paxInput, setPaxInput] = useState("");
 
   // ── Form ─────────────────────────────────────────────────────────────────
   const form = useForm<QuotationFormValues>({
@@ -793,7 +803,7 @@ export function QuotationDrawer({
   const watchedEventTypeId = form.watch("eventTypeId");
   const watchedEventDate = form.watch("eventDate");
 
-  // ── MICE packages available for this quotation ───────────────────────────
+  // ── MICE packages available for this quotation's venue ───────────────────
   interface MicePackageQuotationOption {
     id: string;
     packageName: string;
@@ -811,38 +821,34 @@ export function QuotationDrawer({
   const { data: micePackagesData } = useQuery({
     queryKey: ["mice-packages-quotation", watchedVenueId],
     queryFn: async () => {
-      const qs = `/api/packages?forQuotation=true&category=MICE${
-        watchedVenueId ? `&venueId=${encodeURIComponent(watchedVenueId)}` : ""
-      }`;
+      const qs = `/api/packages?forQuotation=true&category=MICE&venueId=${encodeURIComponent(watchedVenueId)}`;
       const res = await fetch(qs);
       if (!res.ok) return [] as MicePackageQuotationOption[];
       return (await res.json()) as MicePackageQuotationOption[];
     },
-    enabled: open,
+    enabled: open && !!watchedVenueId,
     staleTime: 30_000,
   });
   const micePackages: MicePackageQuotationOption[] = micePackagesData ?? [];
-  const selectedPackage = micePackages.find((p) => p.id === selectedPackageId) ?? null;
 
   /**
-   * Explode the selected package's items into editable quotation line items and
-   * append them (does not overwrite existing template/manual items). PAX items
-   * multiply by pax; NOMINAL items are flat.
+   * Explode a package's items into editable quotation line items and append
+   * them (does not overwrite existing template/manual items). PAX items
+   * multiply by the package's default pax; NOMINAL items are flat.
    */
-  function handleAddPackageItems() {
-    const pkg = micePackages.find((p) => p.id === selectedPackageId);
+  function handleApplyPackage(packageId: string) {
+    const pkg = micePackages.find((p) => p.id === packageId);
     if (!pkg) return;
     if (pkg.miceItems.length === 0) {
       toast.error("Paket ini belum punya item.");
       return;
     }
-    const pax = parseNumericInput(paxInput);
     for (const item of pkg.miceItems) {
       let qty: string;
       let total: number;
       if (item.itemType === "PAX") {
-        qty = String(pax);
-        total = pax * item.itemPrice;
+        qty = String(pkg.pax);
+        total = pkg.pax * item.itemPrice;
       } else {
         qty = "1";
         total = item.itemPrice;
@@ -860,7 +866,6 @@ export function QuotationDrawer({
       `${pkg.miceItems.length} item dari paket "${pkg.packageName}" ditambahkan.`,
     );
     setSelectedPackageId("");
-    setPaxInput("");
   }
 
   const isStep1Incomplete =
@@ -958,6 +963,21 @@ export function QuotationDrawer({
   const discountNum = parseNumericInput(watchedDiscount);
   const grandTotal = Math.max(0, subtotal - discountNum);
 
+  // Auto-apply the venue's package when the quotation is still empty — i.e. a
+  // brand-new draft (no items typed yet, nothing restored from localStorage)
+  // and the venue has exactly one approved MICE package. Ambiguous (>1 package)
+  // or already-populated quotations are left for the user to pick manually via
+  // the "Pilih Package MICE" dropdown.
+  useEffect(() => {
+    if (autoAppliedPackageRef.current) return;
+    if (isEdit || !watchedVenueId) return;
+    const hasExistingItems = (watchedItems ?? []).some((it) => it?.title?.trim());
+    if (hasExistingItems) return;
+    if (micePackages.length !== 1) return;
+    autoAppliedPackageRef.current = true;
+    handleApplyPackage(micePackages[0].id);
+  }, [watchedVenueId, micePackages, isEdit]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // ── Reset on open ────────────────────────────────────────────────────────
   useEffect(() => {
     if (!open) return;
@@ -970,13 +990,14 @@ export function QuotationDrawer({
     sigSalesRef.current?.clear();
     setSignatureSales("");
     setSigningLocation("");
+    pendingSignatureRestoreRef.current = null;
     // Reset instansi lookup state
     setInstansiSearch("");
     setDebouncedInstansi("");
     setInstansiDropdownOpen(false);
-    // Reset MICE package picker state
+    // Reset Package MICE picker state
     setSelectedPackageId("");
-    setPaxInput("");
+    autoAppliedPackageRef.current = false;
 
     if (editQuotation) {
       const matchedVenue = venues.find((v) => v.name === editQuotation.venue);
@@ -1042,9 +1063,19 @@ export function QuotationDrawer({
             ? draftItems
             : DEFAULT_ITEMS.map((it) => ({ ...it })),
         });
+        // Sync instansi search input — form.reset di atas sudah restore field
+        // value-nya, tapi kotak input pakai instansiSearch state terpisah (buat
+        // dropdown autocomplete) yang harus disamakan manual.
+        setInstansiSearch(draft.values.instansi ?? "");
         // Restore signingLocation dari draft
         if (draft.signingLocation) {
           setSigningLocation(draft.signingLocation);
+        }
+        // Restore signature — canvas belum mount di step 1, jadi dataURL-nya
+        // ditahan dulu dan baru di-paint saat step 3 aktif (lihat effect di bawah).
+        if (draft.signatureSales) {
+          setSignatureSales(draft.signatureSales);
+          pendingSignatureRestoreRef.current = draft.signatureSales;
         }
       } else {
         form.reset({
@@ -1068,16 +1099,24 @@ export function QuotationDrawer({
     if (!open || isEdit) return;
     // eslint-disable-next-line react-hooks/incompatible-library
     const sub = form.watch((values) => {
-      persistQuotationDraft(values as Partial<QuotationFormValues>, signingLocation);
+      persistQuotationDraft(values as Partial<QuotationFormValues>, signingLocation, signatureSales);
     });
     return () => sub.unsubscribe();
-  }, [open, isEdit, signingLocation]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [open, isEdit, signingLocation, signatureSales]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Persist signingLocation changes to draft (not triggered by form.watch).
+  // Persist signingLocation/signatureSales changes to draft (not triggered by form.watch).
   useEffect(() => {
     if (!open || isEdit) return;
-    persistQuotationDraft(form.getValues(), signingLocation);
-  }, [signingLocation]); // eslint-disable-line react-hooks/exhaustive-deps
+    persistQuotationDraft(form.getValues(), signingLocation, signatureSales);
+  }, [signingLocation, signatureSales]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Repaint the restored signature once the canvas mounts (step 3 only — see the
+  // "Mount only when step 3 is active" note on SignatureCanvas below).
+  useEffect(() => {
+    if (step !== 3 || !pendingSignatureRestoreRef.current) return;
+    sigSalesRef.current?.fromDataURL(pendingSignatureRestoreRef.current);
+    pendingSignatureRestoreRef.current = null;
+  }, [step]);
 
   // ── Navigation ───────────────────────────────────────────────────────────
   async function handleNext() {
@@ -1194,37 +1233,37 @@ export function QuotationDrawer({
 
                 {/* ── Status banner (edit mode only) ──────────────── */}
                 {isEdit && (
-                  <FormField
-                    control={form.control}
-                    name="status"
-                    render={({ field }) => (
-                      <FormItem className="w-full">
-                        <FormLabel className={LABEL_CLASS}>Status Quotation</FormLabel>
-                        <Select value={field.value} onValueChange={field.onChange}>
-                          <FormControl>
-                            <SelectTrigger className="w-full">
-                              <SelectValue placeholder="Pilih status..." />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {STATUS_OPTIONS.map((opt) => (
-                              <SelectItem key={opt.value} value={opt.value}>
-                                {opt.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                  <div className="rounded-xl border border-border bg-muted/40 px-4 py-3">
+                    <FormField
+                      control={form.control}
+                      name="status"
+                      render={({ field }) => (
+                        <FormItem className="w-full">
+                          <FormLabel className={LABEL_CLASS}>Status Quotation</FormLabel>
+                          <Select value={field.value} onValueChange={field.onChange}>
+                            <FormControl>
+                              <SelectTrigger className="w-full">
+                                <SelectValue placeholder="Pilih status..." />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              {STATUS_OPTIONS.map((opt) => (
+                                <SelectItem key={opt.value} value={opt.value}>
+                                  {opt.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
                 )}
 
                 {/* ── Klien ───────────────────────────────────────── */}
-                <div className={cn("space-y-3", isEdit && "border-t pt-4")}>
-                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                    Klien
-                  </p>
+                <div className="rounded-2xl border bg-card p-5 space-y-3">
+                  <p className="text-sm font-semibold text-foreground mb-1">Klien</p>
 
                   {/* Perusahaan / Instansi */}
                   <div ref={instansiDropdownRef} className="w-full">
@@ -1324,10 +1363,8 @@ export function QuotationDrawer({
                 </div>
 
                 {/* ── Sales ───────────────────────────────────────── */}
-                <div className="border-t pt-4 space-y-3">
-                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                    Sales
-                  </p>
+                <div className="rounded-2xl border bg-card p-5 space-y-3">
+                  <p className="text-sm font-semibold text-foreground mb-1">Sales</p>
 
                   {currentUserIsSales ? (
                     <div className="w-full">
@@ -1393,11 +1430,9 @@ export function QuotationDrawer({
                 </div>
 
                 {/* ── Event ───────────────────────────────────────── */}
-                <div className="border-t pt-4 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                      Detail Event
-                    </p>
+                <div className="rounded-2xl border bg-card p-5 space-y-3">
+                  <div className="flex items-center justify-between mb-1">
+                    <p className="text-sm font-semibold text-foreground">Detail Event</p>
                     <span className="inline-flex items-center rounded-full border border-primary/25 bg-primary/10 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary">
                       MICE
                     </span>
@@ -1594,74 +1629,31 @@ export function QuotationDrawer({
 
               {/* ════════════════ STEP 2 — ITEMS + RINGKASAN ════════════════ */}
               <div className={cn(step !== 2 && "hidden", "space-y-3")}>
-                {/* ── Ambil dari Paket MICE ─────────────────────────── */}
-                <div className="rounded-xl border border-border bg-muted/30 p-3 space-y-2.5">
-                  <div className="flex items-center gap-1.5">
-                    <Box weight="BoldDuotone" className="h-4 w-4 text-primary" />
-                    <p className={LABEL_CLASS}>Ambil dari Paket MICE</p>
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    {!watchedVenueId
-                      ? "Menampilkan semua paket MICE. Pilih venue di step 1 untuk memfilter."
-                      : micePackages.length === 0
-                        ? "Belum ada paket MICE approved untuk venue ini."
-                        : "Pilih paket lalu isi jumlah pax — item paket akan ditambahkan ke daftar di bawah (bisa diedit)."}
-                  </p>
-
-                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_auto]">
-                    <div className="min-w-0">
-                      <FormLabel className="text-xs text-muted-foreground">
-                        Paket
-                      </FormLabel>
-                      <SearchableSelect
-                        options={micePackages.map((p) => ({
-                          id: p.id,
-                          name: p.venue?.name
-                            ? `${p.packageName} — ${p.venue.name}`
-                            : p.packageName,
-                        }))}
-                        value={selectedPackageId}
-                        onChange={(id) => {
-                          setSelectedPackageId(id);
-                          const pkg = micePackages.find((p) => p.id === id);
-                          if (pkg && pkg.pax > 0) setPaxInput(String(pkg.pax));
-                        }}
-                        placeholder="Pilih paket MICE..."
-                        searchPlaceholder="Cari paket..."
-                        emptyText="Tidak ada paket MICE"
-                      />
+                {/* ── Pilih Package MICE ────────────────────────────── */}
+                {watchedVenueId && (
+                  <div className="rounded-xl border border-border bg-muted/30 p-3 space-y-2">
+                    <div className="flex items-center gap-1.5">
+                      <Box weight="BoldDuotone" className="h-4 w-4 text-primary" />
+                      <p className={LABEL_CLASS}>Pilih Package MICE</p>
                     </div>
-                    <div className="w-full sm:w-28">
-                      <FormLabel className="text-xs text-muted-foreground">
-                        Jumlah Pax
-                      </FormLabel>
-                      <Input
-                        value={paxInput}
-                        onChange={(e) => setPaxInput(e.target.value.replace(/\D/g, ""))}
-                        placeholder="0"
-                        inputMode="numeric"
-                        className="w-full"
-                      />
-                    </div>
-                  </div>
-
-                  {selectedPackage && (
                     <p className="text-xs text-muted-foreground">
-                      {selectedPackage.miceItems.length} item akan ditambahkan.
+                      {micePackages.length === 0
+                        ? "Belum ada paket MICE approved untuk venue ini."
+                        : "Pilih paket — item paket akan ditambahkan ke daftar di bawah (bisa diedit)."}
                     </p>
-                  )}
-
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={handleAddPackageItems}
-                    disabled={!selectedPackageId}
-                    className="w-full rounded-xl"
-                  >
-                    <AddCircle weight="BoldDuotone" className="h-4 w-4 mr-1" />
-                    Tambah item dari paket
-                  </Button>
-                </div>
+                    <SearchableSelect
+                      options={micePackages.map((p) => ({ id: p.id, name: p.packageName }))}
+                      value={selectedPackageId}
+                      onChange={(id) => {
+                        setSelectedPackageId(id);
+                        handleApplyPackage(id);
+                      }}
+                      placeholder="Cari & pilih paket MICE untuk venue ini..."
+                      searchPlaceholder="Cari paket..."
+                      emptyText="Tidak ada paket MICE"
+                    />
+                  </div>
+                )}
 
                 {/* ── Items ─────────────────────────────────────────── */}
                 <div className="space-y-2">
@@ -1692,7 +1684,8 @@ export function QuotationDrawer({
                 </div>
 
                 {/* ── Ringkasan ─────────────────────────────────────── */}
-                <div className="border-t pt-4 space-y-3">
+                <div className="rounded-2xl border bg-card p-5 space-y-3">
+                  <p className="text-sm font-semibold text-foreground mb-1">Ringkasan Biaya</p>
                   <FormField
                     control={form.control}
                     name="discount"
@@ -1746,10 +1739,8 @@ export function QuotationDrawer({
                 </div>
 
                 {/* ── Ketentuan Penawaran ───────────────────────────── */}
-                <div className="border-t pt-4 space-y-3">
-                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                    Ketentuan Penawaran
-                  </p>
+                <div className="rounded-2xl border bg-card p-5 space-y-3">
+                  <p className="text-sm font-semibold text-foreground mb-1">Ketentuan Penawaran</p>
 
                   <FormField
                     control={form.control}
@@ -1879,60 +1870,63 @@ export function QuotationDrawer({
               </div>
 
               {/* ════════════════ STEP 3 — TTD ════════════════ */}
-              <div className={cn(step !== 3 && "hidden", "space-y-6")}>
-                <div>
-                  <FormLabel className={cn("text-sm", "font-medium", "text-foreground", "mb-2", "block")}>
-                    Lokasi Tanda Tangan <span className="text-destructive">*</span>
-                  </FormLabel>
-                  <Input
-                    placeholder="Contoh: Jakarta, Bandung, Surabaya..."
-                    value={signingLocation}
-                    onChange={(e) => setSigningLocation(e.target.value)}
-                  />
-                </div>
-                <div className="border-t border-border pt-6">
-                  <FormLabel className={cn("text-sm", "font-medium", "text-foreground", "mb-2", "block")}>
-                    Tanda Tangan Sales <span className="text-destructive">*</span>
-                  </FormLabel>
-                  <div
-                    className={cn(
-                      "border-2 border-dashed rounded-xl overflow-hidden bg-muted",
-                      !signatureSales ? "border-destructive/40" : "border-border",
-                    )}
-                  >
-                    {/* Mount only when step 3 is active — a SignatureCanvas mounted
-                        inside a display:none container has 0 dimensions and never
-                        captures strokes. */}
-                    {step === 3 && (
-                      <SignatureCanvas
-                        ref={sigSalesRef}
-                        penColor="black"
-                        canvasProps={{
-                          className: "w-full",
-                          style: { width: "100%", height: 200, touchAction: "none" },
-                        }}
-                        onEnd={() => {
-                          if (sigSalesRef.current) {
-                            setSignatureSales(sigSalesRef.current.toDataURL("image/png"));
-                          }
-                        }}
-                      />
-                    )}
+              <div className={cn(step !== 3 && "hidden", "space-y-3")}>
+                <div className="rounded-2xl border bg-card p-5 space-y-4">
+                  <p className="text-sm font-semibold text-foreground mb-1">Tanda Tangan & Lokasi</p>
+                  <div>
+                    <FormLabel className={cn("text-sm", "font-medium", "text-foreground", "mb-2", "block")}>
+                      Lokasi Tanda Tangan <span className="text-destructive">*</span>
+                    </FormLabel>
+                    <Input
+                      placeholder="Contoh: Jakarta, Bandung, Surabaya..."
+                      value={signingLocation}
+                      onChange={(e) => setSigningLocation(e.target.value)}
+                    />
                   </div>
-                  <div className="flex items-center justify-between mt-1.5">
-                    <p className={cn("text-xs", "text-destructive", signatureSales && "invisible")}>
-                      Tanda tangan sales wajib diisi
-                    </p>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        sigSalesRef.current?.clear();
-                        setSignatureSales("");
-                      }}
-                      className="text-xs text-destructive hover:text-destructive underline ml-auto"
+                  <div className="border-t border-border/60 pt-4">
+                    <FormLabel className={cn("text-sm", "font-medium", "text-foreground", "mb-2", "block")}>
+                      Tanda Tangan Sales <span className="text-destructive">*</span>
+                    </FormLabel>
+                    <div
+                      className={cn(
+                        "border-2 border-dashed rounded-xl overflow-hidden bg-muted",
+                        !signatureSales ? "border-destructive/40" : "border-border",
+                      )}
                     >
-                      Hapus tanda tangan
-                    </button>
+                      {/* Mount only when step 3 is active — a SignatureCanvas mounted
+                          inside a display:none container has 0 dimensions and never
+                          captures strokes. */}
+                      {step === 3 && (
+                        <SignatureCanvas
+                          ref={sigSalesRef}
+                          penColor="black"
+                          canvasProps={{
+                            className: "w-full",
+                            style: { width: "100%", height: 200, touchAction: "none" },
+                          }}
+                          onEnd={() => {
+                            if (sigSalesRef.current) {
+                              setSignatureSales(sigSalesRef.current.toDataURL("image/png"));
+                            }
+                          }}
+                        />
+                      )}
+                    </div>
+                    <div className="flex items-center justify-between mt-1.5">
+                      <p className={cn("text-xs", "text-destructive", signatureSales && "invisible")}>
+                        Tanda tangan sales wajib diisi
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          sigSalesRef.current?.clear();
+                          setSignatureSales("");
+                        }}
+                        className="text-xs text-destructive hover:text-destructive underline ml-auto"
+                      >
+                        Hapus tanda tangan
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
