@@ -252,6 +252,24 @@ export const ROUTE_META: Record<string, RouteMeta> = {
     parent: "/dashboard/pengadaan-barang",
   },
 
+  // ─── Guestbook ───────────────────────────────────────────────────────────────
+  "/dashboard/guestbook": {
+    title: "Guestbook",
+    subtitle: "Catat kunjungan tamu, vendor, dan client ke kantor",
+  },
+
+  // ─── Cuti (employee self-service) ───────────────────────────────────────────
+  "/dashboard/cuti": {
+    title: "Cuti",
+    subtitle: "Pengajuan dan saldo cuti",
+  },
+
+  // ─── Slip Gaji (employee self-service) ────────────────────────────────────
+  "/dashboard/slip-gaji": {
+    title: "Slip Gaji",
+    subtitle: "Lihat slip gaji bulanan saya",
+  },
+
   // ─── HR & Payroll ──────────────────────────────────────────────────────────
   "/dashboard/hr": {
     title: "HR & Payroll",

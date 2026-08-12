@@ -14,7 +14,7 @@ export function PayrollManagement() {
   const showSettings = can("hr-payroll", "edit");
 
   return (
-    <Tabs defaultValue="periods">
+    <Tabs defaultValue="periods" className="min-w-0 w-full">
       <TabsList className="flex h-auto w-full flex-col gap-1 rounded-2xl p-1 sm:grid sm:grid-cols-4 sm:gap-0">
         <TabsTrigger value="periods" className="rounded-xl gap-2">
           <CalendarDate weight="BoldDuotone" className="h-4 w-4" />

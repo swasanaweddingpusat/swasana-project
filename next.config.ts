@@ -5,6 +5,7 @@ const nextConfig: NextConfig = {
   // server needs into .next/standalone, so the runtime image stays small.
   output: "standalone",
   cacheComponents: true,
+  serverExternalPackages: ["sharp"],
   allowedDevOrigins: ["192.168.1.4"],
   async headers() {
     // Client agreement is a public, status-sensitive flow (validate / sign /

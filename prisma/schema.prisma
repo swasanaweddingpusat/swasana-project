@@ -221,6 +221,12 @@ model Profile {
   @@index([dataScope])
   @@index([departmentId])
   @@index([positionId])
+  recruitmentRequestsCreated  RecruitmentRequest[] @relation("RecruitmentRequestCreator")
+  recruitmentRequestsApproved1 RecruitmentRequest[] @relation("RecruitmentRequestApprover1")
+  recruitmentRequestsApproved2 RecruitmentRequest[] @relation("RecruitmentRequestApprover2")
+  guestbookHosted             GuestbookEntry[]     @relation("GuestbookHost")
+  guestbookCreated            GuestbookEntry[]     @relation("GuestbookCreator")
+  blacklistCreated            BlacklistEntry[]     @relation("BlacklistCreator")
   @@map("profiles")
 }
 
@@ -363,6 +369,7 @@ model Venue {
   weddingIndicators  WeddingIndicator[]
 
   @@index([brandId])
+  guestbookEntries       GuestbookEntry[]
   @@map("venues")
 }
 
@@ -777,6 +784,29 @@ enum OnboardingAssignTo {
 enum OnboardingStatus {
   in_progress
   completed
+}
+
+
+enum RecruitmentRequestStatus {
+  pending
+  approved
+  rejected
+  cancelled
+}
+
+enum RecruitmentRequestPriority {
+  low
+  medium
+  high
+  urgent
+}
+
+enum GuestVisitPurpose {
+  client_visit
+  vendor_meeting
+  interview
+  delivery
+  other
 }
 
 enum Religion {
@@ -2280,6 +2310,7 @@ model Department {
 
   @@index([parentId])
   @@index([headId])
+  recruitmentRequests RecruitmentRequest[]
   @@map("departments")
 }
 
@@ -2298,6 +2329,7 @@ model Position {
   jobPostings JobPosting[]
 
   @@index([departmentId])
+  recruitmentRequests RecruitmentRequest[]
   @@map("positions")
 }
 
@@ -3135,4 +3167,155 @@ model Kpi {
   updatedAt          DateTime @updatedAt
 
   @@map("kpis")
+}
+
+// --- Recruitment Request (FPK) -----------------------------------------------
+
+model RecruitmentRequest {
+  id                  String                      @id @default(uuid())
+  fpkNumber           String                      @unique
+  isWalkinInterview   Boolean                     @default(false)
+  company             String?
+  documentDate        DateTime?
+
+  departmentId        String?
+  positionId          String?
+  level               String?
+  salary              Decimal?                    @db.Decimal(15, 2)
+  quota               Int                         @default(1)
+  workLocation        String?
+  interviewLocation   String?
+  trainingCompanion   String?
+  startDate           DateTime?
+
+  minEducation        String?
+  minExperience       String?
+  otherQualifications String?
+  jobDescriptions     String[]
+  additionalNotes     String[]
+  approver1Id         String?
+  approver2Id         String?
+
+  requestedById       String?
+  status              RecruitmentRequestStatus    @default(pending)
+  priority            RecruitmentRequestPriority  @default(medium)
+  rejectionReason     String?
+  createdAt           DateTime                    @default(now())
+  updatedAt           DateTime                    @updatedAt
+
+  department          Department?                 @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  position            Position?                   @relation(fields: [positionId], references: [id], onDelete: SetNull)
+  requestedBy         Profile?                    @relation("RecruitmentRequestCreator", fields: [requestedById], references: [id], onDelete: SetNull)
+  approver1           Profile?                    @relation("RecruitmentRequestApprover1", fields: [approver1Id], references: [id], onDelete: SetNull)
+  approver2           Profile?                    @relation("RecruitmentRequestApprover2", fields: [approver2Id], references: [id], onDelete: SetNull)
+  formLink            RecruitmentFormLink?
+
+  @@index([status])
+  @@index([departmentId])
+  @@index([requestedById])
+  @@map("recruitment_requests")
+}
+
+// --- Recruitment Form Link ---------------------------------------------------
+
+model RecruitmentFormLink {
+  id                    String                      @id @default(uuid())
+  recruitmentRequestId  String                      @unique
+  token                 String                      @unique
+  accessCode            String
+  status                RecruitmentFormLinkStatus    @default(Active)
+  viewedAt              DateTime?
+  expiresAt             DateTime?
+  createdAt             DateTime                    @default(now())
+  updatedAt             DateTime                    @updatedAt
+
+  recruitmentRequest    RecruitmentRequest          @relation(fields: [recruitmentRequestId], references: [id], onDelete: Cascade)
+  submissions           CandidateSubmission[]
+
+  @@index([token])
+  @@map("recruitment_form_links")
+}
+
+enum RecruitmentFormLinkStatus {
+  Active
+  Revoked
+}
+
+// --- Candidate Submission ----------------------------------------------------
+
+model CandidateSubmission {
+  id                    String                      @id @default(uuid())
+  formLinkId            String
+  fullName              String
+  email                 String
+  phoneNumber           String
+  address               String?
+  birthPlace            String?
+  birthDate             DateTime?
+  lastEducation         String?
+  major                 String?
+  workExperienceYears   Int?
+  workHistory           String?
+  cvUrl                 String?
+  photoUrl              String?
+  submittedAt           DateTime                    @default(now())
+  createdAt             DateTime                    @default(now())
+  updatedAt             DateTime                    @updatedAt
+
+  formLink              RecruitmentFormLink          @relation(fields: [formLinkId], references: [id], onDelete: Cascade)
+
+  @@index([formLinkId])
+  @@map("candidate_submissions")
+}
+
+// --- Blacklist ---------------------------------------------------------------
+
+model BlacklistEntry {
+  id              String   @id @default(uuid())
+  fullName        String
+  email           String?
+  phoneNumber     String?
+  reason          String
+  blacklistedById String?
+  blacklistedAt   DateTime @default(now())
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  blacklistedBy   Profile? @relation("BlacklistCreator", fields: [blacklistedById], references: [id], onDelete: SetNull)
+
+  @@index([email])
+  @@map("blacklist_entries")
+}
+
+// --- Guestbook ---------------------------------------------------------------
+
+model GuestbookEntry {
+  id              String            @id @default(uuid())
+  visitorName     String
+  company         String?
+  email           String?
+  phoneNumber     String?
+  idNumber        String?
+  visitorPhotoUrl String?
+  idPhotoUrl      String?
+  purpose         GuestVisitPurpose @default(other)
+  purposeNote     String?
+  hostId          String?
+  venueId         String?
+  numberOfGuests  Int               @default(1)
+  checkInAt       DateTime          @default(now())
+  checkOutAt      DateTime?
+  notes           String?
+  createdById     String?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  host            Profile?          @relation("GuestbookHost", fields: [hostId], references: [id], onDelete: SetNull)
+  createdBy       Profile?          @relation("GuestbookCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  venue           Venue?            @relation(fields: [venueId], references: [id], onDelete: SetNull)
+
+  @@index([checkInAt])
+  @@index([hostId])
+  @@index([venueId])
+  @@map("guestbook_entries")
 }

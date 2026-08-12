@@ -2,17 +2,22 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { AddCircle, ArrowRight, Buildings, CheckCircle, Pen, TrashBinTrash, UserPlus } from "@solar-icons/react";
+import { AddCircle, ArrowRight, Buildings, CheckCircle, ClipboardText, CloseCircle, Copy, Export, Link, Pen, Refresh, TrashBinTrash, UserMinus, UserPlus, UsersGroupRounded } from "@solar-icons/react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useCandidates, useHireCandidate, useMoveCandidateStage } from "@/hooks/use-candidates";
 import { useEmployees } from "@/hooks/use-employees";
 import { useCloseJobPosting, useJobPostings, usePublishJobPosting } from "@/hooks/use-job-postings";
 import { useOnboardingTemplates, useOnboardingAssignments, useMyOnboarding, useCompleteOnboardingTask } from "@/hooks/use-onboarding";
+import { useExStaff } from "@/hooks/use-ex-staff";
+import { useRecruitmentRequests, useRegenerateFormLink, useRevokeFormLink } from "@/hooks/use-recruitment-requests";
 import type { CandidateItem } from "@/lib/queries/candidates";
+import type { ExStaffItem } from "@/lib/queries/exStaff";
+import type { RecruitmentRequestItem } from "@/lib/queries/recruitmentRequests";
 import type { JobPostingItem } from "@/lib/queries/jobPostings";
 import type { MyOnboardingAssignment, OnboardingAssignmentItem, OnboardingTemplateItem } from "@/lib/queries/onboarding";
 import { JobPostingDrawer } from "@/app/(private)/dashboard/hr/rekrutmen-onboarding/_components/JobPostingDrawer";
@@ -20,6 +25,10 @@ import { OnboardingTemplateDrawer } from "@/app/(private)/dashboard/hr/rekrutmen
 import { AssignOnboardingDrawer } from "@/app/(private)/dashboard/hr/rekrutmen-onboarding/_components/AssignOnboardingDrawer";
 import { CandidateDrawer } from "@/app/(private)/dashboard/hr/rekrutmen-onboarding/_components/CandidateDrawer";
 import { RejectCandidateDrawer } from "@/app/(private)/dashboard/hr/rekrutmen-onboarding/_components/RejectCandidateDrawer";
+import { RecruitmentRequestDrawer } from "@/app/(private)/dashboard/hr/rekrutmen-onboarding/_components/RecruitmentRequestDrawer";
+import { BlacklistDrawer } from "@/app/(private)/dashboard/hr/rekrutmen-onboarding/_components/BlacklistDrawer";
+import { useBlacklistEntries, useDeleteBlacklistEntry } from "@/hooks/use-blacklist";
+import type { BlacklistEntryItem } from "@/lib/queries/blacklistEntries";
 
 const STAGE_LABELS: Record<string, string> = {
   applied: "Applied",
@@ -86,12 +95,18 @@ export function RekrutmenOnboardingClient() {
   const { data: templates = [] } = useOnboardingTemplates();
   const { data: assignments = [] } = useOnboardingAssignments();
   const { data: myOnboarding } = useMyOnboarding();
+  const { data: exStaffList = [] } = useExStaff();
+  const { data: blacklistEntries = [] } = useBlacklistEntries();
+  const { data: recruitmentRequests = [] } = useRecruitmentRequests();
 
   const publishJobPostingMutation = usePublishJobPosting();
   const closeJobPostingMutation = useCloseJobPosting();
   const moveCandidateStageMutation = useMoveCandidateStage();
   const hireCandidateMutation = useHireCandidate();
   const completeTaskMutation = useCompleteOnboardingTask();
+  const deleteBlacklistMutation = useDeleteBlacklistEntry();
+  const regenerateFormLinkMutation = useRegenerateFormLink();
+  const revokeFormLinkMutation = useRevokeFormLink();
 
   const employees = useMemo(() => employeesResult?.data ?? [], [employeesResult?.data]);
 
@@ -109,6 +124,8 @@ export function RekrutmenOnboardingClient() {
   const [candidateDrawerOpen, setCandidateDrawerOpen] = useState(false);
   const [rejectDrawerOpen, setRejectDrawerOpen] = useState(false);
   const [assignDrawerOpen, setAssignDrawerOpen] = useState(false);
+  const [recruitmentRequestDrawerOpen, setRecruitmentRequestDrawerOpen] = useState(false);
+  const [blacklistDrawerOpen, setBlacklistDrawerOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("lowongan");
   const [_selectedJobPostingId, setSelectedJobPostingId] = useState<string | null>(null);
 
@@ -183,6 +200,42 @@ export function RekrutmenOnboardingClient() {
     toast.error(result.error ?? "Gagal menyelesaikan task");
   }
 
+  async function handleDeleteBlacklistEntry(id: string) {
+    const result = await deleteBlacklistMutation.mutateAsync(id);
+    if (result.success) {
+      toast.success("Data berhasil dihapus dari blacklist");
+      return;
+    }
+
+    toast.error(result.error ?? "Gagal menghapus data blacklist");
+  }
+
+  async function handleRegenerateFormLink(recruitmentRequestId: string) {
+    const result = await regenerateFormLinkMutation.mutateAsync(recruitmentRequestId);
+    if (result.success) {
+      toast.success("Link form berhasil diperbarui");
+      return;
+    }
+    toast.error(result.error ?? "Gagal memperbarui link form");
+  }
+
+  async function handleRevokeFormLink(recruitmentRequestId: string) {
+    const result = await revokeFormLinkMutation.mutateAsync(recruitmentRequestId);
+    if (result.success) {
+      toast.success("Link form berhasil dinonaktifkan");
+      return;
+    }
+    toast.error(result.error ?? "Gagal menonaktifkan link form");
+  }
+
+  function handleCopyToClipboard(text: string, label: string) {
+    navigator.clipboard.writeText(text).then(() => {
+      toast.success(`${label} disalin ke clipboard`);
+    }).catch(() => {
+      toast.error("Gagal menyalin ke clipboard");
+    });
+  }
+
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
@@ -205,10 +258,13 @@ export function RekrutmenOnboardingClient() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="flex h-auto w-full flex-col gap-1 rounded-2xl p-1 sm:grid sm:grid-cols-3 sm:gap-0">
+        <TabsList className="flex h-auto w-full flex-col gap-1 rounded-2xl p-1 sm:grid sm:grid-cols-3 sm:gap-0 lg:grid-cols-6">
           <TabsTrigger value="lowongan" className="rounded-xl gap-2"><Buildings weight="BoldDuotone" className="h-4 w-4" />Lowongan</TabsTrigger>
           <TabsTrigger value="kandidat" className="rounded-xl gap-2"><UserPlus weight="BoldDuotone" className="h-4 w-4" />Kandidat</TabsTrigger>
           <TabsTrigger value="onboarding" className="rounded-xl gap-2"><CheckCircle weight="BoldDuotone" className="h-4 w-4" />Onboarding</TabsTrigger>
+          <TabsTrigger value="recruitment-request" className="rounded-xl gap-2"><ClipboardText weight="BoldDuotone" className="h-4 w-4" />Recruitment Request</TabsTrigger>
+          <TabsTrigger value="blacklist" className="rounded-xl gap-2"><CloseCircle weight="BoldDuotone" className="h-4 w-4" />Blacklist</TabsTrigger>
+          <TabsTrigger value="ex-staff" className="rounded-xl gap-2"><UserMinus weight="BoldDuotone" className="h-4 w-4" />Ex-Staff</TabsTrigger>
         </TabsList>
 
         <TabsContent value="lowongan" className="mt-4 space-y-4">
@@ -377,6 +433,288 @@ export function RekrutmenOnboardingClient() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        <TabsContent value="recruitment-request" className="mt-4 space-y-4">
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" className="rounded-full gap-2" onClick={() => toast.info("Fitur export belum tersedia")}>
+              <Export weight="BoldDuotone" className="h-4 w-4" />Export
+            </Button>
+            <Button className="rounded-full gap-2" onClick={() => setRecruitmentRequestDrawerOpen(true)}>
+              <AddCircle weight="BoldDuotone" className="h-4 w-4" />Tambah Data
+            </Button>
+          </div>
+
+          <Card className="rounded-2xl shadow-sm">
+            <CardHeader className="space-y-2">
+              <CardTitle className="text-lg font-heading">Permintaan Rekrutmen</CardTitle>
+              <p className="text-sm text-muted-foreground">Daftar permintaan rekrutmen dari setiap departemen.</p>
+            </CardHeader>
+            <CardContent>
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Departemen</TableHead>
+                      <TableHead>Posisi</TableHead>
+                      <TableHead>Jumlah</TableHead>
+                      <TableHead>Prioritas</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Tanggal Request</TableHead>
+                      <TableHead>Link Form</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {recruitmentRequests.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={7} className="py-10 text-center text-sm text-muted-foreground">
+                          Belum ada permintaan rekrutmen.
+                        </TableCell>
+                      </TableRow>
+                    ) : recruitmentRequests.map((req: RecruitmentRequestItem) => {
+                      const formUrl = req.formLink
+                        ? `${typeof window !== "undefined" ? window.location.origin : ""}/recruitment-form?token=${req.formLink.token}`
+                        : null;
+                      return (
+                      <TableRow key={req.id}>
+                        <TableCell>
+                          <div className="flex flex-col gap-0.5">
+                            <span className="font-medium text-foreground">{req.department?.name ?? "-"}</span>
+                            <span className="text-xs text-muted-foreground">{req.fpkNumber}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell>{req.position?.name ?? req.level ?? "-"}</TableCell>
+                        <TableCell>{req.quota}</TableCell>
+                        <TableCell>
+                          <Badge
+                            variant={req.priority === "urgent" ? "destructive" : "secondary"}
+                            className="rounded-full"
+                          >
+                            {req.priority}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Badge
+                            variant={req.status === "approved" ? "default" : req.status === "rejected" ? "destructive" : "secondary"}
+                            className="rounded-full"
+                          >
+                            {req.status}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground">{formatDate(req.createdAt)}</TableCell>
+                        <TableCell>
+                          {req.formLink ? (
+                            <Popover>
+                              <PopoverTrigger
+                                render={
+                                  <Button size="sm" variant="outline" className="rounded-full gap-1.5">
+                                    <Link weight="BoldDuotone" className="h-4 w-4" />
+                                    <span>{req.formLink.status === "Active" ? "Aktif" : "Nonaktif"}</span>
+                                  </Button>
+                                }
+                              />
+                              <PopoverContent className="w-80" side="left" align="start">
+                                <div className="flex flex-col gap-3">
+                                  <div className="flex items-center justify-between gap-2">
+                                    <span className="text-sm font-medium text-foreground">Link Form Kandidat</span>
+                                    <Badge variant={req.formLink.status === "Active" ? "default" : "secondary"} className="rounded-full text-xs">
+                                      {req.formLink.status === "Active" ? "Aktif" : "Nonaktif"}
+                                    </Badge>
+                                  </div>
+                                  <div className="flex flex-col gap-1.5">
+                                    <span className="text-xs text-muted-foreground">URL Pendaftaran</span>
+                                    <div className="flex items-center gap-2 rounded-xl border border-border bg-muted/50 px-3 py-2">
+                                      <span className="min-w-0 flex-1 truncate font-mono text-xs text-foreground">{formUrl}</span>
+                                      <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        className="h-6 w-6 shrink-0 rounded-full p-0"
+                                        onClick={() => handleCopyToClipboard(formUrl ?? "", "URL")}
+                                      >
+                                        <Copy weight="BoldDuotone" className="h-3.5 w-3.5" />
+                                      </Button>
+                                    </div>
+                                  </div>
+                                  <div className="flex flex-col gap-1.5">
+                                    <span className="text-xs text-muted-foreground">Kode Akses</span>
+                                    <div className="flex items-center gap-2 rounded-xl border border-border bg-muted/50 px-3 py-2">
+                                      <span className="flex-1 font-mono text-sm font-semibold tracking-widest text-foreground">{req.formLink.accessCode}</span>
+                                      <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        className="h-6 w-6 shrink-0 rounded-full p-0"
+                                        onClick={() => handleCopyToClipboard(req.formLink?.accessCode ?? "", "Kode akses")}
+                                      >
+                                        <Copy weight="BoldDuotone" className="h-3.5 w-3.5" />
+                                      </Button>
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                                    <UsersGroupRounded weight="BoldDuotone" className="h-3.5 w-3.5" />
+                                    <span>{req.formLink._count.submissions} pendaftar</span>
+                                    {req.formLink.expiresAt ? (
+                                      <span className="ml-auto">Exp: {formatDate(req.formLink.expiresAt)}</span>
+                                    ) : null}
+                                  </div>
+                                  <div className="flex gap-2 border-t border-border pt-2">
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      className="flex-1 rounded-full gap-1.5"
+                                      onClick={() => handleRegenerateFormLink(req.id)}
+                                      disabled={regenerateFormLinkMutation.isPending}
+                                    >
+                                      <Refresh weight="BoldDuotone" className="h-3.5 w-3.5" />
+                                      Regenerate
+                                    </Button>
+                                    {req.formLink.status === "Active" ? (
+                                      <Button
+                                        size="sm"
+                                        variant="destructive"
+                                        className="flex-1 rounded-full gap-1.5"
+                                        onClick={() => handleRevokeFormLink(req.id)}
+                                        disabled={revokeFormLinkMutation.isPending}
+                                      >
+                                        <CloseCircle weight="BoldDuotone" className="h-3.5 w-3.5" />
+                                        Nonaktifkan
+                                      </Button>
+                                    ) : null}
+                                  </div>
+                                </div>
+                              </PopoverContent>
+                            </Popover>
+                          ) : (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="rounded-full gap-1.5 text-muted-foreground"
+                              onClick={() => handleRegenerateFormLink(req.id)}
+                              disabled={regenerateFormLinkMutation.isPending}
+                            >
+                              <Link weight="BoldDuotone" className="h-4 w-4" />
+                              Buat link
+                            </Button>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="blacklist" className="mt-4 space-y-4">
+          <div className="flex justify-end">
+            <Button className="rounded-full gap-2" onClick={() => setBlacklistDrawerOpen(true)}>
+              <AddCircle weight="BoldDuotone" className="h-4 w-4" />Tambah Blacklist
+            </Button>
+          </div>
+
+          <Card className="rounded-2xl shadow-sm">
+            <CardHeader className="space-y-2">
+              <CardTitle className="text-lg font-heading">Daftar Blacklist</CardTitle>
+              <p className="text-sm text-muted-foreground">Kandidat atau mantan karyawan yang masuk daftar blacklist beserta alasan.</p>
+            </CardHeader>
+            <CardContent>
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Nama</TableHead>
+                      <TableHead>Email</TableHead>
+                      <TableHead>Alasan</TableHead>
+                      <TableHead>Tanggal Blacklist</TableHead>
+                      <TableHead>Ditambahkan oleh</TableHead>
+                      <TableHead className="text-right">Aksi</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {blacklistEntries.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={6} className="py-10 text-center text-sm text-muted-foreground">
+                          Belum ada data blacklist.
+                        </TableCell>
+                      </TableRow>
+                    ) : blacklistEntries.map((entry: BlacklistEntryItem) => (
+                      <TableRow key={entry.id}>
+                        <TableCell>
+                          <span className="font-medium text-foreground">{entry.fullName}</span>
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground">{entry.email ?? "-"}</TableCell>
+                        <TableCell className="max-w-60 text-sm">{entry.reason}</TableCell>
+                        <TableCell className="text-sm text-muted-foreground">{formatDate(entry.blacklistedAt)}</TableCell>
+                        <TableCell className="text-sm text-muted-foreground">{entry.blacklistedBy?.fullName ?? "-"}</TableCell>
+                        <TableCell>
+                          <div className="flex justify-end">
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              className="rounded-full gap-1.5"
+                              onClick={() => handleDeleteBlacklistEntry(entry.id)}
+                              disabled={deleteBlacklistMutation.isPending}
+                            >
+                              <TrashBinTrash weight="BoldDuotone" className="h-4 w-4" />Hapus
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="ex-staff" className="mt-4 space-y-4">
+          <Card className="rounded-2xl shadow-sm">
+            <CardHeader className="space-y-2">
+              <CardTitle className="text-lg font-heading">Daftar Ex-Staff</CardTitle>
+              <p className="text-sm text-muted-foreground">Mantan karyawan yang sudah resign, berakhir kontrak, atau diterminasi.</p>
+            </CardHeader>
+            <CardContent>
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Nama</TableHead>
+                      <TableHead>Posisi Terakhir</TableHead>
+                      <TableHead>Departemen</TableHead>
+                      <TableHead>Tanggal Keluar</TableHead>
+                      <TableHead>Alasan Keluar</TableHead>
+                      <TableHead>Eligible Rehire</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {exStaffList.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={6} className="py-10 text-center text-sm text-muted-foreground">
+                          Belum ada data ex-staff.
+                        </TableCell>
+                      </TableRow>
+                    ) : exStaffList.map((item: ExStaffItem) => (
+                      <TableRow key={item.id}>
+                        <TableCell>
+                          <div className="flex flex-col gap-0.5">
+                            <span className="font-medium text-foreground">{item.fullName ?? "-"}</span>
+                            <span className="text-xs text-muted-foreground">{item.email ?? "-"}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell>{item.position?.name ?? "-"}</TableCell>
+                        <TableCell>{item.department?.name ?? "-"}</TableCell>
+                        <TableCell>{formatDate(item.resignDate)}</TableCell>
+                        <TableCell>-</TableCell>
+                        <TableCell><Badge className="rounded-full">Ya</Badge></TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
       </Tabs>
 
       <JobPostingDrawer
@@ -402,6 +740,14 @@ export function RekrutmenOnboardingClient() {
         isOpen={rejectDrawerOpen}
         onClose={() => setRejectDrawerOpen(false)}
         candidates={candidates}
+      />
+      <RecruitmentRequestDrawer
+        isOpen={recruitmentRequestDrawerOpen}
+        onClose={() => setRecruitmentRequestDrawerOpen(false)}
+      />
+      <BlacklistDrawer
+        isOpen={blacklistDrawerOpen}
+        onClose={() => setBlacklistDrawerOpen(false)}
       />
     </div>
   );

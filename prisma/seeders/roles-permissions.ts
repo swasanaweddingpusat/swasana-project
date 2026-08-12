@@ -1,4 +1,4 @@
-﻿import { prisma } from "./_client";
+import { prisma } from "./_client";
 
 // ── Roles ────────────────────────────────────────────────────────────
 const roleData = [
@@ -56,6 +56,7 @@ const moduleActions: Record<string, string[]> = {
   "settings-maintenance-status": ["view", "create", "edit", "delete"],
   promo: ["view", "create", "edit", "delete"],
   procurement: ["view", "create", "edit", "delete", "approve"],
+  guestbook: ["view", "create", "edit"],
   // HR & Payroll module
   hr: ["view", "create", "edit", "delete", "approve"],
   // Finance AP — customer payout (cashback program + overpay refund)
@@ -91,6 +92,7 @@ const rolePermissionMap: Record<string, Record<string, string[]>> = {
     quotations: ["view", "create", "edit", "delete"],
     "settings-quotation-templates": ["view", "create", "edit", "delete"],
     complimentary: ["view", "create", "edit", "delete"],
+    guestbook: ["view", "create", "edit"],
     promo: ["view"],
   },
   // Manager: CRUD only on dashboard, calendar-event, groups, booking-weddings,
@@ -104,6 +106,7 @@ const rolePermissionMap: Record<string, Record<string, string[]>> = {
     package: ["view", "create", "edit", "delete", "set-harga", "term-&-condition", "set-status"],
     vendor: ["view", "create", "edit", "delete"],
     complimentary: ["view", "create", "edit", "delete"],
+    guestbook: ["view", "create", "edit"],
     promo: ["view"],
     procurement: ["view", "create", "edit", "delete", "approve"],
     hr: ["view", "create", "edit", "delete", "approve"],
@@ -114,6 +117,7 @@ const rolePermissionMap: Record<string, Record<string, string[]>> = {
     package: ["view"],
     vendor: ["view", "create", "edit"],
     maintenance: ["view", "create", "edit"],
+    guestbook: ["view", "create", "edit"],
     promo: ["view"],
     procurement: ["view", "approve"],
   },
@@ -123,6 +127,7 @@ const rolePermissionMap: Record<string, Record<string, string[]>> = {
     package: ["view"],
     vendor: ["view"],
     maintenance: ["view", "create", "edit"],
+    guestbook: ["view", "create", "edit"],
     promo: ["view"],
     procurement: ["view", "create"],
   },
@@ -156,6 +161,7 @@ const rolePermissionMap: Record<string, Record<string, string[]>> = {
     "settings-venues": ["view", "create", "edit", "delete"],
     "vendor-specialist": ["view", "create", "edit", "delete"],
     vendor: ["view", "create", "edit", "delete"],
+    guestbook: ["view", "create", "edit"],
     promo: ["view"],
   },
   // Finance AR only — Accounts Receivable + Cashflow (+ Overview). Can record/ack
@@ -180,6 +186,7 @@ const rolePermissionMap: Record<string, Record<string, string[]>> = {
     package: ["view", "create", "edit", "term-&-condition"],
     vendor: ["view"],
     "settings-source-of-information": ["view", "create", "edit", "delete"],
+    guestbook: ["view", "create", "edit"],
     "daily-activity": ["view", "create", "edit", "delete"],
     // quotations intentionally removed — sales role no longer has quotation access.
     // view+create only: sales can select & create complimentary on-the-fly from booking drawer,
@@ -197,6 +204,7 @@ const rolePermissionMap: Record<string, Record<string, string[]>> = {
     hr: ["view", "create", "edit", "delete", "approve"],
     "settings-users": ["view", "create", "edit", "delete"],
     "settings-education-level": ["view", "create", "edit", "delete"],
+    guestbook: ["view", "create", "edit"],
   },
   "sales-mice": {
     "booking-mice": ["view", "create", "edit", "comment", "client-agreement"],
@@ -206,6 +214,7 @@ const rolePermissionMap: Record<string, Record<string, string[]>> = {
     "daily-activity": ["view", "create", "edit", "delete"],
     complimentary: ["view", "create"],
     "settings-daily-activity-segment": ["view"],
+    guestbook: ["view", "create", "edit"],
     // sales-mice can view/create/edit packages but NOT set-harga and NOT delete
     "package-mice": ["view", "create", "edit"],
   },
