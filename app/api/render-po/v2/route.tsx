@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { requirePermissionForRoute } from "@/lib/permissions";
 import { apiLimiter, rateLimitResponse } from "@/lib/rate-limit";
 import { humanizeRoleName } from "@/lib/approval-flows";
+import { getPoPayments } from "@/lib/queries/getPoPayments";
 import { POPdfDocumentV2 } from "@/components/pdf/POPdfDocumentV2";
 import type { POPdfBooking } from "@/components/pdf/POPdfDocument";
 import path from "path";
@@ -154,6 +155,9 @@ export async function POST(req: Request): Promise<Response> {
         })),
       };
     }
+
+    // Payments di PO = event SETELAH snapshot freeze → SELALU live-fetch (tidak ikut revisi)
+    pdfBooking.poPayments = await getPoPayments(bookingId);
 
     const customerName = (pdfBooking.snapCustomer?.name ?? "Customer").replace(/[^a-zA-Z0-9]/g, "_");
     const fileName = `PO_V2_${customerName}.pdf`;
