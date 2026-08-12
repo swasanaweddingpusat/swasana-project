@@ -3328,3 +3328,30 @@ model GuestbookEntry {
   @@index([venueId])
   @@map("guestbook_entries")
 }
+
+// --- Module Grouping -----------------------------------------------------------
+
+model Module {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  name      String
+  icon      String?
+  sortOrder Int      @default(0)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  permissionMaps ModulePermissionMap[]
+
+  @@map("modules")
+}
+
+model ModulePermissionMap {
+  id               String @id @default(cuid())
+  moduleId         String
+  module           Module @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  permissionModule String
+
+  @@unique([moduleId, permissionModule])
+  @@map("module_permission_maps")
+}
