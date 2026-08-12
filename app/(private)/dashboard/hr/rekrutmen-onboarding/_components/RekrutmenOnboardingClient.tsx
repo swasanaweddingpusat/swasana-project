@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { AddCircle, ArrowRight, Buildings, CheckCircle, ClipboardText, CloseCircle, Copy, Export, Link, Pen, Refresh, TrashBinTrash, UserMinus, UserPlus, UsersGroupRounded } from "@solar-icons/react";
+import { AddCircle, ArrowRight, Buildings, CheckCircle, ClipboardText, CloseCircle, Copy, Export, Eye, Link, Pen, Refresh, TrashBinTrash, UserMinus, UserPlus, UsersGroupRounded } from "@solar-icons/react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -27,6 +27,7 @@ import { CandidateDrawer } from "@/app/(private)/dashboard/hr/rekrutmen-onboardi
 import { RejectCandidateDrawer } from "@/app/(private)/dashboard/hr/rekrutmen-onboarding/_components/RejectCandidateDrawer";
 import { RecruitmentRequestDrawer } from "@/app/(private)/dashboard/hr/rekrutmen-onboarding/_components/RecruitmentRequestDrawer";
 import { BlacklistDrawer } from "@/app/(private)/dashboard/hr/rekrutmen-onboarding/_components/BlacklistDrawer";
+import { RecruitmentRequestDetailDrawer } from "@/app/(private)/dashboard/hr/rekrutmen-onboarding/_components/RecruitmentRequestDetailDrawer";
 import { useBlacklistEntries, useDeleteBlacklistEntry } from "@/hooks/use-blacklist";
 import type { BlacklistEntryItem } from "@/lib/queries/blacklistEntries";
 
@@ -126,6 +127,7 @@ export function RekrutmenOnboardingClient() {
   const [assignDrawerOpen, setAssignDrawerOpen] = useState(false);
   const [recruitmentRequestDrawerOpen, setRecruitmentRequestDrawerOpen] = useState(false);
   const [blacklistDrawerOpen, setBlacklistDrawerOpen] = useState(false);
+  const [selectedRequest, setSelectedRequest] = useState<RecruitmentRequestItem | null>(null);
   const [activeTab, setActiveTab] = useState("lowongan");
   const [_selectedJobPostingId, setSelectedJobPostingId] = useState<string | null>(null);
 
@@ -461,12 +463,13 @@ export function RekrutmenOnboardingClient() {
                       <TableHead>Status</TableHead>
                       <TableHead>Tanggal Request</TableHead>
                       <TableHead>Link Form</TableHead>
+                      <TableHead className="text-right">Aksi</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {recruitmentRequests.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={7} className="py-10 text-center text-sm text-muted-foreground">
+                        <TableCell colSpan={8} className="py-10 text-center text-sm text-muted-foreground">
                           Belum ada permintaan rekrutmen.
                         </TableCell>
                       </TableRow>
@@ -594,6 +597,17 @@ export function RekrutmenOnboardingClient() {
                               Buat link
                             </Button>
                           )}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="rounded-full gap-1.5"
+                            onClick={() => setSelectedRequest(req)}
+                          >
+                            <Eye weight="BoldDuotone" className="h-4 w-4" />
+                            Lihat Detail
+                          </Button>
                         </TableCell>
                       </TableRow>
                       );
@@ -748,6 +762,15 @@ export function RekrutmenOnboardingClient() {
       <BlacklistDrawer
         isOpen={blacklistDrawerOpen}
         onClose={() => setBlacklistDrawerOpen(false)}
+      />
+      <RecruitmentRequestDetailDrawer
+        open={selectedRequest !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setSelectedRequest(null);
+          }
+        }}
+        request={selectedRequest}
       />
     </div>
   );
