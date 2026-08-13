@@ -38,6 +38,8 @@ type GuestbookForm = {
   hostName: string;
   numberOfGuests: number;
   notes: string;
+  visitStatus: string;
+  notJoinReason: string;
   visitorPhotoFile: File | null;
   visitorPhotoPreview: string;
   idPhotoFile: File | null;
@@ -57,6 +59,8 @@ const EMPTY_FORM: GuestbookForm = {
   hostName: "",
   numberOfGuests: 1,
   notes: "",
+  visitStatus: "",
+  notJoinReason: "",
   visitorPhotoFile: null,
   visitorPhotoPreview: "",
   idPhotoFile: null,
@@ -170,6 +174,8 @@ export function GuestbookDrawer({ isOpen, onClose }: GuestbookDrawerProps) {
       hostId: null,
       numberOfGuests: form.numberOfGuests,
       notes: buildNotes(form),
+      visitStatus: form.visitStatus || null,
+      notJoinReason: form.visitStatus === "not_joined" ? (form.notJoinReason.trim() || null) : null,
     });
 
     if (result.success) {
@@ -460,6 +466,41 @@ export function GuestbookDrawer({ isOpen, onClose }: GuestbookDrawerProps) {
               className="rounded-xl min-h-20 resize-y"
             />
           </div>
+
+          {/* Visit Status */}
+          <div className="space-y-1.5">
+            <Label htmlFor="gb-visitStatus" className="text-sm font-medium">
+              Visit Status
+            </Label>
+            <Select
+              value={form.visitStatus}
+              onValueChange={(v) => setField("visitStatus", v)}
+            >
+              <SelectTrigger id="gb-visitStatus" className="rounded-xl w-full">
+                <SelectValue placeholder="Pilih status kunjungan" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="deal">Deal</SelectItem>
+                <SelectItem value="to_be_discuss">To Be Discuss</SelectItem>
+                <SelectItem value="not_joined">Not Joined</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {form.visitStatus === "not_joined" && (
+            <div className="space-y-1.5">
+              <Label htmlFor="gb-notJoinReason" className="text-sm font-medium">
+                Alasan Tidak Bergabung
+              </Label>
+              <Textarea
+                id="gb-notJoinReason"
+                placeholder="Jelaskan alasan..."
+                value={form.notJoinReason}
+                onChange={(e) => setField("notJoinReason", e.target.value)}
+                className="rounded-xl min-h-16 resize-y"
+              />
+            </div>
+          )}
         </div>
 
         {/* Footer */}

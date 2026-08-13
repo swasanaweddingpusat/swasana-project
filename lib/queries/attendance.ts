@@ -22,13 +22,17 @@ export async function getAttendanceSettings() {
 }
 
 export async function getAttendanceList(params: AttendanceListQuery) {
-  const { profileId, date, month, year, page, limit } = params;
+  const { profileId, venueId, date, month, year, page, limit } = params;
   const skip = (page - 1) * limit;
 
   const where: Record<string, unknown> = {};
 
   if (profileId) {
     where.profileId = profileId;
+  }
+
+  if (venueId) {
+    where.workLocation = { venueId };
   }
 
   if (date) {

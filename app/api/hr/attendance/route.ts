@@ -14,6 +14,7 @@ export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const raw = {
     profileId: searchParams.get("profileId") ?? undefined,
+    venueId: searchParams.get("venueId") ?? undefined,
     date: searchParams.get("date") ?? undefined,
     month: searchParams.get("month") ?? undefined,
     year: searchParams.get("year") ?? undefined,

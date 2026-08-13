@@ -64,6 +64,8 @@ export async function createRecruitmentRequest(
           additionalNotes: parsed.data.additionalNotes.filter(Boolean),
           priority: parsed.data.priority,
           requestedById: session!.user.profileId,
+          approver1Id: parsed.data.approver1Id ?? null,
+          approver2Id: parsed.data.approver2Id ?? null,
         },
       }),
       db.recruitmentFormLink.create({

@@ -10,6 +10,7 @@ import { SignaturePad } from "@/components/shared/signature-pad";
 import { useCreateRecruitmentRequest } from "@/hooks/use-recruitment-requests";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { useMySignature } from "@/hooks/use-my-signature";
+import { useUsers } from "@/hooks/use-users";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -71,6 +72,13 @@ export function RecruitmentRequestDrawer({
 
   const { user } = useCurrentUser();
   const { defaultSignature } = useMySignature();
+  const { data: usersData } = useUsers(undefined, { limit: 200 });
+  const userOptions = usersData?.users
+    ?.filter((u) => u.profile?.status === "active")
+    .map((u) => ({
+      profileId: u.profile!.id,
+      label: u.profile?.fullName ?? u.name ?? u.email,
+    })) ?? [];
 
   const [fpkNumber] = useState(() => {
     const now = new Date();
@@ -147,6 +155,8 @@ export function RecruitmentRequestDrawer({
       jobDescriptions: deskripsiPekerjaan.filter(Boolean),
       additionalNotes: catatanTambahan.filter(Boolean),
       priority: "medium" as const,
+      approver1Id: yangMenyetujui1 || null,
+      approver2Id: yangMenyetujui2 || null,
     });
 
     if (result.success) {
@@ -565,9 +575,11 @@ export function RecruitmentRequestDrawer({
                   <SelectValue placeholder="Pilih penyetuju" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="manager-divisi">Manager Divisi</SelectItem>
-                  <SelectItem value="hr-manager">HR Manager</SelectItem>
-                  <SelectItem value="direktur">Direktur</SelectItem>
+                  {userOptions.map((u) => (
+                    <SelectItem key={u.profileId} value={u.profileId}>
+                      {u.label}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
@@ -580,9 +592,11 @@ export function RecruitmentRequestDrawer({
                   <SelectValue placeholder="Pilih penyetuju" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="manager-divisi">Manager Divisi</SelectItem>
-                  <SelectItem value="hr-manager">HR Manager</SelectItem>
-                  <SelectItem value="direktur">Direktur</SelectItem>
+                  {userOptions.map((u) => (
+                    <SelectItem key={u.profileId} value={u.profileId}>
+                      {u.label}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>

@@ -25,6 +25,7 @@ export const attendanceSettingsSchema = z.object({
 
 export const attendanceListQuerySchema = z.object({
   profileId: z.string().optional(),
+  venueId: z.string().optional(),
   date: z.string().optional(),
   month: z.coerce.number().int().min(1).max(12).optional(),
   year: z.coerce.number().int().min(2020).max(2100).optional(),

@@ -809,6 +809,12 @@ enum GuestVisitPurpose {
   other
 }
 
+enum GuestVisitStatus {
+  deal
+  to_be_discuss
+  not_joined
+}
+
 enum Religion {
   islam
   kristen
@@ -3306,6 +3312,9 @@ model GuestbookEntry {
   checkInAt       DateTime          @default(now())
   checkOutAt      DateTime?
   notes           String?
+  guestCode       String?           @unique
+  visitStatus     GuestVisitStatus?
+  notJoinReason   String?
   createdById     String?
   createdAt       DateTime          @default(now())
   updatedAt       DateTime          @updatedAt

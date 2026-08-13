@@ -39,12 +39,14 @@ export function AttendanceTable() {
     : undefined;
   const year = Number(searchParams.get("year")) || new Date().getFullYear();
   const profileId = searchParams.get("profileId") ?? undefined;
+  const venueId = searchParams.get("venueId") ?? undefined;
 
   const { data, isLoading } = useAttendanceList({
     date,
     month,
     year,
     profileId,
+    venueId,
     page,
     limit: 50,
   });
