@@ -1,9 +1,9 @@
 {
-  "id": "/dashboard",
+  "id": "/",
   "name": "Swasana Wedding Management",
   "short_name": "Swasana",
   "description": "Sistem manajemen wedding & MICE Swasana — CRM, booking, approval, hingga finance dalam satu aplikasi.",
-  "start_url": "/dashboard?source=pwa",
+  "start_url": "/select-module?source=pwa",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait-primary",
@@ -37,28 +37,28 @@
       "name": "Booking Weddings",
       "short_name": "Weddings",
       "description": "Lihat & kelola booking wedding",
-      "url": "/dashboard/booking-weddings?source=pwa",
+      "url": "/booking/booking-weddings?source=pwa",
       "icons": [{ "src": "/icons/shortcut-96x96.png", "sizes": "96x96", "type": "image/png" }]
     },
     {
       "name": "Booking MICE",
       "short_name": "MICE",
       "description": "Lihat & kelola booking MICE",
-      "url": "/dashboard/booking-mice?source=pwa",
+      "url": "/booking/booking-mice?source=pwa",
       "icons": [{ "src": "/icons/shortcut-96x96.png", "sizes": "96x96", "type": "image/png" }]
     },
     {
       "name": "Finance",
       "short_name": "Finance",
       "description": "Ringkasan keuangan & piutang",
-      "url": "/dashboard/finance?source=pwa",
+      "url": "/finance/overview?source=pwa",
       "icons": [{ "src": "/icons/shortcut-96x96.png", "sizes": "96x96", "type": "image/png" }]
     },
     {
       "name": "Notifikasi",
       "short_name": "Notifikasi",
       "description": "Lihat notifikasi terbaru",
-      "url": "/dashboard/notifications?source=pwa",
+      "url": "/general/notifications?source=pwa",
       "icons": [{ "src": "/icons/shortcut-96x96.png", "sizes": "96x96", "type": "image/png" }]
     }
   ]
