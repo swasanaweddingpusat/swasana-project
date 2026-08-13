@@ -39,6 +39,7 @@ import {
   Wallet2,
   Case,
   Chart2,
+  Bolt,
 } from "@solar-icons/react";
 
 type SolarIcon = ForwardRefExoticComponent<Omit<IconProps, "ref"> & RefAttributes<SVGSVGElement>>;
@@ -136,6 +137,11 @@ export const MODULE_NAV_MAP: Record<ModuleKey, NavItem[]> = {
   ],
   booking: [
     { name: "Overview", href: "/booking/overview", icon: Widget, subtitle: "Ringkasan booking dan sales", permission: { module: "booking", action: "view" } },
+    { name: "BITRIX24", href: "/booking/bitrix24", icon: Bolt, subtitle: "Integrasi CRM Bitrix24",
+      submenu: [
+        { name: "Overview", href: "/booking/bitrix24/overview", icon: PieChart, title: "Overview Bitrix24", subtitle: "Ringkasan perolehan lead & database CRM dari Bitrix24", permission: { module: "customers", action: "view" } },
+        { name: "Transaksi", href: "/booking/bitrix24/transaksi", icon: ClipboardList, title: "Transaksi Bitrix24", subtitle: "Data transaksi (deals) CRM dari Bitrix24", permission: { module: "customers", action: "view" } },
+      ] },
     { name: "Calendar Events", href: "/booking/calendar-events", icon: CalendarDate, subtitle: "Lihat jadwal event di kalender", permission: { module: "booking", action: "view" } },
     { name: "Groups", href: "/booking/groups", icon: UsersGroupRounded, subtitle: "Kelola tim dan pantau kinerja penjualan", permission: { module: "groups", action: "view" } },
     { name: "Daily Activity", href: "/booking/daily-activity", icon: ClipboardList, subtitle: "Kelola data daily activity dan pipeline penjualan", permission: { module: "daily-activity", action: "view" } },
