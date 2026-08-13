@@ -45,7 +45,7 @@ function filterSubMenus(items: SubMenuItem[], can: CanFn): SubMenuItem[] {
 function filterNavItems(items: NavItem[], can: CanFn, isGroupMember: boolean): NavItem[] {
   return items.flatMap((item) => {
     if (item.hidden) return [];
-    if (item.href === "/general/settings") {
+    if (item.href === "/settings") {
       const hasSettingsAccess = SETTINGS_MODULES.some((mod) => can(mod, "view"));
       if (!hasSettingsAccess) return [];
       return [item];

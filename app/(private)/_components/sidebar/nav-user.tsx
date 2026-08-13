@@ -77,8 +77,8 @@ export function NavUser(): React.ReactElement {
                 <SidebarMenu>
                   <SidebarMenuItem>
                     <SidebarMenuButton
-                      render={<Link href="/general/profile" />}
-                      isActive={pathname === "/general/profile"}
+                      render={<Link href="/profile" />}
+                      isActive={pathname === "/profile"}
                     >
                       <User weight="BoldDuotone" className="h-4 w-4" />
                       <span>Profile</span>

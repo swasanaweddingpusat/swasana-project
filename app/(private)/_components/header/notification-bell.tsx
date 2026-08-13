@@ -187,7 +187,7 @@ export function NotificationBell() {
           {notifications.length > 0 && (
             <button
               type="button"
-              onClick={() => { router.push("/general/notifications"); setOpen(false); }}
+              onClick={() => { router.push("/notifications"); setOpen(false); }}
               className={cn(
                 'w-full', 'text-center', 'py-2.5',
                 'text-xs', 'font-medium', 'text-muted-foreground',

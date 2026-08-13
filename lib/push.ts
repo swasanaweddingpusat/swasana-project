@@ -85,5 +85,5 @@ export function getNotificationUrl(type: string, entityId?: string | null): stri
   if (type === "comment_mention" && entityId) {
     return `/booking/booking-weddings?bookingId=${entityId}&openComments=true`;
   }
-  return "/general/notifications";
+  return "/notifications";
 }

@@ -27,7 +27,7 @@ import {
   createTutorialStepDocument,
   deleteTutorialStepDocument,
 } from "@/actions/tutorial";
-import type { TutorialCategory, TutorialLesson, TutorialStep, TutorialStepDocument } from "@/app/(private)/general/tutorial/_components/tutorial-types";
+import type { TutorialCategory, TutorialLesson, TutorialStep, TutorialStepDocument } from "@/app/(private)/(general)/tutorial/_components/tutorial-types";
 
 interface Props {
   initialCategories: TutorialCategory[];

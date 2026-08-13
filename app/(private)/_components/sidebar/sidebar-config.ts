@@ -168,12 +168,12 @@ export const MODULE_NAV_MAP: Record<ModuleKey, NavItem[]> = {
 
 export const GENERAL_NAV: NavItem[] = [
   { name: "Home", href: "/", icon: Widget, subtitle: "Overview sistem" },
-  { name: "Indikator Pernikahan", href: "/general/wedding-indicators", icon: Heart, subtitle: "Kelola kuesioner penilaian kepuasan pasangan pernikahan", permission: { module: "vendor-specialist", action: "view" } },
-  { name: "Maintenance", href: "/general/maintenance", icon: Sledgehammer, subtitle: "Kelola ticket dan jadwal pemeliharaan", permission: { module: "maintenance", action: "view" } },
-  { name: "Guestbook", href: "/general/guestbook", icon: Notebook, subtitle: "Catat kunjungan tamu, vendor, dan client ke kantor", permission: { module: "guestbook", action: "view" } },
-  { name: "Cuti", href: "/general/cuti", icon: CalendarDate, subtitle: "Pengajuan dan saldo cuti" },
-  { name: "Slip Gaji", href: "/general/slip-gaji", icon: FileText, subtitle: "Lihat slip gaji bulanan saya" },
-  { name: "Notifikasi", href: "/general/notifications", icon: BellBing, subtitle: "Semua notifikasi" },
-  { name: "Tutorial", href: "/general/tutorial", icon: FileText, subtitle: "Panduan penggunaan aplikasi" },
-  { name: "Settings", href: "/general/settings", icon: Settings, subtitle: "Kelola pengaturan sistem" },
+  { name: "Indikator Pernikahan", href: "/wedding-indicators", icon: Heart, subtitle: "Kelola kuesioner penilaian kepuasan pasangan pernikahan", permission: { module: "vendor-specialist", action: "view" } },
+  { name: "Maintenance", href: "/maintenance", icon: Sledgehammer, subtitle: "Kelola ticket dan jadwal pemeliharaan", permission: { module: "maintenance", action: "view" } },
+  { name: "Guestbook", href: "/guestbook", icon: Notebook, subtitle: "Catat kunjungan tamu, vendor, dan client ke kantor", permission: { module: "guestbook", action: "view" } },
+  { name: "Cuti", href: "/cuti", icon: CalendarDate, subtitle: "Pengajuan dan saldo cuti" },
+  { name: "Slip Gaji", href: "/slip-gaji", icon: FileText, subtitle: "Lihat slip gaji bulanan saya" },
+  { name: "Notifikasi", href: "/notifications", icon: BellBing, subtitle: "Semua notifikasi" },
+  { name: "Tutorial", href: "/tutorial", icon: FileText, subtitle: "Panduan penggunaan aplikasi" },
+  { name: "Settings", href: "/settings", icon: Settings, subtitle: "Kelola pengaturan sistem" },
 ];

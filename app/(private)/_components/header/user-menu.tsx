@@ -67,7 +67,7 @@ export function UserMenu() {
         <DropdownMenuSeparator />
 
         <DropdownMenuItem
-          onClick={() => (window.location.href = "/general/profile")}
+          onClick={() => (window.location.href = "/profile")}
           className={cn('cursor-pointer', 'gap-2')}
         >
           <User weight="BoldDuotone" className={cn('h-4', 'w-4', 'text-primary')} />

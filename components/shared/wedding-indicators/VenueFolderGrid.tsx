@@ -18,7 +18,7 @@ export function VenueFolderGrid({ folders }: VenueFolderGridProps) {
       {folders.map((folder) => (
         <Link
           key={folder.venueId}
-          href={`/general/wedding-indicators?view=table&venueId=${folder.venueId}`}
+          href={`/wedding-indicators?view=table&venueId=${folder.venueId}`}
         >
           <Card className="group cursor-pointer p-6 rounded-2xl hover:shadow-md transition-shadow">
             <div className="space-y-4">

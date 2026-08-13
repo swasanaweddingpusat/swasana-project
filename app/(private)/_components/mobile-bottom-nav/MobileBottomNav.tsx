@@ -85,7 +85,7 @@ const NAV_ITEMS: BottomNavItem[] = [
   {
     key: "profile",
     label: "Profile",
-    href: "/general/profile",
+    href: "/profile",
     Icon: UserCircle,
     visible: () => true,
   },
@@ -365,7 +365,7 @@ export function MobileBottomNav(): React.JSX.Element | null {
               type="button"
               onClick={() => {
                 setProfileSheetOpen(false);
-                router.push("/general/profile");
+                router.push("/profile");
               }}
               className={cn(
                 "flex items-center gap-3 rounded-xl px-4 py-3 w-full text-left",

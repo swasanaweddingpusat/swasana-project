@@ -58,7 +58,7 @@
       "name": "Notifikasi",
       "short_name": "Notifikasi",
       "description": "Lihat notifikasi terbaru",
-      "url": "/general/notifications?source=pwa",
+      "url": "/notifications?source=pwa",
       "icons": [{ "src": "/icons/shortcut-96x96.png", "sizes": "96x96", "type": "image/png" }]
     }
   ]

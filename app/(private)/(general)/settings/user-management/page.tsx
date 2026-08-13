@@ -4,5 +4,5 @@ import { requirePagePermission } from "@/lib/require-page-permission";
 // Legacy URL — kept for bookmarks. Consolidated into the flat settings tabs.
 export default async function UserManagementRedirect() {
   await requirePagePermission("settings-users");
-  redirect("/general/settings/users");
+  redirect("/settings/users");
 }

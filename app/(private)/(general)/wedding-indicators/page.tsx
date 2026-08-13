@@ -86,20 +86,20 @@ export default async function WeddingIndicatorsPage({
         </div>
         <div className="flex items-center gap-2">
           {view === "table" && (
-            <Link href="/general/wedding-indicators">
+            <Link href="/wedding-indicators">
               <Button variant="outline" size="sm">
                 Tampilan Folder
               </Button>
             </Link>
           )}
           {view === "folder" && (
-            <Link href="/general/wedding-indicators?view=table">
+            <Link href="/wedding-indicators?view=table">
               <Button variant="outline" size="sm">
                 Tampilan Tabel
               </Button>
             </Link>
           )}
-          <Link href="/general/wedding-indicators/create">
+          <Link href="/wedding-indicators/create">
             <Button size="sm">Buat Kuesioner</Button>
           </Link>
         </div>

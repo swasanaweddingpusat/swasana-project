@@ -190,7 +190,7 @@ export function Header() {
           variant="outline"
           size="sm"
           nativeButton={false}
-          render={<Link href="/general/tutorial" />}
+          render={<Link href="/tutorial" />}
           className={cn("cursor-pointer gap-1.5")}
         >
           <Book weight="BoldDuotone" className="h-4 w-4" />
