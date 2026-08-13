@@ -16,8 +16,9 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
-import { Restart, AltArrowDown, CheckCircle, FileText, DocumentText } from "@solar-icons/react";
+import { Restart, AltArrowDown, CheckCircle, FileText, DocumentText, Buildings3 } from "@solar-icons/react";
 import { useEmployees } from "@/hooks/use-employees";
+import { useVenues } from "@/hooks/use-venues";
 import { fetchAttendanceExport } from "@/services/attendance-service";
 import { exportToExcel, exportToPDF } from "@/lib/attendance-export";
 import { cn } from "@/lib/utils";
@@ -89,7 +90,9 @@ export function AttendanceFilter(): React.ReactElement {
   const currentMonth = searchParams.get("month") ?? String(new Date().getMonth() + 1);
   const currentYear = searchParams.get("year") ?? String(new Date().getFullYear());
   const currentProfileId = searchParams.get("profileId") ?? "";
+  const currentVenueId = searchParams.get("venueId") ?? "";
 
+  const { data: venues = [] } = useVenues();
   const { data: employeeData } = useEmployees({
     search: search || undefined,
     limit: 20,
@@ -114,6 +117,7 @@ export function AttendanceFilter(): React.ReactElement {
       const params = new URLSearchParams();
       params.set("mode", mode);
       if (currentProfileId) params.set("profileId", currentProfileId);
+      if (currentVenueId) params.set("venueId", currentVenueId);
       if (mode === "date") {
         if (currentDate) params.set("date", currentDate);
       }
@@ -126,7 +130,7 @@ export function AttendanceFilter(): React.ReactElement {
       }
       router.push(`?${params.toString()}`);
     },
-    [currentDate, currentMonth, currentYear, currentProfileId, router],
+    [currentDate, currentMonth, currentYear, currentProfileId, currentVenueId, router],
   );
 
   const handleReset = useCallback(() => {

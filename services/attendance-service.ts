@@ -22,6 +22,7 @@ export async function fetchAttendanceSettings(): Promise<AttendanceSettingsResul
 export async function fetchAttendanceList(params: AttendanceListQuery): Promise<AttendanceListResult> {
   const sp = new URLSearchParams();
   if (params.profileId) sp.set("profileId", params.profileId);
+  if (params.venueId) sp.set("venueId", params.venueId);
   if (params.date) sp.set("date", params.date);
   if (params.month) sp.set("month", String(params.month));
   if (params.year) sp.set("year", String(params.year));

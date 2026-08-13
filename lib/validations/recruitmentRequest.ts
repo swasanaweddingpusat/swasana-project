@@ -19,6 +19,8 @@ export const createRecruitmentRequestSchema = z.object({
   jobDescriptions: z.array(z.string()).default([]),
   additionalNotes: z.array(z.string()).default([]),
   priority: z.enum(["low", "medium", "high", "urgent"]).default("medium"),
+  approver1Id: z.string().optional().nullable(),
+  approver2Id: z.string().optional().nullable(),
 });
 
 export const updateRecruitmentRequestStatusSchema = z.object({

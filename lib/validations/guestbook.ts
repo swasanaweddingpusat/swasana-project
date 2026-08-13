@@ -15,6 +15,8 @@ export const createGuestbookEntrySchema = z.object({
   numberOfGuests: z.number().int().min(1).default(1),
   checkInAt: z.string().optional().nullable(),
   notes: z.string().optional().nullable(),
+  visitStatus: z.enum(["deal", "to_be_discuss", "not_joined"]).optional().nullable(),
+  notJoinReason: z.string().optional().nullable(),
 });
 
 export type CreateGuestbookEntryInput = z.infer<typeof createGuestbookEntrySchema>;
@@ -22,3 +24,11 @@ export type CreateGuestbookEntryInput = z.infer<typeof createGuestbookEntrySchem
 export const checkOutGuestbookEntrySchema = z.object({
   checkOutAt: z.string().optional().nullable(),
 });
+
+export const updateGuestbookEntrySchema = z.object({
+  visitStatus: z.enum(["deal", "to_be_discuss", "not_joined"]).optional().nullable(),
+  notJoinReason: z.string().optional().nullable(),
+  notes: z.string().optional().nullable(),
+});
+
+export type UpdateGuestbookEntryInput = z.infer<typeof updateGuestbookEntrySchema>;

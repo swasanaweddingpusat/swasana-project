@@ -2,7 +2,7 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { fetchGuestbookEntries } from "@/services/guestbookService";
-import { createGuestbookEntry, checkOutGuestbookEntry } from "@/actions/guestbook";
+import { createGuestbookEntry, checkOutGuestbookEntry, updateGuestbookEntry } from "@/actions/guestbook";
 
 export function useGuestbookEntries() {
   return useQuery({
@@ -24,6 +24,14 @@ export function useCheckOutGuestbookEntry() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => checkOutGuestbookEntry(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["guestbook-entries"] }),
+  });
+}
+
+export function useUpdateGuestbookEntry() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: Record<string, unknown> }) => updateGuestbookEntry(id, data),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["guestbook-entries"] }),
   });
 }

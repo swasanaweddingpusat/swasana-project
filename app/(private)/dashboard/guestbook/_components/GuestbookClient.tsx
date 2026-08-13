@@ -2,6 +2,9 @@
 
 import { useState } from "react";
 import Image from "next/image";
+import { format } from "date-fns";
+import { id as idLocale } from "date-fns/locale";
+import type { DateRange } from "react-day-picker";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -15,14 +18,29 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import {
   AddCircle,
   UsersGroupRounded,
   Login2,
   Logout2,
   CheckCircle,
+  CalendarMinimalistic,
 } from "@solar-icons/react";
 import { toast } from "sonner";
 import { useGuestbookEntries, useCheckOutGuestbookEntry } from "@/hooks/use-guestbook";
+import { useVenues } from "@/hooks/use-venues";
 import type { GuestbookEntryItem } from "@/lib/queries/guestbookEntries";
 import { GuestbookDrawer } from "./GuestbookDrawer";
 import { GuestbookDetailDrawer } from "./GuestbookDetailDrawer";
@@ -105,6 +123,9 @@ function SkeletonRows() {
           <TableCell><Skeleton className="h-4 w-24" /></TableCell>
           <TableCell><Skeleton className="h-4 w-8" /></TableCell>
           <TableCell><Skeleton className="h-4 w-28" /></TableCell>
+          <TableCell><Skeleton className="h-4 w-28" /></TableCell>
+          <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+          <TableCell><Skeleton className="h-5 w-24 rounded-full" /></TableCell>
           <TableCell><Skeleton className="h-5 w-24 rounded-full" /></TableCell>
           <TableCell><Skeleton className="h-8 w-20 rounded-full" /></TableCell>
         </TableRow>
@@ -217,7 +238,12 @@ function MobileCard({
 export function GuestbookClient() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [selectedEntry, setSelectedEntry] = useState<GuestbookEntryItem | null>(null);
+
+  const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
+  const [filterVenueId, setFilterVenueId] = useState<string>("all");
+
   const { data: entries = [], isLoading } = useGuestbookEntries();
+  const { data: venues = [] } = useVenues();
   const checkOutMutation = useCheckOutGuestbookEntry();
 
   async function handleCheckOut(id: string) {
@@ -233,6 +259,22 @@ export function GuestbookClient() {
   const totalToday = todayEntries.length;
   const currentlyIn = entries.filter((e) => e.checkOutAt === null).length;
   const checkedOutToday = todayEntries.filter((e) => e.checkOutAt !== null).length;
+
+  const filteredEntries = entries.filter((e) => {
+    const d = new Date(e.checkInAt);
+    if (dateRange?.from) {
+      const from = new Date(dateRange.from);
+      from.setHours(0, 0, 0, 0);
+      if (d < from) return false;
+    }
+    if (dateRange?.to) {
+      const to = new Date(dateRange.to);
+      to.setHours(23, 59, 59, 999);
+      if (d > to) return false;
+    }
+    if (filterVenueId !== "all" && e.venueId !== filterVenueId) return false;
+    return true;
+  });
 
   return (
     <div className="flex flex-col gap-6">
@@ -274,12 +316,69 @@ export function GuestbookClient() {
       {/* Table — desktop */}
       <Card className="rounded-2xl shadow-sm hidden sm:block">
         <CardContent className="p-0">
-          <div className="flex items-center justify-between gap-3 px-6 py-4 border-b">
-            <div className="flex items-center gap-2">
-              <h2 className="text-sm font-bold text-foreground">Riwayat Kunjungan</h2>
-              <span className="text-xs font-medium bg-secondary text-secondary-foreground px-3 py-1 rounded-full">
-                {entries.length} tamu
-              </span>
+          <div className="flex flex-col gap-3 px-6 py-4 border-b">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <h2 className="text-sm font-bold text-foreground">Riwayat Kunjungan</h2>
+                <span className="text-xs font-medium bg-secondary text-secondary-foreground px-3 py-1 rounded-full">
+                  {filteredEntries.length} tamu
+                </span>
+              </div>
+              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <CalendarMinimalistic weight="BoldDuotone" className="h-3.5 w-3.5" />
+                <span>Filter</span>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Popover>
+                <PopoverTrigger render={
+                  <button
+                    type="button"
+                    className="flex items-center gap-2 h-8 px-3 text-xs rounded-full border border-input bg-background hover:bg-accent transition-colors text-left"
+                  >
+                    <CalendarMinimalistic weight="BoldDuotone" className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                    <span className={dateRange?.from ? "text-foreground" : "text-muted-foreground"}>
+                      {dateRange?.from && dateRange?.to
+                        ? `${format(dateRange.from, "dd MMM yyyy", { locale: idLocale })} — ${format(dateRange.to, "dd MMM yyyy", { locale: idLocale })}`
+                        : dateRange?.from
+                          ? format(dateRange.from, "dd MMM yyyy", { locale: idLocale })
+                          : "Pilih rentang tanggal"}
+                    </span>
+                  </button>
+                } />
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="range"
+                    numberOfMonths={2}
+                    selected={dateRange}
+                    onSelect={setDateRange}
+                    locale={idLocale}
+                  />
+                </PopoverContent>
+              </Popover>
+
+              {dateRange?.from && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="rounded-full text-xs h-8 text-muted-foreground"
+                  onClick={() => setDateRange(undefined)}
+                >
+                  Reset
+                </Button>
+              )}
+
+              <Select value={filterVenueId} onValueChange={setFilterVenueId}>
+                <SelectTrigger className="rounded-full text-xs h-8 w-44">
+                  <SelectValue placeholder="Semua Venue" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Semua Venue</SelectItem>
+                  {venues.map((v) => (
+                    <SelectItem key={v.id} value={v.id}>{v.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
 
@@ -293,6 +392,9 @@ export function GuestbookClient() {
                   <TableHead>Bertemu</TableHead>
                   <TableHead>Jumlah</TableHead>
                   <TableHead>Check-in</TableHead>
+                  <TableHead>Check-out</TableHead>
+                  <TableHead>Guest Code</TableHead>
+                  <TableHead>Visit Status</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="text-right">Aksi</TableHead>
                 </TableRow>
@@ -301,7 +403,7 @@ export function GuestbookClient() {
                 <SkeletonRows />
               </TableBody>
             </Table>
-          ) : entries.length === 0 ? (
+          ) : filteredEntries.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16 text-muted-foreground gap-2">
               <UsersGroupRounded weight="BoldDuotone" className="h-10 w-10 opacity-30" />
               <p className="text-sm">Belum ada data kunjungan</p>
@@ -317,12 +419,15 @@ export function GuestbookClient() {
                     <TableHead>Bertemu</TableHead>
                     <TableHead>Jumlah</TableHead>
                     <TableHead>Check-in</TableHead>
+                    <TableHead>Check-out</TableHead>
+                    <TableHead>Guest Code</TableHead>
+                    <TableHead>Visit Status</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead className="text-right pr-4">Aksi</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {entries.map((entry) => {
+                  {filteredEntries.map((entry) => {
                     const isActive = entry.checkOutAt === null;
                     return (
                       <TableRow
@@ -376,22 +481,44 @@ export function GuestbookClient() {
                             {formatTime(entry.checkInAt)}
                           </span>
                         </TableCell>
+                        <TableCell className="text-muted-foreground whitespace-nowrap">
+                          {entry.checkOutAt ? (
+                            <>
+                              {formatDate(entry.checkOutAt)}{" "}
+                              <span className="text-foreground font-medium">
+                                {formatTime(entry.checkOutAt)}
+                              </span>
+                            </>
+                          ) : (
+                            <span className="text-muted-foreground/50">—</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground font-mono text-xs whitespace-nowrap">
+                          {entry.guestCode ?? "—"}
+                        </TableCell>
+                        <TableCell>
+                          {entry.visitStatus ? (() => {
+                            const visitLabels: Record<string, { label: string; className: string }> = {
+                              deal: { label: "Deal", className: "bg-green-100 text-green-700 border-0" },
+                              to_be_discuss: { label: "To Be Discuss", className: "bg-yellow-100 text-yellow-700 border-0" },
+                              not_joined: { label: "Not Joined", className: "bg-red-100 text-red-700 border-0" },
+                            };
+                            const info = visitLabels[entry.visitStatus];
+                            if (!info) return <span className="text-muted-foreground/50">—</span>;
+                            return <Badge className={`rounded-full text-xs ${info.className}`}>{info.label}</Badge>;
+                          })() : (
+                            <span className="text-muted-foreground/50">—</span>
+                          )}
+                        </TableCell>
                         <TableCell>
                           {isActive ? (
                             <Badge className="rounded-full text-xs bg-green-100 text-green-700 border-0">
                               Masih di Lokasi
                             </Badge>
                           ) : (
-                            <div className="space-y-0.5">
-                              <Badge variant="secondary" className="rounded-full text-xs">
-                                Selesai
-                              </Badge>
-                              {entry.checkOutAt && (
-                                <p className="text-xs text-muted-foreground">
-                                  {formatTime(entry.checkOutAt)}
-                                </p>
-                              )}
-                            </div>
+                            <Badge variant="secondary" className="rounded-full text-xs">
+                              Selesai
+                            </Badge>
                           )}
                         </TableCell>
                         <TableCell className="text-right pr-4">
@@ -423,6 +550,60 @@ export function GuestbookClient() {
 
       {/* Mobile card list */}
       <div className="flex flex-col gap-3 sm:hidden">
+        {/* Mobile filter bar */}
+        <div className="flex flex-col gap-2">
+          <Popover>
+            <PopoverTrigger render={
+              <button
+                type="button"
+                className="flex items-center gap-2 h-8 px-3 text-xs rounded-full border border-input bg-background hover:bg-accent transition-colors text-left w-full"
+              >
+                <CalendarMinimalistic weight="BoldDuotone" className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                <span className={dateRange?.from ? "text-foreground" : "text-muted-foreground"}>
+                  {dateRange?.from && dateRange?.to
+                    ? `${format(dateRange.from, "dd MMM yyyy", { locale: idLocale })} — ${format(dateRange.to, "dd MMM yyyy", { locale: idLocale })}`
+                    : dateRange?.from
+                      ? format(dateRange.from, "dd MMM yyyy", { locale: idLocale })
+                      : "Pilih rentang tanggal"}
+                </span>
+              </button>
+            } />
+            <PopoverContent className="w-auto p-0" align="start">
+              <Calendar
+                mode="range"
+                selected={dateRange}
+                onSelect={setDateRange}
+                locale={idLocale}
+              />
+            </PopoverContent>
+          </Popover>
+
+          <div className="flex gap-2">
+            {dateRange?.from && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="rounded-full text-xs h-8 text-muted-foreground"
+                onClick={() => setDateRange(undefined)}
+              >
+                Reset
+              </Button>
+            )}
+
+            <Select value={filterVenueId} onValueChange={setFilterVenueId}>
+              <SelectTrigger className="rounded-full text-xs h-8 flex-1">
+                <SelectValue placeholder="Semua Venue" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Semua Venue</SelectItem>
+                {venues.map((v) => (
+                  <SelectItem key={v.id} value={v.id}>{v.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
         {isLoading && (
           <div className="space-y-3">
             {Array.from({ length: 4 }).map((_, i) => (
@@ -436,14 +617,14 @@ export function GuestbookClient() {
             ))}
           </div>
         )}
-        {!isLoading && entries.length === 0 && (
+        {!isLoading && filteredEntries.length === 0 && (
           <div className="flex flex-col items-center justify-center py-16 text-muted-foreground gap-2">
             <UsersGroupRounded weight="BoldDuotone" className="h-10 w-10 opacity-30" />
             <p className="text-sm">Belum ada data kunjungan</p>
           </div>
         )}
         {!isLoading &&
-          entries.map((entry) => (
+          filteredEntries.map((entry) => (
             <MobileCard
               key={entry.id}
               entry={entry}
@@ -467,6 +648,7 @@ export function GuestbookClient() {
           }
         }}
         entry={selectedEntry}
+        allEntries={entries}
       />
     </div>
   );
