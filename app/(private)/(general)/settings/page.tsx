@@ -19,6 +19,7 @@ import {
   Document,
   Book,
   Buildings2,
+  Widget,
   type IconProps,
 } from "@solar-icons/react";
 import type { ComponentType } from "react";
@@ -63,6 +64,13 @@ const GROUPS: SettingGroup[] = [
         description: "Konfigurasi step dan role approver untuk setiap modul approval.",
         icon: Route,
         href: "/settings/approval-flow",
+        module: "settings-role-permission",
+      },
+      {
+        title: "Modules",
+        description: "Kelola module grup sidebar (Finance, HRD, Booking) & pemetaan permission.",
+        icon: Widget,
+        href: "/settings/modules",
         module: "settings-role-permission",
       },
       {

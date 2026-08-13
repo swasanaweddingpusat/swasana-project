@@ -173,7 +173,5 @@ export const GENERAL_NAV: NavItem[] = [
   { name: "Guestbook", href: "/guestbook", icon: Notebook, subtitle: "Catat kunjungan tamu, vendor, dan client ke kantor", permission: { module: "guestbook", action: "view" } },
   { name: "Cuti", href: "/cuti", icon: CalendarDate, subtitle: "Pengajuan dan saldo cuti" },
   { name: "Slip Gaji", href: "/slip-gaji", icon: FileText, subtitle: "Lihat slip gaji bulanan saya" },
-  { name: "Notifikasi", href: "/notifications", icon: BellBing, subtitle: "Semua notifikasi" },
-  { name: "Tutorial", href: "/tutorial", icon: FileText, subtitle: "Panduan penggunaan aplikasi" },
   { name: "Settings", href: "/settings", icon: Settings, subtitle: "Kelola pengaturan sistem" },
 ];

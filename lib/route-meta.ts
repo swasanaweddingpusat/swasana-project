@@ -73,6 +73,10 @@ const DYNAMIC_ROUTE_META: Record<string, RouteMeta> = {
   "/settings/tutorial": { title: "Tutorial CMS", subtitle: "Kelola konten tutorial aplikasi", parent: "/settings" },
   "/settings/quotation-templates": { title: "Quotation Templates", subtitle: "Kelola template quotation", parent: "/settings" },
   "/profile": { title: "Profile", subtitle: "Kelola informasi pribadi dan keamanan akun Anda.", parent: "/settings" },
+  // Reachable from the header (bell / tutorial), no longer in the sidebar nav —
+  // keep their header meta so the page title/subtitle still resolve.
+  "/notifications": { title: "Notifikasi", subtitle: "Semua notifikasi" },
+  "/tutorial": { title: "Tutorial", subtitle: "Panduan penggunaan aplikasi" },
 };
 
 export const ROUTE_META: Record<string, RouteMeta> = { ...DERIVED_ROUTE_META, ...DYNAMIC_ROUTE_META };

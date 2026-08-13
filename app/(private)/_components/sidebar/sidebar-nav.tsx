@@ -1,6 +1,5 @@
 "use client";
 
-import { usePathname } from "next/navigation";
 import {
   SidebarGroup,
   SidebarGroupContent,
@@ -11,12 +10,12 @@ import {
   MODULE_NAV_MAP,
   GENERAL_NAV,
   SETTINGS_MODULES,
-  type ModuleKey,
   type NavItem,
   type SubMenuItem,
 } from "./sidebar-config";
 import { NavItemRow } from "./nav-item";
 import { usePermissions } from "@/hooks/use-permissions";
+import { useActiveModule, GENERAL_MODULE } from "./use-active-module";
 
 type CanFn = (module: string, action: string) => boolean;
 
@@ -64,17 +63,22 @@ function filterNavItems(items: NavItem[], can: CanFn, isGroupMember: boolean): N
   });
 }
 
-function isModuleKey(key: string): key is ModuleKey {
-  return Object.prototype.hasOwnProperty.call(MODULE_NAV_MAP, key);
-}
+// "Home" is pinned to the very top of the sidebar in every world; the remaining
+// general items (Maintenance, Guestbook, Cuti, Settings, …) belong ONLY to the
+// "General" world and are hidden while a module (Finance, HRD, …) is active.
+const HOME_ITEM = GENERAL_NAV.find((item) => item.href === "/");
+const GENERAL_REST = GENERAL_NAV.filter((item) => item.href !== "/");
 
 export function SidebarNav() {
   const { can, isLoading, isGroupMember } = usePermissions();
-  const activeModule = usePathname().split("/")[1];
-  const moduleItems: NavItem[] = isModuleKey(activeModule)
-    ? MODULE_NAV_MAP[activeModule]
-    : [];
-  const items: NavItem[] = [...moduleItems, ...GENERAL_NAV];
+  const activeModule = useActiveModule();
+  // General world → Home + general items. Module world → Home + that module's nav.
+  const worldItems: NavItem[] =
+    activeModule === GENERAL_MODULE ? GENERAL_REST : MODULE_NAV_MAP[activeModule];
+  const items: NavItem[] = [
+    ...(HOME_ITEM ? [HOME_ITEM] : []),
+    ...worldItems,
+  ];
   const visibleItems = isLoading ? [] : filterNavItems(items, can, isGroupMember);
 
   return (
