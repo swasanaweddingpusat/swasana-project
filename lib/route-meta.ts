@@ -66,6 +66,7 @@ const DYNAMIC_ROUTE_META: Record<string, RouteMeta> = {
   "/settings/order-status": { title: "Order Status", subtitle: "Kelola status order vendor", parent: "/settings" },
   "/settings/event-types": { title: "Event Types", subtitle: "Kelola tipe acara untuk nomor PO", parent: "/settings" },
   "/settings/approval-flow": { title: "Approval Flow", subtitle: "Konfigurasi step dan role approver per modul", parent: "/settings" },
+  "/settings/modules": { title: "Module Registry", subtitle: "Kelola module grup sidebar dan pemetaan permission-nya", parent: "/settings" },
   "/settings/customer": { title: "Customers", subtitle: "Kelola data customer", parent: "/settings" },
   "/settings/maintenance-category": { title: "Maintenance Category", subtitle: "Kelola kategori maintenance", parent: "/settings" },
   "/settings/maintenance-priority": { title: "Maintenance Priority", subtitle: "Kelola prioritas maintenance", parent: "/settings" },
