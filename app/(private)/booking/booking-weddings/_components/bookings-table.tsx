@@ -85,6 +85,12 @@ function fmtRp(n: unknown) {
   return `Rp ${new Intl.NumberFormat("id-ID").format(Number(n))}`;
 }
 
+/** A source of information counts as "Bitrix" when its name contains "bitrix"
+ *  (case-insensitive) — mirrors the same check used by the booking form. */
+function isBitrixSource(name: string | null | undefined): boolean {
+  return (name ?? "").toLowerCase().includes("bitrix");
+}
+
 /** Returns a page range array with "..." for gaps.
  *  Always shows: first, last, current, and 1 neighbour each side.
  *  Example (current=50, total=150): [1, "...", 49, 50, 51, "...", 150]
@@ -1067,22 +1073,23 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                               <span className={cn("w-1 h-1 rounded-full mr-1", STATUS_DOT[booking.bookingStatus] ?? "bg-muted-foreground")} />
                               {booking.bookingStatus}
                             </span>
-                            {/* Payment method badge */}
-                            <span className={cn('inline-flex', 'items-center', 'px-1.5', 'py-0.5', 'rounded-full', 'border', 'border-border', 'bg-muted', 'text-muted-foreground', 'text-[10px]', 'font-medium')}>
-                              {booking.paymentMethod?.bankName ?? "N/A"}
-                            </span>
                             {/* Session badge */}
                             {booking.weddingSession && (
                               <span className={cn("inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium", SESSION_STYLE[booking.weddingSession] ?? "bg-muted text-muted-foreground")}>
                                 {SESSION_LABEL[booking.weddingSession] ?? booking.weddingSession}
                               </span>
                             )}
-                            {/* Source of information badge */}
-                            {booking.sourceOfInformation?.name && (
-                              <span className={cn('inline-flex', 'items-center', 'px-1.5', 'py-0.5', 'rounded-full', 'text-[10px]', 'font-medium', 'bg-muted', 'text-muted-foreground')}>
-                                {booking.sourceOfInformation.name}
-                              </span>
-                            )}
+                            {/* Source of information badge — bitrix source shown in blue */}
+                            <span
+                              className={cn(
+                                'inline-flex', 'items-center', 'px-1.5', 'py-0.5', 'rounded-full', 'text-[10px]', 'font-medium',
+                                isBitrixSource(booking.sourceOfInformation?.name)
+                                  ? 'bg-blue-50 text-blue-600'
+                                  : 'bg-muted text-muted-foreground',
+                              )}
+                            >
+                              {booking.sourceOfInformation?.name ?? "N/A"}
+                            </span>
                           </div>
                           <button
                             onClick={(e) => { e.stopPropagation(); setActivityLogTarget(booking); }}
