@@ -12,6 +12,7 @@ import { toast } from "sonner"
 import { useSearchParams } from "next/navigation"
 import { signIn } from "next-auth/react"
 import { useRouter } from "next/navigation"
+import { resolveLoginDestination } from "@/actions/modules"
 
 export function LoginForm({
   className,
@@ -22,7 +23,7 @@ export function LoginForm({
   const searchParams = useSearchParams()
   const toastShownRef = useRef<string | null>(null)
   const router = useRouter()
-  const callbackUrl = searchParams.get("callbackUrl") ?? "/"
+  const callbackUrl = searchParams.get("callbackUrl")
 
   useEffect(() => {
     const message = searchParams.get("message")
@@ -80,9 +81,14 @@ export function LoginForm({
           }
         } else {
           toast.success("Login berhasil!", {
-            description: "Redirecting to dashboard...",
+            description: "Mengalihkan...",
           })
-          router.push(callbackUrl)
+          if (callbackUrl) {
+            router.push(callbackUrl)
+          } else {
+            const dest = await resolveLoginDestination()
+            router.push(dest)
+          }
         }
       } catch {
         toast.error("Terjadi kesalahan", {
