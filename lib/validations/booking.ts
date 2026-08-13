@@ -96,6 +96,17 @@ export const updateBookingSchema = z.object({
   sourceOfInformationId: z.string().optional().nullable(),
 });
 
+/** Cancel a wedding booking → status Canceled. Reason wajib; dokumen surat
+ *  permohonan (opsional) di-handle terpisah sebagai FormData file di action. */
+export const cancelBookingSchema = z.object({
+  id: z.string().min(1),
+  cancelReason: z
+    .string()
+    .trim()
+    .min(3, "Alasan cancel wajib diisi (min 3 karakter)")
+    .max(500, "Alasan maksimal 500 karakter"),
+});
+
 export const editBookingSchema = z.object({
   id: z.string().min(1),
   eventDate: z.string().min(1, "Tanggal event wajib diisi"),
@@ -237,6 +248,7 @@ export const updateBookingSignatureSchema = z.object({
 
 export type BookingInput = z.infer<typeof bookingSchema>;
 export type UpdateBookingInput = z.infer<typeof updateBookingSchema>;
+export type CancelBookingInput = z.infer<typeof cancelBookingSchema>;
 export type EditBookingInput = z.infer<typeof editBookingSchema>;
 export type UpdateBookingClientInfoInput = z.infer<typeof updateBookingClientInfoSchema>;
 export type UpdateBookingSignatureInput = z.infer<typeof updateBookingSignatureSchema>;

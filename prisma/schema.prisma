@@ -875,6 +875,7 @@ model Booking {
   salesSignature        String?
   rejectionNotes        String?
   lostReason            String?
+  cancelReason          String?
   signingLocation       String?
   withMaterai           Boolean             @default(false)
   discountName          String?

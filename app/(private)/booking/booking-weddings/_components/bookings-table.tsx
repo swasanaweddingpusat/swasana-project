@@ -27,6 +27,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AgreementModal } from "@/components/shared/booking/agreement-modal";
 import { RejectBookingModal } from "@/components/shared/booking/reject-booking-modal";
 import { MarkLostDialog } from "@/components/shared/booking/mark-lost-dialog";
+import { CancelBookingDialog } from "@/components/shared/booking/cancel-booking-dialog";
 import { RestoreBookingDialog } from "@/components/shared/booking/restore-booking-dialog";
 import { TransferBookingModal } from "@/components/shared/booking/transfer-booking-modal";
 import { TransferManagerModal } from "@/components/shared/booking/transfer-manager-modal";
@@ -177,6 +178,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
   const [editTarget, setEditTarget] = useState<BookingListItem | null>(null);
   const [rejectTarget, setRejectTarget] = useState<BookingListItem | null>(null);
   const [lostTarget, setLostTarget] = useState<BookingListItem | null>(null);
+  const [cancelTarget, setCancelTarget] = useState<BookingListItem | null>(null);
   const [transferTarget, setTransferTarget] = useState<BookingListItem | null>(null);
   const [uploadDocTarget, setUploadDocTarget] = useState<BookingListItem | null>(null);
   const [managerTarget, setManagerTarget] = useState<BookingListItem | null>(null);
@@ -418,7 +420,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
             <UsersGroupRounded weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4', 'text-primary')} /> Transfer Manager
           </DropdownMenuItem>
         )}
-        {((can("booking", "reject") && booking.bookingStatus !== "Confirmed" && booking.bookingStatus !== "Lost") || (can("booking", "mark-lost") && booking.bookingStatus !== "Lost" && booking.bookingStatus !== "Confirmed") || (can("booking", "restore") && (booking.bookingStatus === "Lost" || booking.bookingStatus === "Confirmed"))) && <DropdownMenuSeparator />}
+        {((can("booking", "reject") && booking.bookingStatus !== "Confirmed" && booking.bookingStatus !== "Lost") || (can("booking", "mark-lost") && booking.bookingStatus !== "Lost" && booking.bookingStatus !== "Confirmed") || (can("booking", "cancel") && booking.bookingStatus !== "Canceled" && booking.bookingStatus !== "Lost") || (can("booking", "restore") && (booking.bookingStatus === "Lost" || booking.bookingStatus === "Confirmed" || booking.bookingStatus === "Canceled"))) && <DropdownMenuSeparator />}
         {can("booking", "reject") && booking.bookingStatus !== "Confirmed" && booking.bookingStatus !== "Lost" && (
           <DropdownMenuItem className="cursor-pointer" onClick={() => setRejectTarget(booking)}>
             <SquareX weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4', 'text-destructive')} /> Reject Booking
@@ -429,7 +431,12 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
             <SquareX weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4')} /> Lost Booking
           </DropdownMenuItem>
         )}
-        {can("booking", "restore") && (booking.bookingStatus === "Lost" || booking.bookingStatus === "Confirmed") && (
+        {can("booking", "cancel") && booking.bookingStatus !== "Canceled" && booking.bookingStatus !== "Lost" && (
+          <DropdownMenuItem className={cn('cursor-pointer', 'text-destructive', 'focus:text-destructive')} onClick={() => setCancelTarget(booking)}>
+            <SquareX weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4', 'text-destructive')} /> Cancel Booking
+          </DropdownMenuItem>
+        )}
+        {can("booking", "restore") && (booking.bookingStatus === "Lost" || booking.bookingStatus === "Confirmed" || booking.bookingStatus === "Canceled") && (
           <DropdownMenuItem className={cn('cursor-pointer', 'text-muted-foreground', 'focus:text-foreground')} onClick={() => setRestoreTarget(booking)}>
             <RotateCcw weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4')} /> Restore Booking
           </DropdownMenuItem>
@@ -1487,6 +1494,13 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
         open={!!lostTarget}
         booking={lostTarget}
         onClose={() => { if (lostTarget) invalidateDetail(lostTarget.id); setLostTarget(null); }}
+      />
+
+      {/* Cancel Booking Modal */}
+      <CancelBookingDialog
+        open={!!cancelTarget}
+        booking={cancelTarget}
+        onClose={() => { if (cancelTarget) invalidateDetail(cancelTarget.id); setCancelTarget(null); }}
       />
 
       {/* Restore Booking Modal */}

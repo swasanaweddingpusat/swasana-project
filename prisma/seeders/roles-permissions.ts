@@ -21,7 +21,7 @@ const roleData = [
 // ── Modules & Actions ────────────────────────────────────────────────
 // Only modules that are ACTUALLY used in code
 const moduleActions: Record<string, string[]> = {
-  booking: ["view", "create", "edit", "delete", "print", "approve", "mark-lost", "restore", "transfer", "transfer-manager", "reject", "comment", "client-agreement", "term-&-condition", "edit-package", "edit-set-harga", "reset-approval"],
+  booking: ["view", "create", "edit", "delete", "print", "approve", "mark-lost", "restore", "cancel", "transfer", "transfer-manager", "reject", "comment", "client-agreement", "term-&-condition", "edit-package", "edit-set-harga", "reset-approval"],
   customers: ["view", "create", "edit", "delete"],
   "finance-ar": ["view", "create", "edit", "delete"],
   groups: ["view", "view-all", "create", "edit", "delete"],
@@ -99,7 +99,7 @@ const rolePermissionMap: Record<string, Record<string, string[]>> = {
   // package, complimentary, vendors, and customers.
   // (dashboard has no permission module; calendar-event is gated by booking:view.)
   manager: {
-    booking: ["view", "create", "edit", "delete", "print", "approve", "mark-lost", "restore", "transfer", "reject", "comment", "client-agreement", "edit-package", "edit-set-harga"],
+    booking: ["view", "create", "edit", "delete", "print", "approve", "mark-lost", "restore", "cancel", "transfer", "reject", "comment", "client-agreement", "edit-package", "edit-set-harga"],
     customers: ["view", "create", "edit", "delete"],
     groups: ["view", "create", "edit", "delete"],
     "daily-activity": ["view", "create", "edit", "delete"],
@@ -136,7 +136,7 @@ const rolePermissionMap: Record<string, Record<string, string[]>> = {
     // and settings-users (those stay super-admin only in prod).
     // booking::term-&-condition auto-granted via step 7; booking::edit-package via step 8.
     "booking-mice": ["view", "create", "edit", "delete", "print", "approve", "mark-lost", "restore", "transfer", "reject", "comment", "client-agreement"],
-    booking: ["view", "create", "edit", "delete", "print", "approve", "mark-lost", "restore", "transfer", "transfer-manager", "reject", "comment", "client-agreement", "edit-set-harga"],
+    booking: ["view", "create", "edit", "delete", "print", "approve", "mark-lost", "restore", "cancel", "transfer", "transfer-manager", "reject", "comment", "client-agreement", "edit-set-harga"],
     complimentary: ["view", "create", "edit", "delete"],
     customers: ["view", "create", "edit", "delete"],
     "finance-ar": ["view", "create", "edit", "delete"],

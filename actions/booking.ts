@@ -8,7 +8,9 @@ import { requirePermission, hasPermission } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
 import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
 import { isSlotConflictError, SLOT_TAKEN_MESSAGE } from "@/lib/booking-slot-error";
-import { bookingSchema, updateBookingSchema, editBookingSchema, updateBookingClientInfoSchema, updateBookingSignatureSchema } from "@/lib/validations/booking";
+import { bookingSchema, updateBookingSchema, cancelBookingSchema, editBookingSchema, updateBookingClientInfoSchema, updateBookingSignatureSchema } from "@/lib/validations/booking";
+import { uploadToStorage, generateStorageKey } from "@/lib/storage";
+import { compressToWebp } from "@/lib/image";
 import { buildBookingApprovalSteps } from "@/lib/approval-flows";
 import { getNextSequence } from "@/lib/counter";
 import { generateAccessCode } from "@/lib/access-code";
@@ -2032,6 +2034,111 @@ export async function updateBookingSignature(data: unknown): Promise<{ success: 
     return { success: true };
   } catch {
     return { success: false, error: "Gagal menyimpan tanda tangan." };
+  }
+}
+
+const CANCEL_DOC_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"] as const;
+const CANCEL_DOC_MAX_SIZE = 10 * 1024 * 1024; // 10MB
+
+/**
+ * Cancel a wedding booking → status Canceled. Reason is mandatory; an optional
+ * cancellation-request document (surat permohonan cancel) is stored as a
+ * BookingDocument tagged "Surat Permohonan Cancel" so it surfaces in the
+ * existing document list. FormData carries id + cancelReason + optional file.
+ */
+export async function cancelBooking(
+  formData: FormData
+): Promise<{ success: boolean; error?: string }> {
+  const { session, error } = await requirePermission({ module: "booking", action: "cancel" });
+  if (error) return { success: false, error };
+  if (!mutationLimiter.check(`booking-cancel:${session!.user.id}`)) {
+    return { success: false, ...rateLimitError() };
+  }
+
+  const parsed = cancelBookingSchema.safeParse({
+    id: formData.get("id"),
+    cancelReason: formData.get("cancelReason"),
+  });
+  if (!parsed.success) return { success: false, error: parsed.error.issues[0].message };
+  const { id, cancelReason } = parsed.data;
+
+  if (!session!.user.profileId) {
+    return { success: false, error: "Sesi tidak valid, silakan login ulang." };
+  }
+  const scope = await getProfileDataScope(session!.user.profileId);
+  if (!(await canAccessBooking(session!.user.profileId, scope, id))) {
+    return { success: false, error: "Anda tidak memiliki akses ke booking ini." };
+  }
+
+  const existing = await db.booking.findFirst({
+    where: { id, category: "WEDDINGS", recordStatus: "saved" },
+    select: { id: true, bookingStatus: true },
+  });
+  if (!existing) return { success: false, error: "Booking tidak ditemukan." };
+  if (existing.bookingStatus === "Canceled") {
+    return { success: false, error: "Booking sudah di-cancel." };
+  }
+
+  // Optional cancellation-request document (mirror uploadBookingDocument).
+  const file = formData.get("document");
+  let docKey: string | null = null;
+  let docMeta: { name: string; type: string; size: number } | null = null;
+  if (file instanceof File && file.size > 0) {
+    if (file.size > CANCEL_DOC_MAX_SIZE) {
+      return { success: false, error: `${file.name} terlalu besar (max 10MB).` };
+    }
+    const buffer = Buffer.from(await file.arrayBuffer());
+    let data: Buffer = buffer;
+    let type = file.type;
+    let name = file.name;
+    let ext = file.name.split(".").pop() ?? "bin";
+    if ((CANCEL_DOC_IMAGE_TYPES as readonly string[]).includes(file.type)) {
+      data = await compressToWebp(buffer);
+      type = "image/webp";
+      name = file.name.replace(/\.[^.]+$/, ".webp");
+      ext = "webp";
+    }
+    docKey = generateStorageKey("booking-documents", ext);
+    await uploadToStorage(data, docKey, type);
+    docMeta = { name, type, size: data.length };
+  }
+
+  try {
+    const ops: Prisma.PrismaPromise<unknown>[] = [
+      db.booking.update({ where: { id }, data: { bookingStatus: "Canceled", cancelReason } }),
+    ];
+    if (docKey && docMeta) {
+      ops.push(
+        db.bookingDocument.create({
+          data: {
+            bookingId: id,
+            name: "Surat Permohonan Cancel",
+            description: cancelReason,
+            filePath: docKey,
+            fileName: docMeta.name,
+            fileSize: docMeta.size,
+            fileType: docMeta.type,
+            uploadedBy: session!.user.profileId,
+          },
+        })
+      );
+    }
+    await db.$transaction(ops);
+
+    await logAudit({
+      userId: session!.user.id,
+      action: "booking.canceled",
+      entityType: "booking",
+      entityId: id,
+      description: `Booking di-cancel. Alasan: ${cancelReason}${docKey ? " (dengan surat permohonan)" : ""}`,
+      changes: { cancelReason, hasDocument: !!docKey },
+    });
+
+    revalidateTag("bookings", "max");
+    return { success: true };
+  } catch (e) {
+    console.error("[cancelBooking]", e);
+    return { success: false, error: "Gagal meng-cancel booking." };
   }
 }
 
