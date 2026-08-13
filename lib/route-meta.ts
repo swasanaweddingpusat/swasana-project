@@ -48,6 +48,10 @@ function buildRouteMetaFromNavTrees(): Record<string, RouteMeta> {
 const DERIVED_ROUTE_META = buildRouteMetaFromNavTrees();
 
 const DYNAMIC_ROUTE_META: Record<string, RouteMeta> = {
+  // Root landing + Settings root — no longer sidebar-nav entries, so keep their
+  // header meta here (Settings is pinned to the sidebar bottom; "/" is retired).
+  "/": { title: "Dashboard", subtitle: "Ringkasan aktivitas" },
+  "/settings": { title: "Settings", subtitle: "Kelola pengaturan sistem" },
   "/booking/groups/[groupId]": { title: "Detail Group", subtitle: "Kinerja dan target penjualan tim", parent: "/booking/groups" },
   "/hrd/database-karyawan/[id]": { title: "Detail Karyawan", subtitle: "Informasi lengkap karyawan", parent: "/hrd/database-karyawan" },
   "/wedding-indicators/create": { title: "Buat Kuesioner Pernikahan", subtitle: "Isi form untuk membuat kuesioner penilaian kepuasan", parent: "/wedding-indicators" },

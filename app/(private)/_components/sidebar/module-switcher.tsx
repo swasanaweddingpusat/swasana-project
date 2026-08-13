@@ -8,17 +8,15 @@ import {
   CartLarge,
   AltArrowDown,
   Widget,
-  Home2,
 } from "@solar-icons/react";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { useModules } from "@/hooks/useModules";
-import { useActiveModule, GENERAL_MODULE } from "./use-active-module";
+import { useActiveModule } from "./use-active-module";
 
 const ICONS: Record<string, typeof Widget> = {
   Wallet,
@@ -34,10 +32,9 @@ export function ModuleSwitcher(): React.JSX.Element | null {
 
   if (!modules || modules.length === 0) return null;
 
-  const isGeneral = activeKey === GENERAL_MODULE;
   const active = modules.find((m) => m.key === activeKey);
-  const ActiveIcon = isGeneral ? Home2 : (active ? (ICONS[active.icon ?? ""] ?? Widget) : Widget);
-  const activeLabel = isGeneral ? "General" : (active?.name ?? "Pilih Module");
+  const ActiveIcon = active ? (ICONS[active.icon ?? ""] ?? Widget) : Widget;
+  const activeLabel = active?.name ?? "Pilih Module";
 
   return (
     <DropdownMenu>
@@ -47,12 +44,6 @@ export function ModuleSwitcher(): React.JSX.Element | null {
         <AltArrowDown weight="BoldDuotone" className="h-4 w-4 text-muted-foreground" />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="min-w-56 rounded-xl">
-        {/* "General" world — Home + cross-module items (Maintenance, Guestbook, Cuti, Settings, …). */}
-        <DropdownMenuItem onClick={() => router.push("/")} className="gap-2 rounded-lg">
-          <Home2 weight="BoldDuotone" className="h-4 w-4" />
-          General
-        </DropdownMenuItem>
-        <DropdownMenuSeparator />
         {modules.map((m) => {
           const Icon = ICONS[m.icon ?? ""] ?? Widget;
           return (

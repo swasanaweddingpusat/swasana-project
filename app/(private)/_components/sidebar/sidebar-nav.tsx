@@ -9,13 +9,15 @@ import {
 import {
   MODULE_NAV_MAP,
   GENERAL_NAV,
+  GENERAL_GROUP,
+  SETTINGS_NAV_ITEM,
   SETTINGS_MODULES,
   type NavItem,
   type SubMenuItem,
 } from "./sidebar-config";
 import { NavItemRow } from "./nav-item";
 import { usePermissions } from "@/hooks/use-permissions";
-import { useActiveModule, GENERAL_MODULE } from "./use-active-module";
+import { useActiveModule } from "./use-active-module";
 
 type CanFn = (module: string, action: string) => boolean;
 
@@ -44,11 +46,6 @@ function filterSubMenus(items: SubMenuItem[], can: CanFn): SubMenuItem[] {
 function filterNavItems(items: NavItem[], can: CanFn, isGroupMember: boolean): NavItem[] {
   return items.flatMap((item) => {
     if (item.hidden) return [];
-    if (item.href === "/settings") {
-      const hasSettingsAccess = SETTINGS_MODULES.some((mod) => can(mod, "view"));
-      if (!hasSettingsAccess) return [];
-      return [item];
-    }
     if (item.href === "/booking/groups") {
       if (!can("groups", "view") && !isGroupMember) return [];
       return [item];
@@ -63,35 +60,41 @@ function filterNavItems(items: NavItem[], can: CanFn, isGroupMember: boolean): N
   });
 }
 
-// "Home" is pinned to the very top of the sidebar in every world; the remaining
-// general items (Maintenance, Guestbook, Cuti, Settings, …) belong ONLY to the
-// "General" world and are hidden while a module (Finance, HRD, …) is active.
-const HOME_ITEM = GENERAL_NAV.find((item) => item.href === "/");
-const GENERAL_REST = GENERAL_NAV.filter((item) => item.href !== "/");
+/** Any GENERAL_NAV entry (a NavItem) is a valid SubMenuItem — icon required
+ *  narrows to optional. Filter by permission, then nest under GENERAL_GROUP. */
+function buildGeneralGroup(can: CanFn): NavItem | null {
+  const children = filterSubMenus(GENERAL_NAV as SubMenuItem[], can);
+  if (children.length === 0) return null;
+  return { ...GENERAL_GROUP, submenu: children };
+}
 
 export function SidebarNav() {
   const { can, isLoading, isGroupMember } = usePermissions();
   const activeModule = useActiveModule();
-  // General world → Home + general items. Module world → Home + that module's nav.
-  const worldItems: NavItem[] =
-    activeModule === GENERAL_MODULE ? GENERAL_REST : MODULE_NAV_MAP[activeModule];
-  const items: NavItem[] = [
-    ...(HOME_ITEM ? [HOME_ITEM] : []),
-    ...worldItems,
-  ];
-  const visibleItems = isLoading ? [] : filterNavItems(items, can, isGroupMember);
+
+  // The active module's nav, followed by the always-present "General" group as a
+  // collapsible submenu — General shows in every module world, never swaps it out.
+  const moduleItems = isLoading ? [] : filterNavItems(MODULE_NAV_MAP[activeModule], can, isGroupMember);
+  const generalGroup = isLoading ? null : buildGeneralGroup(can);
+  const settingsVisible = !isLoading && SETTINGS_MODULES.some((mod) => can(mod, "view"));
 
   return (
     <SidebarGroup>
       <SidebarGroupContent>
         <SidebarMenu>
-          {isLoading
-            ? Array.from({ length: 7 }).map((_, i) => (
-                <SidebarMenuSkeleton key={i} showIcon />
-              ))
-            : visibleItems.map((item) => (
+          {isLoading ? (
+            Array.from({ length: 7 }).map((_, i) => (
+              <SidebarMenuSkeleton key={i} showIcon />
+            ))
+          ) : (
+            <>
+              {moduleItems.map((item) => (
                 <NavItemRow key={item.href} item={item} />
               ))}
+              {generalGroup ? <NavItemRow key={generalGroup.href} item={generalGroup} /> : null}
+              {settingsVisible ? <NavItemRow item={SETTINGS_NAV_ITEM} /> : null}
+            </>
+          )}
         </SidebarMenu>
       </SidebarGroupContent>
     </SidebarGroup>
