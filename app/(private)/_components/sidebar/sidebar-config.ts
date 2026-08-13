@@ -1,4 +1,4 @@
-﻿import type { ForwardRefExoticComponent, RefAttributes } from "react";
+import type { ForwardRefExoticComponent, RefAttributes } from "react";
 import {
   type IconProps,
   Widget,

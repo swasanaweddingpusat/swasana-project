@@ -2,6 +2,7 @@
 
 import { auth } from "@/lib/auth";
 import { getAccessibleModules } from "@/lib/queries/modules";
+import { apiLimiter } from "@/lib/rate-limit";
 
 /**
  * Resolve where a freshly-logged-in user should land when there is no explicit
@@ -10,6 +11,10 @@ import { getAccessibleModules } from "@/lib/queries/modules";
 export async function resolveLoginDestination(): Promise<string> {
   const session = await auth();
   if (!session?.user?.id) return "/";
+
+  // Rate-limit before any DB work. On limit, fall back to the picker (a safe
+  // authenticated landing) rather than resolving a per-role destination.
+  if (!apiLimiter.check(`resolve-dest:${session.user.id}`)) return "/select-module";
 
   const modules = await getAccessibleModules(session.user.roleId);
   if (modules.length >= 2) return "/select-module";
