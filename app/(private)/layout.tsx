@@ -50,7 +50,7 @@ export default function PrivateLayout({
                       <Suspense fallback={null}>
                         <SwasanaSidebar />
                       </Suspense>
-                      <SidebarInset>
+                      <SidebarInset className="min-w-0">
                         <Suspense>
                           <Header />
                         </Suspense>

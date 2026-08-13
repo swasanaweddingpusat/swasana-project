@@ -40,6 +40,7 @@ import {
   Case,
   Chart2,
   Bolt,
+  ChatRound,
 } from "@solar-icons/react";
 
 type SolarIcon = ForwardRefExoticComponent<Omit<IconProps, "ref"> & RefAttributes<SVGSVGElement>>;
@@ -141,6 +142,7 @@ export const MODULE_NAV_MAP: Record<ModuleKey, NavItem[]> = {
       submenu: [
         { name: "Overview", href: "/booking/bitrix24/overview", icon: PieChart, title: "Overview Bitrix24", subtitle: "Ringkasan perolehan lead & database CRM dari Bitrix24", permission: { module: "customers", action: "view" } },
         { name: "Transaksi", href: "/booking/bitrix24/transaksi", icon: ClipboardList, title: "Transaksi Bitrix24", subtitle: "Data transaksi (deals) CRM dari Bitrix24", permission: { module: "customers", action: "view" } },
+        { name: "Percakapan", href: "/booking/bitrix24/percakapan", icon: ChatRound, title: "Percakapan Bitrix24", subtitle: "Data percakapan Contact Center (Open Lines) dari Bitrix24", permission: { module: "customers", action: "view" } },
       ] },
     { name: "Calendar Events", href: "/booking/calendar-events", icon: CalendarDate, subtitle: "Lihat jadwal event di kalender", permission: { module: "booking", action: "view" } },
     { name: "Groups", href: "/booking/groups", icon: UsersGroupRounded, subtitle: "Kelola tim dan pantau kinerja penjualan", permission: { module: "groups", action: "view" } },

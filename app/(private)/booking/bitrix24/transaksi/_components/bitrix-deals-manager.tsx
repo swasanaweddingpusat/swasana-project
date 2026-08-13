@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Magnifer,
   Bolt,
@@ -10,11 +10,14 @@ import {
   UserCircle,
   Phone,
   Link as LinkIcon,
+  Tuning,
+  CloseCircle,
 } from "@solar-icons/react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Label } from "@/components/ui/label";
 import {
   Table,
   TableBody,
@@ -31,6 +34,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 
@@ -129,6 +133,7 @@ export function BitrixDealsManager() {
   const [search, setSearch] = useState("");
   const [query, setQuery] = useState("");
   const [reloadKey, setReloadKey] = useState(0);
+  const [filterOpen, setFilterOpen] = useState(false);
 
   // Debounce the search box → server query. Resets paging to the first page.
   useEffect(() => {
@@ -176,20 +181,27 @@ export function BitrixDealsManager() {
   const canPrev = start > 0;
   const canNext = start + PAGE_SIZE < total;
 
-  function changePipeline(value: string) {
-    setPipeline(value);
+  // Number of non-default active filters — shown as a badge on the Filter button.
+  const activeFilterCount = (pipeline ? 1 : 0) + (stage ? 1 : 0);
+
+  function applyFilters(next: { pipeline: string; stage: string }) {
+    setPipeline(next.pipeline);
+    setStage(next.stage);
     setStart(0);
+    setFilterOpen(false);
   }
 
-  function changeStage(value: string) {
-    setStage(value);
+  function resetFilters() {
+    setPipeline("");
+    setStage("");
     setStart(0);
+    setFilterOpen(false);
   }
 
   return (
-    <div className="space-y-4 p-4 md:p-6">
+    <div className="flex flex-col gap-4">
       {/* Header card */}
-      <Card className="flex flex-col gap-4 rounded-2xl p-5 lg:flex-row lg:items-center lg:justify-between">
+      <Card className="flex flex-col gap-4 rounded-xl p-5 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex items-center gap-3">
           <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-accent">
             <Bolt weight="BoldDuotone" className="h-6 w-6 text-foreground" />
@@ -203,42 +215,6 @@ export function BitrixDealsManager() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          {/* Pipeline filter — hardcoded dropdown (Kediaman/Swasana/…) */}
-          <Select
-            value={pipeline === "" ? PIPELINE_ALL : pipeline}
-            onValueChange={(v) => changePipeline(v === PIPELINE_ALL ? "" : v)}
-          >
-            <SelectTrigger className="w-full rounded-full sm:w-44">
-              <SelectValue placeholder="Semua pipeline" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={PIPELINE_ALL}>Semua pipeline</SelectItem>
-              {PIPELINE_OPTIONS.map((p) => (
-                <SelectItem key={p.id} value={p.id}>
-                  {p.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-          {/* Stage (tahap) filter — options come from the live stage catalog */}
-          <Select
-            value={stage === "" ? STAGE_ALL : stage}
-            onValueChange={(v) => changeStage(v === STAGE_ALL ? "" : v)}
-          >
-            <SelectTrigger className="w-full rounded-full sm:w-44">
-              <SelectValue placeholder="Semua tahap" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={STAGE_ALL}>Semua tahap</SelectItem>
-              {stageCatalog.map((s) => (
-                <SelectItem key={s.name} value={s.name}>
-                  {s.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
           <div className="relative w-full sm:w-56">
             <Magnifer
               weight="BoldDuotone"
@@ -251,6 +227,33 @@ export function BitrixDealsManager() {
               className="rounded-full pl-9"
             />
           </div>
+
+          {/* Filter — grouped popover: pipeline + tahap */}
+          <Popover open={filterOpen} onOpenChange={setFilterOpen}>
+            <PopoverTrigger
+              render={
+                <Button variant="outline" className="shrink-0 rounded-full">
+                  <Tuning weight="BoldDuotone" className="h-4 w-4" />
+                  Filter
+                  {activeFilterCount > 0 && (
+                    <Badge className="ml-1 h-5 min-w-5 justify-center rounded-full px-1.5 text-[10px]">
+                      {activeFilterCount}
+                    </Badge>
+                  )}
+                </Button>
+              }
+            />
+            <PopoverContent className="w-[min(92vw,22rem)] p-0" align="end">
+              <FilterPanel
+                pipeline={pipeline}
+                stage={stage}
+                stageCatalog={stageCatalog}
+                onApply={applyFilters}
+                onReset={resetFilters}
+              />
+            </PopoverContent>
+          </Popover>
+
           <Button
             variant="outline"
             size="icon"
@@ -265,7 +268,7 @@ export function BitrixDealsManager() {
       </Card>
 
       {/* Table card — mirrors the booking-weddings table style */}
-      <Card className="overflow-hidden rounded-2xl">
+      <Card className="overflow-hidden rounded-xl py-0">
         <CardContent className="p-0">
           <TooltipProvider delay={200}>
             <div className={cn("w-full", "overflow-x-auto")}>
@@ -273,7 +276,7 @@ export function BitrixDealsManager() {
                 <TableHeader className="bg-muted/50">
                   <TableRow className="hover:bg-transparent">
                     <TableHead className={cn("px-3", "py-2", "text-muted-foreground", "w-16")}>ID</TableHead>
-                    <TableHead className={cn("px-3", "py-2", "text-muted-foreground", "min-w-56")}>Transaksi</TableHead>
+                    <TableHead className={cn("px-3", "py-2", "text-muted-foreground", "w-64", "min-w-64")}>Transaksi</TableHead>
                     <TableHead className={cn("px-3", "py-2", "text-muted-foreground", "min-w-40")}>Nama Client</TableHead>
                     <TableHead className={cn("px-3", "py-2", "text-muted-foreground", "min-w-36")}>Telepon</TableHead>
                     <TableHead className={cn("px-3", "py-2", "text-muted-foreground", "min-w-36")}>Penanggung Jawab</TableHead>
@@ -284,7 +287,7 @@ export function BitrixDealsManager() {
                     <TableHead className={cn("px-3", "py-2", "text-muted-foreground", "text-right", "min-w-32")}>Nilai</TableHead>
                     <TableHead className={cn("px-3", "py-2", "text-muted-foreground", "min-w-52")}>Ads Source URL</TableHead>
                     <TableHead className={cn("px-3", "py-2", "text-muted-foreground", "min-w-48")}>Ads Headline</TableHead>
-                    <TableHead className={cn("px-3", "py-2", "text-muted-foreground", "w-56", "min-w-56")}>Ads Body</TableHead>
+                    <TableHead className={cn("px-3", "py-2", "text-muted-foreground", "w-96", "min-w-96")}>Ads Body</TableHead>
                     <TableHead className={cn("px-3", "py-2", "text-muted-foreground", "text-right", "min-w-28")}>Dibuat</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -319,13 +322,13 @@ export function BitrixDealsManager() {
                         </TableCell>
 
                         {/* Transaksi (title) */}
-                        <TableCell className="px-3 py-2">
-                          <span className="line-clamp-2 font-medium text-foreground">{d.title}</span>
+                        <TableCell className="px-3 py-2 align-top">
+                          <span className="block font-medium text-foreground break-words whitespace-normal">{d.title}</span>
                         </TableCell>
 
                         {/* Nama Client */}
-                        <TableCell className="px-3 py-2">
-                          <span className="line-clamp-1">{d.client ?? "-"}</span>
+                        <TableCell className="px-3 py-2 align-top">
+                          <span className="block break-words whitespace-normal">{d.client ?? "-"}</span>
                         </TableCell>
 
                         {/* Telepon */}
@@ -360,22 +363,22 @@ export function BitrixDealsManager() {
                         <TableCell className="px-3 py-2 text-sm text-muted-foreground">{d.pipeline}</TableCell>
 
                         {/* Sumber Informasi — label + optional link */}
-                        <TableCell className="px-3 py-2">
+                        <TableCell className="px-3 py-2 align-top">
                           <div className="flex flex-col gap-0.5">
-                            <span className="line-clamp-1 text-sm">{d.source}</span>
+                            <span className="text-sm break-words whitespace-normal">{d.source}</span>
                             {d.sourceDescription &&
                               (isUrl(d.sourceDescription) ? (
                                 <a
                                   href={d.sourceDescription}
                                   target="_blank"
                                   rel="noopener noreferrer"
-                                  className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                                  className="inline-flex items-start gap-1 text-xs text-primary hover:underline"
                                 >
-                                  <LinkIcon weight="BoldDuotone" className="h-3 w-3 shrink-0" />
-                                  <span className="line-clamp-1">{d.sourceDescription}</span>
+                                  <LinkIcon weight="BoldDuotone" className="mt-0.5 h-3 w-3 shrink-0" />
+                                  <span className="break-all whitespace-normal">{d.sourceDescription}</span>
                                 </a>
                               ) : (
-                                <span className="line-clamp-1 text-xs text-muted-foreground">{d.sourceDescription}</span>
+                                <span className="text-xs text-muted-foreground break-words whitespace-normal">{d.sourceDescription}</span>
                               ))}
                           </div>
                         </TableCell>
@@ -397,16 +400,16 @@ export function BitrixDealsManager() {
                         </TableCell>
 
                         {/* Ads Source URL */}
-                        <TableCell className="px-3 py-2">
+                        <TableCell className="px-3 py-2 align-top">
                           {d.adsUrl ? (
                             <a
                               href={d.adsUrl}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="inline-flex items-center gap-1 text-sm text-primary hover:underline"
+                              className="inline-flex items-start gap-1 text-sm text-primary hover:underline"
                             >
-                              <LinkIcon weight="BoldDuotone" className="h-3.5 w-3.5 shrink-0" />
-                              <span className="line-clamp-1 max-w-48">{d.adsUrl}</span>
+                              <LinkIcon weight="BoldDuotone" className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                              <span className="break-all whitespace-normal">{d.adsUrl}</span>
                             </a>
                           ) : (
                             <span className="text-muted-foreground">-</span>
@@ -414,19 +417,19 @@ export function BitrixDealsManager() {
                         </TableCell>
 
                         {/* Ads Headline */}
-                        <TableCell className="px-3 py-2">
-                          <TextCell value={d.adsHeadline} clamp={2} />
-                        </TableCell>
-
-                        {/* Ads Body — narrow column, full text wraps to multiple lines */}
                         <TableCell className="px-3 py-2 align-top">
-                          {d.adsBody ? (
-                            <span className="block w-56 max-w-56 text-sm break-words whitespace-normal text-muted-foreground">
-                              {d.adsBody}
+                          {d.adsHeadline ? (
+                            <span className="block text-sm text-muted-foreground break-words whitespace-normal">
+                              {d.adsHeadline}
                             </span>
                           ) : (
                             <span className="text-muted-foreground">-</span>
                           )}
+                        </TableCell>
+
+                        {/* Ads Body — clamped to 3 lines, expandable on click */}
+                        <TableCell className="px-3 py-2 align-top">
+                          <AdsBodyCell value={d.adsBody} />
                         </TableCell>
 
                         {/* Dibuat */}
@@ -477,6 +480,123 @@ export function BitrixDealsManager() {
   );
 }
 
+// Grouped filter panel rendered inside the Filter popover. Holds its own draft
+// state so the parent only re-fetches when the user hits "Terapkan".
+function FilterPanel({
+  pipeline: initialPipeline,
+  stage: initialStage,
+  stageCatalog,
+  onApply,
+  onReset,
+}: {
+  pipeline: string;
+  stage: string;
+  stageCatalog: StageCatalogItem[];
+  onApply: (next: { pipeline: string; stage: string }) => void;
+  onReset: () => void;
+}) {
+  const [pipeline, setPipeline] = useState(initialPipeline);
+  const [stage, setStage] = useState(initialStage);
+
+  return (
+    <div className="flex flex-col">
+      <div className="flex items-center gap-2 border-b px-4 py-3">
+        <Tuning weight="BoldDuotone" className="h-4 w-4 text-muted-foreground" />
+        <h4 className="font-heading text-sm font-semibold">Filter Transaksi</h4>
+      </div>
+
+      <div className="space-y-4 px-4 py-4">
+        {/* By pipeline */}
+        <div className="space-y-1.5">
+          <Label className="text-xs text-muted-foreground">Pipeline</Label>
+          <Select value={pipeline === "" ? PIPELINE_ALL : pipeline} onValueChange={(v) => setPipeline(v === PIPELINE_ALL ? "" : v)}>
+            <SelectTrigger className="w-full rounded-full">
+              <SelectValue placeholder="Semua pipeline" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={PIPELINE_ALL}>Semua pipeline</SelectItem>
+              {PIPELINE_OPTIONS.map((p) => (
+                <SelectItem key={p.id} value={p.id}>
+                  {p.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        {/* By tahap */}
+        <div className="space-y-1.5">
+          <Label className="text-xs text-muted-foreground">Tahap</Label>
+          <Select value={stage === "" ? STAGE_ALL : stage} onValueChange={(v) => setStage(v === STAGE_ALL ? "" : v)}>
+            <SelectTrigger className="w-full rounded-full">
+              <SelectValue placeholder="Semua tahap" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={STAGE_ALL}>Semua tahap</SelectItem>
+              {stageCatalog.map((s) => (
+                <SelectItem key={s.name} value={s.name}>
+                  {s.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      <div className="flex items-center justify-between gap-2 border-t px-4 py-3">
+        <Button variant="ghost" size="sm" className="rounded-full" onClick={onReset}>
+          <CloseCircle weight="BoldDuotone" className="h-4 w-4" />
+          Reset
+        </Button>
+        <Button size="sm" className="rounded-full" onClick={() => onApply({ pipeline, stage })}>
+          Terapkan
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+// Ads Body cell — clamps long ad copy to 3 lines with a "Selengkapnya" toggle
+// to reveal the full text, so the table row stays compact. The toggle only
+// appears when the text actually overflows the clamp.
+function AdsBodyCell({ value }: { value: string | null }) {
+  const [expanded, setExpanded] = useState(false);
+  const [overflowing, setOverflowing] = useState(false);
+  const ref = useRef<HTMLSpanElement>(null);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    // scrollHeight > clientHeight means the clamped text is cut off.
+    setOverflowing(el.scrollHeight > el.clientHeight + 1);
+  }, [value]);
+
+  if (!value) return <span className="text-muted-foreground">-</span>;
+
+  return (
+    <div className="w-96 max-w-96">
+      <span
+        ref={ref}
+        className={cn(
+          "block text-sm break-words whitespace-normal text-muted-foreground",
+          !expanded && "line-clamp-3",
+        )}
+      >
+        {value}
+      </span>
+      {(overflowing || expanded) && (
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          className="mt-1 text-xs font-medium text-primary hover:underline"
+        >
+          {expanded ? "Sembunyikan" : "Selengkapnya"}
+        </button>
+      )}
+    </div>
+  );
+}
+
 // Bitrix-style segmented funnel bar — one segment per stage in the catalog,
 // filled up to the deal's current stage. Won deals show a fully-filled bar in
 // the won color, lost deals in the lost color; in-process deals fill up to the
@@ -515,25 +635,6 @@ function StageBar({ deal, total }: { deal: Deal; total: number }) {
       <TooltipContent side="bottom" align="start">
         {deal.stage}
         {deal.stageOrder >= 0 ? ` · tahap ${deal.stageOrder + 1}/${segments}` : ""}
-      </TooltipContent>
-    </Tooltip>
-  );
-}
-
-// Truncated text cell with a tooltip that reveals the full value on hover.
-function TextCell({ value, clamp }: { value: string | null; clamp: 1 | 2 }) {
-  if (!value) return <span className="text-muted-foreground">-</span>;
-  return (
-    <Tooltip>
-      <TooltipTrigger
-        render={
-          <span className={cn("block text-left text-sm text-muted-foreground", clamp === 1 ? "line-clamp-1" : "line-clamp-2")}>
-            {value}
-          </span>
-        }
-      />
-      <TooltipContent side="bottom" align="start" className="max-w-80">
-        {value}
       </TooltipContent>
     </Tooltip>
   );

@@ -1,6 +1,13 @@
 import { requirePermissionForRoute } from "@/lib/permissions";
 import { apiLimiter, rateLimitResponse } from "@/lib/rate-limit";
-import { bitrixListAll, getBitrixCrmMeta, getBitrixDealEnums, resolveBitrixUsers, BitrixApiError } from "@/lib/bitrix";
+import {
+  bitrixListAll,
+  getBitrixCrmMeta,
+  getBitrixDealEnums,
+  resolveBitrixUsers,
+  resolveBitrixContactInfo,
+  BitrixApiError,
+} from "@/lib/bitrix";
 
 // Portal-specific custom fields (see /api/bitrix/deals for the same ids).
 const UF_ADS_URL = "UF_CRM_1770698079121"; // ad source URL (fb.me / instagram post)
@@ -8,7 +15,20 @@ const UF_VENUE = "UF_CRM_1767957579717"; // enum: venue name
 const UF_REASON = "UF_CRM_1774952346733"; // enum: includes "Getback"
 const UF_ISSUE = "UF_CRM_1768930533046"; // enum: Leads / No Response / Spam / Komplain …
 
-const DEAL_SELECT = ["ID", "TITLE", "SOURCE_ID", "ASSIGNED_BY_ID", "DATE_CREATE", UF_ADS_URL, UF_VENUE, UF_REASON, UF_ISSUE];
+const DEAL_SELECT = [
+  "ID",
+  "TITLE",
+  "STAGE_ID",
+  "CATEGORY_ID",
+  "CONTACT_ID",
+  "SOURCE_ID",
+  "ASSIGNED_BY_ID",
+  "DATE_CREATE",
+  UF_ADS_URL,
+  UF_VENUE,
+  UF_REASON,
+  UF_ISSUE,
+];
 
 // Venue enum values that aren't real venues — excluded from the venue breakdown
 // and from the "database venue" total, matching the daily report's scope.
@@ -17,6 +37,9 @@ const NON_VENUE_LABELS = new Set(["MICE", "NON VENUE"]);
 interface RawDeal {
   ID: string;
   TITLE: string | null;
+  STAGE_ID: string | null;
+  CATEGORY_ID: string | null;
+  CONTACT_ID: string | null;
   SOURCE_ID: string | null;
   ASSIGNED_BY_ID: string | null;
   DATE_CREATE: string | null;
@@ -68,21 +91,58 @@ export async function GET(request: Request) {
   const fromDay = isIsoDay(fromRaw) ? fromRaw : yesterdayFallback(toRaw);
   const toDay = isIsoDay(toRaw) ? toRaw : fromDay;
 
-  // Bitrix stores DATE_CREATE with a +03:00 offset; filtering on the bare date
-  // string (no offset) matches "created this day" in its UI.
-  const filter = {
-    ">=DATE_CREATE": `${fromDay}T00:00:00`,
-    "<DATE_CREATE": `${nextDay(toDay)}T00:00:00`,
-  };
+  // Extra filters (all optional): pipeline (CATEGORY_ID), stage (name), client
+  // + sales as free-text name matches applied post-fetch (names aren't deal
+  // fields — they come from resolved CONTACT_ID / ASSIGNED_BY_ID).
+  const pipeline = searchParams.get("pipeline")?.trim() ?? "";
+  const stageName = searchParams.get("stage")?.trim() ?? "";
+  const clientQuery = searchParams.get("client")?.trim().toLowerCase() ?? "";
+  const salesQuery = searchParams.get("sales")?.trim().toLowerCase() ?? "";
 
   try {
-    const [{ items }, meta, enums] = await Promise.all([
-      bitrixListAll<RawDeal>("crm.deal.list", { select: DEAL_SELECT, filter, order: { DATE_CREATE: "ASC" } }),
+    // Meta up front so the stage name → STATUS_ID set is ready before the list
+    // call is built (meta is cached, 10-min TTL).
+    const [meta, enums] = await Promise.all([
       getBitrixCrmMeta(),
       getBitrixDealEnums([UF_VENUE, UF_REASON, UF_ISSUE]),
     ]);
 
-    const userMap = await resolveBitrixUsers(items.map((d) => d.ASSIGNED_BY_ID ?? "").filter(Boolean));
+    // Bitrix stores DATE_CREATE with a +03:00 offset; filtering on the bare date
+    // string (no offset) matches "created this day" in its UI.
+    const filter: Record<string, string | string[]> = {
+      ">=DATE_CREATE": `${fromDay}T00:00:00`,
+      "<DATE_CREATE": `${nextDay(toDay)}T00:00:00`,
+    };
+    if (pipeline) filter.CATEGORY_ID = pipeline;
+    if (stageName) {
+      const ids = meta.stageIdsByName[stageName] ?? [];
+      filter.STAGE_ID = ids.length > 0 ? ids : ["__none__"];
+    }
+
+    const { items: allItems } = await bitrixListAll<RawDeal>("crm.deal.list", {
+      select: DEAL_SELECT,
+      filter,
+      order: { DATE_CREATE: "ASC" },
+    });
+
+    // Resolve names once, then narrow by client/sales text if requested. When no
+    // name filter is active this keeps every row (post-filter is a no-op).
+    const [contactMap, userMap] = await Promise.all([
+      resolveBitrixContactInfo(allItems.map((d) => d.CONTACT_ID ?? "").filter(Boolean)),
+      resolveBitrixUsers(allItems.map((d) => d.ASSIGNED_BY_ID ?? "").filter(Boolean)),
+    ]);
+
+    const items = allItems.filter((d) => {
+      if (clientQuery) {
+        const name = (d.CONTACT_ID ? contactMap[d.CONTACT_ID]?.name : "") ?? "";
+        if (!name.toLowerCase().includes(clientQuery)) return false;
+      }
+      if (salesQuery) {
+        const name = (d.ASSIGNED_BY_ID ? userMap[d.ASSIGNED_BY_ID] : "") ?? "";
+        if (!name.toLowerCase().includes(salesQuery)) return false;
+      }
+      return true;
+    });
 
     const venueEnum = enums[UF_VENUE] ?? {};
     const reasonEnum = enums[UF_REASON] ?? {};
@@ -157,6 +217,8 @@ export async function GET(request: Request) {
       ads,
       sales,
       venues,
+      // Ordered stage funnel — powers the "Tahap" filter dropdown on the client.
+      stageCatalog: meta.stageCatalog,
     });
   } catch (e) {
     if (e instanceof BitrixApiError) {

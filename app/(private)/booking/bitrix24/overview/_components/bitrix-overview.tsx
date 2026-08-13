@@ -13,15 +13,43 @@ import {
   VolumeLoud,
   Leaf,
   DangerTriangle,
-  Calendar as CalendarIcon,
+  Tuning,
+  CloseCircle,
 } from "@solar-icons/react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+
+// Pipeline (CATEGORY_ID) options — mirrors the Transaksi page; stable regardless
+// of the current result set. "" = all pipelines.
+const PIPELINE_ALL = "__all__";
+const STAGE_ALL = "__all__";
+const PIPELINE_OPTIONS: { id: string; name: string }[] = [
+  { id: "5", name: "Kediaman" },
+  { id: "0", name: "Swasana" },
+  { id: "1", name: "Gunawarman" },
+  { id: "3", name: "Pakubuwono" },
+];
+
+interface StageCatalogItem {
+  name: string;
+  color: string;
+  semantic: "won" | "lost" | "process";
+  order: number;
+}
 
 interface Bucket {
   key: string;
@@ -53,6 +81,7 @@ interface OverviewData {
   ads: AdBucket[];
   sales: SalesBucket[];
   venues: Bucket[];
+  stageCatalog: StageCatalogItem[];
   error?: string;
 }
 
@@ -74,19 +103,31 @@ function shortUrl(url: string): string {
   return url.replace(/^https?:\/\//i, "").replace(/\/$/, "");
 }
 
+// The full set of applied filters that drive a fetch.
+interface Filters {
+  range: DateRange | undefined;
+  pipeline: string; // "" = all
+  stage: string; // "" = all (stage name)
+  client: string;
+  sales: string;
+}
+
+function initialFilters(): Filters {
+  const y = yesterday();
+  return { range: { from: y, to: y }, pipeline: "", stage: "", client: "", sales: "" };
+}
+
 export function BitrixOverview() {
-  const [range, setRange] = useState<DateRange | undefined>(() => {
-    const y = yesterday();
-    return { from: y, to: y };
-  });
-  const [calendarOpen, setCalendarOpen] = useState(false);
+  const [filters, setFilters] = useState<Filters>(initialFilters);
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [stageCatalog, setStageCatalog] = useState<StageCatalogItem[]>([]);
   const [data, setData] = useState<OverviewData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
 
-  const from = range?.from ? toIsoDay(range.from) : "";
-  const to = range?.to ? toIsoDay(range.to) : from;
+  const from = filters.range?.from ? toIsoDay(filters.range.from) : "";
+  const to = filters.range?.to ? toIsoDay(filters.range.to) : from;
 
   useEffect(() => {
     if (!from) return;
@@ -96,6 +137,10 @@ export function BitrixOverview() {
       setError(null);
       try {
         const params = new URLSearchParams({ from, to });
+        if (filters.pipeline) params.set("pipeline", filters.pipeline);
+        if (filters.stage) params.set("stage", filters.stage);
+        if (filters.client) params.set("client", filters.client);
+        if (filters.sales) params.set("sales", filters.sales);
         const res = await fetch(`/api/bitrix/overview?${params.toString()}`);
         const json = (await res.json()) as OverviewData;
         if (cancelled) return;
@@ -105,6 +150,7 @@ export function BitrixOverview() {
           return;
         }
         setData(json);
+        if (json.stageCatalog?.length) setStageCatalog(json.stageCatalog);
       } catch {
         if (!cancelled) setError("Gagal terhubung ke server.");
       } finally {
@@ -114,14 +160,31 @@ export function BitrixOverview() {
     return () => {
       cancelled = true;
     };
-  }, [from, to, reloadKey]);
+  }, [from, to, filters.pipeline, filters.stage, filters.client, filters.sales, reloadKey]);
 
   const adsPct = data && data.total > 0 ? Math.round((data.fromAds / data.total) * 100) : 0;
 
+  // Count of non-default active filters — shown as a badge on the Filter button.
+  const activeCount =
+    (filters.pipeline ? 1 : 0) +
+    (filters.stage ? 1 : 0) +
+    (filters.client ? 1 : 0) +
+    (filters.sales ? 1 : 0);
+
+  function applyFilters(next: Filters) {
+    setFilters(next);
+    setFilterOpen(false);
+  }
+
+  function resetFilters() {
+    setFilters(initialFilters());
+    setFilterOpen(false);
+  }
+
   return (
-    <div className="space-y-4 p-4 md:p-6">
+    <div className="flex flex-col gap-4">
       {/* Header / filter card */}
-      <Card className="flex flex-col gap-4 rounded-2xl p-5 lg:flex-row lg:items-center lg:justify-between">
+      <Card className="flex flex-col gap-4 rounded-xl p-5 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex items-center gap-3">
           <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-accent">
             <Bolt weight="BoldDuotone" className="h-6 w-6 text-foreground" />
@@ -133,34 +196,31 @@ export function BitrixOverview() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
+          {/* Filter — grouped popover: date, pipeline, tahap, client, sales */}
+          <Popover open={filterOpen} onOpenChange={setFilterOpen}>
             <PopoverTrigger
               render={
-                <button
-                  type="button"
-                  className={cn(
-                    "flex h-10 w-full items-center gap-2 rounded-full border border-input bg-background px-4 text-left text-sm sm:w-72",
-                    "transition-colors hover:bg-accent",
-                    range?.from ? "text-foreground" : "text-muted-foreground",
+                <Button variant="outline" className="shrink-0 rounded-full">
+                  <Tuning weight="BoldDuotone" className="h-4 w-4" />
+                  Filter
+                  {activeCount > 0 && (
+                    <Badge className="ml-1 h-5 min-w-5 justify-center rounded-full px-1.5 text-[10px]">
+                      {activeCount}
+                    </Badge>
                   )}
-                >
-                  <CalendarIcon weight="BoldDuotone" className="h-4 w-4 shrink-0 text-muted-foreground" />
-                  <span className="flex-1 truncate">
-                    {range?.from && range?.to
-                      ? format(range.from, "dd MMM yyyy") === format(range.to, "dd MMM yyyy")
-                        ? format(range.from, "dd MMM yyyy")
-                        : `${format(range.from, "dd MMM yyyy")} — ${format(range.to, "dd MMM yyyy")}`
-                      : range?.from
-                        ? format(range.from, "dd MMM yyyy")
-                        : "Pilih rentang tanggal"}
-                  </span>
-                </button>
+                </Button>
               }
             />
-            <PopoverContent className="w-auto p-0" align="end">
-              <Calendar mode="range" numberOfMonths={2} selected={range} onSelect={setRange} autoFocus />
+            <PopoverContent className="w-auto max-w-[92vw] p-0" align="end">
+              <FilterPanel
+                initial={filters}
+                stageCatalog={stageCatalog}
+                onApply={applyFilters}
+                onReset={resetFilters}
+              />
             </PopoverContent>
           </Popover>
+
           <Button
             variant="outline"
             size="icon"
@@ -175,7 +235,7 @@ export function BitrixOverview() {
       </Card>
 
       {error ? (
-        <Card className="rounded-2xl p-8 text-center text-sm text-destructive">{error}</Card>
+        <Card className="rounded-xl p-8 text-center text-sm text-destructive">{error}</Card>
       ) : (
         <>
           {/* Metric cards */}
@@ -235,6 +295,130 @@ export function BitrixOverview() {
   );
 }
 
+// Grouped filter panel rendered inside the Filter popover. Holds its own draft
+// state so the parent only re-fetches when the user hits "Terapkan".
+function FilterPanel({
+  initial,
+  stageCatalog,
+  onApply,
+  onReset,
+}: {
+  initial: Filters;
+  stageCatalog: StageCatalogItem[];
+  onApply: (next: Filters) => void;
+  onReset: () => void;
+}) {
+  const [range, setRange] = useState<DateRange | undefined>(initial.range);
+  const [pipeline, setPipeline] = useState(initial.pipeline);
+  const [stage, setStage] = useState(initial.stage);
+  const [client, setClient] = useState(initial.client);
+  const [sales, setSales] = useState(initial.sales);
+
+  return (
+    <div className="flex flex-col">
+      <div className="flex items-center gap-2 border-b px-4 py-3">
+        <Tuning weight="BoldDuotone" className="h-4 w-4 text-muted-foreground" />
+        <h4 className="font-heading text-sm font-semibold">Filter Transaksi</h4>
+      </div>
+
+      <div className="max-h-[60vh] space-y-4 overflow-y-auto px-4 py-4">
+        {/* By date */}
+        <div className="space-y-1.5">
+          <Label className="text-xs text-muted-foreground">Rentang Tanggal</Label>
+          <div className="flex justify-center rounded-xl border">
+            <Calendar mode="range" numberOfMonths={2} selected={range} onSelect={setRange} autoFocus />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          {/* By pipeline */}
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">Pipeline</Label>
+            <Select
+              value={pipeline === "" ? PIPELINE_ALL : pipeline}
+              onValueChange={(v) => setPipeline(v === PIPELINE_ALL ? "" : v)}
+            >
+              <SelectTrigger className="w-full rounded-full">
+                <SelectValue placeholder="Semua pipeline" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={PIPELINE_ALL}>Semua pipeline</SelectItem>
+                {PIPELINE_OPTIONS.map((p) => (
+                  <SelectItem key={p.id} value={p.id}>
+                    {p.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* By tahap */}
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">Tahap</Label>
+            <Select value={stage === "" ? STAGE_ALL : stage} onValueChange={(v) => setStage(v === STAGE_ALL ? "" : v)}>
+              <SelectTrigger className="w-full rounded-full">
+                <SelectValue placeholder="Semua tahap" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={STAGE_ALL}>Semua tahap</SelectItem>
+                {stageCatalog.map((s) => (
+                  <SelectItem key={s.name} value={s.name}>
+                    {s.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* By nama client */}
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">Nama Client</Label>
+            <Input
+              value={client}
+              onChange={(e) => setClient(e.target.value)}
+              placeholder="Cari nama client…"
+              className="rounded-full"
+            />
+          </div>
+
+          {/* By nama sales */}
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">Nama Sales</Label>
+            <Input
+              value={sales}
+              onChange={(e) => setSales(e.target.value)}
+              placeholder="Cari nama sales…"
+              className="rounded-full"
+            />
+          </div>
+        </div>
+      </div>
+
+      <div className="flex items-center justify-between gap-2 border-t px-4 py-3">
+        <Button variant="ghost" size="sm" className="rounded-full" onClick={onReset}>
+          <CloseCircle weight="BoldDuotone" className="h-4 w-4" />
+          Reset
+        </Button>
+        <Button
+          size="sm"
+          className="rounded-full"
+          onClick={() =>
+            onApply({
+              range,
+              pipeline,
+              stage,
+              client: client.trim(),
+              sales: sales.trim(),
+            })
+          }
+        >
+          Terapkan
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 function MetricCard({
   icon,
   label,
@@ -247,7 +431,7 @@ function MetricCard({
   hint?: string;
 }) {
   return (
-    <Card className="flex flex-col gap-2 rounded-2xl p-5">
+    <Card className="flex flex-col gap-2 rounded-xl p-5">
       <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent">{icon}</div>
       <div>
         <p className="text-xs text-muted-foreground">{label}</p>
@@ -262,7 +446,7 @@ function MetricCard({
 
 function CardShell({ title, icon, children }: { title: string; icon: React.ReactNode; children: React.ReactNode }) {
   return (
-    <Card className="rounded-2xl p-5">
+    <Card className="rounded-xl p-5">
       <div className="mb-4 flex items-center gap-2">
         {icon}
         <h3 className="font-heading text-sm font-semibold">{title}</h3>
