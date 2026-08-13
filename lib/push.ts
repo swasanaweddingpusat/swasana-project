@@ -74,16 +74,16 @@ export async function sendPushNotification(
 
 export function getNotificationUrl(type: string, entityId?: string | null): string {
   if (type === "leave_approved" || type === "leave_rejected") {
-    return "/dashboard/hr/sistem-cuti";
+    return "/hrd/sistem-cuti";
   }
   if (type === "payslip_generated") {
-    return "/dashboard/hr/slip-gaji";
+    return "/hrd/slip-gaji";
   }
   if (type.startsWith("booking_")) {
-    return "/dashboard/booking-weddings";
+    return "/booking/booking-weddings";
   }
   if (type === "comment_mention" && entityId) {
-    return `/dashboard/booking-weddings?bookingId=${entityId}&openComments=true`;
+    return `/booking/booking-weddings?bookingId=${entityId}&openComments=true`;
   }
-  return "/dashboard/notifications";
+  return "/general/notifications";
 }

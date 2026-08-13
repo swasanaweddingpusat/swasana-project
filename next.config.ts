@@ -29,20 +29,6 @@ const nextConfig: NextConfig = {
       },
     ];
   },
-  async redirects() {
-    return [
-      {
-        source: "/dashboard/my-team",
-        destination: "/dashboard/groups",
-        permanent: true,
-      },
-      {
-        source: "/dashboard/my-team/:groupId",
-        destination: "/dashboard/groups/:groupId",
-        permanent: true,
-      },
-    ];
-  },
   images: {
     remotePatterns: [
       // MinIO on Railway — wildcard covers *.up.railway.app and subdomains

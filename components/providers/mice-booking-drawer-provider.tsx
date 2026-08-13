@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useContext, type ReactNode } from "react";
-import { MiceBookingDrawer } from "@/app/(private)/dashboard/booking-mice/_components/MiceBookingDrawer";
+import { MiceBookingDrawer } from "@/app/(private)/booking/booking-mice/_components/MiceBookingDrawer";
 import { useDrawerController, type OpenDrawerOptions } from "@/hooks/use-drawer-controller";
 
 interface MiceBookingDrawerContextValue {

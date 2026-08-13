@@ -185,8 +185,8 @@ export async function updateGroup(data: unknown) {
 
     revalidateTag("groups", "max");
     revalidateTag("users", "max");
-    revalidatePath(`/dashboard/groups/${id}`);
-    revalidatePath("/dashboard/groups");
+    revalidatePath(`/booking/groups/${id}`);
+    revalidatePath("/booking/groups");
 
     return { success: true, group };
   } catch (e) {
@@ -263,8 +263,8 @@ export async function addGroupMember(groupId: string, profileId: string) {
 
     revalidateTag("groups", "max");
     revalidateTag("users", "max");
-    revalidatePath(`/dashboard/groups/${groupId}`);
-    revalidatePath("/dashboard/groups");
+    revalidatePath(`/booking/groups/${groupId}`);
+    revalidatePath("/booking/groups");
     return { success: true };
   } catch (e) {
     console.error("[addGroupMember]", e);
@@ -298,8 +298,8 @@ export async function removeGroupMember(groupId: string, profileId: string) {
 
     revalidateTag("groups", "max");
     revalidateTag("users", "max");
-    revalidatePath(`/dashboard/groups/${groupId}`);
-    revalidatePath("/dashboard/groups");
+    revalidatePath(`/booking/groups/${groupId}`);
+    revalidatePath("/booking/groups");
     return { success: true };
   } catch (e) {
     console.error("[removeGroupMember]", e);
@@ -393,8 +393,8 @@ export async function setMemberTarget(data: unknown) {
     });
 
     revalidateTag("groups", "max");
-    revalidatePath(`/dashboard/groups/${groupId}`);
-    revalidatePath("/dashboard/groups");
+    revalidatePath(`/booking/groups/${groupId}`);
+    revalidatePath("/booking/groups");
     return { success: true };
   } catch (e) {
     console.error("[setMemberTarget]", e);
@@ -434,8 +434,8 @@ export async function deleteMemberTarget(data: unknown) {
     });
 
     revalidateTag("groups", "max");
-    revalidatePath(`/dashboard/groups/${groupId}`);
-    revalidatePath("/dashboard/groups");
+    revalidatePath(`/booking/groups/${groupId}`);
+    revalidatePath("/booking/groups");
     return { success: true };
   } catch (e) {
     console.error("[deleteMemberTarget]", e);
@@ -534,8 +534,8 @@ export async function updateGroupLeader(groupId: string, leaderId: string) {
 
     revalidateTag("groups", "max");
     revalidateTag("users", "max");
-    revalidatePath(`/dashboard/groups/${groupId}`);
-    revalidatePath("/dashboard/groups");
+    revalidatePath(`/booking/groups/${groupId}`);
+    revalidatePath("/booking/groups");
 
     return { success: true };
   } catch (e) {

@@ -73,7 +73,7 @@ export function IndicatorListTable({
                 className="cursor-pointer hover:bg-muted/50 transition-colors"
                 onClick={() =>
                   router.push(
-                    `/dashboard/vendor-specialist/wedding-indicators/${indicator.id}`,
+                    `/general/wedding-indicators/${indicator.id}`,
                   )
                 }
               >

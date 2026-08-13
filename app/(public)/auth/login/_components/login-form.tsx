@@ -22,7 +22,7 @@ export function LoginForm({
   const searchParams = useSearchParams()
   const toastShownRef = useRef<string | null>(null)
   const router = useRouter()
-  const callbackUrl = searchParams.get("callbackUrl") ?? "/dashboard"
+  const callbackUrl = searchParams.get("callbackUrl") ?? "/"
 
   useEffect(() => {
     const message = searchParams.get("message")
