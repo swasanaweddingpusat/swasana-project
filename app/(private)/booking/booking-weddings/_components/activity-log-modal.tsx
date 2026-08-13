@@ -27,9 +27,40 @@ interface Props {
 }
 
 const ACTION_BADGE: Record<string, { label: string; color: string }> = {
+  // Generic CRUD
   created: { label: "Dibuat", color: "bg-green-100 text-green-700" },
   updated: { label: "Diubah", color: "bg-blue-100 text-blue-700" },
   deleted: { label: "Dihapus", color: "bg-red-100 text-red-700" },
+  // Booking lifecycle
+  "booking.draft_created": { label: "Draft Dibuat", color: "bg-gray-100 text-gray-600" },
+  "booking.draft_updated": { label: "Draft Diubah", color: "bg-gray-100 text-gray-600" },
+  "booking.finalized": { label: "Difinalisasi", color: "bg-green-100 text-green-700" },
+  "booking.signature_saved": { label: "TTD Sales", color: "bg-blue-100 text-blue-700" },
+  "booking.set_harga": { label: "Set Harga", color: "bg-blue-100 text-blue-700" },
+  "booking.update_package_prices": { label: "Harga Diubah", color: "bg-blue-100 text-blue-700" },
+  "booking.update_tc": { label: "S&K Diubah", color: "bg-blue-100 text-blue-700" },
+  "booking.revision_restored": { label: "Revisi Dipulihkan", color: "bg-blue-100 text-blue-700" },
+  "booking.package_synced": { label: "Paket Disinkron", color: "bg-blue-100 text-blue-700" },
+  "booking.reset_approval": { label: "Approval Direset", color: "bg-red-100 text-red-700" },
+  // Vendor / bonus / complimentary
+  "booking.vendor_updated": { label: "Vendor Diubah", color: "bg-blue-100 text-blue-700" },
+  "booking.bonus_added": { label: "Bonus Ditambah", color: "bg-green-100 text-green-700" },
+  "booking.bonus_updated": { label: "Bonus Diubah", color: "bg-blue-100 text-blue-700" },
+  "booking.bonus_deleted": { label: "Bonus Dihapus", color: "bg-red-100 text-red-700" },
+  "booking.complimentary_added": { label: "Complimentary Ditambah", color: "bg-green-100 text-green-700" },
+  "booking.complimentary_updated": { label: "Complimentary Diubah", color: "bg-blue-100 text-blue-700" },
+  "booking.complimentary_deleted": { label: "Complimentary Dihapus", color: "bg-red-100 text-red-700" },
+  // Comments (create sengaja TIDAK di-log — itu chat biasa; hanya edit & hapus yang dicatat)
+  "booking.comment_edited": { label: "Komentar Diubah", color: "bg-gray-100 text-gray-600" },
+  "booking.comment_deleted": { label: "Komentar Dihapus", color: "bg-red-100 text-red-700" },
+  // Approval
+  "approval.approved": { label: "Disetujui", color: "bg-green-100 text-green-700" },
+  "approval.rejected": { label: "Ditolak", color: "bg-red-100 text-red-700" },
+  // Client agreement
+  "client_agreement.sent": { label: "Link Dikirim", color: "bg-blue-100 text-blue-700" },
+  "client_agreement.regenerated": { label: "Link Diperbarui", color: "bg-blue-100 text-blue-700" },
+  "client_agreement.viewed": { label: "Dilihat Client", color: "bg-gray-100 text-gray-600" },
+  "client_signed": { label: "Client TTD", color: "bg-green-100 text-green-700" },
 };
 
 const FIELD_LABEL: Record<string, string> = {

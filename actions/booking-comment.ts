@@ -8,6 +8,7 @@ import { deleteFromStorage, resolveAvatarUrl } from "@/lib/storage";
 import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
 import { canAccessBooking, getProfileDataScope } from "@/lib/access-control";
 import { createNotifications } from "@/lib/notifications";
+import { logAudit } from "@/lib/audit";
 
 const contentSchema = z.string().max(2000);
 const emojiSchema = z.string().min(1).max(16);
@@ -108,6 +109,15 @@ export async function editBookingComment(id: string, content: string) {
     })]);
 
     revalidateTag(`booking-comments-${existing.bookingId}`, "max");
+
+    await logAudit({
+      userId: session!.user.profileId,
+      action: "booking.comment_edited",
+      entityType: "booking",
+      entityId: existing.bookingId,
+      description: `Mengubah komentar`,
+    });
+
     return { success: true as const, comment };
   } catch (e) {
     console.error("[editBookingComment]", e);
@@ -137,6 +147,15 @@ export async function deleteBookingComment(id: string) {
     }
 
     revalidateTag(`booking-comments-${existing.bookingId}`, "max");
+
+    await logAudit({
+      userId: session!.user.profileId,
+      action: "booking.comment_deleted",
+      entityType: "booking",
+      entityId: existing.bookingId,
+      description: `Menghapus komentar`,
+    });
+
     return { success: true as const };
   } catch (e) {
     console.error("[deleteBookingComment]", e);

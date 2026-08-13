@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { apiLimiter, rateLimitResponse } from "@/lib/rate-limit";
+import { logAudit } from "@/lib/audit";
 
 export async function POST(req: Request) {
   const ip = req.headers.get("x-forwarded-for") ?? "unknown";
@@ -52,6 +53,12 @@ export async function POST(req: Request) {
       await db.clientAgreement.update({
         where: { token },
         data: { status: "Viewed", viewedAt: new Date() },
+      });
+      await logAudit({
+        action: "client_agreement.viewed",
+        entityType: "booking",
+        entityId: agreement.bookingId,
+        description: `Client membuka & melihat dokumen agreement`,
       });
     }
 

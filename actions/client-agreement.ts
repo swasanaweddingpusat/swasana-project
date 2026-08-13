@@ -70,6 +70,13 @@ export async function markAgreementSent(bookingId: string) {
       where: { bookingId },
       data: { status: "Sent", sentAt: new Date() },
     })]);
+    await logAudit({
+      userId: session!.user.id,
+      action: "client_agreement.sent",
+      entityType: "booking",
+      entityId: bookingId,
+      description: `Link agreement dikirim ke client`,
+    });
     revalidateTag("bookings", "max");
     return { success: true as const };
   } catch (e) {
