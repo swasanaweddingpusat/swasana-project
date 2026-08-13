@@ -295,6 +295,92 @@ export async function getBookings(
   return { data, total };
 }
 
+/** Filters for the wedding-booking Excel export. Semua opsional — yang diisi
+ *  digabung (AND / intersection). Event pakai `eventDate`, dealing pakai
+ *  `createdAt`. */
+export interface BookingExportFilters {
+  /** Tanggal dealing (created_at) — batas bawah (inklusif), ISO date string. */
+  dealingFrom?: string;
+  /** Tanggal dealing (created_at) — batas atas (inklusif), ISO date string. */
+  dealingTo?: string;
+}
+
+/** Satu baris siap-export — sudah dipetakan ke 6 kolom laporan. */
+export interface BookingExportRow {
+  clientName: string;
+  dealingDate: Date;
+  eventDate: Date | null;
+  marketingName: string;
+  dealingSource: string;
+  status: string;
+}
+
+const EXPORT_MAX_ROWS = 10000;
+
+/** Build the `createdAt` (tanggal dealing) window from an optional from/to
+ *  range. Batas atas dinaikkan ke akhir hari (inklusif) supaya booking pada
+ *  tanggal `dealingTo` ikut terhitung. */
+function buildDealingFilter(filters?: BookingExportFilters): Prisma.BookingWhereInput {
+  const gte = filters?.dealingFrom ? new Date(filters.dealingFrom) : undefined;
+  const lte = filters?.dealingTo
+    ? new Date(`${filters.dealingTo}T23:59:59.999`)
+    : undefined;
+
+  if (!gte && !lte) return {};
+  return {
+    createdAt: {
+      ...(gte && { gte }),
+      ...(lte && { lte }),
+    },
+  };
+}
+
+/**
+ * Fetch wedding bookings for Excel export — respects the caller's data scope,
+ * applies the (AND-combined) tanggal dealing filters, and returns rows already
+ * mapped to the six report columns. No pagination (bounded by EXPORT_MAX_ROWS).
+ */
+export async function getBookingsForExport(
+  profileId?: string,
+  dataScope?: DataScope,
+  filters?: BookingExportFilters,
+): Promise<BookingExportRow[]> {
+  const scopeFilter = await buildScopeFilter(profileId, dataScope);
+  const dealingFilter = buildDealingFilter(filters);
+
+  const where: Prisma.BookingWhereInput = {
+    category: "WEDDINGS",
+    recordStatus: "saved",
+    ...scopeFilter,
+    ...dealingFilter,
+  };
+
+  const rows = await db.booking.findMany({
+    where,
+    orderBy: { createdAt: "desc" },
+    take: EXPORT_MAX_ROWS,
+    select: {
+      createdAt: true,
+      eventDate: true,
+      bookingStatus: true,
+      snapCustomer: { select: { name: true } },
+      customer: { select: { name: true } },
+      sales: { select: { fullName: true } },
+      sourceOfInformation: { select: { name: true } },
+    },
+  });
+
+  return rows.map((r) => ({
+    // Snapshot-first (frozen at signing), fall back to live customer for drafts/pending.
+    clientName: r.snapCustomer?.name ?? r.customer?.name ?? "",
+    dealingDate: r.createdAt,
+    eventDate: r.eventDate,
+    marketingName: r.sales?.fullName ?? "",
+    dealingSource: r.sourceOfInformation?.name ?? "",
+    status: r.bookingStatus,
+  }));
+}
+
 function buildSearchFilter(search?: string): Prisma.BookingWhereInput {
   if (!search?.trim()) return {};
   const q = search.trim();

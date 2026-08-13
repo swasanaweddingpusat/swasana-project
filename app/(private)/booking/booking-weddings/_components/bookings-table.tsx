@@ -11,7 +11,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Input } from "@/components/ui/input";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Calendar as CalendarDays, ArrowLeft, ArrowRight, Magnifer as Search, Eye, Refresh, MenuDots as EllipsisVertical, TrashBinTrash as Trash2, CloseSquare as SquareX, Pen as Pencil, TransferHorizontal as ArrowLeftRight, FileText as FileSignature, Printer, FileSend as FileUp, ChatRound as MessageSquare, ClipboardCheck, AddCircle, UsersGroupRounded, Filter, DocumentText, UserCircle, TagPrice, ClockCircle } from "@solar-icons/react";
+import { Calendar as CalendarDays, ArrowLeft, ArrowRight, Magnifer as Search, Eye, Refresh, MenuDots as EllipsisVertical, TrashBinTrash as Trash2, CloseSquare as SquareX, Pen as Pencil, TransferHorizontal as ArrowLeftRight, FileText as FileSignature, Printer, FileSend as FileUp, ChatRound as MessageSquare, ClipboardCheck, AddCircle, UsersGroupRounded, Filter, DocumentText, UserCircle, TagPrice, ClockCircle, Download } from "@solar-icons/react";
 const RotateCcw = Refresh;
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -40,6 +40,7 @@ import { BookingCommentPanel } from "./booking-comment-panel";
 import { BookingTCDrawer } from "./booking-tc-drawer";
 import { SetHargaBookingDrawer } from "./SetHargaBookingDrawer";
 import { RevisionHistoryDrawer } from "./RevisionHistoryDrawer";
+import { ExportBookingsModal } from "./export-bookings-modal";
 import { useUnreadCommentCounts } from "@/hooks/use-unread-comment-counts";
 import { fetchBookingComments } from "@/services/booking-comment-service";
 import { fetchBookingDetail } from "@/services/booking-detail-service";
@@ -185,6 +186,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
   const [restoreTarget, setRestoreTarget] = useState<BookingListItem | null>(null);
   const [activityLogTarget, setActivityLogTarget] = useState<BookingListItem | null>(null);
   const [detailTarget, setDetailTarget] = useState<string | null>(null);
+  const [exportOpen, setExportOpen] = useState(false);
   // Warm the detail modal's cache on hover/focus so opening a row is instant
   // (shares the ["booking-detail", id] key + staleTime with useBookingDetail).
   const prefetchDetail = (id: string) => {
@@ -795,6 +797,17 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                   {FilterPopoverContent}
                 </PopoverContent>
               </Popover>
+              {/* Export */}
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                onClick={() => setExportOpen(true)}
+                aria-label="Export booking ke Excel"
+                className="shrink-0"
+              >
+                <Download weight="BoldDuotone" aria-hidden="true" className="h-4 w-4" />
+              </Button>
               {/* Refresh */}
               <Button
                 type="button"
@@ -872,6 +885,18 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                 {FilterPopoverContent}
               </PopoverContent>
             </Popover>
+
+            {/* Export */}
+            <Button
+              type="button"
+              variant="outline"
+              className="h-9 gap-1.5 shrink-0"
+              onClick={() => setExportOpen(true)}
+              aria-label="Export booking ke Excel"
+            >
+              <Download weight="BoldDuotone" aria-hidden="true" className="h-4 w-4" />
+              Export
+            </Button>
 
             {/* Search */}
             <div className="relative">
@@ -1502,6 +1527,9 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
         booking={cancelTarget}
         onClose={() => { if (cancelTarget) invalidateDetail(cancelTarget.id); setCancelTarget(null); }}
       />
+
+      {/* Export Bookings Modal */}
+      <ExportBookingsModal open={exportOpen} onClose={() => setExportOpen(false)} />
 
       {/* Restore Booking Modal */}
       <RestoreBookingDialog
