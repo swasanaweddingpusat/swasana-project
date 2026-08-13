@@ -45,11 +45,20 @@ export function proxy(request: NextRequest) {
     request.cookies.get("authjs.session-token")?.value ||
     request.cookies.get("__Secure-authjs.session-token")?.value;
 
+  // Server Action POSTs are dispatched to the current page URL (e.g. the login
+  // form calls resolveLoginDestination() which posts back to /auth/login). Once
+  // signIn() has set the session cookie, the BOUNCE_TO_DASHBOARD rule below would
+  // redirect that POST to /select-module — the action never runs and the client
+  // sees an unparseable response. Let action requests through untouched; they are
+  // identified by the `next-action` header Next.js attaches to every action call.
+  const isServerAction =
+    request.method === "POST" && request.headers.has("next-action");
+
   if (isPublicPath(pathname)) {
     // Already-logged-in users don't need login/forgot-password — bounce to /select-module.
     // reset-password and verify are intentionally allowed through: AuthGate redirects
     // mustChangePassword / unverified users there, and bouncing them would loop.
-    if (sessionToken && BOUNCE_TO_DASHBOARD.has(pathname)) {
+    if (sessionToken && !isServerAction && BOUNCE_TO_DASHBOARD.has(pathname)) {
       return NextResponse.redirect(new URL("/select-module", request.url));
     }
     return NextResponse.next();
