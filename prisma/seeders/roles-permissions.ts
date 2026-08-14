@@ -1,7 +1,7 @@
 import { prisma } from "./_client";
 
 // ── Roles ────────────────────────────────────────────────────────────
-const roleData = [
+export const roleData = [
   { name: "super-admin", description: "All Access", sortOrder: 1 },
   { name: "direktur-sales", description: "Access to sales data and customer management", sortOrder: 2 },
   { name: "manager", description: "Full access to all features and user management", sortOrder: 3 },
@@ -20,7 +20,7 @@ const roleData = [
 
 // ── Modules & Actions ────────────────────────────────────────────────
 // Only modules that are ACTUALLY used in code
-const moduleActions: Record<string, string[]> = {
+export const moduleActions: Record<string, string[]> = {
   booking: ["view", "create", "edit", "delete", "print", "approve", "mark-lost", "restore", "cancel", "transfer", "transfer-manager", "reject", "comment", "client-agreement", "term-&-condition", "edit-package", "edit-set-harga", "reset-approval"],
   customers: ["view", "create", "edit", "delete"],
   "finance-ar": ["view", "create", "edit", "delete"],
@@ -93,7 +93,7 @@ const moduleActions: Record<string, string[]> = {
 
 // ── Role → Permission Matrix ─────────────────────────────────────────
 // "super-admin" gets ALL permissions (handled separately).
-const rolePermissionMap: Record<string, Record<string, string[]>> = {
+export const rolePermissionMap: Record<string, Record<string, string[]>> = {
   "direktur-sales": {
     booking: ["view", "create", "edit", "approve", "mark-lost", "transfer", "transfer-manager", "comment", "print", "client-agreement"],
     customers: ["view", "create", "edit"],
@@ -200,7 +200,7 @@ const rolePermissionMap: Record<string, Record<string, string[]>> = {
     vendor: ["view"],
     "settings-source-of-information": ["view", "create", "edit", "delete"],
     guestbook: ["view", "create", "edit"],
-    "daily-activity": ["view", "create", "edit", "delete"],
+    // daily-activity intentionally removed — sales (wedding) no longer sees it.
     // quotations intentionally removed — sales role no longer has quotation access.
     // view+create only: sales can select & create complimentary on-the-fly from booking drawer,
     // but master data management (edit/delete) is reserved for direktur-sales and above.

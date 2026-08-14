@@ -326,6 +326,90 @@ export async function resolveBitrixContacts(ids: string[]): Promise<Record<strin
   return out;
 }
 
+/**
+ * Search Bitrix users by name (accelerated FIND search across first/last name,
+ * department, and position). Returns the first 50 matches as { id, name }.
+ * Used to resolve a sales name typed in a filter into RESPONSIBLE_ID.
+ */
+export async function searchBitrixUsers(find: string): Promise<{ id: string; name: string }[]> {
+  const { result } = await bitrixCall<{ ID: string; NAME?: string; LAST_NAME?: string }[]>("user.search", {
+    FIND: find,
+    start: 0,
+  });
+  if (!Array.isArray(result)) return [];
+  return result.map((u) => ({
+    id: u.ID,
+    name: [u.NAME, u.LAST_NAME].filter(Boolean).join(" ").trim() || `#${u.ID}`,
+  }));
+}
+
+export interface SessionHistoryMessage {
+  id: string;
+  chatid: string;
+  senderid: string;
+  recipientid: string;
+  date: string;
+  text: string;
+  textlegacy: string;
+  params: unknown;
+}
+
+export interface SessionHistoryUser {
+  id: string;
+  name: string;
+  firstName: string;
+  lastName: string;
+  connector?: boolean;
+  extranet?: boolean;
+  type?: string;
+}
+
+export interface SessionHistoryChat {
+  id: string;
+  name: string;
+  entityType: string;
+  entityId: string;
+  entityData1: string;
+  entityData2: string;
+  entityData3: string;
+  messageCount: number;
+  dateCreate: string;
+  type: string;
+}
+
+export interface SessionHistory {
+  chatId: number;
+  sessionId: number;
+  userId: string;
+  message: Record<string, SessionHistoryMessage>;
+  usersMessage: Record<string, string[]>;
+  users: Record<string, SessionHistoryUser>;
+  chat: Record<string, SessionHistoryChat>;
+  files: Record<string, unknown>;
+}
+
+/**
+ * Fetch the full message history of a single Open Lines session.
+ * `SESSION_ID` is the Open Lines session id (ASSOCIATED_ENTITY_ID on the
+ * IMOPENLINES_SESSION CRM activity).
+ */
+export async function bitrixSessionHistory(sessionId: string): Promise<SessionHistory> {
+  const { result } = await bitrixCall<SessionHistory>("imopenlines.session.history.get", {
+    SESSION_ID: sessionId,
+  });
+  return result;
+}
+
+/**
+ * Extract the Open Lines session id from an ORIGIN_ID like "IMOL_67585".
+ * Returns the bare numeric id when a match is found, otherwise the input.
+ */
+export function stripImol(origin: string | null): string | null {
+  if (!origin) return null;
+  const m = origin.match(/IMOL_(\d+)/);
+  return m ? m[1] : origin;
+}
+
 export interface BitrixContactInfo {
   name: string;
   phone: string | null;

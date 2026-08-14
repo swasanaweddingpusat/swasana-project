@@ -149,7 +149,6 @@ export const MODULE_NAV_MAP: Record<ModuleKey, NavItem[]> = {
         { name: "Evaluasi", href: "/purchase/vendor-specialist/evaluations", icon: ClipboardCheck, subtitle: "Lihat dan kelola evaluasi kinerja vendor" },
         { name: "Analitik", href: "/purchase/vendor-specialist/analytics", icon: ChartSquare, subtitle: "Statistik dan analisis kinerja vendor" },
       ] },
-    { name: "Vendor", href: "/purchase/vendors", icon: ShopMinimalistic, subtitle: "Kelola vendor dan supplier", permission: { module: "vendor", action: "view" } },
   ],
 };
 
@@ -167,10 +166,12 @@ export const GENERAL_NAV: NavItem[] = [
       { name: "Overview", href: "/bitrix24/overview", icon: PieChart, title: "Overview Bitrix24", subtitle: "Ringkasan perolehan lead & database CRM dari Bitrix24", permission: { module: "bitrix", action: "view" } },
       { name: "Transaksi", href: "/bitrix24/transaksi", icon: ClipboardList, title: "Transaksi Bitrix24", subtitle: "Data transaksi (deals) CRM dari Bitrix24", permission: { module: "bitrix", action: "view" } },
       { name: "Percakapan", href: "/bitrix24/percakapan", icon: ChatRound, title: "Percakapan Bitrix24", subtitle: "Data percakapan Contact Center (Open Lines) dari Bitrix24", permission: { module: "bitrix", action: "view" } },
+      { name: "Response Sales", href: "/bitrix24/response-sales", icon: GraphUp, title: "Response Sales Bitrix24", subtitle: "Rata-rata waktu respons sales per percakapan", permission: { module: "bitrix", action: "view" } },
     ] },
   { name: "Indikator Pernikahan", href: "/wedding-indicators", icon: Heart, subtitle: "Kelola kuesioner penilaian kepuasan pasangan pernikahan", permission: { module: "vendor-specialist", action: "view" } },
   { name: "Maintenance", href: "/maintenance", icon: Sledgehammer, subtitle: "Kelola ticket dan jadwal pemeliharaan", permission: { module: "maintenance", action: "view" } },
   { name: "Guestbook", href: "/guestbook", icon: Notebook, subtitle: "Catat kunjungan tamu, vendor, dan client ke kantor", permission: { module: "guestbook", action: "view" } },
+  { name: "Vendor", href: "/vendor", icon: ShopMinimalistic, subtitle: "Kelola vendor dan supplier", permission: { module: "vendor", action: "view" } },
   { name: "Procurement", href: "/procurement", icon: CartLarge, subtitle: "Kelola pengajuan pengadaan dan pembelian barang",
     anyPermission: [
       { module: "procurement", action: "view" },

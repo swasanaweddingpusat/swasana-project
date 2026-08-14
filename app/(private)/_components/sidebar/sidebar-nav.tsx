@@ -69,6 +69,26 @@ export function SidebarNav() {
   const generalItems = isLoading ? [] : filterNavItems(GENERAL_NAV, can, isGroupMember);
   const settingsVisible = !isLoading && SETTINGS_MODULES.some((mod) => can(mod, "view"));
 
+  // BITRIX24 is a General item but must always sit directly below the active
+  // module's Overview entry. Pull it out of General and re-insert it there;
+  // when the module has no Overview entry, leave it in its General position.
+  const bitrixItem = generalItems.find((item) => item.href === "/bitrix24");
+  const overviewIndex = bitrixItem
+    ? moduleItems.findIndex((item) => item.href === `/${activeModule}/overview`)
+    : -1;
+  const orderedModuleItems =
+    bitrixItem && overviewIndex >= 0
+      ? [
+          ...moduleItems.slice(0, overviewIndex + 1),
+          bitrixItem,
+          ...moduleItems.slice(overviewIndex + 1),
+        ]
+      : moduleItems;
+  const remainingGeneralItems =
+    bitrixItem && overviewIndex >= 0
+      ? generalItems.filter((item) => item.href !== "/bitrix24")
+      : generalItems;
+
   return (
     <SidebarGroup>
       <SidebarGroupContent>
@@ -79,10 +99,10 @@ export function SidebarNav() {
             ))
           ) : (
             <>
-              {moduleItems.map((item) => (
+              {orderedModuleItems.map((item) => (
                 <NavItemRow key={item.href} item={item} />
               ))}
-              {generalItems.map((item) => (
+              {remainingGeneralItems.map((item) => (
                 <NavItemRow key={item.href} item={item} />
               ))}
               {settingsVisible ? <NavItemRow item={SETTINGS_NAV_ITEM} /> : null}

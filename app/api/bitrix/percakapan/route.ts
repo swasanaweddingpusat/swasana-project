@@ -1,6 +1,9 @@
 import { requirePermissionForRoute } from "@/lib/permissions";
 import { apiLimiter, rateLimitResponse } from "@/lib/rate-limit";
-import { bitrixList, resolveBitrixUsers, BitrixApiError } from "@/lib/bitrix";
+import { bitrixList, bitrixCall, resolveBitrixUsers, BitrixApiError } from "@/lib/bitrix";
+import type { SessionHistory } from "@/lib/bitrix";
+import { parseResponseSamples, avgSeconds } from "@/lib/bitrix-response";
+import { parseSubject, channelFromSourceId } from "@/lib/bitrix-conversation";
 
 // Open Lines conversations ("Percakapan") are stored as CRM activities whose
 // PROVIDER_ID marks them as chat sessions. There is no imopenlines.session.list
@@ -82,6 +85,10 @@ export async function GET(request: Request) {
   const q = searchParams.get("q")?.trim();
   if (q) filter["%SUBJECT"] = q;
 
+  // Sales filter — RESPONSIBLE_ID is a Bitrix user id.
+  const responsibleId = searchParams.get("responsible")?.trim();
+  if (responsibleId) filter.RESPONSIBLE_ID = responsibleId;
+
   const startRaw = Number(searchParams.get("start"));
   const start = Number.isFinite(startRaw) && startRaw >= 0 ? startRaw : 0;
 
@@ -95,6 +102,14 @@ export async function GET(request: Request) {
 
     // Resolve responsible agents to display names in one batched call.
     const userMap = await resolveBitrixUsers(items.map((a) => a.RESPONSIBLE_ID ?? "").filter(Boolean));
+
+    // Compute each row's average response time (assign/transfer → agent's first
+    // message) from session history. Bitrix has no bulk stat for this, so walk
+    // the current page's sessions in batches of 50 and derive it locally.
+    const sessionIds = items
+      .map((a) => a.ASSOCIATED_ENTITY_ID ?? stripImol(a.ORIGIN_ID) ?? a.ID)
+      .filter(Boolean);
+    const avgResponseBySession = await resolveAvgResponseBySession(sessionIds);
 
     const rows = items.map((a) => {
       const parsed = parseSubject(a.SUBJECT);
@@ -120,6 +135,7 @@ export async function GET(request: Request) {
         closedAt: a.COMPLETED === "Y" ? a.END_TIME : null,
         lastMessageAt: a.LAST_UPDATED,
         durationSec: durationSeconds(a.START_TIME, a.END_TIME),
+        avgResponseSec: avgResponseBySession[sessionId] ?? null,
       };
     });
 
@@ -136,63 +152,48 @@ export async function GET(request: Request) {
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
-interface ParsedSubject {
-  name: string;
-  phone: string | null;
-  venue: string | null;
-  channel: string | null;
-}
-
-// Subject shape (Indonesian portal):
-//   Obrolan Saluran Terbuka: "<name> (<handle>) - <VENUE>" (<channel label>)
-// Handle is a phone for WA, a username for IG/TikTok. Venue + handle are
-// optional; "Guest" sessions have just the quoted name.
-function parseSubject(subject: string | null): ParsedSubject {
-  if (!subject) return { name: "Guest", phone: null, venue: null, channel: null };
-
-  const quoted = subject.match(/"([^"]+)"/);
-  const inner = quoted?.[1]?.trim() ?? subject.trim();
-
-  // Trailing "(...)" after the quoted block is the human channel label.
-  const channelMatch = subject.match(/\(([^()]*)\)\s*$/);
-  const channel = channelMatch && quoted ? channelMatch[1].trim() : null;
-
-  // Venue is the segment after the last " - ".
-  let venue: string | null = null;
-  let core = inner;
-  const dashIdx = core.lastIndexOf(" - ");
-  if (dashIdx !== -1) {
-    venue = core.slice(dashIdx + 3).trim() || null;
-    core = core.slice(0, dashIdx).trim();
-  }
-
-  // Handle inside "(...)" — a phone if mostly digits.
-  let phone: string | null = null;
-  const handleMatch = core.match(/\(([^)]*)\)\s*$/);
-  if (handleMatch) {
-    const handle = handleMatch[1].trim();
-    if (/^\+?\d[\d\s-]{6,}$/.test(handle)) phone = handle;
-    core = core.slice(0, handleMatch.index).trim();
-  }
-
-  const name = core || "Guest";
-  return { name, phone, venue, channel };
-}
-
 function stripImol(origin: string | null): string | null {
   if (!origin) return null;
   const m = origin.match(/IMOL_(\d+)/);
   return m ? m[1] : origin;
 }
 
-// Fallback channel label when the subject carries no trailing "(...)".
-function channelFromSourceId(source: string | null): string {
-  if (!source) return "-";
-  if (/tiktok/i.test(source)) return "TikTok";
-  if (/instagram|ig_|fbinstagram/i.test(source)) return "Instagram Direct";
-  if (/whatsapp|_wa_|wazzup|1engage/i.test(source)) return "WhatsApp";
-  if (/facebook|fb_|messenger/i.test(source)) return "Facebook Messenger";
-  return source.replace(/askarasoft_conn_/i, "").replace(/_/g, " ").trim() || "-";
+// Fetch session histories in chunks of 50 and return sessionId → avg response
+// seconds. A missing/empty history resolves to null (rendered as "-").
+async function resolveAvgResponseBySession(sessionIds: string[]): Promise<Record<string, number | null>> {
+  const out: Record<string, number | null> = {};
+  const unique = [...new Set(sessionIds)];
+
+  for (const chunk of chunkArray(unique, 50)) {
+    const cmd: Record<string, string> = {};
+    for (const id of chunk) cmd[`h${id}`] = `imopenlines.session.history.get?SESSION_ID=${id}`;
+
+    const batch = await bitrixCall("batch", { cmd, halt: 0 });
+    const results = (batch.result ?? {}) as { result?: Record<string, SessionHistory> };
+
+    for (const [key, history] of Object.entries(results.result ?? {})) {
+      const sessionId = key.startsWith("h") ? key.slice(1) : key;
+      if (!history?.message) {
+        out[sessionId] = null;
+        continue;
+      }
+      const { samples } = parseResponseSamples(history);
+      out[sessionId] = samples.length > 0 ? avgSeconds(samples) : null;
+    }
+
+    // Preserve null for sessions missing from the batch result (e.g. error).
+    for (const id of chunk) {
+      if (!(id in out)) out[id] = null;
+    }
+  }
+
+  return out;
+}
+
+function chunkArray<T>(arr: T[], size: number): T[][] {
+  const chunks: T[][] = [];
+  for (let i = 0; i < arr.length; i += size) chunks.push(arr.slice(i, i + size));
+  return chunks;
 }
 
 // Conversation duration in seconds from START/END; null when either is missing.

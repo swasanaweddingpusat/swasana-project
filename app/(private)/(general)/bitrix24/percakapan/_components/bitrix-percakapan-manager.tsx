@@ -38,12 +38,14 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+import { PercakapanDetailDrawer } from "./percakapan-detail-drawer";
 
 const PAGE_SIZE = 50;
-const COLSPAN = 9;
+const COLSPAN = 10;
 
 const DIRECTION_ALL = "__all__";
 const STATUS_ALL = "__all__";
+const RESPONSIBLE_ALL = "__all__";
 
 const DIRECTION_OPTIONS: { id: string; name: string }[] = [
   { id: "1", name: "Inbound" },
@@ -71,6 +73,7 @@ interface Conversation {
   closedAt: string | null;
   lastMessageAt: string | null;
   durationSec: number | null;
+  avgResponseSec: number | null;
 }
 
 interface ApiResponse {
@@ -110,12 +113,32 @@ export function BitrixPercakapanManager() {
   const [start, setStart] = useState(0);
   const [direction, setDirection] = useState<string>("");
   const [status, setStatus] = useState<string>("");
+  const [responsible, setResponsible] = useState<string>("");
+  const [salesOptions, setSalesOptions] = useState<{ id: string; name: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [query, setQuery] = useState("");
   const [reloadKey, setReloadKey] = useState(0);
   const [filterOpen, setFilterOpen] = useState(false);
+  const [selectedSession, setSelectedSession] = useState<string | null>(null);
+
+  // Load sales options once for the filter dropdown.
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch("/api/bitrix/sales");
+        const json = (await res.json()) as { id: string; name: string }[] | { error?: string };
+        if (!cancelled && Array.isArray(json)) setSalesOptions(json);
+      } catch {
+        // Non-fatal — filter falls back to showing only the selected id.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Debounce the search box → server query. Resets paging to the first page.
   useEffect(() => {
@@ -135,6 +158,7 @@ export function BitrixPercakapanManager() {
         const params = new URLSearchParams({ start: String(start) });
         if (direction) params.set("direction", direction);
         if (status) params.set("status", status);
+        if (responsible) params.set("responsible", responsible);
         if (query) params.set("q", query);
         const res = await fetch(`/api/bitrix/percakapan?${params.toString()}`);
         const json = (await res.json()) as ApiResponse;
@@ -155,18 +179,19 @@ export function BitrixPercakapanManager() {
     return () => {
       cancelled = true;
     };
-  }, [start, direction, status, query, reloadKey]);
+  }, [start, direction, status, responsible, query, reloadKey]);
 
   const pageFrom = total === 0 ? 0 : start + 1;
   const pageTo = Math.min(start + PAGE_SIZE, total);
   const canPrev = start > 0;
   const canNext = start + PAGE_SIZE < total;
 
-  const activeFilterCount = (direction ? 1 : 0) + (status ? 1 : 0);
+  const activeFilterCount = (direction ? 1 : 0) + (status ? 1 : 0) + (responsible ? 1 : 0);
 
-  function applyFilters(next: { direction: string; status: string }) {
+  function applyFilters(next: { direction: string; status: string; responsible: string }) {
     setDirection(next.direction);
     setStatus(next.status);
+    setResponsible(next.responsible);
     setStart(0);
     setFilterOpen(false);
   }
@@ -174,6 +199,7 @@ export function BitrixPercakapanManager() {
   function resetFilters() {
     setDirection("");
     setStatus("");
+    setResponsible("");
     setStart(0);
     setFilterOpen(false);
   }
@@ -227,6 +253,8 @@ export function BitrixPercakapanManager() {
               <FilterPanel
                 direction={direction}
                 status={status}
+                responsible={responsible}
+                salesOptions={salesOptions}
                 onApply={applyFilters}
                 onReset={resetFilters}
               />
@@ -261,6 +289,7 @@ export function BitrixPercakapanManager() {
                   <TableHead className="px-3 py-2 text-muted-foreground min-w-36">Karyawan</TableHead>
                   <TableHead className="px-3 py-2 text-muted-foreground min-w-32">Dibuat</TableHead>
                   <TableHead className="px-3 py-2 text-muted-foreground min-w-32">Ditutup</TableHead>
+                  <TableHead className="px-3 py-2 text-muted-foreground text-right min-w-24">Response</TableHead>
                   <TableHead className="px-3 py-2 text-muted-foreground text-right min-w-24">Durasi</TableHead>
                 </TableRow>
               </TableHeader>
@@ -289,7 +318,11 @@ export function BitrixPercakapanManager() {
                   </TableRow>
                 ) : (
                   items.map((c) => (
-                    <TableRow key={c.id} className="hover:bg-muted/40">
+                    <TableRow
+                      key={c.id}
+                      className="cursor-pointer hover:bg-muted/40"
+                      onClick={() => setSelectedSession(c.sessionId)}
+                    >
                       {/* Sesi */}
                       <TableCell className="px-3 py-2 font-mono text-xs text-muted-foreground">
                         {c.sessionId}
@@ -366,6 +399,11 @@ export function BitrixPercakapanManager() {
                         {formatDateTime(c.closedAt)}
                       </TableCell>
 
+                      {/* Response rata-rata */}
+                      <TableCell className="px-3 py-2 text-right text-sm whitespace-nowrap">
+                        {formatDuration(c.avgResponseSec)}
+                      </TableCell>
+
                       {/* Durasi */}
                       <TableCell className="px-3 py-2 text-right text-sm whitespace-nowrap">
                         {formatDuration(c.durationSec)}
@@ -409,6 +447,11 @@ export function BitrixPercakapanManager() {
           )}
         </CardContent>
       </Card>
+
+      <PercakapanDetailDrawer
+        sessionId={selectedSession}
+        onClose={() => setSelectedSession(null)}
+      />
     </div>
   );
 }
@@ -418,16 +461,21 @@ export function BitrixPercakapanManager() {
 function FilterPanel({
   direction: initialDirection,
   status: initialStatus,
+  responsible: initialResponsible,
+  salesOptions,
   onApply,
   onReset,
 }: {
   direction: string;
   status: string;
-  onApply: (next: { direction: string; status: string }) => void;
+  responsible: string;
+  salesOptions: { id: string; name: string }[];
+  onApply: (next: { direction: string; status: string; responsible: string }) => void;
   onReset: () => void;
 }) {
   const [direction, setDirection] = useState(initialDirection);
   const [status, setStatus] = useState(initialStatus);
+  const [responsible, setResponsible] = useState(initialResponsible);
 
   return (
     <div className="flex flex-col">
@@ -475,6 +523,27 @@ function FilterPanel({
             </SelectContent>
           </Select>
         </div>
+
+        {/* By sales */}
+        <div className="space-y-1.5">
+          <Label className="text-xs text-muted-foreground">Sales</Label>
+          <Select
+            value={responsible === "" ? RESPONSIBLE_ALL : responsible}
+            onValueChange={(v) => setResponsible(v === RESPONSIBLE_ALL ? "" : v)}
+          >
+            <SelectTrigger className="w-full rounded-full">
+              <SelectValue placeholder="Semua sales" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={RESPONSIBLE_ALL}>Semua sales</SelectItem>
+              {salesOptions.map((s) => (
+                <SelectItem key={s.id} value={s.id}>
+                  {s.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       <div className="flex items-center justify-between gap-2 border-t px-4 py-3">
@@ -482,7 +551,7 @@ function FilterPanel({
           <CloseCircle weight="BoldDuotone" className="h-4 w-4" />
           Reset
         </Button>
-        <Button size="sm" className="rounded-full" onClick={() => onApply({ direction, status })}>
+        <Button size="sm" className="rounded-full" onClick={() => onApply({ direction, status, responsible })}>
           Terapkan
         </Button>
       </div>

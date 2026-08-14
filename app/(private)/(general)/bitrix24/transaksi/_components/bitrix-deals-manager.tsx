@@ -40,6 +40,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+import { BitrixDealDetailModal } from "./bitrix-deal-detail-modal";
 
 const PAGE_SIZE = 50;
 const COLSPAN = 15;
@@ -64,7 +65,7 @@ interface StageCatalogItem {
   order: number;
 }
 
-interface Deal {
+export interface Deal {
   id: string;
   title: string;
   stageId: string | null;
@@ -149,6 +150,7 @@ export function BitrixDealsManager() {
   const [query, setQuery] = useState("");
   const [reloadKey, setReloadKey] = useState(0);
   const [filterOpen, setFilterOpen] = useState(false);
+  const [selectedDeal, setSelectedDeal] = useState<Deal | null>(null);
 
   // Derive ISO-day bounds from the two date ranges — primitive deps for the
   // fetch effect (a "from" with no "to" is treated as a single-day range).
@@ -366,7 +368,11 @@ export function BitrixDealsManager() {
                     </TableRow>
                   ) : (
                     deals.map((d) => (
-                      <TableRow key={d.id} className={cn("hover:bg-muted/40")}>
+                      <TableRow
+                        key={d.id}
+                        className={cn("cursor-pointer hover:bg-muted/40")}
+                        onClick={() => setSelectedDeal(d)}
+                      >
                         <TableCell className={cn("px-3", "py-2", "font-mono", "text-xs", "text-muted-foreground")}>
                           {d.id}
                         </TableCell>
@@ -531,6 +537,11 @@ export function BitrixDealsManager() {
           )}
         </CardContent>
       </Card>
+
+      <BitrixDealDetailModal
+        deal={selectedDeal}
+        onClose={() => setSelectedDeal(null)}
+      />
     </div>
   );
 }

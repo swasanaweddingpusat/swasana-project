@@ -4,7 +4,7 @@ export const metadata = { title: "Purchase Overview" };
 
 // Mirror the purchase module's permission map (prisma seed mpm_pur_*) so any role
 // that getAccessibleModules() grants the module can also open its overview.
-const PURCHASE_MODULES = ["vendor", "vendor-specialist", "procurement"];
+const PURCHASE_MODULES = ["vendor-specialist"];
 
 export default async function PurchaseOverviewPage(): Promise<React.JSX.Element> {
   await requirePagePermission(PURCHASE_MODULES, "view");

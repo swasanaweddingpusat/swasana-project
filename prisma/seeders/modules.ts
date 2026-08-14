@@ -31,7 +31,7 @@ interface ModuleSeed {
   permissions: string[];
 }
 
-const MODULE_REGISTRY: ModuleSeed[] = [
+export const MODULE_REGISTRY: ModuleSeed[] = [
   { key: "finance", name: "Finance", icon: "Wallet", sortOrder: 10, permissions: ["finance-ar", "finance-ap"] },
   { key: "hrd", name: "HRD", icon: "UsersGroupRounded", sortOrder: 20, permissions: ["hr", "hr-recruitment"] },
   {
@@ -51,9 +51,9 @@ const MODULE_REGISTRY: ModuleSeed[] = [
       "promo",
     ],
   },
-  // Purchase world: vendor + vendor-specialist only. `procurement` intentionally
-  // NOT here — it is now a GENERAL menu (route: /(general)/procurement).
-  { key: "purchase", name: "Purchase", icon: "CartLarge", sortOrder: 40, permissions: ["vendor", "vendor-specialist"] },
+  // Purchase world: vendor-specialist only. `procurement` intentionally NOT here
+  // (route: /(general)/procurement); `vendor` also moved to GENERAL (/vendor).
+  { key: "purchase", name: "Purchase", icon: "CartLarge", sortOrder: 40, permissions: ["vendor-specialist"] },
 ];
 
 export async function seedModules(): Promise<void> {
