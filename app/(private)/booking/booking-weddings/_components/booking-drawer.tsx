@@ -18,6 +18,7 @@ import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { SearchableSelect } from "@/components/ui/searchable-select";
+import { BitrixDealSelect } from "./bitrix-deal-select";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ContactEntry, parseStoredPhone } from "@/components/shared/PhoneInput";
@@ -1839,7 +1840,10 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
                   {isBitrixSource && (
                     <div>
                       <FormLabel className={cn('text-sm', 'font-medium', 'text-foreground')}>Bitrix ID <span className="text-destructive">*</span></FormLabel>
-                      <Input placeholder="e.g. 12345" value={contactBitrixId} onChange={(e) => setContactBitrixId(e.target.value)} className="mt-1" />
+                      <BitrixDealSelect
+                        value={contactBitrixId}
+                        onChange={setContactBitrixId}
+                      />
                     </div>
                   )}
                   </div>
