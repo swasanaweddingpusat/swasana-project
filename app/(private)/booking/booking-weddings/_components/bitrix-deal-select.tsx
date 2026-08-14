@@ -154,81 +154,77 @@ export function BitrixDealSelect({
     setSearch("");
   };
 
-  const dropdown = open ? (
+  const dropdown = open && pos ? (
     <div
       ref={portalRef}
-      style={{ position: "fixed", top: 0, left: 0, zIndex: 9999 }}
-      className="pointer-events-none absolute"
+      style={{
+        position: "fixed",
+        top: pos.top,
+        left: pos.left,
+        width: pos.width,
+        zIndex: 9999,
+      }}
+      className={cn(
+        "rounded-md border bg-popover text-popover-foreground shadow-md animate-in fade-in-0 zoom-in-95",
+      )}
     >
-      <div
-        style={{
-          position: "fixed",
-          top: (containerRef.current?.getBoundingClientRect().bottom ?? 0) + 4,
-          left: containerRef.current?.getBoundingClientRect().left ?? 0,
-          width: containerRef.current?.getBoundingClientRect().width ?? 240,
-        }}
-        className={cn(
-          "pointer-events-auto rounded-md border bg-popover text-popover-foreground shadow-md animate-in fade-in-0 zoom-in-95",
-        )}
-      >
-        <div className={cn("flex", "items-center", "border-b", "px-3")}>
-          <Magnifer weight="BoldDuotone" className={cn("mr-2", "h-4", "w-4", "shrink-0", "opacity-50")} />
-          <input
-            ref={inputRef}
-            className={cn("flex", "h-10", "w-full", "bg-transparent", "py-3", "text-sm", "outline-none", "placeholder:text-muted-foreground")}
-            placeholder={searchPlaceholder}
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Escape") {
-                setOpen(false);
-                setSearch("");
-              }
-            }}
-          />
-        </div>
-        <div className={cn("max-h-64", "overflow-y-auto", "p-1")}>
-          {loading ? (
-            <p className="py-4 text-center text-sm text-muted-foreground">Mencari...</p>
-          ) : options.length === 0 ? (
-            <p className="py-4 text-center text-sm text-muted-foreground">Tidak ada transaksi ditemukan</p>
-          ) : (
-            options.map((opt) => (
-              <div
-                key={opt.id}
-                className="flex items-center justify-between gap-2 rounded-sm px-2 py-2 text-sm cursor-pointer hover:bg-accent"
-                onMouseDown={(e) => {
-                  e.preventDefault();
-                  handleSelect(opt);
-                }}
-              >
-                <div className="flex min-w-0 items-start gap-2">
-                  <CheckCircle
-                    weight="BoldDuotone"
-                    className={cn("mt-0.5 h-4 w-4 shrink-0", value === opt.id ? "opacity-100" : "opacity-0")}
-                  />
-                  <div className="min-w-0">
-                    <p className="truncate font-medium text-foreground">{opt.client ?? opt.title}</p>
-                    <p className="flex items-center gap-1 text-xs text-muted-foreground">
-                      <UserCircle weight="BoldDuotone" className="h-3 w-3 shrink-0" />
-                      <span className="truncate">{opt.assignedBy ?? "-"}</span>
-                    </p>
-                  </div>
+      <div className={cn("flex", "items-center", "border-b", "px-3")}>
+        <Magnifer weight="BoldDuotone" className={cn("mr-2", "h-4", "w-4", "shrink-0", "opacity-50")} />
+        <input
+          ref={inputRef}
+          className={cn("flex", "h-10", "w-full", "bg-transparent", "py-3", "text-sm", "outline-none", "placeholder:text-muted-foreground")}
+          placeholder={searchPlaceholder}
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") {
+              setOpen(false);
+              setSearch("");
+            }
+          }}
+        />
+      </div>
+      <div className={cn("max-h-64", "overflow-y-auto", "p-1")}>
+        {loading ? (
+          <p className="py-4 text-center text-sm text-muted-foreground">Mencari...</p>
+        ) : options.length === 0 ? (
+          <p className="py-4 text-center text-sm text-muted-foreground">Tidak ada transaksi ditemukan</p>
+        ) : (
+          options.map((opt) => (
+            <div
+              key={opt.id}
+              className="flex items-center justify-between gap-2 rounded-sm px-2 py-2 text-sm cursor-pointer hover:bg-accent"
+              onMouseDown={(e) => {
+                e.preventDefault();
+                handleSelect(opt);
+              }}
+            >
+              <div className="flex min-w-0 items-start gap-2">
+                <CheckCircle
+                  weight="BoldDuotone"
+                  className={cn("mt-0.5 h-4 w-4 shrink-0", value === opt.id ? "opacity-100" : "opacity-0")}
+                />
+                <div className="min-w-0">
+                  <p className="truncate font-medium text-foreground">{opt.client ?? opt.title}</p>
+                  <p className="flex items-center gap-1 text-xs text-muted-foreground">
+                    <UserCircle weight="BoldDuotone" className="h-3 w-3 shrink-0" />
+                    <span className="truncate">{opt.assignedBy ?? "-"}</span>
+                  </p>
                 </div>
-                <span
-                  className="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium"
-                  style={
-                    opt.stageColor
-                      ? { backgroundColor: opt.stageColor, color: contrastText(opt.stageColor) }
-                      : undefined
-                  }
-                >
-                  {opt.stage}
-                </span>
               </div>
-            ))
-          )}
-        </div>
+              <span
+                className="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium"
+                style={
+                  opt.stageColor
+                    ? { backgroundColor: opt.stageColor, color: contrastText(opt.stageColor) }
+                    : undefined
+                }
+              >
+                {opt.stage}
+              </span>
+            </div>
+          ))
+        )}
       </div>
     </div>
   ) : null;

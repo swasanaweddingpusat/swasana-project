@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { format, startOfMonth } from "date-fns";
 import { Calendar as CalendarIcon, CloseCircle, AltArrowDown } from "@solar-icons/react";
 import { CreatePaymentStep } from "@/app/(private)/booking/booking-weddings/_components/_create-booking/CreatePaymentStep";
@@ -270,7 +270,6 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
   const updateStep3Mut = useUpdateDraftStep3();
   const updateStep4Mut = useUpdateDraftStep4();
   const finalizeMut = useFinalizeDraftBooking();
-  const qc = useQueryClient();
 
   // DB draft ID — set after Step 1 "Continue" (or injected via initialDraftId from Deal flow)
   const [draftId, setDraftId] = useState<string | null>(initialDraftId ?? null);
@@ -1823,14 +1822,6 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
                           placeholder="Pilih sumber informasi"
                           searchPlaceholder="Cari sumber..."
                           emptyText="Tidak ada data"
-                          onAdd={async (name) => {
-                            const { createSourceOfInformation } = await import("@/actions/source-of-information");
-                            const result = await createSourceOfInformation(name);
-                            if (!result.success) { toast.error(result.error ?? "Gagal menambahkan"); return; }
-                            await qc.invalidateQueries({ queryKey: ["source-of-informations"] });
-                            field.onChange(result.item!.id);
-                            toast.success(`"${name}" berhasil ditambahkan`);
-                          }}
                         />
                       <FormMessage />
                     </FormItem>
