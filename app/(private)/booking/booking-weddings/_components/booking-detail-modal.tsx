@@ -865,7 +865,7 @@ export function BookingDetailModal({ open, onClose, bookingId }: Props) {
 
               {/* ═══ TAB: BITRIX ═══ */}
               {activeTab === "bitrix" && bitrixId && (
-                <BitrixSection dealId={bitrixId} />
+                <BitrixSection key={bitrixId} dealId={bitrixId} />
               )}
             </>
           )}
@@ -961,9 +961,6 @@ function BitrixSection({ dealId }: { dealId: string }) {
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
-    setError(null);
-    setDeal(null);
     fetch(`/api/bitrix/deals?filter[ID]=${encodeURIComponent(dealId)}`)
       .then(async (res) => {
         const json = (await res.json().catch(() => null)) as

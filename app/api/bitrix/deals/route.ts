@@ -15,6 +15,7 @@ const UF_ISSUE = "UF_CRM_1768930533046"; // enum: Leads / No Response / Spam / K
 const UF_ADS_URL = "UF_CRM_1770698079121"; // ad source URL (IG/FB post link)
 const UF_ADS_HEADLINE = "UF_CRM_1770698102639"; // ad headline
 const UF_ADS_BODY = "UF_CRM_1770698208232"; // ad body / caption
+const UF_DB_DATE = "UF_CRM_1786680629702"; // date: "Tanggal Database" — when the lead entered the database
 
 // Fields pulled for the Transaksi (deals) table.
 const DEAL_SELECT = [
@@ -33,6 +34,7 @@ const DEAL_SELECT = [
   UF_ADS_URL,
   UF_ADS_HEADLINE,
   UF_ADS_BODY,
+  UF_DB_DATE,
 ];
 
 interface RawDeal {
@@ -94,6 +96,18 @@ export async function GET(request: Request) {
   // matching STATUS_ID via the CRM meta and filter STAGE_ID by that set.
   const stageName = searchParams.get("stage")?.trim();
 
+  // Issue filter — the client sends an issue *label* ("Spam/Prank"); resolve it
+  // to the enum item ID and filter UF_ISSUE by it.
+  const issueName = searchParams.get("issue")?.trim();
+
+  // Date-range filters (ISO day strings, all optional). Two independent ranges:
+  //   created* → DATE_CREATE (datetime; +03:00 in Bitrix, filtered on bare date)
+  //   db*      → UF_DB_DATE  ("Tanggal Database", a date-only custom field)
+  const createdFrom = searchParams.get("createdFrom")?.trim();
+  const createdTo = searchParams.get("createdTo")?.trim();
+  const dbFrom = searchParams.get("dbFrom")?.trim();
+  const dbTo = searchParams.get("dbTo")?.trim();
+
   const startRaw = Number(searchParams.get("start"));
   const start = Number.isFinite(startRaw) && startRaw >= 0 ? startRaw : 0;
 
@@ -101,6 +115,8 @@ export async function GET(request: Request) {
     // Meta is cached (10-min TTL); await it up front so the stage name → IDs
     // mapping is available before the list call is built.
     const [meta, enums] = await Promise.all([getBitrixCrmMeta(), getBitrixDealEnums([UF_ISSUE])]);
+
+    const issueEnum = enums[UF_ISSUE] ?? {};
 
     // Bitrix matches STAGE_ID against an array of STATUS_IDs, so the stage
     // filter value is a string[] — widen the type from the string-only URL map.
@@ -110,6 +126,22 @@ export async function GET(request: Request) {
       // Unknown stage name → no rows, rather than silently ignoring the filter.
       stageFilter.STAGE_ID = ids.length > 0 ? ids : ["__none__"];
     }
+    if (issueName) {
+      // Resolve the issue label back to its enum item ID (label → ID).
+      const issueId = Object.entries(issueEnum).find(([, label]) => label === issueName)?.[0];
+      // Unknown issue label → no rows, rather than silently ignoring the filter.
+      stageFilter[UF_ISSUE] = issueId ?? "__none__";
+    }
+
+    // Tanggal Dibuat range → DATE_CREATE. The "to" bound is exclusive on the
+    // next day so the whole end day is included.
+    if (isIsoDay(createdFrom)) stageFilter[">=DATE_CREATE"] = `${createdFrom}T00:00:00`;
+    if (isIsoDay(createdTo)) stageFilter["<DATE_CREATE"] = `${nextDay(createdTo)}T00:00:00`;
+
+    // Tanggal Database range → UF_DB_DATE. Date-only field, so bound on the bare
+    // ISO day; "to" is inclusive via <= on the same day.
+    if (isIsoDay(dbFrom)) stageFilter[`>=${UF_DB_DATE}`] = dbFrom;
+    if (isIsoDay(dbTo)) stageFilter[`<=${UF_DB_DATE}`] = dbTo;
 
     const { items, total, next } = await bitrixList<RawDeal>("crm.deal.list", {
       select: DEAL_SELECT,
@@ -122,8 +154,6 @@ export async function GET(request: Request) {
       resolveBitrixContactInfo(items.map((d) => d.CONTACT_ID ?? "").filter(Boolean)),
       resolveBitrixUsers(items.map((d) => d.ASSIGNED_BY_ID ?? "").filter(Boolean)),
     ]);
-
-    const issueEnum = enums[UF_ISSUE] ?? {};
 
     const rows = items.map((d) => {
       const contact = d.CONTACT_ID ? contactMap[d.CONTACT_ID] : undefined;
@@ -152,6 +182,7 @@ export async function GET(request: Request) {
       adsUrl: d[UF_ADS_URL]?.trim() || null,
       adsHeadline: d[UF_ADS_HEADLINE]?.trim() || null,
       adsBody: cleanBbcode(d[UF_ADS_BODY]),
+      dbDate: d[UF_DB_DATE]?.trim() || null,
       dateCreate: d.DATE_CREATE,
       };
     });
@@ -163,6 +194,8 @@ export async function GET(request: Request) {
       // Ordered stage funnel (name/color/semantic) — powers the stage filter
       // dropdown and the per-row segmented progress bar on the client.
       stageCatalog: meta.stageCatalog,
+      // Distinct issue labels — powers the issue filter dropdown on the client.
+      issueCatalog: Object.values(issueEnum),
     });
   } catch (e) {
     if (e instanceof BitrixApiError) {
@@ -172,6 +205,22 @@ export async function GET(request: Request) {
     console.error("[api/bitrix/deals]", e);
     return Response.json({ error: "Gagal mengambil data transaksi." }, { status: 500 });
   }
+}
+
+// True for a bare ISO calendar day ("2026-08-14"), the shape the date filters
+// expect. Rejects datetimes and malformed input so a bad param is ignored
+// rather than silently narrowing the result set.
+function isIsoDay(v: string | null | undefined): v is string {
+  return !!v && /^\d{4}-\d{2}-\d{2}$/.test(v);
+}
+
+// Day after an ISO day via UTC calendar math — avoids timezone drift for a
+// date-only boundary (used to make the "to" bound inclusive of the whole day).
+function nextDay(day: string): string {
+  const [y, m, d] = day.split("-").map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  dt.setUTCDate(dt.getUTCDate() + 1);
+  return dt.toISOString().slice(0, 10);
 }
 
 // Ad body text arrives with Bitrix BBCode tags ([b]…[/b], [br]) — strip them so

@@ -257,33 +257,44 @@ export async function getBitrixCrmMeta(): Promise<BitrixCrmMeta> {
   return data;
 }
 
-// Cache of deal enumeration fields (UF_CRM_* of type "enumeration") → its
-// { itemId → label } map. Used to render human labels for select-type custom
-// fields like "Issue" and "Venue" without a lookup per row.
+// Cache of ALL deal enumeration fields (UF_CRM_* of type "enumeration") →
+// { fieldName → { itemId → label } }. `crm.deal.fields` returns every field in
+// one call, so we cache the complete map and let each caller pick the subset it
+// needs. Caching only the requested subset would let one route (e.g. Transaksi,
+// which asks for just ISSUE) overwrite another route's cache (Overview, which
+// also needs VENUE + REASON), making labels vanish until the TTL expires.
 let dealEnumCache: { data: Record<string, Record<string, string>>; expiresAt: number } | null = null;
 
 /**
  * Fetch & cache the value maps for the given enumeration custom fields on deals.
  * Returns `{ fieldName → { itemId → label } }`; missing fields resolve to `{}`.
+ *
+ * The cache holds every enum field regardless of what a given call requests, so
+ * the returned subset is always complete no matter the call order.
  */
 export async function getBitrixDealEnums(fieldNames: string[]): Promise<Record<string, Record<string, string>>> {
   const now = Date.now();
-  if (dealEnumCache && now < dealEnumCache.expiresAt) return dealEnumCache.data;
 
-  const fields = await bitrixCall<Record<string, { type?: string; items?: { ID: string; VALUE: string }[] }>>(
-    "crm.deal.fields",
-  );
-  const defs = fields.result ?? {};
+  let all = dealEnumCache && now < dealEnumCache.expiresAt ? dealEnumCache.data : null;
+  if (!all) {
+    const fields = await bitrixCall<Record<string, { type?: string; items?: { ID: string; VALUE: string }[] }>>(
+      "crm.deal.fields",
+    );
+    const defs = fields.result ?? {};
 
-  const data: Record<string, Record<string, string>> = {};
-  for (const name of fieldNames) {
-    const map: Record<string, string> = {};
-    for (const item of defs[name]?.items ?? []) map[item.ID] = item.VALUE;
-    data[name] = map;
+    all = {};
+    for (const [name, def] of Object.entries(defs)) {
+      if (!def?.items) continue;
+      const map: Record<string, string> = {};
+      for (const item of def.items) map[item.ID] = item.VALUE;
+      all[name] = map;
+    }
+    dealEnumCache = { data: all, expiresAt: now + META_TTL_MS };
   }
 
-  dealEnumCache = { data, expiresAt: now + META_TTL_MS };
-  return data;
+  const out: Record<string, Record<string, string>> = {};
+  for (const name of fieldNames) out[name] = all[name] ?? {};
+  return out;
 }
 
 /**

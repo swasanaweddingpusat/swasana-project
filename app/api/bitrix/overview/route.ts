@@ -98,6 +98,7 @@ export async function GET(request: Request) {
   const stageName = searchParams.get("stage")?.trim() ?? "";
   const clientQuery = searchParams.get("client")?.trim().toLowerCase() ?? "";
   const salesQuery = searchParams.get("sales")?.trim().toLowerCase() ?? "";
+  const issueName = searchParams.get("issue")?.trim() ?? "";
 
   try {
     // Meta up front so the stage name → STATUS_ID set is ready before the list
@@ -117,6 +118,12 @@ export async function GET(request: Request) {
     if (stageName) {
       const ids = meta.stageIdsByName[stageName] ?? [];
       filter.STAGE_ID = ids.length > 0 ? ids : ["__none__"];
+    }
+    if (issueName) {
+      // Resolve the issue label back to its enum item ID (label → ID).
+      const issueEnumForFilter = enums[UF_ISSUE] ?? {};
+      const issueId = Object.entries(issueEnumForFilter).find(([, label]) => label === issueName)?.[0];
+      filter[UF_ISSUE] = issueId ?? "__none__";
     }
 
     const { items: allItems } = await bitrixListAll<RawDeal>("crm.deal.list", {
@@ -219,6 +226,8 @@ export async function GET(request: Request) {
       venues,
       // Ordered stage funnel — powers the "Tahap" filter dropdown on the client.
       stageCatalog: meta.stageCatalog,
+      // Distinct issue labels — powers the "Issue" filter dropdown on the client.
+      issueCatalog: Object.values(issueEnum),
     });
   } catch (e) {
     if (e instanceof BitrixApiError) {

@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { format } from "date-fns";
+import type { DateRange } from "react-day-picker";
 import {
   Magnifer,
   Bolt,
@@ -35,17 +37,19 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 
 const PAGE_SIZE = 50;
-const COLSPAN = 14;
+const COLSPAN = 15;
 
 // Pipeline (CATEGORY_ID) options — hardcoded from the Bitrix portal's
 // crm.category.list so the filter is stable regardless of the current page's
 // rows. "" = all pipelines.
 const PIPELINE_ALL = "__all__";
 const STAGE_ALL = "__all__";
+const ISSUE_ALL = "__all__";
 const PIPELINE_OPTIONS: { id: string; name: string }[] = [
   { id: "5", name: "Kediaman" },
   { id: "0", name: "Swasana" },
@@ -84,6 +88,7 @@ interface Deal {
   adsUrl: string | null;
   adsHeadline: string | null;
   adsBody: string | null;
+  dbDate: string | null;
   dateCreate: string | null;
 }
 
@@ -92,6 +97,7 @@ interface ApiResponse {
   total: number;
   next: number | null;
   stageCatalog: StageCatalogItem[];
+  issueCatalog: string[];
   error?: string;
 }
 
@@ -121,19 +127,35 @@ function isUrl(value: string | null): boolean {
   return !!value && /^https?:\/\//i.test(value.trim());
 }
 
+// Local calendar day (not UTC) — avoids the off-by-one from toISOString().
+function toIsoDay(d: Date): string {
+  return format(d, "yyyy-MM-dd");
+}
+
 export function BitrixDealsManager() {
   const [deals, setDeals] = useState<Deal[]>([]);
   const [total, setTotal] = useState(0);
   const [start, setStart] = useState(0);
   const [pipeline, setPipeline] = useState<string>("");
   const [stage, setStage] = useState<string>("");
+  const [issue, setIssue] = useState<string>("");
+  const [createdRange, setCreatedRange] = useState<DateRange | undefined>();
+  const [dbRange, setDbRange] = useState<DateRange | undefined>();
   const [stageCatalog, setStageCatalog] = useState<StageCatalogItem[]>([]);
+  const [issueCatalog, setIssueCatalog] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [query, setQuery] = useState("");
   const [reloadKey, setReloadKey] = useState(0);
   const [filterOpen, setFilterOpen] = useState(false);
+
+  // Derive ISO-day bounds from the two date ranges — primitive deps for the
+  // fetch effect (a "from" with no "to" is treated as a single-day range).
+  const createdFrom = createdRange?.from ? toIsoDay(createdRange.from) : "";
+  const createdTo = createdRange?.from ? toIsoDay(createdRange.to ?? createdRange.from) : "";
+  const dbFrom = dbRange?.from ? toIsoDay(dbRange.from) : "";
+  const dbTo = dbRange?.from ? toIsoDay(dbRange.to ?? dbRange.from) : "";
 
   // Debounce the search box → server query. Resets paging to the first page.
   useEffect(() => {
@@ -153,6 +175,11 @@ export function BitrixDealsManager() {
         const params = new URLSearchParams({ start: String(start) });
         if (pipeline) params.set("filter[CATEGORY_ID]", pipeline);
         if (stage) params.set("stage", stage);
+        if (issue) params.set("issue", issue);
+        if (createdFrom) params.set("createdFrom", createdFrom);
+        if (createdTo) params.set("createdTo", createdTo);
+        if (dbFrom) params.set("dbFrom", dbFrom);
+        if (dbTo) params.set("dbTo", dbTo);
         if (query) params.set("q", query);
         const res = await fetch(`/api/bitrix/deals?${params.toString()}`);
         const json = (await res.json()) as ApiResponse;
@@ -165,6 +192,7 @@ export function BitrixDealsManager() {
         setDeals(json.items ?? []);
         setTotal(json.total ?? 0);
         if (json.stageCatalog?.length) setStageCatalog(json.stageCatalog);
+        if (json.issueCatalog?.length) setIssueCatalog(json.issueCatalog);
       } catch {
         if (!cancelled) setError("Gagal terhubung ke server.");
       } finally {
@@ -174,7 +202,7 @@ export function BitrixDealsManager() {
     return () => {
       cancelled = true;
     };
-  }, [start, pipeline, stage, query, reloadKey]);
+  }, [start, pipeline, stage, issue, createdFrom, createdTo, dbFrom, dbTo, query, reloadKey]);
 
   const pageFrom = total === 0 ? 0 : start + 1;
   const pageTo = Math.min(start + PAGE_SIZE, total);
@@ -182,11 +210,25 @@ export function BitrixDealsManager() {
   const canNext = start + PAGE_SIZE < total;
 
   // Number of non-default active filters — shown as a badge on the Filter button.
-  const activeFilterCount = (pipeline ? 1 : 0) + (stage ? 1 : 0);
+  const activeFilterCount =
+    (pipeline ? 1 : 0) +
+    (stage ? 1 : 0) +
+    (issue ? 1 : 0) +
+    (createdRange?.from ? 1 : 0) +
+    (dbRange?.from ? 1 : 0);
 
-  function applyFilters(next: { pipeline: string; stage: string }) {
+  function applyFilters(next: {
+    pipeline: string;
+    stage: string;
+    issue: string;
+    createdRange: DateRange | undefined;
+    dbRange: DateRange | undefined;
+  }) {
     setPipeline(next.pipeline);
     setStage(next.stage);
+    setIssue(next.issue);
+    setCreatedRange(next.createdRange);
+    setDbRange(next.dbRange);
     setStart(0);
     setFilterOpen(false);
   }
@@ -194,6 +236,9 @@ export function BitrixDealsManager() {
   function resetFilters() {
     setPipeline("");
     setStage("");
+    setIssue("");
+    setCreatedRange(undefined);
+    setDbRange(undefined);
     setStart(0);
     setFilterOpen(false);
   }
@@ -243,11 +288,15 @@ export function BitrixDealsManager() {
                 </Button>
               }
             />
-            <PopoverContent className="w-[min(92vw,22rem)] p-0" align="end">
+            <PopoverContent className="w-auto max-w-[92vw] p-0" align="end">
               <FilterPanel
                 pipeline={pipeline}
                 stage={stage}
+                issue={issue}
+                createdRange={createdRange}
+                dbRange={dbRange}
                 stageCatalog={stageCatalog}
+                issueCatalog={issueCatalog}
                 onApply={applyFilters}
                 onReset={resetFilters}
               />
@@ -288,6 +337,7 @@ export function BitrixDealsManager() {
                     <TableHead className={cn("px-3", "py-2", "text-muted-foreground", "min-w-52")}>Ads Source URL</TableHead>
                     <TableHead className={cn("px-3", "py-2", "text-muted-foreground", "min-w-48")}>Ads Headline</TableHead>
                     <TableHead className={cn("px-3", "py-2", "text-muted-foreground", "w-96", "min-w-96")}>Ads Body</TableHead>
+                    <TableHead className={cn("px-3", "py-2", "text-muted-foreground", "text-right", "min-w-32")}>Tanggal Database</TableHead>
                     <TableHead className={cn("px-3", "py-2", "text-muted-foreground", "text-right", "min-w-28")}>Dibuat</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -432,6 +482,11 @@ export function BitrixDealsManager() {
                           <AdsBodyCell value={d.adsBody} />
                         </TableCell>
 
+                        {/* Tanggal Database */}
+                        <TableCell className="px-3 py-2 text-right text-sm text-muted-foreground whitespace-nowrap">
+                          {formatDate(d.dbDate)}
+                        </TableCell>
+
                         {/* Dibuat */}
                         <TableCell className="px-3 py-2 text-right text-sm text-muted-foreground whitespace-nowrap">
                           {formatDate(d.dateCreate)}
@@ -485,18 +540,35 @@ export function BitrixDealsManager() {
 function FilterPanel({
   pipeline: initialPipeline,
   stage: initialStage,
+  issue: initialIssue,
+  createdRange: initialCreatedRange,
+  dbRange: initialDbRange,
   stageCatalog,
+  issueCatalog,
   onApply,
   onReset,
 }: {
   pipeline: string;
   stage: string;
+  issue: string;
+  createdRange: DateRange | undefined;
+  dbRange: DateRange | undefined;
   stageCatalog: StageCatalogItem[];
-  onApply: (next: { pipeline: string; stage: string }) => void;
+  issueCatalog: string[];
+  onApply: (next: {
+    pipeline: string;
+    stage: string;
+    issue: string;
+    createdRange: DateRange | undefined;
+    dbRange: DateRange | undefined;
+  }) => void;
   onReset: () => void;
 }) {
   const [pipeline, setPipeline] = useState(initialPipeline);
   const [stage, setStage] = useState(initialStage);
+  const [issue, setIssue] = useState(initialIssue);
+  const [createdRange, setCreatedRange] = useState<DateRange | undefined>(initialCreatedRange);
+  const [dbRange, setDbRange] = useState<DateRange | undefined>(initialDbRange);
 
   return (
     <div className="flex flex-col">
@@ -505,41 +577,100 @@ function FilterPanel({
         <h4 className="font-heading text-sm font-semibold">Filter Transaksi</h4>
       </div>
 
-      <div className="space-y-4 px-4 py-4">
-        {/* By pipeline */}
-        <div className="space-y-1.5">
-          <Label className="text-xs text-muted-foreground">Pipeline</Label>
-          <Select value={pipeline === "" ? PIPELINE_ALL : pipeline} onValueChange={(v) => setPipeline(v === PIPELINE_ALL ? "" : v)}>
-            <SelectTrigger className="w-full rounded-full">
-              <SelectValue placeholder="Semua pipeline" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={PIPELINE_ALL}>Semua pipeline</SelectItem>
-              {PIPELINE_OPTIONS.map((p) => (
-                <SelectItem key={p.id} value={p.id}>
-                  {p.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+      <div className="max-h-[60vh] space-y-4 overflow-y-auto px-4 py-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          {/* By pipeline */}
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">Pipeline</Label>
+            <Select value={pipeline === "" ? PIPELINE_ALL : pipeline} onValueChange={(v) => setPipeline(v === PIPELINE_ALL ? "" : v)}>
+              <SelectTrigger className="w-full rounded-full">
+                <SelectValue placeholder="Semua pipeline" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={PIPELINE_ALL}>Semua pipeline</SelectItem>
+                {PIPELINE_OPTIONS.map((p) => (
+                  <SelectItem key={p.id} value={p.id}>
+                    {p.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* By tahap */}
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">Tahap</Label>
+            <Select value={stage === "" ? STAGE_ALL : stage} onValueChange={(v) => setStage(v === STAGE_ALL ? "" : v)}>
+              <SelectTrigger className="w-full rounded-full">
+                <SelectValue placeholder="Semua tahap" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={STAGE_ALL}>Semua tahap</SelectItem>
+                {stageCatalog.map((s) => (
+                  <SelectItem key={s.name} value={s.name}>
+                    {s.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* By issue */}
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">Issue</Label>
+            <Select value={issue === "" ? ISSUE_ALL : issue} onValueChange={(v) => setIssue(v === ISSUE_ALL ? "" : v)}>
+              <SelectTrigger className="w-full rounded-full">
+                <SelectValue placeholder="Semua issue" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ISSUE_ALL}>Semua issue</SelectItem>
+                {issueCatalog.map((label) => (
+                  <SelectItem key={label} value={label}>
+                    {label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </div>
 
-        {/* By tahap */}
-        <div className="space-y-1.5">
-          <Label className="text-xs text-muted-foreground">Tahap</Label>
-          <Select value={stage === "" ? STAGE_ALL : stage} onValueChange={(v) => setStage(v === STAGE_ALL ? "" : v)}>
-            <SelectTrigger className="w-full rounded-full">
-              <SelectValue placeholder="Semua tahap" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={STAGE_ALL}>Semua tahap</SelectItem>
-              {stageCatalog.map((s) => (
-                <SelectItem key={s.name} value={s.name}>
-                  {s.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        {/* Date ranges — created vs database date, side by side on wider screens */}
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <Label className="text-xs text-muted-foreground">Tanggal Dibuat</Label>
+              {createdRange?.from && (
+                <button
+                  type="button"
+                  onClick={() => setCreatedRange(undefined)}
+                  className="text-xs font-medium text-primary hover:underline"
+                >
+                  Bersihkan
+                </button>
+              )}
+            </div>
+            <div className="flex justify-center rounded-xl border">
+              <Calendar mode="range" numberOfMonths={1} selected={createdRange} onSelect={setCreatedRange} />
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <Label className="text-xs text-muted-foreground">Tanggal Database</Label>
+              {dbRange?.from && (
+                <button
+                  type="button"
+                  onClick={() => setDbRange(undefined)}
+                  className="text-xs font-medium text-primary hover:underline"
+                >
+                  Bersihkan
+                </button>
+              )}
+            </div>
+            <div className="flex justify-center rounded-xl border">
+              <Calendar mode="range" numberOfMonths={1} selected={dbRange} onSelect={setDbRange} />
+            </div>
+          </div>
         </div>
       </div>
 
@@ -548,7 +679,7 @@ function FilterPanel({
           <CloseCircle weight="BoldDuotone" className="h-4 w-4" />
           Reset
         </Button>
-        <Button size="sm" className="rounded-full" onClick={() => onApply({ pipeline, stage })}>
+        <Button size="sm" className="rounded-full" onClick={() => onApply({ pipeline, stage, issue, createdRange, dbRange })}>
           Terapkan
         </Button>
       </div>

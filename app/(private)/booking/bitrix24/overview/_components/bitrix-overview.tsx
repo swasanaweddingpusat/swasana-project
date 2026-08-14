@@ -37,6 +37,7 @@ import { cn } from "@/lib/utils";
 // of the current result set. "" = all pipelines.
 const PIPELINE_ALL = "__all__";
 const STAGE_ALL = "__all__";
+const ISSUE_ALL = "__all__";
 const PIPELINE_OPTIONS: { id: string; name: string }[] = [
   { id: "5", name: "Kediaman" },
   { id: "0", name: "Swasana" },
@@ -82,6 +83,7 @@ interface OverviewData {
   sales: SalesBucket[];
   venues: Bucket[];
   stageCatalog: StageCatalogItem[];
+  issueCatalog: string[];
   error?: string;
 }
 
@@ -108,19 +110,21 @@ interface Filters {
   range: DateRange | undefined;
   pipeline: string; // "" = all
   stage: string; // "" = all (stage name)
+  issue: string; // "" = all (issue label)
   client: string;
   sales: string;
 }
 
 function initialFilters(): Filters {
   const y = yesterday();
-  return { range: { from: y, to: y }, pipeline: "", stage: "", client: "", sales: "" };
+  return { range: { from: y, to: y }, pipeline: "", stage: "", issue: "", client: "", sales: "" };
 }
 
 export function BitrixOverview() {
   const [filters, setFilters] = useState<Filters>(initialFilters);
   const [filterOpen, setFilterOpen] = useState(false);
   const [stageCatalog, setStageCatalog] = useState<StageCatalogItem[]>([]);
+  const [issueCatalog, setIssueCatalog] = useState<string[]>([]);
   const [data, setData] = useState<OverviewData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -139,6 +143,7 @@ export function BitrixOverview() {
         const params = new URLSearchParams({ from, to });
         if (filters.pipeline) params.set("pipeline", filters.pipeline);
         if (filters.stage) params.set("stage", filters.stage);
+        if (filters.issue) params.set("issue", filters.issue);
         if (filters.client) params.set("client", filters.client);
         if (filters.sales) params.set("sales", filters.sales);
         const res = await fetch(`/api/bitrix/overview?${params.toString()}`);
@@ -151,6 +156,7 @@ export function BitrixOverview() {
         }
         setData(json);
         if (json.stageCatalog?.length) setStageCatalog(json.stageCatalog);
+        if (json.issueCatalog?.length) setIssueCatalog(json.issueCatalog);
       } catch {
         if (!cancelled) setError("Gagal terhubung ke server.");
       } finally {
@@ -160,7 +166,7 @@ export function BitrixOverview() {
     return () => {
       cancelled = true;
     };
-  }, [from, to, filters.pipeline, filters.stage, filters.client, filters.sales, reloadKey]);
+  }, [from, to, filters.pipeline, filters.stage, filters.issue, filters.client, filters.sales, reloadKey]);
 
   const adsPct = data && data.total > 0 ? Math.round((data.fromAds / data.total) * 100) : 0;
 
@@ -168,6 +174,7 @@ export function BitrixOverview() {
   const activeCount =
     (filters.pipeline ? 1 : 0) +
     (filters.stage ? 1 : 0) +
+    (filters.issue ? 1 : 0) +
     (filters.client ? 1 : 0) +
     (filters.sales ? 1 : 0);
 
@@ -215,6 +222,7 @@ export function BitrixOverview() {
               <FilterPanel
                 initial={filters}
                 stageCatalog={stageCatalog}
+                issueCatalog={issueCatalog}
                 onApply={applyFilters}
                 onReset={resetFilters}
               />
@@ -300,17 +308,20 @@ export function BitrixOverview() {
 function FilterPanel({
   initial,
   stageCatalog,
+  issueCatalog,
   onApply,
   onReset,
 }: {
   initial: Filters;
   stageCatalog: StageCatalogItem[];
+  issueCatalog: string[];
   onApply: (next: Filters) => void;
   onReset: () => void;
 }) {
   const [range, setRange] = useState<DateRange | undefined>(initial.range);
   const [pipeline, setPipeline] = useState(initial.pipeline);
   const [stage, setStage] = useState(initial.stage);
+  const [issue, setIssue] = useState(initial.issue);
   const [client, setClient] = useState(initial.client);
   const [sales, setSales] = useState(initial.sales);
 
@@ -370,6 +381,24 @@ function FilterPanel({
             </Select>
           </div>
 
+          {/* By issue */}
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">Issue</Label>
+            <Select value={issue === "" ? ISSUE_ALL : issue} onValueChange={(v) => setIssue(v === ISSUE_ALL ? "" : v)}>
+              <SelectTrigger className="w-full rounded-full">
+                <SelectValue placeholder="Semua issue" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ISSUE_ALL}>Semua issue</SelectItem>
+                {issueCatalog.map((label) => (
+                  <SelectItem key={label} value={label}>
+                    {label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
           {/* By nama client */}
           <div className="space-y-1.5">
             <Label className="text-xs text-muted-foreground">Nama Client</Label>
@@ -407,6 +436,7 @@ function FilterPanel({
               range,
               pipeline,
               stage,
+              issue,
               client: client.trim(),
               sales: sales.trim(),
             })
