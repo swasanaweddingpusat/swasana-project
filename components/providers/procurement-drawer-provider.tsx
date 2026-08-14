@@ -1,9 +1,9 @@
 "use client";
 
 import { createContext, useContext, type ReactNode } from "react";
-import { AddProcurementDrawer } from "@/app/(private)/purchase/pengadaan-barang/_components/AddProcurementDrawer";
-import { AnnouncementFormDrawer } from "@/app/(private)/purchase/pengadaan-barang/_components/AnnouncementFormDrawer";
-import { BudgetFormDrawer } from "@/app/(private)/purchase/pengadaan-barang/_components/BudgetFormDrawer";
+import { AddProcurementDrawer } from "@/app/(private)/(general)/procurement/_components/AddProcurementDrawer";
+import { AnnouncementFormDrawer } from "@/app/(private)/(general)/procurement/_components/AnnouncementFormDrawer";
+import { BudgetFormDrawer } from "@/app/(private)/(general)/procurement/_components/BudgetFormDrawer";
 import { useDrawerController, type OpenDrawerOptions } from "@/hooks/use-drawer-controller";
 
 interface ProcurementDrawerContextValue {

@@ -22,7 +22,7 @@ async function CachedContent() {
 }
 
 export default async function PengumumanPage() {
-  await requirePagePermission("procurement");
+  await requirePagePermission("procurement-announcement");
 
   return (
     <div className="flex flex-col mb-6 px-2">

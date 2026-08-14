@@ -9,7 +9,7 @@ export const metadata: Metadata = {
 };
 
 export default async function RingkasanPage() {
-  await requirePagePermission("procurement");
+  await requirePagePermission("procurement-summary");
 
   return (
     <div className="flex flex-col mb-6 px-2">

@@ -12,7 +12,7 @@ import { getAnnouncementList } from "@/lib/queries/procurement";
 
 export async function GET(req: Request): Promise<Response> {
   const { session, response } = await requirePermissionForRoute({
-    module: "procurement",
+    module: "procurement-announcement",
     action: "view",
   });
   if (response) return response;
@@ -35,7 +35,7 @@ export async function GET(req: Request): Promise<Response> {
 
 export async function POST(req: Request): Promise<Response> {
   const { session, response } = await requirePermissionForRoute({
-    module: "procurement",
+    module: "procurement-announcement",
     action: "create",
   });
   if (response) return response;

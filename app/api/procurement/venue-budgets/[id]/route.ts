@@ -12,7 +12,7 @@ export async function PATCH(
   const { id } = await params;
 
   const { session, response } = await requirePermissionForRoute({
-    module: "procurement",
+    module: "procurement-budget",
     action: "edit",
   });
   if (response) return response;
@@ -92,7 +92,7 @@ export async function DELETE(
   const { id } = await params;
 
   const { session, response } = await requirePermissionForRoute({
-    module: "procurement",
+    module: "procurement-budget",
     action: "delete",
   });
   if (response) return response;
