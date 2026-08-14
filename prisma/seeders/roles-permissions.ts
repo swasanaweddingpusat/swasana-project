@@ -59,6 +59,10 @@ const moduleActions: Record<string, string[]> = {
   guestbook: ["view", "create", "edit"],
   // HR & Payroll module
   hr: ["view", "create", "edit", "delete", "approve"],
+  // HR Recruitment & Onboarding — seeded originally via migration 20260622180000.
+  // Listed here so the seeder treats it as a valid module (else step 3b would
+  // delete these permissions) and can assign them per the role matrix.
+  "hr-recruitment": ["view", "create", "edit", "delete", "hire"],
   // Finance AP — customer payout (cashback program + overpay refund)
   "finance-ap": ["view", "create", "edit", "delete"],
 };
@@ -121,48 +125,31 @@ const rolePermissionMap: Record<string, Record<string, string[]>> = {
     promo: ["view"],
     procurement: ["view", "approve"],
   },
+  // Operational — persis daftar menu yang disepakati:
+  //   Procurement (4 tab, CRUD) · Vendor (view) · Purchase Order (view) ·
+  //   Guestbook · Slip Gaji Personal + Pengajuan Cuti (General, tanpa gate).
+  // Akses lama booking/customers/package/maintenance/promo sengaja DICABUT.
+  // Absensi (lintas-role) butuh perubahan nav/permission — di luar scope seeder.
   operational: {
-    booking: ["view", "create", "edit", "comment"],
-    customers: ["view"],
-    package: ["view"],
+    procurement: ["view", "create", "edit", "delete"],
     vendor: ["view"],
-    maintenance: ["view", "create", "edit"],
+    "vendor-specialist": ["view"],
     guestbook: ["view", "create", "edit"],
-    promo: ["view"],
-    procurement: ["view", "create"],
   },
   finance: {
-    // Finance has near-full access per PROD (118 perms). Excludes settings-role-permission
-    // and settings-users (those stay super-admin only in prod).
+    // Lean scope per spec — sidebar Finance hanya: Overview, Report & Analytics,
+    // Income, Expense, AR, AP. Cuti & Slip Gaji tampil via GENERAL_NAV (tanpa
+    // permission). Settings TIDAK ditampilkan karena tidak ada permission
+    // settings-* di sini (menu Settings hanya muncul kalau role punya salah satu
+    // SETTINGS_MODULES:view).
+    // NOTE: getPaymentMethodsForPicker() (dipakai ack cash-in di Income) adalah
+    // cached read TANPA gate, jadi ack tetap jalan tanpa settings-payment-methods.
     // booking::term-&-condition auto-granted via step 7; booking::edit-package via step 8.
-    "booking-mice": ["view", "create", "edit", "delete", "print", "approve", "mark-lost", "restore", "transfer", "reject", "comment", "client-agreement"],
-    booking: ["view", "create", "edit", "delete", "print", "approve", "mark-lost", "restore", "cancel", "transfer", "transfer-manager", "reject", "comment", "client-agreement", "edit-set-harga"],
-    complimentary: ["view", "create", "edit", "delete"],
-    customers: ["view", "create", "edit", "delete"],
+    // TODO(blocker code): Absensi (item 6) butuh route General /absensi + gate
+    // clock-in/out dilonggarkan; Procurement "Only tab Pengadaan" (item 8) butuh
+    // split permission per-tab. Belum di-grant di sini sampai kode-nya siap.
     "finance-ar": ["view", "create", "edit", "delete"],
     "finance-ap": ["view", "create", "edit", "delete"],
-    groups: ["view", "view-all", "create", "edit", "delete"],
-    "daily-activity": ["view", "create", "edit", "delete"],
-    maintenance: ["view", "create", "edit", "delete"],
-    package: ["view", "create", "edit", "delete", "set-harga", "term-&-condition"],
-    quotations: ["view", "create", "edit", "delete"],
-    "settings-brands": ["view", "create", "edit", "delete"],
-    "settings-education-level": ["view", "create", "edit", "delete"],
-    "settings-event-types": ["view", "create", "edit", "delete"],
-    "settings-lead-status": ["view", "create", "edit", "delete"],
-    "settings-daily-activity-segment": ["view", "create", "edit", "delete"],
-    "settings-maintenance-category": ["view", "create", "edit", "delete"],
-    "settings-maintenance-priority": ["view", "create", "edit", "delete"],
-    "settings-maintenance-status": ["view", "create", "edit", "delete"],
-    "settings-order-status": ["view", "create", "edit", "delete"],
-    "settings-payment-methods": ["view", "create", "edit", "delete"],
-    "settings-quotation-templates": ["view", "create", "edit", "delete"],
-    "settings-source-of-information": ["view", "create", "edit", "delete"],
-    "settings-venues": ["view", "create", "edit", "delete"],
-    "vendor-specialist": ["view", "create", "edit", "delete"],
-    vendor: ["view", "create", "edit", "delete"],
-    guestbook: ["view", "create", "edit"],
-    promo: ["view"],
   },
   // Finance AR only — Accounts Receivable + Cashflow (+ Overview). Can record/ack
   // cash-in and edit termin (updateTermOfPayments accepts finance-ar:edit). No AP access.
@@ -202,6 +189,13 @@ const rolePermissionMap: Record<string, Record<string, string[]>> = {
   },
   "human-resource": {
     hr: ["view", "create", "edit", "delete", "approve"],
+    // Rekrutmen & Onboarding — full lifecycle incl. hiring (creates employee account).
+    "hr-recruitment": ["view", "create", "edit", "delete", "hire"],
+    // Procurement — CRUD. NOTE: grants access to ALL four Purchase→Procurement
+    // sub-tabs (Pengadaan/Ringkasan/Pengumuman/Anggaran Venue) since they share
+    // one `procurement:view` gate, and surfaces the Purchase module world. Scoping
+    // to only the "Pengadaan" tab requires splitting the permission per sub-tab.
+    procurement: ["view", "create", "edit", "delete"],
     "settings-users": ["view", "create", "edit", "delete"],
     "settings-education-level": ["view", "create", "edit", "delete"],
     guestbook: ["view", "create", "edit"],
