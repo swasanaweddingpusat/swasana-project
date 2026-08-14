@@ -66,7 +66,7 @@ interface RawDeal {
  * to the raw id if that scope is missing.
  */
 export async function GET(request: Request) {
-  const { session, response } = await requirePermissionForRoute({ module: "customers", action: "view" });
+  const { session, response } = await requirePermissionForRoute({ module: "bitrix", action: "view" });
   if (response) return response;
   if (!apiLimiter.check(`bitrix-deals:${session.user.id}`)) return rateLimitResponse();
 

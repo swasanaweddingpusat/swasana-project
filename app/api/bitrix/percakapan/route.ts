@@ -60,7 +60,7 @@ interface RawActivity {
  * scope, so they are intentionally omitted here.
  */
 export async function GET(request: Request) {
-  const { session, response } = await requirePermissionForRoute({ module: "customers", action: "view" });
+  const { session, response } = await requirePermissionForRoute({ module: "bitrix", action: "view" });
   if (response) return response;
   if (!apiLimiter.check(`bitrix-percakapan:${session.user.id}`)) return rateLimitResponse();
 

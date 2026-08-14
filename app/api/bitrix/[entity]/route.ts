@@ -38,7 +38,7 @@ export async function GET(
     );
   }
 
-  const { session, response } = await requirePermissionForRoute({ module: "customers", action: "view" });
+  const { session, response } = await requirePermissionForRoute({ module: "bitrix", action: "view" });
   if (response) return response;
   if (!apiLimiter.check(`bitrix:${session.user.id}`)) return rateLimitResponse();
 

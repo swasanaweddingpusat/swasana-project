@@ -8,6 +8,6 @@ export const metadata: Metadata = {
 };
 
 export default async function BitrixTransaksiPage() {
-  await requirePagePermission("customers");
+  await requirePagePermission("bitrix");
   return <BitrixDealsManager />;
 }
