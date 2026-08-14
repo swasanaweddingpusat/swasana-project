@@ -36,6 +36,19 @@ export function ModuleSwitcher(): React.JSX.Element | null {
   const ActiveIcon = active ? (ICONS[active.icon ?? ""] ?? Widget) : Widget;
   const activeLabel = active?.name ?? "Pilih Module";
 
+  // Hanya punya satu module → tidak ada yang bisa dipilih. Tampilkan sebagai
+  // label statis (tanpa dropdown / chevron); module itu otomatis aktif.
+  if (modules.length === 1) {
+    const only = modules[0];
+    const OnlyIcon = ICONS[only.icon ?? ""] ?? Widget;
+    return (
+      <div className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium">
+        <OnlyIcon weight="BoldDuotone" className="h-5 w-5" />
+        <span className="flex-1 truncate text-left">{only.name}</span>
+      </div>
+    );
+  }
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium transition-colors hover:bg-accent">
