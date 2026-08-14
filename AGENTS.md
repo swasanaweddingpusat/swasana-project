@@ -81,8 +81,8 @@ If any of these reveals a cascade, handle ALL affected files in the same change.
 | React | React | **19.2.4** | Server Components default |
 | Runtime | Node | **≥ 20.9.0** | Node 18 dropped |
 | Language | TypeScript | ≥ 5.1 | strict mode |
-| DB | PostgreSQL (Neon serverless) | — | HTTP adapter via `@prisma/adapter-neon` |
-| ORM | Prisma | **7.7.0** | `prisma-client-js` generator |
+| DB | PostgreSQL | — | Neon (`@prisma/adapter-neon`) by default; `DB_NEON=false` → native `@prisma/adapter-pg` |
+| ORM | Prisma | **7.8.0** | `prisma-client-js` generator |
 | Auth | NextAuth (Auth.js) | **v5 beta** | JWT strategy, PrismaAdapter |
 | UI | Shadcn v4 + Tailwind v4 | — | `components/ui` generated, do not edit directly |
 | Forms | react-hook-form + Zod v4 | — | always validate with Zod schema |
@@ -112,12 +112,16 @@ swasana-project/
 │   │       └── _components/<form>.tsx
 │   ├── (private)/
 │   │   ├── layout.tsx        # <AuthGate> — enforces session content (status, verified, mustChangePassword)
-│   │   └── dashboard/
-│   │       ├── layout.tsx    # shell (sidebar + header)
-│   │       ├── _components/  # shell sub-components (sidebar, header)
-│   │       └── <feature>/
-│   │           ├── page.tsx
-│   │           └── _components/
+│   │   ├── _components/      # shell: sidebar, header, auth-gate, mobile-bottom-nav
+│   │   ├── select-module/    # world picker after login
+│   │   ├── (general)/        # cross-world menus (vendor, procurement, bitrix24, maintenance, …)
+│   │   ├── finance/          # world: finance (overview, ar, ap, income, expense, …)
+│   │   ├── hrd/              # world: HRD
+│   │   ├── booking/          # world: booking (weddings, mice, groups, quotations, …)
+│   │   ├── purchase/         # world: purchase (vendor-specialist → purchase-order)
+│   │   │   └── <feature>/
+│   │   │       ├── page.tsx
+│   │   │       └── _components/
 │   ├── api/
 │   │   ├── auth/[...nextauth]/route.ts
 │   │   ├── <resource>/route.ts
@@ -154,7 +158,7 @@ swasana-project/
 **Folder rules:**
 - Never create `middleware.ts`. Next.js 16 renamed it to `proxy.ts` with `export function proxy()`.
 - Server actions live in `actions/`, API routes in `app/api/`. Do not mix concerns.
-- Feature components co-located under `app/(private)/dashboard/<feature>/_components/`. Move to `components/shared/` only when used across ≥2 features.
+- Feature components co-located under `app/(private)/<world>/<feature>/_components/`. Move to `components/shared/` only when used across ≥2 features.
 - `components/ui/` is shadcn-generated — never hand-edit. Wrap in `components/shared/` instead.
 - Reads (SELECT) live in `lib/queries/`. Writes (INSERT/UPDATE/DELETE) live in `actions/` or `app/api/`.
 - Email templates live in `emails/` (NOT inside `app/api/send-email/components/`).
@@ -406,7 +410,7 @@ Polling `/api/auth/session` adds zero value with JWT strategy — the cookie alr
 
 Responsibilities (in order):
 1. Skip static assets (handled by matcher).
-2. Allow `PUBLIC_EXACT` + `PUBLIC_PREFIXES`. If logged in and hitting `PUBLIC_EXACT` auth page → redirect `/dashboard`.
+2. Allow `PUBLIC_EXACT` + `PUBLIC_PREFIXES`. If logged in and hitting `PUBLIC_EXACT` auth page → redirect `/select-module`.
 3. No session cookie → redirect `/auth/login?callbackUrl=...`.
 4. Hand off to `(private)/_components/auth-gate.tsx` for session-content checks (status, isEmailVerified, mustChangePassword).
 
@@ -439,14 +443,15 @@ Required fields: `userId`, `action` (e.g., `user.invited`), `result` (`success`/
 
 ## 5. Permission Module Naming
 
-Permission `(module, action)` tuples — kebab-case format:
+Permission `(module, action)` tuples — kebab-case format. **Sumber kebenaran = `moduleActions` di `prisma/seeders/roles-permissions.ts`.**
 
 | Module | Actions |
 |---|---|
-| `booking` | `view`, `create`, `edit`, `delete`, `print`, `approve`, `mark-lost`, `restore`, `cancel`, `transfer`, `transfer-manager`, `reject`, `comment`, `client-agreement` |
+| `booking` | `view`, `create`, `edit`, `delete`, `print`, `approve`, `mark-lost`, `restore`, `cancel`, `transfer`, `transfer-manager`, `reject`, `comment`, `client-agreement`, `term-&-condition`, `edit-package`, `edit-set-harga`, `reset-approval` |
 | `booking-mice` | `view`, `create`, `edit`, `delete`, `print`, `approve`, `mark-lost`, `restore`, `transfer`, `reject`, `comment`, `client-agreement` |
 | `customers` | `view`, `create`, `edit`, `delete` |
 | `finance-ar` | `view`, `create`, `edit`, `delete` |
+| `finance-ap` | `view`, `create`, `edit`, `delete` |
 | `groups` | `view`, `view-all`, `create`, `edit`, `delete` |
 | `package` | `view`, `create`, `edit`, `delete`, `set-harga`, `term-&-condition`, `set-status` |
 | `package-mice` | `view`, `create`, `edit`, `delete`, `set-harga`, `set-status` |
@@ -459,14 +464,30 @@ Permission `(module, action)` tuples — kebab-case format:
 | `settings-event-types` | `view`, `create`, `edit`, `delete` |
 | `settings-order-status` | `view`, `create`, `edit`, `delete` |
 | `settings-payment-methods` | `view`, `create`, `edit`, `delete` |
+| `settings-quotation-templates` | `view`, `create`, `edit`, `delete` |
 | `settings-role-permission` | `view`, `create`, `edit`, `delete` |
 | `settings-source-of-information` | `view`, `create`, `edit`, `delete` |
+| `settings-tutorial` | `view`, `create`, `edit`, `delete` |
 | `complimentary` | `view`, `create`, `edit`, `delete` |
-| `leads` | `view`, `create`, `edit`, `delete` |
+| `daily-activity` | `view`, `create`, `edit`, `delete` |
 | `settings-lead-status` | `view`, `create`, `edit`, `delete` |
-| `settings-lead-segment` | `view`, `create`, `edit`, `delete` |
+| `settings-daily-activity-segment` | `view`, `create`, `edit`, `delete` |
 | `quotations` | `view`, `create`, `edit`, `delete` |
+| `maintenance` | `view`, `create`, `edit`, `delete` |
+| `settings-maintenance-category` | `view`, `create`, `edit`, `delete` |
+| `settings-maintenance-priority` | `view`, `create`, `edit`, `delete` |
+| `settings-maintenance-status` | `view`, `create`, `edit`, `delete` |
+| `promo` | `view`, `create`, `edit`, `delete` |
 | `procurement` | `view`, `create`, `edit`, `delete`, `approve` |
+| `procurement-summary` | `view` |
+| `procurement-announcement` | `view`, `create`, `edit`, `delete` |
+| `procurement-budget` | `view`, `create`, `edit`, `delete` |
+| `guestbook` | `view`, `create`, `edit` |
+| `bitrix` | `view` |
+| `hr` | `view`, `create`, `edit`, `delete`, `approve` |
+| `hr-recruitment` | `view`, `create`, `edit`, `delete`, `hire` |
+
+Module yang sudah **dihapus** (jangan dipakai di kode baru): `leads` (→ `daily-activity`), `settings-lead-segment` (→ `settings-daily-activity-segment`), `attendance`, `brand_management`, `calendar_event`, `catering`, `dashboard`, `decoration`, `finance_ap`, `notification`, `user_management`, `venue_management`. Daftar lengkap ada di `REMOVED_MODULES`.
 
 ---
 
@@ -504,14 +525,16 @@ Data required in all environments (roles, permissions, reference data):
 ### Workflow Structure
 ```
 .github/workflows/
-├── ci.yml              → PR validation (generate → lint → typecheck → build)
-├── cd-staging.yml      → Push main: migrate → build → deploy
-└── cd-production.yml   → Push production: migrate → build → deploy (concurrency locked)
+└── ci.yml              → PR validation (generate → lint → typecheck → build)
 ```
 
-### Deploy Flow
-- Push to `main` → auto migrate staging DB → build → deploy staging
-- Push to `production` → auto migrate prod DB → build → deploy prod
+> Catatan: deployment (staging/production) belum diotomasi lewat GitHub Actions
+> saat dokumen ini ditulis. Satu-satunya workflow aktif adalah CI. Kalau nanti ada
+> `cd-staging.yml` / `cd-production.yml`, ikuti pola migrate → build → deploy di bawah.
+
+### Deploy Flow (target)
+- Push ke `main` → auto migrate staging DB → build → deploy staging
+- Push ke `production` → auto migrate prod DB → build → deploy prod
 - Migration failure = deploy blocked (separate jobs)
 - `prisma generate` explicit in every job
 - No lint/typecheck in CD (already validated in CI)
@@ -580,21 +603,30 @@ Data required in all environments (roles, permissions, reference data):
 ## 11. Env vars (required)
 
 ```
-DATABASE_URL=                    # Neon postgres
-DIRECT_URL=                      # Neon direct (migrations)
-AUTH_SECRET=                     # openssl rand -base64 32
-AUTH_URL=                        # https://app.swasana.com
+DB_NEON=                        # true → Neon adapter; false → native pg (self-hosted/Dokploy)
+DATABASE_URL=                   # pooled connection (runtime app)
+DIRECT_URL=                     # direct connection (migrations)
+AUTH_SECRET=                    # openssl rand -base64 32
+AUTH_URL=                       # https://app.swasana.com
+AUTH_TRUST_HOST=                # true when behind reverse proxy (Dokploy/Traefik)
 RESEND_API_KEY=
-RESEND_FROM_EMAIL=               # noreply@yourdomain.com
-S3_ENDPOINT=                     # MinIO endpoint (e.g. https://minio.railway.app)
-S3_REGION=                       # auto
+RESEND_FROM_EMAIL=              # noreply@yourdomain.com
+S3_ENDPOINT=                    # S3-compatible endpoint (MinIO/Railway/R2)
+S3_REGION=                      # auto
 S3_ACCESS_KEY_ID=
 S3_SECRET_ACCESS_KEY=
 S3_BUCKET_NAME=
-S3_PUBLIC_URL=                   # public base URL for objects
-NEXT_PUBLIC_S3_PUBLIC_URL=       # same as S3_PUBLIC_URL, inlined at build time
-APP_URL=                         # public base for emails/links
-CLEANUP_SECRET=                  # dedicated secret for /api/admin/cleanup-logs (do NOT reuse AUTH_SECRET)
+S3_PUBLIC_URL=                  # public base URL for objects
+NEXT_PUBLIC_S3_PUBLIC_URL=      # same as S3_PUBLIC_URL, inlined at build time
+APP_URL=                        # public base for emails/links
+CLEANUP_SECRET=                 # dedicated secret for /api/admin/cleanup-logs (do NOT reuse AUTH_SECRET)
+NEXT_PUBLIC_VAPID_PUBLIC_KEY=   # web-push (PWA notifications)
+VAPID_PRIVATE_KEY=
+VAPID_SUBJECT=                  # mailto:noreply@swasana.com
+PERURI_USERNAME=                # e-meterai (Peruri)
+PERURI_PASSWORD=
+PERURI_ENV=                     # staging | production
+BITRIX_WEBHOOK_BASE=            # Bitrix24 inbound webhook base URL
 ```
 
 > Rate limiting uses in-memory store — no Redis or external service needed.

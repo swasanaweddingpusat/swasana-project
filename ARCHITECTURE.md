@@ -24,9 +24,9 @@ Leads / Daily Activity  →  Quotation  →  Deal (jadi Customer + Booking draft
         →  Client tanda tangan PO  →  Confirmed  →  Finance AR (termin, ack, piutang)
 ```
 
-Modul pendukung: HRD (payroll, absensi, cuti, rekrutmen), Purchase (vendor + PO),
-Procurement (pengadaan), Groups (tim sales + target vs achievement), Bitrix24 (CRM sync),
-Maintenance, Guestbook.
+Modul pendukung: HRD (payroll, absensi, cuti, rekrutmen), Purchase (vendor-specialist + PO),
+Procurement (pengadaan), Vendor (master vendor, general), Groups (tim sales + target vs achievement),
+Bitrix24 (CRM sync), Maintenance, Guestbook.
 
 ---
 
@@ -36,13 +36,17 @@ Maintenance, Guestbook.
 |---|---|---|
 | Framework | **Next.js 16.2.3** | App Router, Turbopack. **`proxy.ts` BUKAN `middleware.ts`**. `cookies()`/`headers()` async. Baca `node_modules/next/dist/docs/` sebelum pakai API Next apa pun. |
 | UI | React 19.2.4 | Server Components default |
-| DB | PostgreSQL (Neon serverless) | HTTP adapter — `$transaction([...])` **array form only**, no callback, no `createMany` |
+| DB | PostgreSQL | Neon (`@prisma/adapter-neon`) default; `DB_NEON=false` → native `@prisma/adapter-pg`. `$transaction([...])` **array form only**, no callback, no `createMany` |
 | ORM | Prisma 7 | ~130 model, ~181 migration |
 | Auth | NextAuth v5 beta | JWT strategy, PrismaAdapter, hardened (rate limit + lockout + audit) |
 | UI kit | shadcn v4 (base-nova) + Tailwind v4 | `components/ui/*` generated — **jangan edit** |
 | Icons | `@solar-icons/react` | `weight="BoldDuotone"` |
 | Forms | react-hook-form + Zod v4 | schema di `lib/validations/` |
 | Client data | TanStack Query v5 | hooks di `hooks/` |
+| Email | Resend | template di `emails/` |
+| Storage | MinIO / S3-compatible (S3 SDK) | `lib/storage.ts`, `forcePathStyle: true` |
+| E-meterai | Peruri | `PERURI_*` env |
+| CRM sync | Bitrix24 | inbound webhook (`BITRIX_WEBHOOK_BASE`), route `/bitrix24/*` + `/api/bitrix/*` |
 
 ---
 
@@ -56,12 +60,12 @@ app/
 │   ├── _components/sidebar/  # Shell: sidebar, module-switcher, nav (lihat §5)
 │   ├── select-module/        # Picker "world" saat login (auto-redirect kalau cuma 1)
 │   ├── (general)/            # ★ MENU GENERAL — lintas-world (lihat §5)
-│   │   ├── procurement/  bitrix24/  maintenance/  guestbook/  cuti/
+│   │   ├── vendor/  procurement/  bitrix24/  maintenance/  guestbook/  cuti/
 │   │   ├── slip-gaji/  settings/  profile/  notifications/  tutorial/  wedding-indicators/
 │   ├── finance/              # World: Finance
 │   ├── hrd/                  # World: HRD
 │   ├── booking/              # World: Booking (weddings, mice, groups, quotations, dst)
-│   └── purchase/             # World: Purchase (vendor, purchase-order)
+│   └── purchase/             # World: Purchase (vendor-specialist → purchase-order)
 ├── api/<resource>/route.ts   # REST handlers (GET reads + non-action mutations)
 components/
 ├── ui/                       # shadcn generated — JANGAN edit
@@ -128,7 +132,7 @@ Sebuah world muncul di switcher untuk suatu role kalau role itu punya `view` pad
 di `lib/queries/modules.ts`).
 
 **General menu** — item lintas-world yang muncul **flat** di setiap dunia
-(mis. Procurement, Bitrix24, Maintenance, Guestbook, Pengajuan Cuti, Slip Gaji).
+(mis. Vendor, Procurement, Bitrix24, Maintenance, Guestbook, Pengajuan Cuti, Slip Gaji).
 Didefinisikan di `GENERAL_NAV` (sidebar-config.ts). Route-nya hidup di `app/(private)/(general)/`.
 
 ### Aturan penentu world vs general
@@ -142,7 +146,7 @@ saja** lalu `npm run db:seed:modules`:
 - world → tambahkan permission-module-nya di bawah `permissions` module target.
 - general → hapus dari semua `permissions` (biarkan unmapped), lalu daftarkan di `GENERAL_NAV`.
 
-Contoh nyata: `procurement` & `customers` (Bitrix24) sengaja **tidak** di-map → general.
+Contoh nyata: `procurement`, `customers` (Bitrix24), dan `vendor` sengaja **tidak** di-map → general.
 
 Route-meta (header + breadcrumb) **auto-derive** dari `MODULE_NAV_MAP` + `GENERAL_NAV`
 (`lib/route-meta.ts` `buildRouteMetaFromNavTrees()`) — pindahin nav entry, header ikut update.
