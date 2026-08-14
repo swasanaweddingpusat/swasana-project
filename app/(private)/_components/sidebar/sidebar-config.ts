@@ -110,15 +110,8 @@ export const MODULE_NAV_MAP: Record<ModuleKey, NavItem[]> = {
     { name: "Income", href: "/finance/income", icon: Notebook, subtitle: "Catatan kas masuk — uang riil yang sudah diterima & diverifikasi Finance.",
       anyPermission: [{ module: "finance-ar", action: "view" }, { module: "finance-ap", action: "view" }] },
     { name: "Expense", href: "/finance/expense", icon: MoneyBag, permission: { module: "finance-ap", action: "view" } },
-    { name: "AR", href: "/finance/ar", icon: CardReceive, subtitle: "Status termin pembayaran per booking", permission: { module: "finance-ar", action: "view" },
-      submenu: [
-        { name: "Aging", href: "/finance/ar/aging", subtitle: "Umur piutang per booking" },
-        { name: "Client", href: "/finance/ar/client", subtitle: "Piutang per client" },
-      ] },
-    { name: "AP", href: "/finance/ap", icon: CardSend, subtitle: "Kewajiban uang keluar — outstanding & per event", permission: { module: "finance-ap", action: "view" },
-      submenu: [
-        { name: "Customer Payout", href: "/finance/ap/customer", subtitle: "Kewajiban uang keluar ke customer — cashback & refund overpay" },
-      ] },
+    { name: "AR", href: "/finance/ar", icon: CardReceive, subtitle: "Status termin pembayaran per booking", permission: { module: "finance-ar", action: "view" } },
+    { name: "AP", href: "/finance/ap", icon: CardSend, subtitle: "Kewajiban uang keluar — outstanding & per event", permission: { module: "finance-ap", action: "view" } },
   ],
   hrd: [
     { name: "Overview", href: "/hrd/overview", icon: Widget, subtitle: "Ringkasan SDM dan penggajian", permission: { module: "hr", action: "view" } },
@@ -175,31 +168,20 @@ export const MODULE_NAV_MAP: Record<ModuleKey, NavItem[]> = {
 };
 
 /**
- * General items — cross-module menus that show in EVERY module world as a
- * single collapsible "General" group. Home & Settings intentionally excluded:
- * Home is retired (booking Overview is the landing), Settings renders pinned to
- * the sidebar bottom via SETTINGS_NAV_ITEM. Kept flat here so route-meta walks
- * each leaf with no synthetic parent (breadcrumbs stay per-page).
+ * General items — cross-module menus that show in EVERY module world as
+ * top-level sidebar entries (rendered flat, no wrapping group). Home & Settings
+ * intentionally excluded: Home is retired (booking Overview is the landing),
+ * Settings renders pinned to the sidebar bottom via SETTINGS_NAV_ITEM. Flat here
+ * so route-meta walks each leaf with no synthetic parent (breadcrumbs stay
+ * per-page).
  */
 export const GENERAL_NAV: NavItem[] = [
   { name: "Indikator Pernikahan", href: "/wedding-indicators", icon: Heart, subtitle: "Kelola kuesioner penilaian kepuasan pasangan pernikahan", permission: { module: "vendor-specialist", action: "view" } },
   { name: "Maintenance", href: "/maintenance", icon: Sledgehammer, subtitle: "Kelola ticket dan jadwal pemeliharaan", permission: { module: "maintenance", action: "view" } },
   { name: "Guestbook", href: "/guestbook", icon: Notebook, subtitle: "Catat kunjungan tamu, vendor, dan client ke kantor", permission: { module: "guestbook", action: "view" } },
-  { name: "Cuti", href: "/cuti", icon: CalendarDate, subtitle: "Pengajuan dan saldo cuti" },
+  { name: "Pengajuan Cuti", href: "/cuti", icon: CalendarDate, subtitle: "Pengajuan dan saldo cuti" },
   { name: "Slip Gaji", href: "/slip-gaji", icon: FileText, subtitle: "Lihat slip gaji bulanan saya" },
 ];
-
-/**
- * The always-visible "General" parent group. `href` is a non-navigable anchor
- * (clicking the row just toggles the submenu — see NavItemRow). SidebarNav
- * injects the permission-filtered GENERAL_NAV as its submenu at render time.
- */
-export const GENERAL_GROUP: NavItem = {
-  name: "General",
-  href: "#general",
-  icon: Widget,
-  subtitle: "Menu umum lintas modul",
-};
 
 /** Settings entry — pinned to the very bottom of the sidebar, always visible
  *  to anyone with access to at least one SETTINGS_MODULES (gated in SidebarNav). */

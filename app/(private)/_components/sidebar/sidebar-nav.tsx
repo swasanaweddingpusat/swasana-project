@@ -9,7 +9,6 @@ import {
 import {
   MODULE_NAV_MAP,
   GENERAL_NAV,
-  GENERAL_GROUP,
   SETTINGS_NAV_ITEM,
   SETTINGS_MODULES,
   type NavItem,
@@ -60,22 +59,14 @@ function filterNavItems(items: NavItem[], can: CanFn, isGroupMember: boolean): N
   });
 }
 
-/** Any GENERAL_NAV entry (a NavItem) is a valid SubMenuItem — icon required
- *  narrows to optional. Filter by permission, then nest under GENERAL_GROUP. */
-function buildGeneralGroup(can: CanFn): NavItem | null {
-  const children = filterSubMenus(GENERAL_NAV as SubMenuItem[], can);
-  if (children.length === 0) return null;
-  return { ...GENERAL_GROUP, submenu: children };
-}
-
 export function SidebarNav() {
   const { can, isLoading, isGroupMember } = usePermissions();
   const activeModule = useActiveModule();
 
-  // The active module's nav, followed by the always-present "General" group as a
-  // collapsible submenu — General shows in every module world, never swaps it out.
+  // The active module's nav, followed by the always-present General items as
+  // flat top-level rows — they show in every module world, never swap it out.
   const moduleItems = isLoading ? [] : filterNavItems(MODULE_NAV_MAP[activeModule], can, isGroupMember);
-  const generalGroup = isLoading ? null : buildGeneralGroup(can);
+  const generalItems = isLoading ? [] : filterNavItems(GENERAL_NAV, can, isGroupMember);
   const settingsVisible = !isLoading && SETTINGS_MODULES.some((mod) => can(mod, "view"));
 
   return (
@@ -91,7 +82,9 @@ export function SidebarNav() {
               {moduleItems.map((item) => (
                 <NavItemRow key={item.href} item={item} />
               ))}
-              {generalGroup ? <NavItemRow key={generalGroup.href} item={generalGroup} /> : null}
+              {generalItems.map((item) => (
+                <NavItemRow key={item.href} item={item} />
+              ))}
               {settingsVisible ? <NavItemRow item={SETTINGS_NAV_ITEM} /> : null}
             </>
           )}
