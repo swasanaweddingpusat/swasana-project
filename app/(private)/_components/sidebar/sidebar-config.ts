@@ -131,12 +131,6 @@ export const MODULE_NAV_MAP: Record<ModuleKey, NavItem[]> = {
   ],
   booking: [
     { name: "Overview", href: "/booking/overview", icon: Widget, subtitle: "Ringkasan booking dan sales", permission: { module: "booking", action: "view" } },
-    { name: "BITRIX24", href: "/booking/bitrix24", icon: Bolt, subtitle: "Integrasi CRM Bitrix24",
-      submenu: [
-        { name: "Overview", href: "/booking/bitrix24/overview", icon: PieChart, title: "Overview Bitrix24", subtitle: "Ringkasan perolehan lead & database CRM dari Bitrix24", permission: { module: "customers", action: "view" } },
-        { name: "Transaksi", href: "/booking/bitrix24/transaksi", icon: ClipboardList, title: "Transaksi Bitrix24", subtitle: "Data transaksi (deals) CRM dari Bitrix24", permission: { module: "customers", action: "view" } },
-        { name: "Percakapan", href: "/booking/bitrix24/percakapan", icon: ChatRound, title: "Percakapan Bitrix24", subtitle: "Data percakapan Contact Center (Open Lines) dari Bitrix24", permission: { module: "customers", action: "view" } },
-      ] },
     { name: "Calendar Events", href: "/booking/calendar-events", icon: CalendarDate, subtitle: "Lihat jadwal event di kalender", permission: { module: "booking", action: "view" } },
     { name: "Groups", href: "/booking/groups", icon: UsersGroupRounded, subtitle: "Kelola tim dan pantau kinerja penjualan", permission: { module: "groups", action: "view" } },
     { name: "Daily Activity", href: "/booking/daily-activity", icon: ClipboardList, subtitle: "Kelola data daily activity dan pipeline penjualan", permission: { module: "daily-activity", action: "view" } },
@@ -157,13 +151,6 @@ export const MODULE_NAV_MAP: Record<ModuleKey, NavItem[]> = {
         { name: "Analitik", href: "/purchase/vendor-specialist/analytics", icon: ChartSquare, subtitle: "Statistik dan analisis kinerja vendor" },
       ] },
     { name: "Vendor", href: "/purchase/vendors", icon: ShopMinimalistic, subtitle: "Kelola vendor dan supplier", permission: { module: "vendor", action: "view" } },
-    { name: "Procurement", href: "/purchase/pengadaan-barang", icon: CartLarge, subtitle: "Kelola pengajuan pengadaan dan pembelian barang", permission: { module: "procurement", action: "view" },
-      submenu: [
-        { name: "Pengadaan", href: "/purchase/pengadaan-barang", icon: BillList, permission: { module: "procurement", action: "view" } },
-        { name: "Ringkasan", href: "/purchase/pengadaan-barang/ringkasan", icon: ChartSquare, permission: { module: "procurement", action: "view" } },
-        { name: "Pengumuman", href: "/purchase/pengadaan-barang/pengumuman", icon: BellBing, permission: { module: "procurement", action: "view" } },
-        { name: "Anggaran Venue", href: "/purchase/pengadaan-barang/anggaran-venue", icon: Wallet2, permission: { module: "procurement", action: "view" } },
-      ] },
   ],
 };
 
@@ -176,9 +163,22 @@ export const MODULE_NAV_MAP: Record<ModuleKey, NavItem[]> = {
  * per-page).
  */
 export const GENERAL_NAV: NavItem[] = [
+  { name: "BITRIX24", href: "/bitrix24", icon: Bolt, subtitle: "Integrasi CRM Bitrix24",
+    submenu: [
+      { name: "Overview", href: "/bitrix24/overview", icon: PieChart, title: "Overview Bitrix24", subtitle: "Ringkasan perolehan lead & database CRM dari Bitrix24", permission: { module: "customers", action: "view" } },
+      { name: "Transaksi", href: "/bitrix24/transaksi", icon: ClipboardList, title: "Transaksi Bitrix24", subtitle: "Data transaksi (deals) CRM dari Bitrix24", permission: { module: "customers", action: "view" } },
+      { name: "Percakapan", href: "/bitrix24/percakapan", icon: ChatRound, title: "Percakapan Bitrix24", subtitle: "Data percakapan Contact Center (Open Lines) dari Bitrix24", permission: { module: "customers", action: "view" } },
+    ] },
   { name: "Indikator Pernikahan", href: "/wedding-indicators", icon: Heart, subtitle: "Kelola kuesioner penilaian kepuasan pasangan pernikahan", permission: { module: "vendor-specialist", action: "view" } },
   { name: "Maintenance", href: "/maintenance", icon: Sledgehammer, subtitle: "Kelola ticket dan jadwal pemeliharaan", permission: { module: "maintenance", action: "view" } },
   { name: "Guestbook", href: "/guestbook", icon: Notebook, subtitle: "Catat kunjungan tamu, vendor, dan client ke kantor", permission: { module: "guestbook", action: "view" } },
+  { name: "Procurement", href: "/procurement", icon: CartLarge, subtitle: "Kelola pengajuan pengadaan dan pembelian barang", permission: { module: "procurement", action: "view" },
+    submenu: [
+      { name: "Pengadaan", href: "/procurement", icon: BillList, permission: { module: "procurement", action: "view" } },
+      { name: "Ringkasan", href: "/procurement/ringkasan", icon: ChartSquare, permission: { module: "procurement", action: "view" } },
+      { name: "Pengumuman", href: "/procurement/pengumuman", icon: BellBing, permission: { module: "procurement", action: "view" } },
+      { name: "Anggaran Venue", href: "/procurement/anggaran-venue", icon: Wallet2, permission: { module: "procurement", action: "view" } },
+    ] },
   { name: "Pengajuan Cuti", href: "/cuti", icon: CalendarDate, subtitle: "Pengajuan dan saldo cuti" },
   { name: "Slip Gaji", href: "/slip-gaji", icon: FileText, subtitle: "Lihat slip gaji bulanan saya" },
 ];
