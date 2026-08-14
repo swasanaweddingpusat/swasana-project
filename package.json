@@ -14,6 +14,7 @@
     "db:push": "prisma db push",
     "db:seed": "tsx prisma/seed.ts",
     "db:seed:roles-permissions": "tsx prisma/seeders/roles-permissions.ts",
+    "db:seed:modules": "tsx prisma/seeders/modules.ts",
     "db:seed:packages": "tsx prisma/seeders/packages.ts",
     "db:seed:packages-mice": "tsx prisma/seeders/packages-mice.ts",
     "db:seed:packages-prod": "tsx prisma/seeders/packages-from-prod.ts",
