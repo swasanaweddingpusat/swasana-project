@@ -368,7 +368,7 @@ export function WeddingIndicatorForm({
         }
 
         if (result.success) {
-          router.push(`/dashboard/vendor-specialist/wedding-indicators/${result.id}`);
+          router.push(`/wedding-indicators/${result.id}`);
         } else {
           toast.error(result.error || "Gagal menyimpan");
         }

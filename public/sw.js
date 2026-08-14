@@ -1,4 +1,4 @@
-const CACHE_NAME = "swasana-v2";
+const CACHE_NAME = "swasana-v3";
 const OFFLINE_URL = "/offline";
 
 const PRECACHE_URLS = [OFFLINE_URL, "/swasana-logo.png"];
@@ -78,7 +78,7 @@ self.addEventListener("push", (event) => {
     body: data.body || "",
     icon: "/icons/icon-192x192.png",
     badge: "/icons/badge-72x72.png",
-    data: { url: data.url || "/dashboard" },
+    data: { url: data.url || "/select-module" },
     tag: data.tag || "default",
   };
   event.waitUntil(self.registration.showNotification(title, options));
@@ -87,7 +87,7 @@ self.addEventListener("push", (event) => {
 // Notification click — open the target URL
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  const targetUrl = event.notification.data?.url || "/dashboard";
+  const targetUrl = event.notification.data?.url || "/select-module";
   event.waitUntil(
     self.clients
       .matchAll({ type: "window", includeUncontrolled: true })

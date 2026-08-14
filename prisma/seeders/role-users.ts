@@ -22,6 +22,7 @@ const ROLE_USERS: RoleUserSeed[] = [
   { email: "finance@swasana.com", name: "Finance", roleName: "finance", password: "FinancePass@2026", dataScope: DataScope.all },
   { email: "sales-mice@swasana.com", name: "Sales MICE", roleName: "sales-mice", password: "SalesMicePass@2026", dataScope: DataScope.own },
   { email: "manager-mice@swasana.com", name: "Manager MICE", roleName: "manager-mice", password: "ManagerMicePass@2026", dataScope: DataScope.all },
+  { email: "hrd@swasana.com", name: "HRD", roleName: "human-resource", password: "HrdPass@2026", dataScope: DataScope.all },
 ];
 
 export async function seedRoleUsers(): Promise<void> {

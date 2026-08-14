@@ -12,7 +12,7 @@ import type {
   UpdateMiceBookingInput,
   MarkMiceLostInput,
 } from "@/lib/validations/booking-mice";
-import type { MiceBookingsResponse } from "@/app/(private)/dashboard/booking-mice/_components/types";
+import type { MiceBookingsResponse } from "@/app/(private)/booking/booking-mice/_components/types";
 
 interface MiceFilter {
   page?: number;

@@ -1,7 +1,7 @@
 import { prisma } from "./_client";
 
 // ── Roles ────────────────────────────────────────────────────────────
-const roleData = [
+export const roleData = [
   { name: "super-admin", description: "All Access", sortOrder: 1 },
   { name: "direktur-sales", description: "Access to sales data and customer management", sortOrder: 2 },
   { name: "manager", description: "Full access to all features and user management", sortOrder: 3 },
@@ -20,8 +20,8 @@ const roleData = [
 
 // ── Modules & Actions ────────────────────────────────────────────────
 // Only modules that are ACTUALLY used in code
-const moduleActions: Record<string, string[]> = {
-  booking: ["view", "create", "edit", "delete", "print", "approve", "mark-lost", "restore", "transfer", "transfer-manager", "reject", "comment", "client-agreement", "term-&-condition", "edit-package", "edit-set-harga", "reset-approval"],
+export const moduleActions: Record<string, string[]> = {
+  booking: ["view", "create", "edit", "delete", "print", "approve", "mark-lost", "restore", "cancel", "transfer", "transfer-manager", "reject", "comment", "client-agreement", "term-&-condition", "edit-package", "edit-set-harga", "reset-approval"],
   customers: ["view", "create", "edit", "delete"],
   "finance-ar": ["view", "create", "edit", "delete"],
   groups: ["view", "view-all", "create", "edit", "delete"],
@@ -56,9 +56,25 @@ const moduleActions: Record<string, string[]> = {
   "settings-maintenance-status": ["view", "create", "edit", "delete"],
   promo: ["view", "create", "edit", "delete"],
   procurement: ["view", "create", "edit", "delete", "approve"],
+  // Procurement sub-tabs split off `procurement` so a role can be granted the
+  // main "Pengadaan" list WITHOUT the other three tabs (e.g. HRD gets Pengadaan
+  // only). Each gates one sidebar submenu + its API routes:
+  //   procurement-summary      → Ringkasan      (/procurement/ringkasan)
+  //   procurement-announcement → Pengumuman     (/procurement/pengumuman)
+  //   procurement-budget       → Anggaran Venue (/procurement/anggaran-venue)
+  "procurement-summary": ["view"],
+  "procurement-announcement": ["view", "create", "edit", "delete"],
+  "procurement-budget": ["view", "create", "edit", "delete"],
   guestbook: ["view", "create", "edit"],
+  // Bitrix24 CRM integration — own gate (was reusing `customers`). GENERAL menu
+  // (muncul di semua module), route /bitrix24/*.
+  bitrix: ["view"],
   // HR & Payroll module
   hr: ["view", "create", "edit", "delete", "approve"],
+  // HR Recruitment & Onboarding — seeded originally via migration 20260622180000.
+  // Listed here so the seeder treats it as a valid module (else step 3b would
+  // delete these permissions) and can assign them per the role matrix.
+  "hr-recruitment": ["view", "create", "edit", "delete", "hire"],
   // Finance AP — customer payout (cashback program + overpay refund)
   "finance-ap": ["view", "create", "edit", "delete"],
 };
@@ -77,7 +93,7 @@ const moduleActions: Record<string, string[]> = {
 
 // ── Role → Permission Matrix ─────────────────────────────────────────
 // "super-admin" gets ALL permissions (handled separately).
-const rolePermissionMap: Record<string, Record<string, string[]>> = {
+export const rolePermissionMap: Record<string, Record<string, string[]>> = {
   "direktur-sales": {
     booking: ["view", "create", "edit", "approve", "mark-lost", "transfer", "transfer-manager", "comment", "print", "client-agreement"],
     customers: ["view", "create", "edit"],
@@ -94,12 +110,13 @@ const rolePermissionMap: Record<string, Record<string, string[]>> = {
     complimentary: ["view", "create", "edit", "delete"],
     guestbook: ["view", "create", "edit"],
     promo: ["view"],
+    bitrix: ["view"],
   },
   // Manager: CRUD only on dashboard, calendar-event, groups, booking-weddings,
   // package, complimentary, vendors, and customers.
   // (dashboard has no permission module; calendar-event is gated by booking:view.)
   manager: {
-    booking: ["view", "create", "edit", "delete", "print", "approve", "mark-lost", "restore", "transfer", "reject", "comment", "client-agreement", "edit-package", "edit-set-harga"],
+    booking: ["view", "create", "edit", "delete", "print", "approve", "mark-lost", "restore", "cancel", "transfer", "reject", "comment", "client-agreement", "edit-package", "edit-set-harga"],
     customers: ["view", "create", "edit", "delete"],
     groups: ["view", "create", "edit", "delete"],
     "daily-activity": ["view", "create", "edit", "delete"],
@@ -109,7 +126,11 @@ const rolePermissionMap: Record<string, Record<string, string[]>> = {
     guestbook: ["view", "create", "edit"],
     promo: ["view"],
     procurement: ["view", "create", "edit", "delete", "approve"],
+    "procurement-summary": ["view"],
+    "procurement-announcement": ["view", "create", "edit", "delete"],
+    "procurement-budget": ["view", "create", "edit", "delete"],
     hr: ["view", "create", "edit", "delete", "approve"],
+    bitrix: ["view"],
   },
   "direktur-operational": {
     booking: ["view", "create", "edit", "approve", "comment", "print"],
@@ -120,49 +141,39 @@ const rolePermissionMap: Record<string, Record<string, string[]>> = {
     guestbook: ["view", "create", "edit"],
     promo: ["view"],
     procurement: ["view", "approve"],
+    "procurement-summary": ["view"],
+    "procurement-announcement": ["view", "create", "edit", "delete"],
+    "procurement-budget": ["view", "create", "edit", "delete"],
+    bitrix: ["view"],
   },
+  // Operational — persis daftar menu yang disepakati:
+  //   Procurement (4 tab, CRUD) · Vendor (view) · Purchase Order (view) ·
+  //   Guestbook · Slip Gaji Personal + Pengajuan Cuti (General, tanpa gate).
+  // Akses lama booking/customers/package/maintenance/promo sengaja DICABUT.
+  // Absensi (lintas-role) butuh perubahan nav/permission — di luar scope seeder.
   operational: {
-    booking: ["view", "create", "edit", "comment"],
-    customers: ["view"],
-    package: ["view"],
+    procurement: ["view", "create", "edit", "delete"],
+    "procurement-summary": ["view"],
+    "procurement-announcement": ["view", "create", "edit", "delete"],
+    "procurement-budget": ["view", "create", "edit", "delete"],
     vendor: ["view"],
-    maintenance: ["view", "create", "edit"],
+    "vendor-specialist": ["view"],
     guestbook: ["view", "create", "edit"],
-    promo: ["view"],
-    procurement: ["view", "create"],
   },
   finance: {
-    // Finance has near-full access per PROD (118 perms). Excludes settings-role-permission
-    // and settings-users (those stay super-admin only in prod).
+    // Lean scope per spec — sidebar Finance hanya: Overview, Report & Analytics,
+    // Income, Expense, AR, AP. Cuti & Slip Gaji tampil via GENERAL_NAV (tanpa
+    // permission). Settings TIDAK ditampilkan karena tidak ada permission
+    // settings-* di sini (menu Settings hanya muncul kalau role punya salah satu
+    // SETTINGS_MODULES:view).
+    // NOTE: getPaymentMethodsForPicker() (dipakai ack cash-in di Income) adalah
+    // cached read TANPA gate, jadi ack tetap jalan tanpa settings-payment-methods.
     // booking::term-&-condition auto-granted via step 7; booking::edit-package via step 8.
-    "booking-mice": ["view", "create", "edit", "delete", "print", "approve", "mark-lost", "restore", "transfer", "reject", "comment", "client-agreement"],
-    booking: ["view", "create", "edit", "delete", "print", "approve", "mark-lost", "restore", "transfer", "transfer-manager", "reject", "comment", "client-agreement", "edit-set-harga"],
-    complimentary: ["view", "create", "edit", "delete"],
-    customers: ["view", "create", "edit", "delete"],
+    // TODO(blocker code): Absensi (item 6) butuh route General /absensi + gate
+    // clock-in/out dilonggarkan; Procurement "Only tab Pengadaan" (item 8) butuh
+    // split permission per-tab. Belum di-grant di sini sampai kode-nya siap.
     "finance-ar": ["view", "create", "edit", "delete"],
     "finance-ap": ["view", "create", "edit", "delete"],
-    groups: ["view", "view-all", "create", "edit", "delete"],
-    "daily-activity": ["view", "create", "edit", "delete"],
-    maintenance: ["view", "create", "edit", "delete"],
-    package: ["view", "create", "edit", "delete", "set-harga", "term-&-condition"],
-    quotations: ["view", "create", "edit", "delete"],
-    "settings-brands": ["view", "create", "edit", "delete"],
-    "settings-education-level": ["view", "create", "edit", "delete"],
-    "settings-event-types": ["view", "create", "edit", "delete"],
-    "settings-lead-status": ["view", "create", "edit", "delete"],
-    "settings-daily-activity-segment": ["view", "create", "edit", "delete"],
-    "settings-maintenance-category": ["view", "create", "edit", "delete"],
-    "settings-maintenance-priority": ["view", "create", "edit", "delete"],
-    "settings-maintenance-status": ["view", "create", "edit", "delete"],
-    "settings-order-status": ["view", "create", "edit", "delete"],
-    "settings-payment-methods": ["view", "create", "edit", "delete"],
-    "settings-quotation-templates": ["view", "create", "edit", "delete"],
-    "settings-source-of-information": ["view", "create", "edit", "delete"],
-    "settings-venues": ["view", "create", "edit", "delete"],
-    "vendor-specialist": ["view", "create", "edit", "delete"],
-    vendor: ["view", "create", "edit", "delete"],
-    guestbook: ["view", "create", "edit"],
-    promo: ["view"],
   },
   // Finance AR only — Accounts Receivable + Cashflow (+ Overview). Can record/ack
   // cash-in and edit termin (updateTermOfPayments accepts finance-ar:edit). No AP access.
@@ -171,6 +182,7 @@ const rolePermissionMap: Record<string, Record<string, string[]>> = {
     // read-only booking context so AR rows show customer/event/package labels
     booking: ["view"],
     customers: ["view"],
+    bitrix: ["view"],
   },
   // Finance AP only — Expense + Accounts Payable + Customer Payout + Cashflow (+ Overview).
   // No AR access (can't ack cash-in or edit termin).
@@ -178,6 +190,7 @@ const rolePermissionMap: Record<string, Record<string, string[]>> = {
     "finance-ap": ["view", "create", "edit", "delete"],
     booking: ["view"],
     customers: ["view"],
+    bitrix: ["view"],
   },
   sales: {
     booking: ["view", "create", "edit", "comment", "client-agreement", "print"],
@@ -187,12 +200,13 @@ const rolePermissionMap: Record<string, Record<string, string[]>> = {
     vendor: ["view"],
     "settings-source-of-information": ["view", "create", "edit", "delete"],
     guestbook: ["view", "create", "edit"],
-    "daily-activity": ["view", "create", "edit", "delete"],
+    // daily-activity intentionally removed — sales (wedding) no longer sees it.
     // quotations intentionally removed — sales role no longer has quotation access.
     // view+create only: sales can select & create complimentary on-the-fly from booking drawer,
     // but master data management (edit/delete) is reserved for direktur-sales and above.
     complimentary: ["view", "create"],
     promo: ["view", "create", "edit", "delete"],
+    bitrix: ["view"],
   },
   "vendor-specialist": {
     "vendor-specialist": ["view", "create", "edit", "delete"],
@@ -202,6 +216,13 @@ const rolePermissionMap: Record<string, Record<string, string[]>> = {
   },
   "human-resource": {
     hr: ["view", "create", "edit", "delete", "approve"],
+    // Rekrutmen & Onboarding — full lifecycle incl. hiring (creates employee account).
+    "hr-recruitment": ["view", "create", "edit", "delete", "hire"],
+    // Procurement — ONLY the "Pengadaan" tab. Now that the sidebar submenu is
+    // split per-tab (procurement / -summary / -announcement / -budget), granting
+    // `procurement:view` alone shows Pengadaan without Ringkasan/Pengumuman/
+    // Anggaran Venue. view-only: HRD sees the list but doesn't manage requests.
+    procurement: ["view"],
     "settings-users": ["view", "create", "edit", "delete"],
     "settings-education-level": ["view", "create", "edit", "delete"],
     guestbook: ["view", "create", "edit"],
@@ -217,6 +238,7 @@ const rolePermissionMap: Record<string, Record<string, string[]>> = {
     guestbook: ["view", "create", "edit"],
     // sales-mice can view/create/edit packages but NOT set-harga and NOT delete
     "package-mice": ["view", "create", "edit"],
+    bitrix: ["view"],
   },
   "manager-mice": {
     "booking-mice": ["view", "create", "edit", "delete", "print", "approve", "mark-lost", "restore", "transfer", "reject", "comment", "client-agreement"],
@@ -228,9 +250,13 @@ const rolePermissionMap: Record<string, Record<string, string[]>> = {
     "settings-quotation-templates": ["view", "create", "edit", "delete"],
     "settings-daily-activity-segment": ["view", "create", "edit", "delete"],
     "package-mice": ["view", "create", "edit", "delete", "set-harga", "set-status"],
+    bitrix: ["view"],
   },
   "procurement-manager": {
     procurement: ["view", "create", "edit", "delete", "approve"],
+    "procurement-summary": ["view"],
+    "procurement-announcement": ["view", "create", "edit", "delete"],
+    "procurement-budget": ["view", "create", "edit", "delete"],
   },
 };
 

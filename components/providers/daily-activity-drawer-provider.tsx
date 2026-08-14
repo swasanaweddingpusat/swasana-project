@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useContext, type ReactNode } from "react";
-import { CreateDailyActivityDrawer } from "@/app/(private)/dashboard/daily-activity/_components/CreateDailyActivityDrawer";
+import { CreateDailyActivityDrawer } from "@/app/(private)/booking/daily-activity/_components/CreateDailyActivityDrawer";
 import { useDrawerController, type OpenDrawerOptions } from "@/hooks/use-drawer-controller";
 
 interface DailyActivityDrawerContextValue {

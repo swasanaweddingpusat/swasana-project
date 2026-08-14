@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useContext, type ReactNode } from "react";
-import { QuotationDrawer } from "@/app/(private)/dashboard/quotations/_components/quotation-drawer";
+import { QuotationDrawer } from "@/app/(private)/booking/quotations/_components/quotation-drawer";
 import { useDrawerController, type OpenDrawerOptions } from "@/hooks/use-drawer-controller";
 
 interface QuotationDrawerContextValue {

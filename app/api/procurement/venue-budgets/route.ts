@@ -8,7 +8,7 @@ import { getVenueBudgetList } from "@/lib/queries/procurement";
 
 export async function GET(req: Request): Promise<Response> {
   const { session, response } = await requirePermissionForRoute({
-    module: "procurement",
+    module: "procurement-budget",
     action: "view",
   });
   if (response) return response;
@@ -37,7 +37,7 @@ export async function GET(req: Request): Promise<Response> {
 
 export async function POST(req: Request): Promise<Response> {
   const { session, response } = await requirePermissionForRoute({
-    module: "procurement",
+    module: "procurement-budget",
     action: "create",
   });
   if (response) return response;

@@ -14,5 +14,5 @@ export async function requirePagePermission(module: string | string[], action: s
     const allowed = await hasPermission(session.user.roleId, mod, action);
     if (allowed) return;
   }
-  redirect("/dashboard?error=forbidden");
+  redirect("/forbidden");
 }

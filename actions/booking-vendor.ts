@@ -128,6 +128,7 @@ export async function updateSnapBonus(id: string, data: { vendorId?: string; ven
         orderStatusId: data.orderStatusId ?? null,
       },
     })]);
+    await logAudit({ userId: session!.user.id, action: "booking.bonus_updated", entityType: "booking", entityId: bookingId, description: `Mengubah bonus${data.vendorName ? ` "${data.vendorName}"` : ""}` });
     revalidateTag("bookings", "max");
     return { success: true as const };
   } catch (e) {
@@ -160,6 +161,7 @@ export async function addSnapBonus(bookingId: string, data: { vendorId: string; 
       },
       include: { orderStatus: { select: { id: true, name: true } } },
     })]);
+    await logAudit({ userId: session!.user.id, action: "booking.bonus_added", entityType: "booking", entityId: bookingId, description: `Menambahkan bonus "${data.vendorName}"` });
     revalidateTag("bookings", "max");
     return { success: true as const, item };
   } catch (e) {
@@ -181,7 +183,9 @@ export async function deleteSnapBonus(id: string) {
   }
 
   try {
+    const bonus = await db.snapBonus.findUnique({ where: { id }, select: { vendorName: true } });
     await db.$transaction([db.snapBonus.delete({ where: { id } })]);
+    await logAudit({ userId: session!.user.id, action: "booking.bonus_deleted", entityType: "booking", entityId: bookingId, description: `Menghapus bonus${bonus?.vendorName ? ` "${bonus.vendorName}"` : ""}` });
     revalidateTag("bookings", "max");
     return { success: true as const };
   } catch (e) {
@@ -228,7 +232,7 @@ export async function addSnapComplimentary(
         },
       }),
     ]);
-    await logAudit({ userId: session!.user.id, action: "booking.complimentary.add", result: "success", entityType: "SnapComplimentary", entityId: item.id });
+    await logAudit({ userId: session!.user.id, action: "booking.complimentary_added", entityType: "booking", entityId: bookingId, description: `Menambahkan complimentary "${data.name}"` });
     revalidateTag("bookings", "max");
     return { success: true as const, item };
   } catch (e) {
@@ -273,6 +277,7 @@ export async function updateSnapComplimentary(
         },
       }),
     ]);
+    await logAudit({ userId: session!.user.id, action: "booking.complimentary_updated", entityType: "booking", entityId: bookingId, description: `Mengubah complimentary${data.name ? ` "${data.name}"` : ""}` });
     revalidateTag("bookings", "max");
     return { success: true as const };
   } catch (e) {
@@ -294,7 +299,9 @@ export async function deleteSnapComplimentary(id: string) {
   }
 
   try {
+    const comp = await db.snapComplimentary.findUnique({ where: { id }, select: { name: true } });
     await db.$transaction([db.snapComplimentary.delete({ where: { id } })]);
+    await logAudit({ userId: session!.user.id, action: "booking.complimentary_deleted", entityType: "booking", entityId: bookingId, description: `Menghapus complimentary${comp?.name ? ` "${comp.name}"` : ""}` });
     revalidateTag("bookings", "max");
     return { success: true as const };
   } catch (e) {

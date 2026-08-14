@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useContext, type ReactNode } from "react";
-import { BookingDrawer } from "@/app/(private)/dashboard/booking-weddings/_components/booking-drawer";
+import { BookingDrawer } from "@/app/(private)/booking/booking-weddings/_components/booking-drawer";
 import { useDrawerController, type OpenDrawerOptions } from "@/hooks/use-drawer-controller";
 
 interface BookingDrawerContextValue {

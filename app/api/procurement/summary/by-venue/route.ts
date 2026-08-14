@@ -4,7 +4,7 @@ import { getProcurementSummaryByVenue } from "@/lib/queries/procurement";
 
 export async function GET(req: Request): Promise<Response> {
   const { session, response } = await requirePermissionForRoute({
-    module: "procurement",
+    module: "procurement-summary",
     action: "view",
   });
   if (response) return response;

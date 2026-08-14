@@ -5,7 +5,7 @@ import type {
   MiceBookingItem,
   MiceBookingStatus,
   MiceBookingsResponse,
-} from "@/app/(private)/dashboard/booking-mice/_components/types";
+} from "@/app/(private)/booking/booking-mice/_components/types";
 
 export async function GET(request: Request): Promise<Response> {
   const { session, response } = await requirePermissionForRoute({ module: "booking-mice", action: "view" });
