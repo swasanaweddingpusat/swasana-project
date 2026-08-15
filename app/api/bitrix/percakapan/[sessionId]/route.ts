@@ -17,9 +17,9 @@ interface DetailMessage {
  * GET /api/bitrix/percakapan/[sessionId]
  *
  * Returns the structured detail of a single Open Lines session: client info,
- * assignment/transfer events, response-time samples per involved agent, and the
- * full ordered message timeline. This powers the right-hand drawer on the
- * Percakapan list.
+ * assignment/transfer events (with resolved agent names), response-time samples
+ * per involved agent, and the full ordered message timeline. This powers the
+ * right-hand drawer on the Percakapan list.
  */
 export async function GET(
   request: Request,
@@ -37,6 +37,13 @@ export async function GET(
     const customerEntries = Object.values(history.users ?? {}).filter((u) => u.connector === true);
     const customer = customerEntries[0] ?? null;
 
+    // Resolve user ids -> display names from the session history's user table so
+    // transfer events + system messages can show names instead of raw ids.
+    const userName = (id: string | null): string | null => {
+      if (!id) return null;
+      return history.users?.[id]?.name ?? null;
+    };
+
     const messages: DetailMessage[] = Object.values(history.message ?? {})
       .sort((a, b) => Date.parse(a.date) - Date.parse(b.date))
       .map((m) => ({
@@ -46,7 +53,8 @@ export async function GET(
         isSystem: m.senderid === "0",
         isCustomer: customer?.id === m.senderid,
         isAgent: m.senderid !== "0" && customer?.id !== m.senderid,
-        // Raw message text (BBCode). The client renders [b], [URL], and newlines.
+        // Raw message text (BBCode). The client renders [b], [URL], newlines,
+        // and resolves [USER=...] tags to names.
         text: m.text,
       }));
 
@@ -60,9 +68,18 @@ export async function GET(
     }
 
     const responseByAgent = [...samplesByUser.entries()].map(([userId, list]) => {
-      const name = history.users?.[userId]?.name ?? `#${userId}`;
+      const name = userName(userId) ?? `#${userId}`;
       return { userId, name, samples: list.length, avgSeconds: avgSeconds(list) };
     });
+
+    // Enrich transfer events with resolved names - "dari X ke Y" instead of ids.
+    const enrichedEvents = events.map((e) => ({
+      ...e,
+      fromUserId: e.fromUserId ?? null,
+      toUserId: e.toUserId,
+      fromName: userName(e.fromUserId),
+      toName: userName(e.toUserId) ?? `#${e.toUserId}`,
+    }));
 
     const chat = Object.values(history.chat ?? {})[0] ?? null;
 
@@ -77,7 +94,7 @@ export async function GET(
         entityData2: chat?.entityData2 ?? null,
       },
       client: customer ? { id: customer.id, name: customer.name } : null,
-      events,
+      events: enrichedEvents,
       responseByAgent,
       messages,
     });

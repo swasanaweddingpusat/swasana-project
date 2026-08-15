@@ -71,6 +71,9 @@ export const moduleActions: Record<string, string[]> = {
   bitrix: ["view"],
   // HR & Payroll module
   hr: ["view", "create", "edit", "delete", "approve"],
+  // Attendance — own permission so ALL roles can be granted `attendance:view`
+  // (menu Absensi = GENERAL) without unlocking the whole HRD world (hr:view).
+  attendance: ["view"],
   // HR Recruitment & Onboarding — seeded originally via migration 20260622180000.
   // Listed here so the seeder treats it as a valid module (else step 3b would
   // delete these permissions) and can assign them per the role matrix.
@@ -462,6 +465,25 @@ export async function seedRolesPermissions(): Promise<void> {
       });
       if (!existing) {
         await prisma.rolePermission.create({ data: { roleId: role.id, permissionId: bookingEditPackagePerm.id } });
+      }
+    }
+  }
+
+  // 9. Force-grant attendance:view to ALL roles.
+  // Absensi is a GENERAL menu (all roles can clock in/out); `attendance` is a
+  // dedicated permission so granting it does NOT unlock the HRD world (hr:view).
+  // Runs AFTER step 6 wipe-and-replace so it sticks for roles whose matrix omits it.
+  const attendancePerm = await prisma.permission.findUnique({
+    where: { module_action: { module: "attendance", action: "view" } },
+  });
+  if (attendancePerm) {
+    const everyRole = await prisma.role.findMany({ select: { id: true } });
+    for (const role of everyRole) {
+      const existing = await prisma.rolePermission.findUnique({
+        where: { roleId_permissionId: { roleId: role.id, permissionId: attendancePerm.id } },
+      });
+      if (!existing) {
+        await prisma.rolePermission.create({ data: { roleId: role.id, permissionId: attendancePerm.id } });
       }
     }
   }

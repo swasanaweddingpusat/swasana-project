@@ -10,7 +10,7 @@ import { logAudit } from "@/lib/audit";
 export async function POST(req: Request) {
   // 1. Auth + rate limit
   const { session, response } = await requirePermissionForRoute({
-    module: "hr",
+    module: "attendance",
     action: "view",
   });
   if (response) return response;

@@ -9,7 +9,7 @@ export const metadata: Metadata = {
 };
 
 export default async function AbsensiPage() {
-  await requirePagePermission("hr");
+  await requirePagePermission("attendance");
   return (
     <div className="flex flex-col gap-6 w-full mb-6">
       <AttendanceClock />

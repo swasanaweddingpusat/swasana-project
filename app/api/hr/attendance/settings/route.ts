@@ -7,7 +7,7 @@ import { logAudit } from "@/lib/audit";
 
 export async function GET() {
   const { session, response } = await requirePermissionForRoute({
-    module: "hr",
+    module: "attendance",
     action: "view",
   });
   if (response) return response;

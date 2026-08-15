@@ -18,7 +18,7 @@
 - Wants transparency and evidence-backed explanation when something in their environment appears broken or uninstalled — verify actual state with commands instead of just dismissing the concern. Confidence: 0.6
 - Wants empty leftover folders/artifacts (refactor remnants) proactively scanned for and deleted, not left behind ("cek kalo ada folder kosong kayak tadi hapus aja"). Confidence: 0.7
 - Uses a third-party model router/gateway (9router) with a personal API key to reach Claude, and wants it wired into the CLI as a custom provider (BYO key) rather than relying on default provider billing. Confidence: 0.6
-- Expects seeders/migrations to be actually created and applied to the database, not just edited — follows up to confirm both that the migration file exists and that the seed/migration was executed ("bro udh di seed belum bro tadi yang modules ?", "udh bikin migrationnya ?"). Confidence: 0.65
+- Expects seeders/migrations to be actually created and applied to the database, not just edited — follows up to confirm both that the migration file exists and that the seed/migration was executed ("bro udh di seed belum bro tadi yang modules ?", "udh bikin migrationnya ?", "broh udh di migrate belum bro ?"). Confidence: 0.75
 - Uses Conventional Commits for git messages — `feat(scope): subject` with a bullet-point body and a `Co-authored-by: CommandCodeBot <noreply@commandcode.ai>` footer. Confidence: 0.8
 - Works on Windows cmd where heredocs (`<<'EOF'`) are unsupported — for multi-line commit messages, writes the message to a temp file and commits via `git commit -F <file>`. Confidence: 0.8
 - Is now fine including the `.commandcode/` directory in commits when asked ("termasuk commandcode ikut di commit aja bro gpp"), overriding the earlier preference to keep it out of git. Confidence: 0.7
@@ -28,3 +28,34 @@
 tes the parent is treated as incomplete. Confidence: 0.7
 - Prefers a clean remote branch set — after work is merged, wants feature/fix/deploy branches deleted from origin, keeping only `main` and `production` ("hapusin semua branch di origin ... kecuali main dan production"). Confidence: 0.6
 - Cares about which branch work is currently on (`main` vs `production`) and asks to confirm the active branch before changes get committed/pushed — wants to avoid accidentally landing work on the wrong shared branch. Confidence: 0.6
+- Dynamic-segment route files with bracket names (`[sessionId]`) can't be read/written by the file tools — uses PowerShell (`Get-Content`/`Set-Content`) or writes to a temp file then `Copy-Item`. Confidence: 0.6
+- Verifies role/permission DB state by writing a small temporary `tsx` script inside the project root (so Prisma/tsconfig resolves), running it, then deleting it — inline `tsx -e` breaks on `# Taste — Communication & Workflow
+- Communicates in casual Indonesian ("bro", "gue", "loe") and expects responses in Indonesian, not English. Confidence: 0.95
+- Prefers being asked one question at a time rather than multi-question prompt batches. Confidence: 0.8
+- Does not want unprompted auto-commits — normally triggers commits himself ("commit kerjaan loe"). Confidence: 0.7
+- When he does ask to commit, wants the agent to verify first (build + lint) and then commit and push directly if clean, without pausing for a separate review ("kalo gak ada error maka langsung commit dan push"). Confidence: 0.8
+- Before any commit, verify git identity is "Hilmi Anugrah" / "hilmianugrah2003@gmail.com". Confidence: 0.9
+- Prefers to keep working in the current feature branch rather than creating a new one, but never commits directly to `main` — asks to create a new branch (e.g., `docs/update-readme`) when the work starts from `main` ("jgn ke main tapi bikin branch baru"), and wants the latest `main` pulled before branching off it. Confidence: 0.85
+- Prefers fast verification via `npx tsc --noEmit` over slow full `npm run build`; dislikes slow builds ("lama bener bro jalaninnya"). Confidence: 0.8
+- Prefers server-side filtering over frontend/client-side filtering. Confidence: 0.8
+
+- When a client-side helper becomes unused after a refactor (e.g., exporting moved to a server endpoint), prefers deleting the dead file and unused imports rather than leaving them behind. Confidence: 0.65
+- Prefers form drafts persisted to localStorage so inputs aren't lost between sessions. Confidence: 0.7
+- Wants to see actual raw API responses as evidence rather than relying on docs or assumptions ("kasih lihat ke gue response asli apinya", "detailin kayak tadi bro"). Confidence: 0.7
+- Expects evidence-based verification of completeness before considering work done — automated cross-checks against source data, not verbal assurance ("cek lagi udh lengkap semua belum ?"). Confidence: 0.75
+- Contributes domain/business rules for metrics (e.g., response-time timer starts at the transfer event) and expects implementation to follow those rules rather than generic defaults. Confidence: 0.6
+- Prefers auto-accept mode for file edits and filesystem commands — does not want to approve every action individually ("gue udh percaya bro"). Set `permissions.defaultMode` to `auto-accept` at user scope. Confidence: 0.9
+- Prefers clean, default-conforming tool configuration — asks to reset tools to their out-of-the-box defaults rather than keep accumulated customizations ("bersih clean dan sesuai bawaan"). Confidence: 0.6
+- Wants transparency and evidence-backed explanation when something in their environment appears broken or uninstalled — verify actual state with commands instead of just dismissing the concern. Confidence: 0.6
+- Wants empty leftover folders/artifacts (refactor remnants) proactively scanned for and deleted, not left behind ("cek kalo ada folder kosong kayak tadi hapus aja"). Confidence: 0.7
+- Uses a third-party model router/gateway (9router) with a personal API key to reach Claude, and wants it wired into the CLI as a custom provider (BYO key) rather than relying on default provider billing. Confidence: 0.6
+- Expects seeders/migrations to be actually created and applied to the database, not just edited — follows up to confirm both that the migration file exists and that the seed/migration was executed ("bro udh di seed belum bro tadi yang modules ?", "udh bikin migrationnya ?", "broh udh di migrate belum bro ?"). Confidence: 0.75
+- Uses Conventional Commits for git messages — `feat(scope): subject` with a bullet-point body and a `Co-authored-by: CommandCodeBot <noreply@commandcode.ai>` footer. Confidence: 0.8
+- Works on Windows cmd where heredocs (`<<'EOF'`) are unsupported — for multi-line commit messages, writes the message to a temp file and commits via `git commit -F <file>`. Confidence: 0.8
+- Is now fine including the `.commandcode/` directory in commits when asked ("termasuk commandcode ikut di commit aja bro gpp"), overriding the earlier preference to keep it out of git. Confidence: 0.7
+- Wants project documentation kept accurate against the actual code and organized by purpose — AGENTS.md for coding rules/conventions, a dedicated ARCHITECTURE.md for the tech-stack lookup + mind map, and README.md kept in sync with the actual project — with stale facts (versions, folder structure, redirects, permission tables, CI/CD, env vars) proactively verified and corrected rather than left outdated. Confidence: 0.7
+- When seeding/creating test data for a domain entity, expects the real creation flow to be mirrored in full — all descendant records (snapshots, approval records + steps, terms of payment, payment ledgers/allocations) — not a bare top-level row; a thin seed that only crea- Prefers removing unused/unreferenced environment variables from deployment config to avoid confusion (e.g., a platform-injected `RAILWAY_URL` the app never reads). Confidence: 0.6
+- When debugging staging/production issues (e.g., a login failure), wants the agent to connect to the actual staging database using the connection string from `.env` ("pake db source staging bro ada di env") rather than guessing or hardcoding credentials. Confidence: 0.6
+tes the parent is treated as incomplete. Confidence: 0.7
+- Prefers a clean remote branch set — after work is merged, wants feature/fix/deploy branches deleted from origin, keeping only `main` and `production` ("hapusin semua branch di origin ... kecuali main dan production"). Confidence: 0.6
+ escaping and scratchpad scripts outside the project can't resolve Prisma. Confidence: 0.55

@@ -7,8 +7,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 
 // Render Bitrix BBCode into React nodes. Supports [b]bold[/b], [URL=...]label[/URL],
-// and preserves newlines. No dangerouslySetInnerHTML — everything is built from
-// plain strings + React elements, so message text stays inert.
+// [USER=id]name[/USER] (rendered as a plain name — no link), and preserves
+// newlines. No dangerouslySetInnerHTML — everything is built from plain strings
+// + React elements, so message text stays inert.
 function renderBbcode(text: string): ReactNode[] {
   const lines = text.split(/\r?\n/);
   const out: ReactNode[] = [];
@@ -16,9 +17,10 @@ function renderBbcode(text: string): ReactNode[] {
   lines.forEach((line, lineIdx) => {
     if (lineIdx > 0) out.push(<br key={`br-${lineIdx}`} />);
 
-    // Tokenize [b]...[/b] and [URL=...]...[/URL].
+    // Tokenize [b]...[/b], [URL=...]...[/URL], and [USER=...]...[/USER].
     const parts: ReactNode[] = [];
-    const regex = /\[b\]([\s\S]*?)\[\/b\]|\[URL=([^\]]+)\]([\s\S]*?)\[\/URL\]/gi;
+    const regex =
+      /\[b\]([\s\S]*?)\[\/b\]|\[URL=([^\]]+)\]([\s\S]*?)\[\/URL\]|\[USER=\d+\s+REPLACE\]([\s\S]*?)\[\/USER\]/gi;
     let last = 0;
     let match: RegExpExecArray | null;
     let key = 0;
@@ -38,6 +40,13 @@ function renderBbcode(text: string): ReactNode[] {
           >
             {match[3] || match[2]}
           </a>,
+        );
+      } else if (match[4] !== undefined) {
+        // [USER=...] — render the name only, styled as an agent mention.
+        parts.push(
+          <span key={`usr-${lineIdx}-${key++}`} className="font-medium text-foreground">
+            {match[4]}
+          </span>,
         );
       }
       last = regex.lastIndex;
@@ -64,6 +73,8 @@ interface TransferEvent {
   at: string;
   fromUserId: string | null;
   toUserId: string;
+  fromName?: string | null;
+  toName?: string | null;
 }
 
 interface AgentResponse {
@@ -215,7 +226,17 @@ export function PercakapanDetailDrawer({
                   <div key={`${e.at}-${i}`} className="flex items-start gap-2 text-xs text-muted-foreground">
                     <ClockCircle weight="BoldDuotone" className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                     <span>
-                      {formatTime(e.at)} · transfer ke <span className="font-medium text-foreground">#{e.toUserId}</span>
+                      {formatTime(e.at)} ·{" "}
+                      {e.fromName ? (
+                        <>
+                          ditransfer dari <span className="font-medium text-foreground">{e.fromName}</span> ke{" "}
+                          <span className="font-medium text-foreground">{e.toName ?? `#${e.toUserId}`}</span>
+                        </>
+                      ) : (
+                        <>
+                          ditugaskan ke <span className="font-medium text-foreground">{e.toName ?? `#${e.toUserId}`}</span>
+                        </>
+                      )}
                     </span>
                   </div>
                 ))}
