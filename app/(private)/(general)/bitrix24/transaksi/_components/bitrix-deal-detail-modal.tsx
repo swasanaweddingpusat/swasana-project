@@ -155,6 +155,13 @@ export function BitrixDealDetailModal({
                   "-"
                 )}
               </Field>
+              <Field label="Sub Issue">
+                {deal.subIssue ? (
+                  <Badge variant="secondary" className="rounded-full font-normal">{deal.subIssue}</Badge>
+                ) : (
+                  "-"
+                )}
+              </Field>
               <Field label="Tanggal Database">{fmtDate(deal.dbDate)}</Field>
             </div>
 

@@ -11,6 +11,7 @@ import { CreatePaymentRecordStep, type CreatePaymentEntry } from "@/app/(private
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import SignatureCanvas from "react-signature-canvas";
 import { Drawer } from "@/components/shared/drawer";
+import { ApprovalWarningDialog } from "@/components/shared/approval-warning-dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -286,6 +287,8 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
   // so the button stays disabled even after the mutation's isPending flips back to false.
   // Prevents a double-click from creating two bookings.
   const [isSubmitting, setIsSubmitting] = useState(false);
+  // Confirm modal shown before the final submit (create/finalize).
+  const [showSubmitConfirm, setShowSubmitConfirm] = useState(false);
   // Holds the retry thunk for the last failed background save — calling it re-fires the save.
   const retryWriteRef = useRef<(() => Promise<void>) | null>(null);
   const { users: salesUsers } = useSalesUsers();
@@ -2584,7 +2587,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
               {currentStep === 1 ? "Cancel" : "Previous"}
             </Button>
             <Button
-              onClick={currentStep < totalSteps ? handleNext : form.handleSubmit(onSubmit)}
+              onClick={currentStep < totalSteps ? handleNext : () => setShowSubmitConfirm(true)}
               disabled={isContinueDisabled}
               className={cn("flex-[60%] cursor-pointer", isContinueDisabled && "opacity-50 cursor-not-allowed")}
             >
@@ -2597,6 +2600,24 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
           </div>
         </div>
       </div>
+
+      <ApprovalWarningDialog
+        open={showSubmitConfirm}
+        onOpenChange={setShowSubmitConfirm}
+        title="Konfirmasi Pembuatan Booking"
+        description="Anda akan membuat booking baru dan mengirimkannya ke alur approval."
+        warnings={[
+          "Data booking akan dikunci sebagai dokumen awal dan masuk ke antrean approval Sales, Manager, hingga Finance.",
+          "Setelah dikirim, perubahan paket, venue, tanggal acara, harga, atau ketentuan pembayaran akan memicu proses approval ulang.",
+          "Pastikan seluruh data, pembayaran, dan tanda tangan sudah benar sebelum booking dibuat.",
+        ]}
+        confirmLabel="Ya, Buat Booking"
+        onConfirm={() => {
+          setShowSubmitConfirm(false);
+          void form.handleSubmit(onSubmit)();
+        }}
+        submitting={isSubmitting}
+      />
     </Drawer>
   );
 }

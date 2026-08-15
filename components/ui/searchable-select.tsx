@@ -23,6 +23,13 @@ interface SearchableSelectProps {
   disabled?: boolean;
   className?: string;
   minDropdownWidth?: number;
+  // Opt-in server-side search: when provided, `options` is treated as the
+  // already-filtered result set (no local filtering) and this fires
+  // debounced as the user types so the caller can re-fetch from the server.
+  onSearchChange?: (query: string) => void;
+  searchDebounceMs?: number;
+  loading?: boolean;
+  loadingText?: string;
 }
 
 export function SearchableSelect({
@@ -37,6 +44,10 @@ export function SearchableSelect({
   disabled = false,
   className,
   minDropdownWidth,
+  onSearchChange,
+  searchDebounceMs = 300,
+  loading = false,
+  loadingText = "Mencari...",
 }: SearchableSelectProps) {
   const [open, setOpen] = React.useState(false);
   const [search, setSearch] = React.useState("");
@@ -47,9 +58,16 @@ export function SearchableSelect({
   const safeOptions = Array.isArray(options) ? options : [];
   const selectedOption = safeOptions.find((o) => o.id === value);
 
-  const filtered = safeOptions.filter((o) =>
-    o.name.toLowerCase().includes(search.toLowerCase())
-  );
+  const filtered = onSearchChange
+    ? safeOptions
+    : safeOptions.filter((o) => o.name.toLowerCase().includes(search.toLowerCase()));
+
+  React.useEffect(() => {
+    if (!onSearchChange) return;
+    const timer = setTimeout(() => onSearchChange(search), searchDebounceMs);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search]);
 
   const showAddButton =
     onAdd &&
@@ -150,10 +168,13 @@ export function SearchableSelect({
         </div>
       )}
       <div className={cn('max-h-50', 'overflow-y-auto', 'p-1')}>
-        {filtered.length === 0 && !showAddButton && (
+        {loading && (
+          <p className={cn('py-4', 'text-center', 'text-sm', 'text-muted-foreground')}>{loadingText}</p>
+        )}
+        {!loading && filtered.length === 0 && !showAddButton && (
           <p className={cn('py-4', 'text-center', 'text-sm', 'text-muted-foreground')}>{emptyText}</p>
         )}
-        {filtered.map((opt) => (
+        {!loading && filtered.map((opt) => (
           <div
             key={opt.id}
             className={cn('flex', 'items-center', 'justify-between', 'rounded-sm', 'px-2', 'py-1.5', 'text-sm', 'cursor-pointer', 'hover:bg-accent', 'hover:text-accent-foreground')}

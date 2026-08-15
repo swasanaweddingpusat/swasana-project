@@ -443,7 +443,7 @@ export function MiceTable() {
                     <TableRow
                       key={item.id}
                       onClick={() => handleRowClick(item)}
-                      className="cursor-pointer transition-colors hover:bg-muted/40"
+                      className={cn('cursor-pointer', 'transition-colors', item.status === "Canceled" ? 'bg-destructive/10 hover:bg-destructive/15' : 'hover:bg-muted/40')}
                     >
                       <TableCell className="px-4 text-center text-muted-foreground">
                         {(currentPage - 1) * ROWS_PER_PAGE + idx + 1}

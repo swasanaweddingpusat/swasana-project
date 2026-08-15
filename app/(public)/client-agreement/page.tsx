@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { ApprovalWarningDialog } from "@/components/shared/approval-warning-dialog";
 import { toast } from "sonner";
 import { Refresh, CheckCircle, FileText, Lock, DownloadMinimalistic } from "@solar-icons/react";
 import SignatureCanvas from "react-signature-canvas";
@@ -39,6 +40,7 @@ function ClientAgreementContent() {
   const [pdfUrl, setPdfUrl] = React.useState<string | null>(null);
   const [loadingPdf, setLoadingPdf] = React.useState(false);
   const [showSuccessModal, setShowSuccessModal] = React.useState(false);
+  const [showConfirmModal, setShowConfirmModal] = React.useState(false);
   const [signedPdfUrl, setSignedPdfUrl] = React.useState<string | null>(null);
   const [loadingSignedPdf, setLoadingSignedPdf] = React.useState(false);
   const sigRef = React.useRef<SignatureCanvas>(null);
@@ -107,6 +109,14 @@ function ClientAgreementContent() {
     } finally {
       setLoadingSignedPdf(false);
     }
+  };
+
+  const openConfirmModal = () => {
+    if (!sigRef.current || sigRef.current.isEmpty()) {
+      toast.error("Silakan tanda tangan terlebih dahulu");
+      return;
+    }
+    setShowConfirmModal(true);
   };
 
   const handleSign = async () => {
@@ -303,13 +313,32 @@ function ClientAgreementContent() {
                 <Button variant="outline" size="sm" onClick={() => { sigRef.current?.clear(); setHasSigned(false); }}>
                   Hapus
                 </Button>
-                <Button size="sm" className="ml-auto" onClick={handleSign} disabled={signing || !hasSigned}>
+                <Button size="sm" className="ml-auto" onClick={openConfirmModal} disabled={signing || !hasSigned}>
                   {signing ? <><Refresh weight="BoldDuotone" className={cn('h-3.5', 'w-3.5', 'mr-1', 'animate-spin')} />Menyimpan...</> : "Kirim Tanda Tangan"}
                 </Button>
               </div>
             </div>
           </div>
         </div>
+
+        {/* Confirm modal — shown before finalizing the signature. */}
+        <ApprovalWarningDialog
+          open={showConfirmModal}
+          onOpenChange={setShowConfirmModal}
+          title="Perhatian Sebelum Tanda Tangan"
+          description="Bacalah dengan saksama sebelum melanjutkan. Tindakan ini tidak dapat dibatalkan."
+          warnings={[
+            "Setelah ditandatangani, paket, venue, tanggal acara, harga, dan ketentuan pembayaran akan terkunci.",
+            "Jika Anda meminta perubahan pada paket atau ketentuan lainnya setelah ini, perubahan tersebut harus melalui proses persetujuan (approval) ulang.",
+            "Tanda tangan Anda menjadi persetujuan resmi atas seluruh isi dokumen yang ditampilkan.",
+          ]}
+          confirmLabel="Ya, Tanda Tangani"
+          onConfirm={() => {
+            setShowConfirmModal(false);
+            void handleSign();
+          }}
+          submitting={signing}
+        />
       </div>
     );
   }
