@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { format } from "date-fns";
+import type { DateRange } from "react-day-picker";
 import {
   Magnifer,
   ChatRound,
@@ -14,6 +16,7 @@ import {
   CallChatRounded,
   Login2,
   Logout2,
+  Download,
 } from "@solar-icons/react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -37,9 +40,15 @@ import {
 } from "@/components/ui/select";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { PercakapanDetailDrawer } from "./percakapan-detail-drawer";
+
+// Local calendar day (not UTC) — avoids the off-by-one from toISOString().
+function toIsoDay(d: Date): string {
+  return format(d, "yyyy-MM-dd");
+}
 
 const PAGE_SIZE = 50;
 const COLSPAN = 10;
@@ -47,6 +56,12 @@ const COLSPAN = 10;
 const DIRECTION_ALL = "__all__";
 const STATUS_ALL = "__all__";
 const RESPONSIBLE_ALL = "__all__";
+const TRANSFERRED_ALL = "__all__";
+
+const TRANSFERRED_OPTIONS: { id: string; name: string }[] = [
+  { id: "yes", name: "Sudah ditransfer" },
+  { id: "no", name: "Belum ditransfer" },
+];
 
 const DIRECTION_OPTIONS: { id: string; name: string }[] = [
   { id: "1", name: "Inbound" },
@@ -75,6 +90,8 @@ interface Conversation {
   lastMessageAt: string | null;
   durationSec: number | null;
   avgResponseSec: number | null;
+  transferCount?: number;
+  transferred?: boolean;
 }
 
 interface ApiResponse {
@@ -115,6 +132,8 @@ export function BitrixPercakapanManager() {
   const [direction, setDirection] = useState<string>("");
   const [status, setStatus] = useState<string>("");
   const [responsible, setResponsible] = useState<string>("");
+  const [createdRange, setCreatedRange] = useState<DateRange | undefined>(undefined);
+  const [transferredFilter, setTransferredFilter] = useState<string>("");
   const [salesOptions, setSalesOptions] = useState<{ id: string; name: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -123,6 +142,40 @@ export function BitrixPercakapanManager() {
   const [reloadKey, setReloadKey] = useState(0);
   const [filterOpen, setFilterOpen] = useState(false);
   const [selectedSession, setSelectedSession] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
+
+  const createdFrom = createdRange?.from ? toIsoDay(createdRange.from) : "";
+  const createdTo = createdRange?.from ? toIsoDay(createdRange.to ?? createdRange.from) : "";
+
+  async function handleExport(): Promise<void> {
+    setExporting(true);
+    try {
+      const params = new URLSearchParams({ format: "xlsx" });
+      if (direction) params.set("direction", direction);
+      if (status) params.set("status", status);
+      if (responsible) params.set("responsible", responsible);
+      if (createdFrom) params.set("createdFrom", createdFrom);
+      if (createdTo) params.set("createdTo", createdTo);
+      if (transferredFilter) params.set("transferred", transferredFilter);
+      if (query) params.set("q", query);
+
+      const res = await fetch(`/api/bitrix/percakapan/export?${params.toString()}`);
+      if (!res.ok) return;
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `bitrix-percakapan-${new Date().toISOString().split("T")[0]}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error("[bitrix percakapan] export failed", err);
+    } finally {
+      setExporting(false);
+    }
+  }
 
   // Load sales options once for the filter dropdown.
   useEffect(() => {
@@ -160,6 +213,9 @@ export function BitrixPercakapanManager() {
         if (direction) params.set("direction", direction);
         if (status) params.set("status", status);
         if (responsible) params.set("responsible", responsible);
+        if (createdFrom) params.set("createdFrom", createdFrom);
+        if (createdTo) params.set("createdTo", createdTo);
+        if (transferredFilter) params.set("transferred", transferredFilter);
         if (query) params.set("q", query);
         const res = await fetch(`/api/bitrix/percakapan?${params.toString()}`);
         const json = (await res.json()) as ApiResponse;
@@ -180,19 +236,21 @@ export function BitrixPercakapanManager() {
     return () => {
       cancelled = true;
     };
-  }, [start, direction, status, responsible, query, reloadKey]);
+  }, [start, direction, status, responsible, createdFrom, createdTo, transferredFilter, query, reloadKey]);
 
   const pageFrom = total === 0 ? 0 : start + 1;
   const pageTo = Math.min(start + PAGE_SIZE, total);
   const canPrev = start > 0;
   const canNext = start + PAGE_SIZE < total;
 
-  const activeFilterCount = (direction ? 1 : 0) + (status ? 1 : 0) + (responsible ? 1 : 0);
+  const activeFilterCount = (direction ? 1 : 0) + (status ? 1 : 0) + (responsible ? 1 : 0) + (createdRange?.from ? 1 : 0) + (transferredFilter ? 1 : 0);
 
-  function applyFilters(next: { direction: string; status: string; responsible: string }) {
+  function applyFilters(next: { direction: string; status: string; responsible: string; createdRange: DateRange | undefined; transferred: string }) {
     setDirection(next.direction);
     setStatus(next.status);
     setResponsible(next.responsible);
+    setCreatedRange(next.createdRange);
+    setTransferredFilter(next.transferred);
     setStart(0);
     setFilterOpen(false);
   }
@@ -201,6 +259,8 @@ export function BitrixPercakapanManager() {
     setDirection("");
     setStatus("");
     setResponsible("");
+    setCreatedRange(undefined);
+    setTransferredFilter("");
     setStart(0);
     setFilterOpen(false);
   }
@@ -235,6 +295,17 @@ export function BitrixPercakapanManager() {
             />
           </div>
 
+          {/* Export Excel */}
+          <Button
+            variant="outline"
+            className="shrink-0 rounded-full"
+            onClick={handleExport}
+            disabled={loading || exporting}
+          >
+            <Download weight="BoldDuotone" className="h-4 w-4" />
+            Export Excel
+          </Button>
+
           {/* Filter — grouped popover: tipe + status */}
           <Popover open={filterOpen} onOpenChange={setFilterOpen}>
             <PopoverTrigger
@@ -255,6 +326,8 @@ export function BitrixPercakapanManager() {
                 direction={direction}
                 status={status}
                 responsible={responsible}
+                createdRange={createdRange}
+                transferred={transferredFilter}
                 salesOptions={salesOptions}
                 onApply={applyFilters}
                 onReset={resetFilters}
@@ -343,12 +416,19 @@ export function BitrixPercakapanManager() {
 
                       {/* Status */}
                       <TableCell className="px-3 py-2">
-                        <Badge
-                          variant={c.closed ? "secondary" : "outline"}
-                          className="rounded-full font-normal"
-                        >
-                          {c.closed ? "Percakapan ditutup" : "Agen merespons"}
-                        </Badge>
+                        <div className="flex flex-wrap items-center gap-1">
+                          <Badge
+                            variant={c.closed ? "secondary" : "outline"}
+                            className="rounded-full font-normal"
+                          >
+                            {c.closed ? "Percakapan ditutup" : "Agen merespons"}
+                          </Badge>
+                          {c.transferred && (
+                            <Badge variant="outline" className="rounded-full font-normal text-primary border-primary/30">
+                              {c.transferCount ?? 1}x Transfer
+                            </Badge>
+                          )}
+                        </div>
                       </TableCell>
 
                       {/* Saluran */}
@@ -463,6 +543,8 @@ function FilterPanel({
   direction: initialDirection,
   status: initialStatus,
   responsible: initialResponsible,
+  createdRange: initialCreatedRange,
+  transferred: initialTransferred,
   salesOptions,
   onApply,
   onReset,
@@ -470,13 +552,17 @@ function FilterPanel({
   direction: string;
   status: string;
   responsible: string;
+  createdRange: DateRange | undefined;
+  transferred: string;
   salesOptions: { id: string; name: string }[];
-  onApply: (next: { direction: string; status: string; responsible: string }) => void;
+  onApply: (next: { direction: string; status: string; responsible: string; createdRange: DateRange | undefined; transferred: string }) => void;
   onReset: () => void;
 }) {
   const [direction, setDirection] = useState(initialDirection);
   const [status, setStatus] = useState(initialStatus);
   const [responsible, setResponsible] = useState(initialResponsible);
+  const [createdRange, setCreatedRange] = useState<DateRange | undefined>(initialCreatedRange);
+  const [transferred, setTransferred] = useState(initialTransferred);
 
   return (
     <div className="flex flex-col">
@@ -486,6 +572,25 @@ function FilterPanel({
       </div>
 
       <div className="space-y-4 px-4 py-4">
+        {/* By tanggal dibuat */}
+        <div className="space-y-1.5">
+          <div className="flex items-center justify-between">
+            <Label className="text-xs text-muted-foreground">Tanggal Dibuat</Label>
+            {createdRange?.from && (
+              <button
+                type="button"
+                onClick={() => setCreatedRange(undefined)}
+                className="text-xs font-medium text-primary hover:underline"
+              >
+                Bersihkan
+              </button>
+            )}
+          </div>
+          <div className="flex justify-center rounded-xl border">
+            <Calendar mode="range" numberOfMonths={1} selected={createdRange} onSelect={setCreatedRange} />
+          </div>
+        </div>
+
         {/* By tipe */}
         <div className="space-y-1.5">
           <Label className="text-xs text-muted-foreground">Tipe</Label>
@@ -525,6 +630,24 @@ function FilterPanel({
           </Select>
         </div>
 
+        {/* By transfer */}
+        <div className="space-y-1.5">
+          <Label className="text-xs text-muted-foreground">Transfer</Label>
+          <Select value={transferred === "" ? TRANSFERRED_ALL : transferred} onValueChange={(v) => setTransferred(v === TRANSFERRED_ALL ? "" : v)}>
+            <SelectTrigger className="w-full rounded-full">
+              <SelectValue placeholder="Semua transfer" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={TRANSFERRED_ALL}>Semua transfer</SelectItem>
+              {TRANSFERRED_OPTIONS.map((t) => (
+                <SelectItem key={t.id} value={t.id}>
+                  {t.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
         {/* By sales */}
         <div className="space-y-1.5">
           <Label className="text-xs text-muted-foreground">Sales</Label>
@@ -548,7 +671,7 @@ function FilterPanel({
           <CloseCircle weight="BoldDuotone" className="h-4 w-4" />
           Reset
         </Button>
-        <Button size="sm" className="rounded-full" onClick={() => onApply({ direction, status, responsible })}>
+        <Button size="sm" className="rounded-full" onClick={() => onApply({ direction, status, responsible, createdRange, transferred })}>
           Terapkan
         </Button>
       </div>
