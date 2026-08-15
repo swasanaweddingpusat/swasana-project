@@ -1,0 +1,404 @@
+import { requirePermissionForRoute } from "@/lib/permissions";
+import { apiLimiter, rateLimitResponse } from "@/lib/rate-limit";
+import { bitrixListAll, bitrixCall, resolveBitrixUsers, BitrixApiError } from "@/lib/bitrix";
+import type { SessionHistory } from "@/lib/bitrix";
+import { parseResponseSamples, avgSeconds } from "@/lib/bitrix-response";
+import { parseSubject, channelFromSourceId } from "@/lib/bitrix-conversation";
+
+const PROVIDER_ID = "IMOPENLINES_SESSION";
+
+const ACTIVITY_SELECT = [
+  "ID",
+  "OWNER_ID",
+  "OWNER_TYPE_ID",
+  "ASSOCIATED_ENTITY_ID",
+  "ORIGIN_ID",
+  "SUBJECT",
+  "DIRECTION",
+  "COMPLETED",
+  "STATUS",
+  "RESPONSIBLE_ID",
+  "RESULT_SOURCE_ID",
+  "PROVIDER_TYPE_ID",
+  "CREATED",
+  "START_TIME",
+  "END_TIME",
+  "LAST_UPDATED",
+];
+
+interface RawActivity {
+  ID: string;
+  OWNER_ID: string | null;
+  OWNER_TYPE_ID: string | null;
+  ASSOCIATED_ENTITY_ID: string | null;
+  ORIGIN_ID: string | null;
+  SUBJECT: string | null;
+  DIRECTION: string | null;
+  COMPLETED: string | null;
+  STATUS: string | null;
+  RESPONSIBLE_ID: string | null;
+  RESULT_SOURCE_ID: string | null;
+  PROVIDER_TYPE_ID: string | null;
+  CREATED: string | null;
+  START_TIME: string | null;
+  END_TIME: string | null;
+  LAST_UPDATED: string | null;
+}
+
+interface ConversationRow {
+  id: string;
+  sessionId: string;
+  dealId: string | null;
+  direction: "inbound" | "outbound";
+  closed: boolean;
+  client: string | null;
+  phone: string | null;
+  venue: string | null;
+  channel: string;
+  responsible: string | null;
+  responsibleId: string | null;
+  createdAt: string | null;
+  closedAt: string | null;
+  lastMessageAt: string | null;
+  durationSec: number | null;
+  avgResponseSec: number | null;
+}
+
+const MAX_PAGES = 100; // up to 5000 rows.
+
+export async function GET(request: Request) {
+  const { session, response } = await requirePermissionForRoute({ module: "bitrix", action: "view" });
+  if (response) return response;
+  if (!apiLimiter.check(`bitrix-percakapan-export:${session.user.id}`)) return rateLimitResponse();
+
+  const { searchParams } = new URL(request.url);
+  const format = searchParams.get("format") === "pdf" ? "pdf" : "xlsx";
+
+  try {
+    const rows = await fetchFilteredConversations(searchParams);
+    if (format === "pdf") return pdfResponse(rows);
+    return xlsxResponse(rows);
+  } catch (e) {
+    if (e instanceof BitrixApiError) {
+      const status = e.code === "no_config" ? 503 : 502;
+      return Response.json({ error: e.message, code: e.code }, { status });
+    }
+    console.error("[api/bitrix/percakapan/export]", e);
+    return Response.json({ error: "Gagal mengekspor data percakapan." }, { status: 500 });
+  }
+}
+
+async function fetchFilteredConversations(searchParams: URLSearchParams): Promise<ConversationRow[]> {
+  const filter: Record<string, string> = { PROVIDER_ID };
+
+  const direction = searchParams.get("direction")?.trim();
+  if (direction === "1" || direction === "2") filter.DIRECTION = direction;
+
+  const status = searchParams.get("status")?.trim();
+  if (status === "open") filter.COMPLETED = "N";
+  if (status === "closed") filter.COMPLETED = "Y";
+
+  const q = searchParams.get("q")?.trim();
+  if (q) filter["%SUBJECT"] = q;
+
+  const responsibleId = searchParams.get("responsible")?.trim();
+  if (responsibleId) filter.RESPONSIBLE_ID = responsibleId;
+
+  const createdFrom = searchParams.get("createdFrom")?.trim();
+  const createdTo = searchParams.get("createdTo")?.trim();
+  if (isIsoDay(createdFrom)) filter[">=CREATED"] = `${createdFrom}T00:00:00`;
+  if (isIsoDay(createdTo)) filter["<CREATED"] = `${nextDay(createdTo)}T00:00:00`;
+
+  const transferred = searchParams.get("transferred")?.trim();
+
+  const { items } = await bitrixListAll<RawActivity>(
+    "crm.activity.list",
+    {
+      select: ACTIVITY_SELECT,
+      filter,
+      order: { ID: "DESC" },
+    },
+    MAX_PAGES,
+  );
+
+  const userMap = await resolveBitrixUsers(items.map((a) => a.RESPONSIBLE_ID ?? "").filter(Boolean));
+
+  const sessionIds = items
+    .map((a) => a.ASSOCIATED_ENTITY_ID ?? stripImol(a.ORIGIN_ID) ?? a.ID)
+    .filter(Boolean);
+  const sessionInfo = await resolveSessionInfo(sessionIds);
+
+  return items
+    .map((a) => {
+      const parsed = parseSubject(a.SUBJECT);
+      const sessionId = a.ASSOCIATED_ENTITY_ID ?? stripImol(a.ORIGIN_ID) ?? a.ID;
+      const dealId = a.OWNER_TYPE_ID === "2" ? a.OWNER_ID : null;
+
+      return {
+        id: a.ID,
+        sessionId,
+        dealId,
+        direction: (a.DIRECTION === "2" ? "outbound" : "inbound") as "outbound" | "inbound",
+        closed: a.COMPLETED === "Y",
+        client: parsed.name,
+        phone: parsed.phone,
+        venue: parsed.venue,
+        channel: parsed.channel ?? channelFromSourceId(a.RESULT_SOURCE_ID),
+        responsible: (a.RESPONSIBLE_ID && userMap[a.RESPONSIBLE_ID]) ?? null,
+        responsibleId: a.RESPONSIBLE_ID,
+        createdAt: a.CREATED ?? a.START_TIME,
+        closedAt: a.COMPLETED === "Y" ? a.END_TIME : null,
+        lastMessageAt: a.LAST_UPDATED,
+        durationSec: durationSeconds(a.START_TIME, a.END_TIME),
+        avgResponseSec: sessionInfo[sessionId]?.avgResponseSec ?? null,
+        transferCount: sessionInfo[sessionId]?.transferCount ?? 0,
+        transferred: (sessionInfo[sessionId]?.transferCount ?? 0) > 0,
+      };
+    })
+    .filter((r) => {
+      if (transferred === "yes") return r.transferred;
+      if (transferred === "no") return !r.transferred;
+      return true;
+    });
+}
+
+function isIsoDay(v: string | null | undefined): v is string {
+  return !!v && /^\d{4}-\d{2}-\d{2}$/.test(v);
+}
+
+function nextDay(day: string): string {
+  const [y, m, d] = day.split("-").map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  dt.setUTCDate(dt.getUTCDate() + 1);
+  return dt.toISOString().slice(0, 10);
+}
+
+function stripImol(origin: string | null): string | null {
+  if (!origin) return null;
+  const m = origin.match(/IMOL_(\d+)/);
+  return m ? m[1] : origin;
+}
+
+async function resolveSessionInfo(
+  sessionIds: string[],
+): Promise<Record<string, { avgResponseSec: number | null; transferCount: number }>> {
+  const out: Record<string, { avgResponseSec: number | null; transferCount: number }> = {};
+  const unique = [...new Set(sessionIds)];
+
+  for (const chunk of chunkArray(unique, 50)) {
+    const cmd: Record<string, string> = {};
+    for (const id of chunk) cmd[`h${id}`] = `imopenlines.session.history.get?SESSION_ID=${id}`;
+
+    const batch = await bitrixCall("batch", { cmd, halt: 0 });
+    const results = (batch.result ?? {}) as { result?: Record<string, SessionHistory> };
+
+    for (const [key, history] of Object.entries(results.result ?? {})) {
+      const sessionId = key.startsWith("h") ? key.slice(1) : key;
+      if (!history?.message) {
+        out[sessionId] = { avgResponseSec: null, transferCount: 0 };
+        continue;
+      }
+      const { samples, events } = parseResponseSamples(history);
+      out[sessionId] = {
+        avgResponseSec: samples.length > 0 ? avgSeconds(samples) : null,
+        transferCount: events.length,
+      };
+    }
+
+    for (const id of chunk) {
+      if (!(id in out)) out[id] = { avgResponseSec: null, transferCount: 0 };
+    }
+  }
+
+  return out;
+}
+
+function chunkArray<T>(arr: T[], size: number): T[][] {
+  const chunks: T[][] = [];
+  for (let i = 0; i < arr.length; i += size) chunks.push(arr.slice(i, i + size));
+  return chunks;
+}
+
+function durationSeconds(start: string | null, end: string | null): number | null {
+  if (!start || !end) return null;
+  const s = Date.parse(start);
+  const e = Date.parse(end);
+  if (Number.isNaN(s) || Number.isNaN(e) || e < s) return null;
+  return Math.round((e - s) / 1000);
+}
+
+function fmtDuration(sec: number | null): string {
+  if (sec === null || sec < 0) return "-";
+  if (sec < 60) return `${sec} dtk`;
+  const min = Math.floor(sec / 60);
+  if (min < 60) return `${min} mnt`;
+  const h = Math.floor(min / 60);
+  const rem = min % 60;
+  return rem ? `${h} jam ${rem} mnt` : `${h} jam`;
+}
+
+function fmtDateTime(iso: string | null): string {
+  if (!iso) return "";
+  try {
+    return new Date(iso).toLocaleString("id-ID", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  } catch {
+    return "";
+  }
+}
+
+function stamp(): string {
+  return new Date().toISOString().split("T")[0];
+}
+
+async function xlsxResponse(rows: ConversationRow[]): Promise<Response> {
+  const ExcelJS = await import("exceljs");
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet("Percakapan");
+
+  const headers = [
+    "Sesi",
+    "Tipe",
+    "Status",
+    "Saluran",
+    "Klien",
+    "Telepon",
+    "Venue",
+    "Karyawan",
+    "Deal ID",
+    "Dibuat",
+    "Ditutup",
+    "Response",
+    "Durasi",
+  ];
+  const headerRow = ws.addRow(headers);
+  headerRow.eachCell((cell) => {
+    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF0F4159" } };
+    cell.font = { bold: true, color: { argb: "FFFFFFFF" } };
+    cell.alignment = { vertical: "middle" };
+  });
+
+  for (const r of rows) {
+    ws.addRow([
+      r.sessionId,
+      r.direction === "inbound" ? "Inbound" : "Outbound",
+      r.closed ? "Percakapan ditutup" : "Agen merespons",
+      r.channel,
+      r.client ?? "Guest",
+      r.phone ?? "",
+      r.venue ?? "",
+      r.responsible ?? (r.responsibleId ? `#${r.responsibleId}` : ""),
+      r.dealId ?? "",
+      fmtDateTime(r.createdAt),
+      fmtDateTime(r.closedAt),
+      fmtDuration(r.avgResponseSec),
+      fmtDuration(r.durationSec),
+    ]);
+  }
+
+  ws.columns.forEach((col) => {
+    let max = 10;
+    col.eachCell?.({ includeEmpty: false }, (cell) => {
+      const len = String(cell.value ?? "").length;
+      if (len > max) max = len;
+    });
+    col.width = Math.min(max + 2, 60);
+  });
+
+  const buf = await wb.xlsx.writeBuffer();
+  const ab =
+    buf instanceof ArrayBuffer
+      ? buf
+      : (buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer);
+
+  return new Response(ab as unknown as BodyInit, {
+    headers: {
+      "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "Content-Disposition": `attachment; filename="bitrix-percakapan-${stamp()}.xlsx"`,
+    },
+  });
+}
+
+async function pdfResponse(rows: ConversationRow[]): Promise<Response> {
+  const { jsPDF } = await import("jspdf");
+  const doc = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
+  const margin = 24;
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const colWidths = [45, 40, 60, 70, 90, 80, 55, 70, 55, 85, 85, 60, 60];
+  const headers = ["Sesi", "Tipe", "Status", "Saluran", "Klien", "Telepon", "Venue", "Karyawan", "Deal ID", "Dibuat", "Ditutup", "Response", "Durasi"];
+  const tableLeft = margin;
+  const tableWidth = pageWidth - margin * 2;
+  const headerHeight = 20;
+  let y = margin + 20;
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(14);
+  doc.text("Percakapan Bitrix24", margin, y);
+  y += 16;
+
+  function drawHeader(): void {
+    doc.setFillColor(15, 65, 89);
+    doc.rect(tableLeft, y, tableWidth, headerHeight, "F");
+    doc.setTextColor(255, 255, 255);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(6.5);
+    let x = tableLeft;
+    headers.forEach((h, i) => {
+      doc.text(h, x + 3, y + 13);
+      x += colWidths[i];
+    });
+    y += headerHeight + 4;
+    doc.setTextColor(0);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(6.5);
+  }
+
+  drawHeader();
+
+  for (const r of rows) {
+    if (y > pageHeight - margin) {
+      doc.addPage();
+      y = margin;
+      drawHeader();
+    }
+    const cells = [
+      r.sessionId,
+      r.direction === "inbound" ? "Inbound" : "Outbound",
+      r.closed ? "Ditutup" : "Agen merespons",
+      r.channel,
+      r.client ?? "Guest",
+      r.phone ?? "",
+      r.venue ?? "",
+      r.responsible ?? (r.responsibleId ? `#${r.responsibleId}` : ""),
+      r.dealId ?? "",
+      fmtDateTime(r.createdAt),
+      fmtDateTime(r.closedAt),
+      fmtDuration(r.avgResponseSec),
+      fmtDuration(r.durationSec),
+    ];
+    const cellLines = cells.map((c, i) => doc.splitTextToSize(c, colWidths[i] - 6) as string[]);
+    const maxLines = Math.max(...cellLines.map((l) => l.length));
+    const rowHeight = Math.max(14, maxLines * 8 + 4);
+
+    let x = tableLeft;
+    cells.forEach((c, i) => {
+      doc.text(cellLines[i], x + 3, y + 8);
+      x += colWidths[i];
+    });
+    y += rowHeight;
+  }
+
+  const ab = doc.output("arraybuffer") as ArrayBuffer;
+  return new Response(ab, {
+    headers: {
+      "Content-Type": "application/pdf",
+      "Content-Disposition": `attachment; filename="bitrix-percakapan-${stamp()}.pdf"`,
+    },
+  });
+}

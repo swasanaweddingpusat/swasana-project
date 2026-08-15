@@ -89,6 +89,17 @@ export async function GET(request: Request) {
   const responsibleId = searchParams.get("responsible")?.trim();
   if (responsibleId) filter.RESPONSIBLE_ID = responsibleId;
 
+  // Tanggal Dibuat range — CREATED datetime (+03:00 in Bitrix), filtered on bare date.
+  const createdFrom = searchParams.get("createdFrom")?.trim();
+  const createdTo = searchParams.get("createdTo")?.trim();
+  if (isIsoDay(createdFrom)) filter[">=CREATED"] = `${createdFrom}T00:00:00`;
+  if (isIsoDay(createdTo)) filter["<CREATED"] = `${nextDay(createdTo)}T00:00:00`;
+
+  // "Sudah ditransfer" filter — applied post-fetch (the info lives in the session
+  // history, not on the activity row). "yes" → only sessions with ≥1 transfer,
+  // "no" → only sessions never transferred.
+  const transferred = searchParams.get("transferred")?.trim();
+
   const startRaw = Number(searchParams.get("start"));
   const start = Number.isFinite(startRaw) && startRaw >= 0 ? startRaw : 0;
 
@@ -109,37 +120,48 @@ export async function GET(request: Request) {
     const sessionIds = items
       .map((a) => a.ASSOCIATED_ENTITY_ID ?? stripImol(a.ORIGIN_ID) ?? a.ID)
       .filter(Boolean);
-    const avgResponseBySession = await resolveAvgResponseBySession(sessionIds);
+    const sessionInfo = await resolveSessionInfo(sessionIds);
 
-    const rows = items.map((a) => {
-      const parsed = parseSubject(a.SUBJECT);
-      // Session id shown in Bitrix (# column) is the Open Lines session, carried
-      // by ASSOCIATED_ENTITY_ID / ORIGIN_ID (IMOL_<id>). The linked CRM record is
-      // OWNER_ID, but only when the owner type is a deal (2).
-      const sessionId = a.ASSOCIATED_ENTITY_ID ?? stripImol(a.ORIGIN_ID) ?? a.ID;
-      const dealId = a.OWNER_TYPE_ID === "2" ? a.OWNER_ID : null;
+    const rows = items
+      .map((a) => {
+        const parsed = parseSubject(a.SUBJECT);
+        // Session id shown in Bitrix (# column) is the Open Lines session, carried
+        // by ASSOCIATED_ENTITY_ID / ORIGIN_ID (IMOL_<id>). The linked CRM record is
+        // OWNER_ID, but only when the owner type is a deal (2).
+        const sessionId = a.ASSOCIATED_ENTITY_ID ?? stripImol(a.ORIGIN_ID) ?? a.ID;
+        const dealId = a.OWNER_TYPE_ID === "2" ? a.OWNER_ID : null;
 
-      return {
-        id: a.ID,
-        sessionId,
-        dealId,
-        direction: a.DIRECTION === "2" ? "outbound" : "inbound",
-        closed: a.COMPLETED === "Y",
-        client: parsed.name,
-        phone: parsed.phone,
-        venue: parsed.venue,
-        channel: parsed.channel ?? channelFromSourceId(a.RESULT_SOURCE_ID),
-        responsibleId: a.RESPONSIBLE_ID,
-        responsible: (a.RESPONSIBLE_ID && userMap[a.RESPONSIBLE_ID]) ?? null,
-        createdAt: a.CREATED ?? a.START_TIME,
-        closedAt: a.COMPLETED === "Y" ? a.END_TIME : null,
-        lastMessageAt: a.LAST_UPDATED,
-        durationSec: durationSeconds(a.START_TIME, a.END_TIME),
-        avgResponseSec: avgResponseBySession[sessionId] ?? null,
-      };
-    });
+        return {
+          id: a.ID,
+          sessionId,
+          dealId,
+          direction: a.DIRECTION === "2" ? "outbound" : "inbound",
+          closed: a.COMPLETED === "Y",
+          client: parsed.name,
+          phone: parsed.phone,
+          venue: parsed.venue,
+          channel: parsed.channel ?? channelFromSourceId(a.RESULT_SOURCE_ID),
+          responsibleId: a.RESPONSIBLE_ID,
+          responsible: (a.RESPONSIBLE_ID && userMap[a.RESPONSIBLE_ID]) ?? null,
+          createdAt: a.CREATED ?? a.START_TIME,
+          closedAt: a.COMPLETED === "Y" ? a.END_TIME : null,
+          lastMessageAt: a.LAST_UPDATED,
+          durationSec: durationSeconds(a.START_TIME, a.END_TIME),
+          avgResponseSec: sessionInfo[sessionId]?.avgResponseSec ?? null,
+          transferCount: sessionInfo[sessionId]?.transferCount ?? 0,
+          transferred: (sessionInfo[sessionId]?.transferCount ?? 0) > 0,
+        };
+      })
+      .filter((r) => {
+        if (transferred === "yes") return r.transferred;
+        if (transferred === "no") return !r.transferred;
+        return true;
+      });
 
-    return Response.json({ items: rows, total, next: next ?? null });
+    // Re-count the total after a post-fetch filter (transferred) is applied.
+    const totalAfter = transferred === "yes" || transferred === "no" ? rows.length : total;
+
+    return Response.json({ items: rows, total: totalAfter, next: next ?? null });
   } catch (e) {
     if (e instanceof BitrixApiError) {
       const status = e.code === "no_config" ? 503 : 502;
@@ -152,6 +174,17 @@ export async function GET(request: Request) {
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
+function isIsoDay(v: string | null | undefined): v is string {
+  return !!v && /^\d{4}-\d{2}-\d{2}$/.test(v);
+}
+
+function nextDay(day: string): string {
+  const [y, m, d] = day.split("-").map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  dt.setUTCDate(dt.getUTCDate() + 1);
+  return dt.toISOString().slice(0, 10);
+}
+
 function stripImol(origin: string | null): string | null {
   if (!origin) return null;
   const m = origin.match(/IMOL_(\d+)/);
@@ -159,9 +192,11 @@ function stripImol(origin: string | null): string | null {
 }
 
 // Fetch session histories in chunks of 50 and return sessionId → avg response
-// seconds. A missing/empty history resolves to null (rendered as "-").
-async function resolveAvgResponseBySession(sessionIds: string[]): Promise<Record<string, number | null>> {
-  const out: Record<string, number | null> = {};
+// seconds + transfer count. A missing/empty history resolves to null / 0.
+async function resolveSessionInfo(
+  sessionIds: string[],
+): Promise<Record<string, { avgResponseSec: number | null; transferCount: number }>> {
+  const out: Record<string, { avgResponseSec: number | null; transferCount: number }> = {};
   const unique = [...new Set(sessionIds)];
 
   for (const chunk of chunkArray(unique, 50)) {
@@ -174,16 +209,19 @@ async function resolveAvgResponseBySession(sessionIds: string[]): Promise<Record
     for (const [key, history] of Object.entries(results.result ?? {})) {
       const sessionId = key.startsWith("h") ? key.slice(1) : key;
       if (!history?.message) {
-        out[sessionId] = null;
+        out[sessionId] = { avgResponseSec: null, transferCount: 0 };
         continue;
       }
-      const { samples } = parseResponseSamples(history);
-      out[sessionId] = samples.length > 0 ? avgSeconds(samples) : null;
+      const { samples, events } = parseResponseSamples(history);
+      out[sessionId] = {
+        avgResponseSec: samples.length > 0 ? avgSeconds(samples) : null,
+        transferCount: events.length,
+      };
     }
 
-    // Preserve null for sessions missing from the batch result (e.g. error).
+    // Preserve null/0 for sessions missing from the batch result (e.g. error).
     for (const id of chunk) {
-      if (!(id in out)) out[id] = null;
+      if (!(id in out)) out[id] = { avgResponseSec: null, transferCount: 0 };
     }
   }
 
