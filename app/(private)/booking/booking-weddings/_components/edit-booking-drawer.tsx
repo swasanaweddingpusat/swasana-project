@@ -273,9 +273,10 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
         title="Perubahan Akan Memicu Approval Ulang"
         description="Booking ini sudah ditandatangani klien. Mengubah venue, paket, atau tanggal event akan membatalkan persetujuan yang sudah berjalan."
         warnings={[
-          "Approval akan di-reset ke Pending — Sales, Manager, dan Finance harus menyetujui ulang dari awal.",
+          "Approval akan di-reset ke Pending — Sales, Manager, dan Finance wajib menyetujui ulang dari awal.",
+          "Tanda tangan Manager harus di-approve ulang untuk mengecek kembali setiap perubahan yang terjadi pada booking ini.",
           "Persetujuan klien akan dibatalkan dan klien harus menandatangani ulang kontraknya.",
-          "Perubahan ini membuka revisi baru; data yang sudah disetujui sebelumnya tidak bisa dipulihkan begitu saja.",
+          "Perubahan ini membuka revisi baru; pastikan seluruh perbedaan sudah diperiksa sebelum melanjutkan.",
         ]}
         confirmLabel="Ya, Lanjutkan Perubahan"
         onConfirm={() => {

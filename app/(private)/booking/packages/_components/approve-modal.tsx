@@ -147,6 +147,7 @@ export function ApproveModal({ open, onClose, stepId, stepLabel, packageName }: 
         warnings={[
           "Tanda tangan Anda akan tercatat sebagai bukti persetujuan resmi pada dokumen ini.",
           "Setelah disetujui, tahap ini tidak bisa diubah tanpa proses reset approval oleh pihak yang berwenang.",
+          "Jika terjadi perubahan pada booking — seperti paket, tanggal event, venue, harga, atau ketentuan pembayaran — setelah ditandatangani, tanda tangan Manager harus di-approve ulang untuk mengecek kembali setiap perubahan yang terjadi.",
           "Pastikan seluruh isi dokumen sudah benar karena keputusan ini mengikat.",
         ]}
         confirmLabel="Ya, Setujui"
