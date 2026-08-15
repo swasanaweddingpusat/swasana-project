@@ -126,7 +126,6 @@ export const MODULE_NAV_MAP: Record<ModuleKey, NavItem[]> = {
     { name: "Reimbursement & Loan", href: "/hrd/reimbursement-loan", icon: Card, subtitle: "Klaim biaya dan pinjaman karyawan", permission: { module: "hr", action: "view" } },
     { name: "Hubungan Industrial", href: "/hrd/hubungan-industrial", icon: UserHands, subtitle: "SP tracking dan pengaduan karyawan", permission: { module: "hr", action: "view" } },
     { name: "Analitik & Laporan", href: "/hrd/analitik-laporan", icon: GraphNew, subtitle: "Dashboard metrik HR dan laporan", permission: { module: "hr", action: "view" } },
-    { name: "Absensi", href: "/hrd/absensi", icon: CheckSquare, subtitle: "Catat kehadiran dengan foto dan lokasi", permission: { module: "hr", action: "view" } },
   ],
   booking: [
     { name: "Overview", href: "/booking/overview", icon: Widget, subtitle: "Ringkasan booking dan sales", permission: { module: "booking", action: "view" } },
@@ -169,6 +168,7 @@ export const GENERAL_NAV: NavItem[] = [
       { name: "Response Sales", href: "/bitrix24/response-sales", icon: GraphUp, title: "Response Sales Bitrix24", subtitle: "Rata-rata waktu respons sales per percakapan", permission: { module: "bitrix", action: "view" } },
     ] },
   { name: "Indikator Pernikahan", href: "/wedding-indicators", icon: Heart, subtitle: "Kelola kuesioner penilaian kepuasan pasangan pernikahan", permission: { module: "vendor-specialist", action: "view" } },
+  { name: "Absensi", href: "/absensi", icon: CheckSquare, subtitle: "Catat kehadiran dengan foto dan lokasi", permission: { module: "hr", action: "view" } },
   { name: "Maintenance", href: "/maintenance", icon: Sledgehammer, subtitle: "Kelola ticket dan jadwal pemeliharaan", permission: { module: "maintenance", action: "view" } },
   { name: "Guestbook", href: "/guestbook", icon: Notebook, subtitle: "Catat kunjungan tamu, vendor, dan client ke kantor", permission: { module: "guestbook", action: "view" } },
   { name: "Vendor", href: "/vendor", icon: ShopMinimalistic, subtitle: "Kelola vendor dan supplier", permission: { module: "vendor", action: "view" } },
