@@ -25,8 +25,6 @@ import { usePermissions } from "@/hooks/use-permissions";
 import { useBookingDrawer } from "@/components/providers/booking-drawer-provider";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AgreementModal } from "@/components/shared/booking/agreement-modal";
-import { RejectBookingModal } from "@/components/shared/booking/reject-booking-modal";
-import { MarkLostDialog } from "@/components/shared/booking/mark-lost-dialog";
 import { CancelBookingDialog } from "@/components/shared/booking/cancel-booking-dialog";
 import { RestoreBookingDialog } from "@/components/shared/booking/restore-booking-dialog";
 import { TransferBookingModal } from "@/components/shared/booking/transfer-booking-modal";
@@ -49,6 +47,7 @@ import { ApproveModal } from "@/app/(private)/booking/packages/_components/appro
 import { ApprovalDialog } from "@/app/(private)/booking/packages/_components/approval-dialog";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import type { BookingsResult, BookingListItem, SalesProfile, ApprovalStatusFilter } from "@/lib/queries/bookings";
+import type { BookingStatus } from "@prisma/client";
 
 const STATUS_DOT: Record<string, string> = {
   Confirmed: "bg-primary",
@@ -140,6 +139,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
   const [dateRangeOpen, setDateRangeOpen] = useState(false);
   const [yearFilter, setYearFilter] = useState<number | null>(null);
   const [approvalFilter, setApprovalFilter] = useState<ApprovalStatusFilter | "">("");
+  const [bookingStatusFilter, setBookingStatusFilter] = useState<BookingStatus | "">("");
   const [sourceOfInformationFilter, setSourceOfInformationFilter] = useState("");
 
   const { data: venues = [] } = useQuery<{ id: string; name: string }[]>({
@@ -181,7 +181,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
   }, [search]);
 
   const { data: result = initialData, refetch, isFetching, isLoading, isPlaceholderData } = useBookings(
-    { page: currentPage, pageSize: ROWS_PER_PAGE, search: debouncedSearch, venueId: venueFilter || undefined, recordStatus: recordStatusFilter, dateFrom: dateFrom || undefined, dateTo: dateTo || undefined, year: (!dateFrom && !dateTo && yearFilter) ? yearFilter : undefined, approvalStatus: approvalFilter || undefined, salesId: salesFilter || undefined, sourceOfInformationId: sourceOfInformationFilter || undefined },
+    { page: currentPage, pageSize: ROWS_PER_PAGE, search: debouncedSearch, venueId: venueFilter || undefined, recordStatus: recordStatusFilter, dateFrom: dateFrom || undefined, dateTo: dateTo || undefined, year: (!dateFrom && !dateTo && yearFilter) ? yearFilter : undefined, approvalStatus: approvalFilter || undefined, bookingStatus: bookingStatusFilter || undefined, salesId: salesFilter || undefined, sourceOfInformationId: sourceOfInformationFilter || undefined },
     initialData,
   );
   // Show shimmer on initial load AND while transitioning pages/filters (keepPreviousData
@@ -195,8 +195,6 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
 
   const [deleteTarget, setDeleteTarget] = useState<BookingListItem | null>(null);
   const [editTarget, setEditTarget] = useState<BookingListItem | null>(null);
-  const [rejectTarget, setRejectTarget] = useState<BookingListItem | null>(null);
-  const [lostTarget, setLostTarget] = useState<BookingListItem | null>(null);
   const [cancelTarget, setCancelTarget] = useState<BookingListItem | null>(null);
   const [transferTarget, setTransferTarget] = useState<BookingListItem | null>(null);
   const [uploadDocTarget, setUploadDocTarget] = useState<BookingListItem | null>(null);
@@ -401,6 +399,25 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
 
   /** Renders the DropdownMenuItems for the More dropdown (shared between desktop & mobile). */
   function renderMoreItems(booking: BookingListItem): React.ReactNode {
+    // Canceled booking: only Detail + Restore are allowed — every other action
+    // (edit, sync, set harga, T&C, upload, transfer, delete) is suppressed.
+    if (booking.bookingStatus === "Canceled") {
+      return (
+        <>
+          <DropdownMenuItem className="cursor-pointer" onClick={() => setDetailTarget(booking.id)} onMouseEnter={() => prefetchDetail(booking.id)} onFocus={() => prefetchDetail(booking.id)}>
+            <Eye weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4', 'text-primary')} /> Lihat Detail
+          </DropdownMenuItem>
+          {can("booking", "restore") && (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem className={cn('cursor-pointer', 'text-muted-foreground', 'focus:text-foreground')} onClick={() => setRestoreTarget(booking)}>
+                <RotateCcw weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4')} /> Restore Booking
+              </DropdownMenuItem>
+            </>
+          )}
+        </>
+      );
+    }
     return (
       <>
         <DropdownMenuItem className="cursor-pointer" onClick={() => setDetailTarget(booking.id)} onMouseEnter={() => prefetchDetail(booking.id)} onFocus={() => prefetchDetail(booking.id)}>
@@ -412,7 +429,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
             <Pencil weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4', 'text-primary')} /> Edit Booking
           </DropdownMenuItem>
         )}
-        {can("booking", "edit") && booking.bookingStatus !== "Lost" && booking.bookingStatus !== "Rejected" && booking.bookingStatus !== "Canceled" && (
+        {can("booking", "edit") && booking.bookingStatus !== "Lost" && booking.bookingStatus !== "Rejected" && (
           <DropdownMenuItem className="cursor-pointer" onClick={(e) => { e.stopPropagation(); setSyncPackageTarget(booking); }}>
             <RotateCcw weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4', 'text-primary')} /> Sync Paket dari Master
           </DropdownMenuItem>
@@ -440,23 +457,13 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
             <UsersGroupRounded weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4', 'text-primary')} /> Transfer Manager
           </DropdownMenuItem>
         )}
-        {((can("booking", "reject") && booking.bookingStatus !== "Confirmed" && booking.bookingStatus !== "Lost") || (can("booking", "mark-lost") && booking.bookingStatus !== "Lost" && booking.bookingStatus !== "Confirmed") || (can("booking", "cancel") && booking.bookingStatus !== "Canceled" && booking.bookingStatus !== "Lost") || (can("booking", "restore") && (booking.bookingStatus === "Lost" || booking.bookingStatus === "Confirmed" || booking.bookingStatus === "Canceled"))) && <DropdownMenuSeparator />}
-        {can("booking", "reject") && booking.bookingStatus !== "Confirmed" && booking.bookingStatus !== "Lost" && (
-          <DropdownMenuItem className="cursor-pointer" onClick={() => setRejectTarget(booking)}>
-            <SquareX weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4', 'text-destructive')} /> Reject Booking
-          </DropdownMenuItem>
-        )}
-        {can("booking", "mark-lost") && booking.bookingStatus !== "Lost" && booking.bookingStatus !== "Confirmed" && (
-          <DropdownMenuItem className={cn('cursor-pointer', 'text-muted-foreground', 'focus:text-foreground')} onClick={() => setLostTarget(booking)}>
-            <SquareX weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4')} /> Lost Booking
-          </DropdownMenuItem>
-        )}
-        {can("booking", "cancel") && booking.bookingStatus !== "Canceled" && booking.bookingStatus !== "Lost" && (
+        {(can("booking", "cancel") || (can("booking", "restore") && booking.bookingStatus === "Confirmed")) && <DropdownMenuSeparator />}
+        {can("booking", "cancel") && (
           <DropdownMenuItem className={cn('cursor-pointer', 'text-destructive', 'focus:text-destructive')} onClick={() => setCancelTarget(booking)}>
             <SquareX weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4', 'text-destructive')} /> Cancel Booking
           </DropdownMenuItem>
         )}
-        {can("booking", "restore") && (booking.bookingStatus === "Lost" || booking.bookingStatus === "Confirmed" || booking.bookingStatus === "Canceled") && (
+        {can("booking", "restore") && booking.bookingStatus === "Confirmed" && (
           <DropdownMenuItem className={cn('cursor-pointer', 'text-muted-foreground', 'focus:text-foreground')} onClick={() => setRestoreTarget(booking)}>
             <RotateCcw weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4')} /> Restore Booking
           </DropdownMenuItem>
@@ -506,7 +513,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
       <>
         {/* Agreement modal trigger — hidden on mobile. Shown only once manager +
             finance approved, and hidden again after the client has signed. */}
-        {can("booking", "client-agreement") && internalApproved && booking.clientAgreement?.status !== "Signed" && (
+        {booking.bookingStatus !== "Canceled" && can("booking", "client-agreement") && internalApproved && booking.clientAgreement?.status !== "Signed" && (
         <TooltipProvider delay={200}>
           <Tooltip>
             <TooltipTrigger render={<Button variant="ghost" size="icon" className={cn('cursor-pointer', 'hidden', 'sm:inline-flex')} onClick={(e) => { e.stopPropagation(); setAgreementModal({ bookingId: booking.id, customerName: booking.snapCustomer?.name ?? "Client" }); }} />}>
@@ -518,7 +525,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
         )}
 
         {/* Booking Approval dropdown */}
-        {approvalMap.has(booking.id) && hasPendingApproval(booking) && (
+        {booking.bookingStatus !== "Canceled" && approvalMap.has(booking.id) && hasPendingApproval(booking) && (
           <DropdownMenu>
             <Tooltip>
               <DropdownMenuTrigger asChild>
@@ -617,14 +624,25 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
   const hasDateFilter = dateFrom !== "" || dateTo !== "";
   const hasYearFilter = yearFilter !== null;
   const hasApprovalFilter = approvalFilter !== "";
+  const hasBookingStatusFilter = bookingStatusFilter !== "";
   const hasSourceOfInformationFilter = sourceOfInformationFilter !== "" && sourceOfInformationFilter !== "all";
-  const activeFilterCount = (hasVenueFilter ? 1 : 0) + (hasSalesFilter ? 1 : 0) + (hasRecordStatusFilter ? 1 : 0) + (hasDateFilter ? 1 : 0) + (hasYearFilter ? 1 : 0) + (hasApprovalFilter ? 1 : 0) + (hasSourceOfInformationFilter ? 1 : 0);
+  const activeFilterCount = (hasVenueFilter ? 1 : 0) + (hasSalesFilter ? 1 : 0) + (hasRecordStatusFilter ? 1 : 0) + (hasDateFilter ? 1 : 0) + (hasYearFilter ? 1 : 0) + (hasApprovalFilter ? 1 : 0) + (hasBookingStatusFilter ? 1 : 0) + (hasSourceOfInformationFilter ? 1 : 0);
   const hasActiveFilter = activeFilterCount > 0;
 
   const RECORD_STATUS_OPTIONS: { id: "saved" | "draft" | "all"; name: string }[] = [
     { id: "saved", name: "Saved" },
     { id: "draft", name: "Draft" },
     { id: "all", name: "Semua" },
+  ];
+
+  const BOOKING_STATUS_OPTIONS: { id: BookingStatus | ""; name: string }[] = [
+    { id: "", name: "Semua" },
+    { id: "Pending", name: "Pending" },
+    { id: "Uploaded", name: "Uploaded" },
+    { id: "Confirmed", name: "Confirmed" },
+    { id: "Rejected", name: "Rejected" },
+    { id: "Canceled", name: "Canceled" },
+    { id: "Lost", name: "Lost" },
   ];
 
   const FilterPopoverContent = (
@@ -634,7 +652,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
         {hasActiveFilter && (
           <button
             type="button"
-            onClick={() => { setVenueFilter(""); setSalesFilter(""); setRecordStatusFilter("saved"); setDateFrom(""); setDateTo(""); setYearFilter(null); setApprovalFilter(""); setSourceOfInformationFilter(""); setCurrentPage(1); }}
+            onClick={() => { setVenueFilter(""); setSalesFilter(""); setRecordStatusFilter("saved"); setDateFrom(""); setDateTo(""); setYearFilter(null); setApprovalFilter(""); setBookingStatusFilter(""); setSourceOfInformationFilter(""); setCurrentPage(1); }}
             className="text-xs text-muted-foreground hover:text-foreground transition-colors"
           >
             Reset
@@ -697,6 +715,18 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
           onChange={(val) => { setRecordStatusFilter(val as "saved" | "draft" | "all"); setCurrentPage(1); }}
           placeholder="Saved"
           searchPlaceholder="Cari status..."
+          emptyText="Status tidak ditemukan"
+          className="h-9"
+        />
+      </div>
+      <div className="space-y-1">
+        <label className="text-xs font-medium text-muted-foreground">Status Booking</label>
+        <SearchableSelect
+          options={BOOKING_STATUS_OPTIONS}
+          value={bookingStatusFilter || ""}
+          onChange={(val) => { setBookingStatusFilter(val as BookingStatus | ""); setCurrentPage(1); }}
+          placeholder="Semua"
+          searchPlaceholder="Cari status booking..."
           emptyText="Status tidak ditemukan"
           className="h-9"
         />
@@ -1046,7 +1076,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                   {bookings.map((booking: BookingListItem, idx: number) => (
                     <TableRow
                       key={booking.id}
-                      className={cn('hover:bg-muted/40', 'cursor-pointer')}
+                      className={cn('cursor-pointer', booking.bookingStatus === "Canceled" ? 'bg-destructive/10 hover:bg-destructive/15' : 'hover:bg-muted/40')}
                       onMouseEnter={() => { if (booking.recordStatus !== "draft") prefetchDetail(booking.id); }}
                       onClick={() => {
                         if (booking.recordStatus === "draft") {
@@ -1181,6 +1211,10 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                       {/* Approval */}
                       <TableCell className={cn('px-2', 'py-2', 'hidden', 'lg:table-cell')} onClick={(e) => e.stopPropagation()}>
                         {(() => {
+                          // Canceled booking: static "Canceled" badge — not clickable, no approval flow.
+                          if (booking.bookingStatus === "Canceled") {
+                            return <span className={cn('inline-flex', 'px-2', 'py-0.5', 'rounded-full', 'text-xs', 'font-medium', 'bg-destructive/10', 'text-destructive')}>Canceled</span>;
+                          }
                           const record = approvalMap.get(booking.id);
                           if (!record) return <span className={cn('text-xs', 'text-muted-foreground')}>—</span>;
                           return (
@@ -1220,7 +1254,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                 return (
                   <div
                     key={booking.id}
-                    className={cn('rounded-lg', 'border', 'bg-card', 'p-3', 'space-y-2', 'cursor-pointer')}
+                    className={cn('rounded-lg', 'border', 'p-3', 'space-y-2', 'cursor-pointer', booking.bookingStatus === "Canceled" ? 'bg-destructive/10' : 'bg-card')}
                     onMouseEnter={() => { if (booking.recordStatus !== "draft") prefetchDetail(booking.id); }}
                     onClick={() => {
                       if (booking.recordStatus === "draft") {
@@ -1283,6 +1317,10 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                     {/* Row 4: approval badge + PO number */}
                     <div className={cn('flex', 'items-center', 'gap-1.5', 'flex-wrap', 'text-xs')}>
                       {(() => {
+                        // Canceled booking: static "Canceled" badge — not clickable, no approval flow.
+                        if (booking.bookingStatus === "Canceled") {
+                          return <span className={cn('inline-flex', 'px-2', 'py-0.5', 'rounded-full', 'text-[10px]', 'font-medium', 'bg-destructive/10', 'text-destructive')}>Canceled</span>;
+                        }
                         const record = approvalMap.get(booking.id);
                         if (!record) return null;
                         return (
@@ -1376,8 +1414,8 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                               <span className={cn('text-[10px]', 'font-medium', 'text-muted-foreground', 'leading-none', 'text-center')}>Detail</span>
                             </button>
 
-                            {/* 2. Edit tile — if permitted */}
-                            {can("booking", "edit") && (
+                            {/* 2. Edit tile — if permitted (hidden for Canceled) */}
+                            {booking.bookingStatus !== "Canceled" && can("booking", "edit") && (
                               <button
                                 type="button"
                                 className={cn('flex', 'flex-col', 'items-center', 'justify-center', 'gap-0.5', 'w-14', 'rounded-xl', 'py-1.5', 'px-1', 'cursor-pointer', 'transition-colors', 'hover:bg-accent')}
@@ -1389,8 +1427,8 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                               </button>
                             )}
 
-                            {/* 3. Slot status — Approval OR Client Agreement OR nothing */}
-                            {hasPending && approvalMap.has(booking.id) ? (
+                            {/* 3. Slot status — Approval OR Client Agreement OR nothing (hidden for Canceled) */}
+                            {booking.bookingStatus === "Canceled" ? null : hasPending && approvalMap.has(booking.id) ? (
                               <DropdownMenu>
                                 <DropdownMenuTrigger asChild>
                                   <button
@@ -1542,19 +1580,6 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-
-      {/* Reject */}
-      <RejectBookingModal
-        open={!!rejectTarget}
-        booking={rejectTarget}
-        onClose={() => { if (rejectTarget) invalidateDetail(rejectTarget.id); setRejectTarget(null); }}
-      />
-
-      <MarkLostDialog
-        open={!!lostTarget}
-        booking={lostTarget}
-        onClose={() => { if (lostTarget) invalidateDetail(lostTarget.id); setLostTarget(null); }}
-      />
 
       {/* Cancel Booking Modal */}
       <CancelBookingDialog
