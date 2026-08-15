@@ -37,11 +37,26 @@ export async function GET(
     const customerEntries = Object.values(history.users ?? {}).filter((u) => u.connector === true);
     const customer = customerEntries[0] ?? null;
 
-    // Resolve user ids -> display names from the session history's user table so
-    // transfer events + system messages can show names instead of raw ids.
+    // Resolve user ids -> display names. `history.users` may omit agents that
+    // only appear as transfer targets, so ALSO scrape the [USER=id]Name[/USER]
+    // tags from the system messages — the names live in the message text itself.
+    const userNames = new Map<string, string>();
+    for (const [id, u] of Object.entries(history.users ?? {})) {
+      if (u?.name?.trim()) userNames.set(id, u.name.trim());
+    }
+    const userTagRe = /\[USER=(\d+)\s+REPLACE\]([^\]]+?)\[\/USER\]/g;
+    for (const m of Object.values(history.message ?? {})) {
+      if (!m?.text) continue;
+      let mm: RegExpExecArray | null;
+      userTagRe.lastIndex = 0;
+      while ((mm = userTagRe.exec(m.text)) !== null) {
+        const name = mm[2]?.trim();
+        if (name) userNames.set(mm[1], name);
+      }
+    }
     const userName = (id: string | null): string | null => {
       if (!id) return null;
-      return history.users?.[id]?.name ?? null;
+      return userNames.get(id) ?? null;
     };
 
     const messages: DetailMessage[] = Object.values(history.message ?? {})

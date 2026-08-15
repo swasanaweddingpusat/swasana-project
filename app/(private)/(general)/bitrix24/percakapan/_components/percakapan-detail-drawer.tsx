@@ -244,33 +244,53 @@ export function PercakapanDetailDrawer({
             </div>
           )}
 
-          {/* Timeline pesan */}
+          {/* Timeline pesan — chat bubbles; system messages as plain centered text */}
           <div className="space-y-2">
             <h4 className="font-heading text-sm font-semibold">Percakapan</h4>
             <div className="flex flex-col gap-2">
-              {data.messages.map((m) => (
-                <div
-                  key={m.id}
-                  className={cn(
-                    "rounded-xl border px-3 py-2 text-sm",
-                    m.isSystem && "border-dashed bg-muted/40 text-xs text-muted-foreground",
-                    m.isCustomer && "border-transparent bg-muted",
-                    m.isAgent && "border-transparent bg-accent",
-                  )}
-                >
-                  <div className="mb-0.5 flex items-center justify-between gap-2">
-                    <span className="text-xs text-muted-foreground">
-                      {m.isSystem ? "System" : m.isCustomer ? data.client?.name ?? "Customer" : "Sales"}
-                    </span>
-                    <span className="text-[10px] text-muted-foreground">{formatTime(m.date)}</span>
+              {data.messages.map((m) => {
+                if (m.isSystem) {
+                  // System event (assign/transfer/status) — plain muted text, no bubble.
+                  return (
+                    <div key={m.id} className="flex justify-center">
+                      <span className="inline-block max-w-[85%] text-center text-[11px] leading-relaxed text-muted-foreground">
+                        {m.text ? renderBbcode(m.text) : "(lampiran)"}
+                      </span>
+                    </div>
+                  );
+                }
+
+                const isCustomer = m.isCustomer;
+                return (
+                  <div
+                    key={m.id}
+                    className={cn("flex w-full", isCustomer ? "justify-start" : "justify-end")}
+                  >
+                    <div
+                      className={cn(
+                        "max-w-[78%] rounded-2xl px-3.5 py-2 text-sm",
+                        isCustomer
+                          ? "rounded-bl-sm border border-border bg-card"
+                          : "rounded-br-sm bg-primary text-primary-foreground",
+                      )}
+                    >
+                      <div className="mb-0.5 flex items-center justify-between gap-3">
+                        <span className={cn("text-[11px]", isCustomer ? "text-muted-foreground" : "text-primary-foreground/70")}>
+                          {isCustomer ? data.client?.name ?? "Customer" : "Sales"}
+                        </span>
+                        <span className={cn("text-[10px]", isCustomer ? "text-muted-foreground" : "text-primary-foreground/60")}>
+                          {formatTime(m.date)}
+                        </span>
+                      </div>
+                      {m.text ? (
+                        <p className="break-words whitespace-normal">{renderBbcode(m.text)}</p>
+                      ) : (
+                        <p className="text-xs italic opacity-70">(lampiran)</p>
+                      )}
+                    </div>
                   </div>
-                  {m.text ? (
-                    <p className="break-words whitespace-normal">{renderBbcode(m.text)}</p>
-                  ) : (
-                    <p className="text-xs italic text-muted-foreground">(lampiran)</p>
-                  )}
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         </div>

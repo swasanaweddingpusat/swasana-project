@@ -14,7 +14,7 @@ export interface TransferEvent {
 /**
  * Extract the target agent id from an assignment / transfer system message.
  *
- * Two shapes observed in the portal:
+ * Shapes observed in the portal:
  *   - "Permintaan ditugaskan kepada [USER=37 REPLACE]Kediaman Corp[/USER]"
  *   - "...mentransfer percakapan ke [USER=121 REPLACE]Mutiara Puspasari[/USER]"
  *
@@ -35,8 +35,14 @@ export function extractTransferTarget(text: string): string | null {
 
 /**
  * Walk a session's message history and compute one response sample per
- * assignment/transfer: the time from when an agent was assigned (system message)
- * to that agent's first subsequent message.
+ * assign/transfer AFTER the initial default assignment.
+ *
+ * The FIRST assign/transfer event is the default queue assignment (e.g.
+ * "Permintaan ditugaskan kepada Kediaman Corp") — it is NOT a response-timing
+ * event. Timing starts from the 2nd event onwards: the time from when an agent
+ * received the conversation (assign/transfer system message) to that agent's
+ * first subsequent message. This matches how response time is measured in the
+ * Response Sales report.
  *
  * Customer messages are identified via `users.*.connector === true`; system
  * messages use `senderid === "0"`. Everything else is treated as an agent.
@@ -63,12 +69,20 @@ export function parseResponseSamples(history: SessionHistory): {
   // agent is tracked; a new assignment overwrites any pending one.
   const pending = new Map<string, string>();
 
+  // The first assign/transfer event is the DEFAULT queue assignment — skip it
+  // entirely (no sample, no history entry). Timing starts from the 2nd event.
+  let isFirstEvent = true;
+
   for (const msg of sorted) {
     const sender = msg.senderid;
 
     if (sender === "0") {
       const target = extractTransferTarget(msg.text);
       if (target) {
+        if (isFirstEvent) {
+          isFirstEvent = false;
+          continue;
+        }
         const from = extractTransferFrom(msg);
         pending.set(target, msg.date);
         events.push({ at: msg.date, fromUserId: from, toUserId: target });
