@@ -16,9 +16,8 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
-import { Restart, AltArrowDown, CheckCircle, FileText, DocumentText, Buildings3 } from "@solar-icons/react";
+import { Restart, AltArrowDown, CheckCircle, FileText, DocumentText } from "@solar-icons/react";
 import { useEmployees } from "@/hooks/use-employees";
-import { useVenues } from "@/hooks/use-venues";
 import { fetchAttendanceExport } from "@/services/attendance-service";
 import { exportToExcel, exportToPDF } from "@/lib/attendance-export";
 import { cn } from "@/lib/utils";
@@ -92,7 +91,6 @@ export function AttendanceFilter(): React.ReactElement {
   const currentProfileId = searchParams.get("profileId") ?? "";
   const currentVenueId = searchParams.get("venueId") ?? "";
 
-  const { data: venues = [] } = useVenues();
   const { data: employeeData } = useEmployees({
     search: search || undefined,
     limit: 20,

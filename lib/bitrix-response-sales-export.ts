@@ -1,4 +1,3 @@
-import type { jsPDF } from "jspdf";
 import type { Workbook, Worksheet } from "exceljs";
 
 interface ResponseSalesRow {
