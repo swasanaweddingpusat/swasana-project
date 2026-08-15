@@ -3,6 +3,7 @@
 import { useRef } from "react";
 import { cn } from "@/lib/utils";
 import { Drawer } from "@/components/shared/drawer";
+import { ApprovalWarningDialog } from "@/components/shared/approval-warning-dialog";
 import { Button } from "@/components/ui/button";
 import { SalesSignatureContent } from "./SalesSignatureDrawer";
 import { EditTopContentById } from "./edit-top-drawer";
@@ -36,6 +37,9 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
     isStep1Complete,
     isStep2Complete,
     hasVenueTabChange,
+    willResetApproval,
+    showSubmitConfirm,
+    setShowSubmitConfirm,
     hideCloseButton,
     drawerTitle,
     stepHeader,
@@ -51,6 +55,12 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
 
   // â”€â”€â”€ Step 2 save: editBooking first, then complimentary if dirty â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   async function handleStep2Save() {
+    // If the edit will trigger re-approval (venue/package/date changed on a signed
+    // booking), show a strong warning first instead of firing the mutation immediately.
+    if (willResetApproval) {
+      setShowSubmitConfirm(true);
+      return;
+    }
     // Run the existing editBooking handler (sets linearMode + advances to step 3
     // if venue changed, or stays on step 2 with updated originals if unchanged).
     await handleSubmit();
@@ -256,6 +266,24 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
         )}
         </div>
       </div>
+
+      <ApprovalWarningDialog
+        open={showSubmitConfirm}
+        onOpenChange={setShowSubmitConfirm}
+        title="Perubahan Akan Memicu Approval Ulang"
+        description="Booking ini sudah ditandatangani klien. Mengubah venue, paket, atau tanggal event akan membatalkan persetujuan yang sudah berjalan."
+        warnings={[
+          "Approval akan di-reset ke Pending — Sales, Manager, dan Finance harus menyetujui ulang dari awal.",
+          "Persetujuan klien akan dibatalkan dan klien harus menandatangani ulang kontraknya.",
+          "Perubahan ini membuka revisi baru; data yang sudah disetujui sebelumnya tidak bisa dipulihkan begitu saja.",
+        ]}
+        confirmLabel="Ya, Lanjutkan Perubahan"
+        onConfirm={() => {
+          setShowSubmitConfirm(false);
+          void handleSubmit();
+        }}
+        submitting={isSubmitting}
+      />
     </Drawer>
   );
 }

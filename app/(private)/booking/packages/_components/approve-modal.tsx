@@ -7,6 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { SignaturePad } from "@/components/shared/signature-pad";
+import { ApprovalWarningDialog } from "@/components/shared/approval-warning-dialog";
 import { toast } from "sonner";
 import { approveStep, rejectStep } from "@/actions/approval";
 import { useQueryClient } from "@tanstack/react-query";
@@ -26,6 +27,7 @@ export function ApproveModal({ open, onClose, stepId, stepLabel, packageName }: 
   const [useDefaultSig, setUseDefaultSig] = useState(false);
   const [rejectNotes, setRejectNotes] = useState("");
   const [showReject, setShowReject] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const qc = useQueryClient();
   const { defaultSignature } = useMySignature();
@@ -35,7 +37,13 @@ export function ApproveModal({ open, onClose, stepId, stepLabel, packageName }: 
     setUseDefaultSig(false);
     setRejectNotes("");
     setShowReject(false);
+    setShowConfirm(false);
     onClose();
+  }
+
+  function openConfirm() {
+    if (!signature) { toast.error("Tanda tangan wajib diisi"); return; }
+    setShowConfirm(true);
   }
 
   async function handleApprove() {
@@ -111,7 +119,7 @@ export function ApproveModal({ open, onClose, stepId, stepLabel, packageName }: 
               <Button variant="outline" onClick={() => setShowReject(true)} className={cn("flex-1", "text-destructive", "border-destructive", "hover:bg-destructive/10")} disabled={submitting}>
                 Tolak
               </Button>
-              <Button onClick={handleApprove} disabled={submitting || !signature} className="flex-1">
+              <Button onClick={openConfirm} disabled={submitting || !signature} className="flex-1">
                 {submitting ? "Memproses..." : "Setujui"}
               </Button>
             </div>
@@ -130,6 +138,24 @@ export function ApproveModal({ open, onClose, stepId, stepLabel, packageName }: 
           </div>
         )}
       </DialogContent>
+
+      <ApprovalWarningDialog
+        open={showConfirm}
+        onOpenChange={setShowConfirm}
+        title="Konfirmasi Persetujuan"
+        description="Anda akan menyetujui tahap approval ini atas nama Anda."
+        warnings={[
+          "Tanda tangan Anda akan tercatat sebagai bukti persetujuan resmi pada dokumen ini.",
+          "Setelah disetujui, tahap ini tidak bisa diubah tanpa proses reset approval oleh pihak yang berwenang.",
+          "Pastikan seluruh isi dokumen sudah benar karena keputusan ini mengikat.",
+        ]}
+        confirmLabel="Ya, Setujui"
+        onConfirm={() => {
+          setShowConfirm(false);
+          void handleApprove();
+        }}
+        submitting={submitting}
+      />
     </Dialog>
   );
 }
