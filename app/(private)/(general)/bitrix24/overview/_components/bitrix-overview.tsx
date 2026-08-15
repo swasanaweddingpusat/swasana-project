@@ -15,6 +15,8 @@ import {
   DangerTriangle,
   Tuning,
   CloseCircle,
+  Download,
+  FileText,
 } from "@solar-icons/react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -28,10 +30,20 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+import {
+  exportBitrixOverviewExcel,
+  exportBitrixOverviewPdf,
+} from "@/lib/bitrix-overview-export";
 
 // Pipeline (CATEGORY_ID) options — mirrors the Transaksi page; stable regardless
 // of the current result set. "" = all pipelines.
@@ -129,6 +141,20 @@ export function BitrixOverview() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
+  const [exporting, setExporting] = useState(false);
+
+  async function handleExport(format: "pdf" | "excel"): Promise<void> {
+    if (!data) return;
+    setExporting(true);
+    try {
+      if (format === "excel") await exportBitrixOverviewExcel(data);
+      else await exportBitrixOverviewPdf(data);
+    } catch (err) {
+      console.error("[bitrix overview] export failed", err);
+    } finally {
+      setExporting(false);
+    }
+  }
 
   const from = filters.range?.from ? toIsoDay(filters.range.from) : "";
   const to = filters.range?.to ? toIsoDay(filters.range.to) : from;
@@ -203,6 +229,26 @@ export function BitrixOverview() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          {/* Export dropdown */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" className="shrink-0 rounded-full" disabled={!data || exporting}>
+                <Download weight="BoldDuotone" className="h-4 w-4" />
+                Export
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="rounded-xl">
+              <DropdownMenuItem className="cursor-pointer" onClick={() => handleExport("pdf")}>
+                <FileText weight="BoldDuotone" className="mr-2 h-4 w-4" />
+                Export PDF
+              </DropdownMenuItem>
+              <DropdownMenuItem className="cursor-pointer" onClick={() => handleExport("excel")}>
+                <Download weight="BoldDuotone" className="mr-2 h-4 w-4" />
+                Export Excel
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+
           {/* Filter — grouped popover: date, pipeline, tahap, client, sales */}
           <Popover open={filterOpen} onOpenChange={setFilterOpen}>
             <PopoverTrigger

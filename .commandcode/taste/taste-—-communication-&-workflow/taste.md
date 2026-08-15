@@ -4,9 +4,11 @@
 - Does not want unprompted auto-commits — normally triggers commits himself ("commit kerjaan loe"). Confidence: 0.7
 - When he does ask to commit, wants the agent to verify first (build + lint) and then commit and push directly if clean, without pausing for a separate review ("kalo gak ada error maka langsung commit dan push"). Confidence: 0.8
 - Before any commit, verify git identity is "Hilmi Anugrah" / "hilmianugrah2003@gmail.com". Confidence: 0.9
-- Prefers to keep working in the current feature branch rather than creating a new one, but never commits directly to `main` — asks to create a new branch (e.g., `docs/update-readme`) when the work starts from `main` ("jgn ke main tapi bikin branch baru"). Confidence: 0.8
+- Prefers to keep working in the current feature branch rather than creating a new one, but never commits directly to `main` — asks to create a new branch (e.g., `docs/update-readme`) when the work starts from `main` ("jgn ke main tapi bikin branch baru"), and wants the latest `main` pulled before branching off it. Confidence: 0.85
 - Prefers fast verification via `npx tsc --noEmit` over slow full `npm run build`; dislikes slow builds ("lama bener bro jalaninnya"). Confidence: 0.8
 - Prefers server-side filtering over frontend/client-side filtering. Confidence: 0.8
+- Prefers exports to fetch all matching/filtered data server-side (via a dedicated API endpoint using paginated full walk like `bitrixListAll`) rather than only the currently loaded page's client state — when a filter matches more rows than the visible page (e.g., 1000 matches vs 50 shown), the export must include the full filtered set. Confidence: 0.8
+- When a client-side helper becomes unused after a refactor (e.g., exporting moved to a server endpoint), prefers deleting the dead file and unused imports rather than leaving them behind. Confidence: 0.65
 - Prefers form drafts persisted to localStorage so inputs aren't lost between sessions. Confidence: 0.7
 - Wants to see actual raw API responses as evidence rather than relying on docs or assumptions ("kasih lihat ke gue response asli apinya", "detailin kayak tadi bro"). Confidence: 0.7
 - Expects evidence-based verification of completeness before considering work done — automated cross-checks against source data, not verbal assurance ("cek lagi udh lengkap semua belum ?"). Confidence: 0.75
