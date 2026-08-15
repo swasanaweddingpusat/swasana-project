@@ -12,6 +12,7 @@ import {
 // Custom (UF_CRM_*) fields carrying the ad-tracking + issue data. Mirrors
 // app/api/bitrix/deals/route.ts — these ids are portal-specific.
 const UF_ISSUE = "UF_CRM_1768930533046";
+const UF_SUB_ISSUE = "UF_CRM_1774952346733";
 const UF_ADS_URL = "UF_CRM_1770698079121";
 const UF_ADS_HEADLINE = "UF_CRM_1770698102639";
 const UF_ADS_BODY = "UF_CRM_1770698208232";
@@ -30,6 +31,7 @@ const DEAL_SELECT = [
   "ASSIGNED_BY_ID",
   "DATE_CREATE",
   UF_ISSUE,
+  UF_SUB_ISSUE,
   UF_ADS_URL,
   UF_ADS_HEADLINE,
   UF_ADS_BODY,
@@ -65,6 +67,7 @@ interface DealRow {
   assignedById: string | null;
   assignedBy: string | null;
   issue: string | null;
+  subIssue: string | null;
   adsUrl: string | null;
   adsHeadline: string | null;
   adsBody: string | null;
@@ -97,8 +100,9 @@ export async function GET(request: Request) {
 }
 
 async function fetchFilteredDeals(searchParams: URLSearchParams): Promise<DealRow[]> {
-  const [meta, enums] = await Promise.all([getBitrixCrmMeta(), getBitrixDealEnums([UF_ISSUE])]);
+  const [meta, enums] = await Promise.all([getBitrixCrmMeta(), getBitrixDealEnums([UF_ISSUE, UF_SUB_ISSUE])]);
   const issueEnum = enums[UF_ISSUE] ?? {};
+  const subIssueEnum = enums[UF_SUB_ISSUE] ?? {};
 
   // Build the same filter the Transaksi page applies.
   const filter: Record<string, string | string[]> = {};
@@ -116,6 +120,15 @@ async function fetchFilteredDeals(searchParams: URLSearchParams): Promise<DealRo
     const issueId = Object.entries(issueEnum).find(([, label]) => label === issueName)?.[0];
     filter[UF_ISSUE] = issueId ?? "__none__";
   }
+
+  const subIssueName = searchParams.get("subIssue")?.trim();
+  if (subIssueName) {
+    const subIssueId = Object.entries(subIssueEnum).find(([, label]) => label === subIssueName)?.[0];
+    filter[UF_SUB_ISSUE] = subIssueId ?? "__none__";
+  }
+
+  const salesId = searchParams.get("salesId")?.trim();
+  if (salesId) filter.ASSIGNED_BY_ID = salesId;
 
   const createdFrom = searchParams.get("createdFrom")?.trim();
   const createdTo = searchParams.get("createdTo")?.trim();
@@ -148,6 +161,7 @@ async function fetchFilteredDeals(searchParams: URLSearchParams): Promise<DealRo
   return items.map((d) => {
     const contact = d.CONTACT_ID ? contactMap[d.CONTACT_ID] : undefined;
     const issueId = d[UF_ISSUE];
+    const subIssueId = d[UF_SUB_ISSUE];
     return {
       id: d.ID,
       title: d.TITLE ?? "Tanpa judul",
@@ -162,6 +176,7 @@ async function fetchFilteredDeals(searchParams: URLSearchParams): Promise<DealRo
       assignedById: d.ASSIGNED_BY_ID,
       assignedBy: (d.ASSIGNED_BY_ID && userMap[d.ASSIGNED_BY_ID]) ?? null,
       issue: (issueId && issueEnum[issueId]) ?? null,
+      subIssue: (subIssueId && subIssueEnum[subIssueId]) ?? null,
       adsUrl: d[UF_ADS_URL]?.trim() || null,
       adsHeadline: d[UF_ADS_HEADLINE]?.trim() || null,
       adsBody: cleanBbcode(d[UF_ADS_BODY]),
@@ -169,10 +184,6 @@ async function fetchFilteredDeals(searchParams: URLSearchParams): Promise<DealRo
       dateCreate: d.DATE_CREATE,
     };
   });
-}
-
-function toSafe(v: unknown): string {
-  return v == null ? "" : String(v);
 }
 
 async function xlsxResponse(rows: DealRow[]): Promise<Response> {
@@ -190,6 +201,7 @@ async function xlsxResponse(rows: DealRow[]): Promise<Response> {
     "Pipeline",
     "Sumber Informasi",
     "Issue",
+    "Sub Issue",
     "Nilai",
     "Ads Source URL",
     "Ads Headline",
@@ -215,6 +227,7 @@ async function xlsxResponse(rows: DealRow[]): Promise<Response> {
       d.pipeline,
       d.source,
       d.issue ?? "",
+      d.subIssue ?? "",
       d.opportunity ?? 0,
       d.adsUrl ?? "",
       d.adsHeadline ?? "",
@@ -254,7 +267,7 @@ async function pdfResponse(rows: DealRow[]): Promise<Response> {
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
   // Ringkas: drop kolom Ads URL/Headline/Body yang bikin tabel terlalu lebar.
-  const colWidths = [40, 130, 90, 75, 90, 60, 60, 75, 55, 55, 65, 60];
+  const colWidths = [35, 105, 80, 65, 75, 50, 50, 60, 50, 50, 55, 50, 55];
   const headers = [
     "ID",
     "Transaksi",
@@ -265,6 +278,7 @@ async function pdfResponse(rows: DealRow[]): Promise<Response> {
     "Pipeline",
     "Sumber",
     "Issue",
+    "Sub Issue",
     "Nilai",
     "Tgl Database",
     "Dibuat",
@@ -314,6 +328,7 @@ async function pdfResponse(rows: DealRow[]): Promise<Response> {
       d.pipeline,
       d.source,
       d.issue ?? "",
+      d.subIssue ?? "",
       d.opportunity ? String(d.opportunity) : "0",
       d.dbDate ?? "",
       d.dateCreate ?? "",
