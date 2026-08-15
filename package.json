@@ -19,6 +19,7 @@
     "db:seed:packages-mice": "tsx prisma/seeders/packages-mice.ts",
     "db:seed:packages-prod": "tsx prisma/seeders/packages-from-prod.ts",
     "db:seed:bookings-2026": "tsx prisma/seeders/seed-bookings-2026.ts",
+    "db:seed:bookings-bitrix": "tsx prisma/seeders/seed-bookings-bitrix.ts",
     "db:seed:users": "tsx prisma/seeders/users.ts",
     "db:seed:test-users": "tsx prisma/seeders/test-users.ts",
     "db:seed:role-users": "tsx prisma/seeders/role-users.ts",
