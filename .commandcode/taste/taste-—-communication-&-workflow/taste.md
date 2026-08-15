@@ -4,7 +4,7 @@
 - Does not want unprompted auto-commits — normally triggers commits himself ("commit kerjaan loe"). Confidence: 0.7
 - When he does ask to commit, wants the agent to verify first (build + lint) and then commit and push directly if clean, without pausing for a separate review ("kalo gak ada error maka langsung commit dan push"). Confidence: 0.8
 - Before any commit, verify git identity is "Hilmi Anugrah" / "hilmianugrah2003@gmail.com". Confidence: 0.9
-- Prefers to keep working in the current branch rather than creating a new branch. Confidence: 0.8
+- Prefers to keep working in the current feature branch rather than creating a new one, but never commits directly to `main` — asks to create a new branch (e.g., `docs/update-readme`) when the work starts from `main` ("jgn ke main tapi bikin branch baru"). Confidence: 0.8
 - Prefers fast verification via `npx tsc --noEmit` over slow full `npm run build`; dislikes slow builds ("lama bener bro jalaninnya"). Confidence: 0.8
 - Prefers server-side filtering over frontend/client-side filtering. Confidence: 0.8
 - Prefers form drafts persisted to localStorage so inputs aren't lost between sessions. Confidence: 0.7
@@ -19,7 +19,8 @@
 - Expects seeders/migrations to be actually created and applied to the database, not just edited — follows up to confirm both that the migration file exists and that the seed/migration was executed ("bro udh di seed belum bro tadi yang modules ?", "udh bikin migrationnya ?"). Confidence: 0.65
 - Uses Conventional Commits for git messages — `feat(scope): subject` with a bullet-point body and a `Co-authored-by: CommandCodeBot <noreply@commandcode.ai>` footer. Confidence: 0.8
 - Works on Windows cmd where heredocs (`<<'EOF'`) are unsupported — for multi-line commit messages, writes the message to a temp file and commits via `git commit -F <file>`. Confidence: 0.8
-- Keeps the agent directory (`.commandcode/`) out of git commits — stage everything else, reset it, and keep it gitignored rather than committing it. Confidence: 0.7
+- Is now fine including the `.commandcode/` directory in commits when asked ("termasuk commandcode ikut di commit aja bro gpp"), overriding the earlier preference to keep it out of git. Confidence: 0.7
 - Wants project documentation kept accurate against the actual code and organized by purpose — AGENTS.md for coding rules/conventions, a dedicated ARCHITECTURE.md for the tech-stack lookup + mind map, and README.md kept in sync with the actual project — with stale facts (versions, folder structure, redirects, permission tables, CI/CD, env vars) proactively verified and corrected rather than left outdated. Confidence: 0.7
-- When seeding/creating test data for a domain entity, expects the real creation flow to be mirrored in full — all descendant records (snapshots, approval records + steps, terms of payment, payment ledgers/allocations) — not a bare top-level row; a thin seed that only creates the parent is treated as incomplete. Confidence: 0.7
+- When seeding/creating test data for a domain entity, expects the real creation flow to be mirrored in full — all descendant records (snapshots, approval records + steps, terms of payment, payment ledgers/allocations) — not a bare top-level row; a thin seed that only crea- Prefers removing unused/unreferenced environment variables from deployment config to avoid confusion (e.g., a platform-injected `RAILWAY_URL` the app never reads). Confidence: 0.6
+- When debugging staging/production issues (e.g., a login failure), wants the agent to connect to the actual staging database using the connection string from `.env` ("pake db source staging bro ada di env") rather than guessing or hardcoding credentials. Confidence: 0.6
 tes the parent is treated as incomplete. Confidence: 0.7

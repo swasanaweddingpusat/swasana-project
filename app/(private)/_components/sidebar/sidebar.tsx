@@ -15,7 +15,15 @@ export function SwasanaSidebar() {
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader className="h-14 justify-center border-b border-sidebar-border px-2 py-0">
-        <ModuleSwitcher />
+        <div className="flex w-full items-center gap-2">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/icons/icon-192x192.png"
+            alt="Swasana"
+            className="h-8 w-8 shrink-0 rounded-lg object-contain"
+          />
+          <ModuleSwitcher />
+        </div>
       </SidebarHeader>
 
       <SidebarContent>
