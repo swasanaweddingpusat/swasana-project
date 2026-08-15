@@ -164,12 +164,15 @@ export type ApprovalStatusFilter =
 export async function getBookings(
   profileId?: string,
   dataScope?: DataScope,
-  options?: { page?: number; pageSize?: number; search?: string; venueId?: string; category?: "WEDDINGS" | "MICE"; recordStatus?: "saved" | "draft" | "all"; dateFrom?: string; dateTo?: string; year?: number; salesId?: string; approvalStatus?: ApprovalStatusFilter },
+  options?: { page?: number; pageSize?: number; search?: string; venueId?: string; category?: "WEDDINGS" | "MICE"; recordStatus?: "saved" | "draft" | "all"; dateFrom?: string; dateTo?: string; year?: number; salesId?: string; approvalStatus?: ApprovalStatusFilter; sourceOfInformationId?: string },
 ): Promise<PaginatedBookings> {
   const scopeFilter = await buildScopeFilter(profileId, dataScope);
   const searchFilter = buildSearchFilter(options?.search);
   const venueFilter: Prisma.BookingWhereInput = options?.venueId ? { venueId: options.venueId } : {};
   const categoryFilter: Prisma.BookingWhereInput = options?.category ? { category: options.category } : {};
+  const sourceOfInformationFilter: Prisma.BookingWhereInput = options?.sourceOfInformationId
+    ? { sourceOfInformationId: options.sourceOfInformationId }
+    : {};
   const rs = options?.recordStatus;
   const recordStatusFilter: Prisma.BookingWhereInput =
     rs === "draft" ? { recordStatus: "draft" } :
@@ -242,7 +245,7 @@ export async function getBookings(
         ? { id: { in: approvedIds } }
         : { id: { notIn: approvedIds } };
   }
-  const where: Prisma.BookingWhereInput = { ...recordStatusFilter, ...scopeFilter, ...searchFilter, ...venueFilter, ...categoryFilter, ...dateFilter, ...salesIdFilter, ...approvalStatusFilter };
+  const where: Prisma.BookingWhereInput = { ...recordStatusFilter, ...scopeFilter, ...searchFilter, ...venueFilter, ...categoryFilter, ...sourceOfInformationFilter, ...dateFilter, ...salesIdFilter, ...approvalStatusFilter };
 
   const page = Math.max(1, options?.page ?? 1);
   const pageSize = Math.min(100, Math.max(1, options?.pageSize ?? 10));
