@@ -24,3 +24,4 @@
 - Prefers PDF export to be available broadly, including flat tabular/list pages (e.g., Transaksi/deals) — asked to add PDF there ("kalo export pake PDF bisa bro?") after initially requesting Excel-only, so list pages also get the PDF + Excel dropdown. Confidence: 0.75
 - Prefers PDF exports to be compact rather than exhaustive — drop verbose/non-essential columns (e.g., long ad copy fields like Ads URL/Headline/Body) so the document stays short and readable, keeping full detail in the Excel export instead. Confidence: 0.7
 - Flags runaway/continuous repeated requests (e.g., polling that keeps re-hitting the same route) as a problem to diagnose and reduce, not acceptable background behavior. Confidence: 0.6
+- When background polling is too aggressive, prefers reducing its aggressiveness (disable refetch-on-window-focus, add staleTime/cache) over removing the polling feature entirely. Confidence: 0.6
