@@ -42,21 +42,6 @@ interface PostWeddingWishesData {
   custom2: string;
 }
 
-export interface QuestionnaireData {
-  projectManagers?: ProjectManager[];
-  postWeddingWishes?: PostWeddingWishesData;
-  signatures?: Record<string, string | null>;
-  signatureNames?: Record<string, string>;
-  signatureDate?: string;
-  eventManagerNotes?: string;
-  woNotes?: string;
-  ballroomFacilitiesNotes?: string;
-  ballroomCleanlinessNotes?: string;
-  vendorsNotes?: string;
-  salesNotes?: string;
-  notes?: string;
-}
-
 interface VenueOption {
   id: string;
   name: string;
@@ -85,7 +70,7 @@ interface WeddingIndicatorFormProps {
     salesRating: number | null;
     salesNotes: string;
     recommendationScore: number;
-    questionnaireData: QuestionnaireData | null;
+    questionnaireData: Record<string, unknown> | null;
     notes: string;
     satisfactionScore: number | null;
     allowancePercentage: number | null;
@@ -111,6 +96,8 @@ export function WeddingIndicatorForm({
   const createMutation = useCreateWeddingIndicator();
   const updateMutation = useUpdateWeddingIndicator();
 
+  const qData = (initialData?.questionnaireData ?? {}) as Record<string, unknown>;
+
   // Basic Info
   const [coupleName, setCoupleName] = useState(initialData?.coupleName || "");
   const [eventDate, setEventDate] = useState(
@@ -133,7 +120,7 @@ export function WeddingIndicatorForm({
 
   // Project Managers
   const [projectManagers, setProjectManagers] = useState<ProjectManager[]>(
-    initialData?.questionnaireData?.projectManagers || []
+    (qData.projectManagers as ProjectManager[]) || []
   );
 
   // Wedding Organizer
@@ -175,7 +162,7 @@ export function WeddingIndicatorForm({
   );
   const [postWeddingWishes, setPostWeddingWishes] =
     useState<PostWeddingWishesData>(
-      initialData?.questionnaireData?.postWeddingWishes || {
+      (qData.postWeddingWishes as PostWeddingWishesData) || {
         logamMulia: false,
         mobil: false,
         rumah: false,
@@ -191,10 +178,10 @@ export function WeddingIndicatorForm({
 
   // Signatures
   const [signaturesData, setSignaturesData] = useState<SignaturesData>(() => {
-    const qd = initialData?.questionnaireData;
-    const existingSigs = qd?.signatures;
-    const existingNames = qd?.signatureNames;
-    const existingDate = qd?.signatureDate;
+    const qd = qData;
+    const existingSigs = qd?.signatures as Record<string, string | null> | undefined;
+    const existingNames = qd?.signatureNames as Record<string, string> | undefined;
+    const existingDate = qd?.signatureDate as string | undefined;
 
     const slots: Record<string, { name: string; signature: string | null }> = {};
     const keys = [

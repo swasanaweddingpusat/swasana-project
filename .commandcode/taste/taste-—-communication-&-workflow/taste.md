@@ -27,3 +27,4 @@
 - When debugging staging/production issues (e.g., a login failure), wants the agent to connect to the actual staging database using the connection string from `.env` ("pake db source staging bro ada di env") rather than guessing or hardcoding credentials. Confidence: 0.6
 tes the parent is treated as incomplete. Confidence: 0.7
 - Prefers a clean remote branch set — after work is merged, wants feature/fix/deploy branches deleted from origin, keeping only `main` and `production` ("hapusin semua branch di origin ... kecuali main dan production"). Confidence: 0.6
+- Cares about which branch work is currently on (`main` vs `production`) and asks to confirm the active branch before changes get committed/pushed — wants to avoid accidentally landing work on the wrong shared branch. Confidence: 0.6
