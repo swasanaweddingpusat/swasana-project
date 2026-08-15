@@ -14,6 +14,8 @@ import {
   Link as LinkIcon,
   Tuning,
   CloseCircle,
+  Download,
+  FileText,
 } from "@solar-icons/react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -36,6 +38,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -151,6 +159,38 @@ export function BitrixDealsManager() {
   const [reloadKey, setReloadKey] = useState(0);
   const [filterOpen, setFilterOpen] = useState(false);
   const [selectedDeal, setSelectedDeal] = useState<Deal | null>(null);
+  const [exporting, setExporting] = useState(false);
+
+  async function handleExport(format: "pdf" | "excel"): Promise<void> {
+    setExporting(true);
+    try {
+      const params = new URLSearchParams({ format });
+      if (pipeline) params.set("pipeline", pipeline);
+      if (stage) params.set("stage", stage);
+      if (issue) params.set("issue", issue);
+      if (createdFrom) params.set("createdFrom", createdFrom);
+      if (createdTo) params.set("createdTo", createdTo);
+      if (dbFrom) params.set("dbFrom", dbFrom);
+      if (dbTo) params.set("dbTo", dbTo);
+      if (query) params.set("q", query);
+
+      const res = await fetch(`/api/bitrix/deals/export?${params.toString()}`);
+      if (!res.ok) return;
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `bitrix-transaksi-${new Date().toISOString().split("T")[0]}.${format === "pdf" ? "pdf" : "xlsx"}`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error("[bitrix deals] export failed", err);
+    } finally {
+      setExporting(false);
+    }
+  }
 
   // Derive ISO-day bounds from the two date ranges — primitive deps for the
   // fetch effect (a "from" with no "to" is treated as a single-day range).
@@ -274,6 +314,26 @@ export function BitrixDealsManager() {
               className="rounded-full pl-9"
             />
           </div>
+
+          {/* Export dropdown */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" className="shrink-0 rounded-full" disabled={loading || exporting || deals.length === 0}>
+                <Download weight="BoldDuotone" className="h-4 w-4" />
+                Export
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="rounded-xl">
+              <DropdownMenuItem className="cursor-pointer" onClick={() => handleExport("pdf")}>
+                <FileText weight="BoldDuotone" className="mr-2 h-4 w-4" />
+                Export PDF
+              </DropdownMenuItem>
+              <DropdownMenuItem className="cursor-pointer" onClick={() => handleExport("excel")}>
+                <Download weight="BoldDuotone" className="mr-2 h-4 w-4" />
+                Export Excel
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
 
           {/* Filter — grouped popover: pipeline + tahap */}
           <Popover open={filterOpen} onOpenChange={setFilterOpen}>

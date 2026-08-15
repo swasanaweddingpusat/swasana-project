@@ -35,6 +35,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
@@ -527,22 +528,18 @@ function FilterPanel({
         {/* By sales */}
         <div className="space-y-1.5">
           <Label className="text-xs text-muted-foreground">Sales</Label>
-          <Select
+          <SearchableSelect
+            options={[
+              { id: RESPONSIBLE_ALL, name: "Semua sales" },
+              ...salesOptions.map((s) => ({ id: s.id, name: s.name })),
+            ]}
             value={responsible === "" ? RESPONSIBLE_ALL : responsible}
-            onValueChange={(v) => setResponsible(v === RESPONSIBLE_ALL ? "" : v)}
-          >
-            <SelectTrigger className="w-full rounded-full">
-              <SelectValue placeholder="Semua sales" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={RESPONSIBLE_ALL}>Semua sales</SelectItem>
-              {salesOptions.map((s) => (
-                <SelectItem key={s.id} value={s.id}>
-                  {s.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            onChange={(v) => setResponsible(v === RESPONSIBLE_ALL ? "" : v)}
+            placeholder="Semua sales"
+            searchPlaceholder="Cari sales..."
+            emptyText="Sales tidak ditemukan"
+            className="w-full"
+          />
         </div>
       </div>
 

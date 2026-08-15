@@ -21,8 +21,10 @@ export function usePoll(): { notificationCount: number } {
     // background. Re-evaluates to 30s once the tab becomes visible again.
     refetchInterval: () =>
       typeof document !== "undefined" && document.hidden ? false : 30_000,
-    // Refetch once on tab refocus so the notification bell is fresh after idle.
-    refetchOnWindowFocus: true,
+    // Don't refetch on tab refocus — the 30s interval already keeps data fresh.
+    refetchOnWindowFocus: false,
+    // Cache the poll result for 30s so rapid re-mounts don't re-fetch.
+    staleTime: 30_000,
   });
 
   useEffect(() => {

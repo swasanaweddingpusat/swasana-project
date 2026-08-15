@@ -9,6 +9,8 @@ import {
   Magnifer,
   Tuning,
   CloseCircle,
+  Download,
+  FileText,
 } from "@solar-icons/react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -23,10 +25,20 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+import {
+  exportResponseSalesExcel,
+  exportResponseSalesPdf,
+} from "@/lib/bitrix-response-sales-export";
 import { SalesConversationsDrawer, type SalesConversation } from "./sales-conversations-drawer";
 
 interface ResponseSalesRow {
@@ -82,6 +94,20 @@ export function ResponseSalesManager() {
   const [query, setQuery] = useState("");
   const [reloadKey, setReloadKey] = useState(0);
   const [selectedSales, setSelectedSales] = useState<ResponseSalesRow | null>(null);
+  const [exporting, setExporting] = useState(false);
+
+  async function handleExport(format: "pdf" | "excel"): Promise<void> {
+    setExporting(true);
+    try {
+      const payload = { from, to, totalSessions, rows, grandTotal, salesQuery: query };
+      if (format === "excel") await exportResponseSalesExcel(payload);
+      else await exportResponseSalesPdf(payload);
+    } catch (err) {
+      console.error("[response sales] export failed", err);
+    } finally {
+      setExporting(false);
+    }
+  }
 
   const from = range?.from ? toIsoDay(range.from) : "";
   const to = range?.to ? toIsoDay(range.to) : from;
@@ -155,6 +181,26 @@ export function ResponseSalesManager() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          {/* Export dropdown */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" className="shrink-0 rounded-full" disabled={loading || exporting}>
+                <Download weight="BoldDuotone" className="h-4 w-4" />
+                Export
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="rounded-xl">
+              <DropdownMenuItem className="cursor-pointer" onClick={() => handleExport("pdf")}>
+                <FileText weight="BoldDuotone" className="mr-2 h-4 w-4" />
+                Export PDF
+              </DropdownMenuItem>
+              <DropdownMenuItem className="cursor-pointer" onClick={() => handleExport("excel")}>
+                <Download weight="BoldDuotone" className="mr-2 h-4 w-4" />
+                Export Excel
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+
           <div className="relative w-full sm:w-56">
             <Magnifer
               weight="BoldDuotone"
