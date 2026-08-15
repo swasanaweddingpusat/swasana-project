@@ -59,6 +59,8 @@ export async function GET(request: Request) {
   const rawSalesId = searchParams.get("salesId") ?? undefined;
   const salesId = rawSalesId?.trim() || undefined;
 
+  const sourceOfInformationId = searchParams.get("sourceOfInformationId")?.trim() || undefined;
+
   const emptyResult = () =>
     new Response(
       JSON.stringify({ data: [], total: 0 }, (_k, v) => (typeof v === "bigint" ? Number(v) : v)),
@@ -91,7 +93,7 @@ export async function GET(request: Request) {
   // share a group, so visibility is intentional.
   const effectiveScope: DataScope = salesId ? "all" : dataScope;
 
-  const result = await getBookings(profileId, effectiveScope, { page, pageSize, search, venueId, category: "WEDDINGS", recordStatus, dateFrom, dateTo, year, salesId, approvalStatus });
+  const result = await getBookings(profileId, effectiveScope, { page, pageSize, search, venueId, category: "WEDDINGS", recordStatus, dateFrom, dateTo, year, salesId, approvalStatus, sourceOfInformationId });
 
   const transformed = {
     ...result,

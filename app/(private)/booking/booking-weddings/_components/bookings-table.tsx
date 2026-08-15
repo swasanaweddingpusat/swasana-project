@@ -140,11 +140,23 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
   const [dateRangeOpen, setDateRangeOpen] = useState(false);
   const [yearFilter, setYearFilter] = useState<number | null>(null);
   const [approvalFilter, setApprovalFilter] = useState<ApprovalStatusFilter | "">("");
+  const [sourceOfInformationFilter, setSourceOfInformationFilter] = useState("");
 
   const { data: venues = [] } = useQuery<{ id: string; name: string }[]>({
     queryKey: ["venues-list"],
     queryFn: async () => {
       const res = await fetch("/api/venues");
+      if (!res.ok) return [];
+      const json = await res.json();
+      return Array.isArray(json) ? json : [];
+    },
+    staleTime: 10 * 60 * 1000,
+  });
+
+  const { data: sourceOfInformations = [] } = useQuery<{ id: string; name: string }[]>({
+    queryKey: ["source-of-informations-list"],
+    queryFn: async () => {
+      const res = await fetch("/api/source-of-informations");
       if (!res.ok) return [];
       const json = await res.json();
       return Array.isArray(json) ? json : [];
@@ -169,7 +181,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
   }, [search]);
 
   const { data: result = initialData, refetch, isFetching, isLoading, isPlaceholderData } = useBookings(
-    { page: currentPage, pageSize: ROWS_PER_PAGE, search: debouncedSearch, venueId: venueFilter || undefined, recordStatus: recordStatusFilter, dateFrom: dateFrom || undefined, dateTo: dateTo || undefined, year: (!dateFrom && !dateTo && yearFilter) ? yearFilter : undefined, approvalStatus: approvalFilter || undefined, salesId: salesFilter || undefined },
+    { page: currentPage, pageSize: ROWS_PER_PAGE, search: debouncedSearch, venueId: venueFilter || undefined, recordStatus: recordStatusFilter, dateFrom: dateFrom || undefined, dateTo: dateTo || undefined, year: (!dateFrom && !dateTo && yearFilter) ? yearFilter : undefined, approvalStatus: approvalFilter || undefined, salesId: salesFilter || undefined, sourceOfInformationId: sourceOfInformationFilter || undefined },
     initialData,
   );
   // Show shimmer on initial load AND while transitioning pages/filters (keepPreviousData
@@ -605,7 +617,8 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
   const hasDateFilter = dateFrom !== "" || dateTo !== "";
   const hasYearFilter = yearFilter !== null;
   const hasApprovalFilter = approvalFilter !== "";
-  const activeFilterCount = (hasVenueFilter ? 1 : 0) + (hasSalesFilter ? 1 : 0) + (hasRecordStatusFilter ? 1 : 0) + (hasDateFilter ? 1 : 0) + (hasYearFilter ? 1 : 0) + (hasApprovalFilter ? 1 : 0);
+  const hasSourceOfInformationFilter = sourceOfInformationFilter !== "" && sourceOfInformationFilter !== "all";
+  const activeFilterCount = (hasVenueFilter ? 1 : 0) + (hasSalesFilter ? 1 : 0) + (hasRecordStatusFilter ? 1 : 0) + (hasDateFilter ? 1 : 0) + (hasYearFilter ? 1 : 0) + (hasApprovalFilter ? 1 : 0) + (hasSourceOfInformationFilter ? 1 : 0);
   const hasActiveFilter = activeFilterCount > 0;
 
   const RECORD_STATUS_OPTIONS: { id: "saved" | "draft" | "all"; name: string }[] = [
@@ -621,7 +634,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
         {hasActiveFilter && (
           <button
             type="button"
-            onClick={() => { setVenueFilter(""); setSalesFilter(""); setRecordStatusFilter("saved"); setDateFrom(""); setDateTo(""); setYearFilter(null); setApprovalFilter(""); setCurrentPage(1); }}
+            onClick={() => { setVenueFilter(""); setSalesFilter(""); setRecordStatusFilter("saved"); setDateFrom(""); setDateTo(""); setYearFilter(null); setApprovalFilter(""); setSourceOfInformationFilter(""); setCurrentPage(1); }}
             className="text-xs text-muted-foreground hover:text-foreground transition-colors"
           >
             Reset
@@ -658,6 +671,21 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
           placeholder="Semua Sales"
           searchPlaceholder="Cari sales..."
           emptyText="Sales tidak ditemukan"
+          className="h-9"
+        />
+      </div>
+      <div className="space-y-1">
+        <label className="text-xs font-medium text-muted-foreground">Source of Information</label>
+        <SearchableSelect
+          options={[
+            { id: "all", name: "Semua Source" },
+            ...sourceOfInformations.map((s) => ({ id: s.id, name: s.name })),
+          ]}
+          value={sourceOfInformationFilter || "all"}
+          onChange={(val) => { setSourceOfInformationFilter(val === "all" ? "" : val); setCurrentPage(1); }}
+          placeholder="Semua Source"
+          searchPlaceholder="Cari source..."
+          emptyText="Source tidak ditemukan"
           className="h-9"
         />
       </div>
