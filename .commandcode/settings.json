@@ -1,0 +1,30 @@
+{
+  "permissions": {
+    "allow": [
+      "Shell(npm:*)",
+      "Shell(npx tsx \"C:\\Users\\user\\AppData\\Local\\Temp\\commandcode\\D--Apps-myApps-swasana-project\\9829e0f0-a620-43b9-a608-9636535156b3\\scratchpad\\gen-rbac-migration.ts\")",
+      "Shell(npx prisma validate)",
+      "powershell",
+      "Shell(powershell -NoProfile -Command \"Get-Content 'C:\\Users\\user\\AppData\\Local\\Temp\\commandcode\\toolout\\2026-08-14T18-15-28-809Z-powershell-6gntc6.log' | Select-String -Pattern 'MESSAGES TIMELINE' -Context 0,200\")",
+      "Shell(where pi 2>nul & echo --- & pi --version 2>nul & echo --- & where oh-my-posh 2>nul & echo --- & where starship 2>nul)",
+      "Shell(pi:*)",
+      "Shell(cd /d D:\\Apps\\myApps\\swasana-project && node -e \"const fs=require('fs'); const src=fs.readFileSync('prisma/seeders/roles-permissions.ts','utf8'); const mig=fs.readFileSync('prisma/migrations/20260814120000_sync_roles_permissions_modules/migration.sql','utf8'); const m=/export const moduleActions[^=]*=\\s*\\{([\\s\\S]*?)\\n\\};/.exec(src)[1]; const mods=[...m.matchAll(/(['\\\"])([^'\\\"]+)\\1\\s*:\\s*\\[([^\\]]*)\\]/g)].map(x=>({mod:x[2], actions:x[3].match(/['\\\"]([^'\\\"]+)['\\\"]/g).map(s=>s.replace(/['\\\"]/g,''))})); const missing=[]; for(const {mod,actions} of mods){ for(const a of actions){ if(!mig.includes(\\\"'\\\"+mod+\\\"', '\\\"+a+\\\"'\\\")) missing.push(mod+'::'+a); } } console.log('modules:',mods.length); console.log('missing module::action:', missing.length ? missing : 'NONE');\")",
+      "Shell(node -e \"const fs=require('fs'); const src=fs.readFileSync('prisma/seeders/roles-permissions.ts','utf8'); const mig=fs.readFileSync('prisma/migrations/20260814120000_sync_roles_permissions_modules/migration.sql','utf8'); const m=/export const moduleActions[^=]*=\\s*\\{([\\s\\S]*?)\\n\\};/.exec(src)[1]; const mods=[...m.matchAll(/(['\\\"])([^'\\\"]+)\\1\\s*:\\s*\\[([^\\]]*)\\]/g)].map(x=>({mod:x[2], actions:x[3].match(/['\\\"]([^'\\\"]+)['\\\"]/g).map(s=>s.replace(/['\\\"]/g,''))})); const missing=[]; for(const {mod,actions} of mods){ for(const a of actions){ if(!mig.includes(\\\"'\\\"+mod+\\\"', '\\\"+a+\\\"'\\\")) missing.push(mod+'::'+a); } } console.log('modules:',mods.length); console.log('missing module::action:', missing.length ? missing.join(', ') : 'NONE');\")",
+      "Shell(ls:*)",
+      "Shell(node \"C:\\Users\\user\\AppData\\Local\\Temp\\commandcode\\D--Apps-myApps-swasana-project\\9829e0f0-a620-43b9-a608-9636535156b3\\scratchpad\\verify.mjs\")",
+      "Shell(dir:*)",
+      "Shell(node \"C:\\Users\\user\\AppData\\Local\\Temp\\commandcode\\D--Apps-myApps-swasana-project\\9829e0f0-a620-43b9-a608-9636535156b3\\scratchpad\\verify-matrix.mjs\")",
+      "Shell(node -v)",
+      "Shell(where:*)",
+      "Shell(node \"C:\\Users\\user\\AppData\\Local\\Temp\\commandcode\\D--Apps-myApps-swasana-project\\9829e0f0-a620-43b9-a608-9636535156b3\\scratchpad\\verify-roles.mjs\")",
+      "Shell(type:*)",
+      "Shell(findstr:*)",
+      "Shell(more:*)",
+      "Shell(node -e \"const s=require('fs').readFileSync(process.env.APPDATA+'/npm/node_modules/command-code/dist/cli.mjs','utf8'); const i=s.indexOf('api.commandcode.ai'); console.log(s.slice(i-400, i+400));\")",
+      "Shell(winget:*)",
+      "Shell(npx tsc --noEmit)"
+    ],
+    "deny": [],
+    "defaultMode": "default"
+  }
+}
