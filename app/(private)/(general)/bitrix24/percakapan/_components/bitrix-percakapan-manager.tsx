@@ -132,7 +132,11 @@ export function BitrixPercakapanManager() {
   const [direction, setDirection] = useState<string>("");
   const [status, setStatus] = useState<string>("");
   const [responsible, setResponsible] = useState<string>("");
-  const [createdRange, setCreatedRange] = useState<DateRange | undefined>(undefined);
+  const [createdRange, setCreatedRange] = useState<DateRange | undefined>(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return { from: today, to: today };
+  });
   const [transferredFilter, setTransferredFilter] = useState<string>("");
   const [salesOptions, setSalesOptions] = useState<{ id: string; name: string }[]>([]);
   const [loading, setLoading] = useState(true);
@@ -259,7 +263,9 @@ export function BitrixPercakapanManager() {
     setDirection("");
     setStatus("");
     setResponsible("");
-    setCreatedRange(undefined);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    setCreatedRange({ from: today, to: today });
     setTransferredFilter("");
     setStart(0);
     setFilterOpen(false);

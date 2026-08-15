@@ -31,3 +31,4 @@
 - Converts picked calendar dates to local calendar day via date-fns `format(d, "yyyy-MM-dd")` rather than `toISOString()` to avoid the UTC off-by-one. Confidence: 0.55
 - When a filter criterion isn't directly queryable on the list entity in the source system (e.g., transfer history lives in session history, not on the activity row), derives the field server-side from a secondary source and applies the filter post-fetch (with the total re-counted), keeping the pattern consistent with sibling pages. Confidence: 0.6
 - Surfaces derived boolean/count state (e.g., number of transfers) as an inline badge next to the primary status badge in list tables. Confidence: 0.55
+- Prefers date-range filters on list/report pages to default to the current day (from = to = today, midnight-local) rather than being empty/unset, and Reset should return to today too, not clear to empty. Confidence: 0.55
