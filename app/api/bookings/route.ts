@@ -2,6 +2,7 @@ import { getBookings, type ApprovalStatusFilter } from "@/lib/queries/bookings";
 import { requirePermissionForRoute, canViewSalesBookings, isSuperAdmin, hasPermission } from "@/lib/permissions";
 import { apiLimiter, rateLimitResponse } from "@/lib/rate-limit";
 import type { DataScope } from "@/types/user";
+import type { BookingStatus } from "@prisma/client";
 
 export async function GET(request: Request) {
   const { session, response } = await requirePermissionForRoute({ module: "booking", action: "view" });
@@ -56,6 +57,20 @@ export async function GET(request: Request) {
       ? (rawApprovalStatus as ApprovalStatusFilter)
       : undefined;
 
+  const ALLOWED_BOOKING_STATUS = new Set<BookingStatus>([
+    "Pending",
+    "Uploaded",
+    "Confirmed",
+    "Rejected",
+    "Canceled",
+    "Lost",
+  ]);
+  const rawBookingStatus = searchParams.get("bookingStatus");
+  const bookingStatus: BookingStatus | undefined =
+    rawBookingStatus && ALLOWED_BOOKING_STATUS.has(rawBookingStatus as BookingStatus)
+      ? (rawBookingStatus as BookingStatus)
+      : undefined;
+
   const rawSalesId = searchParams.get("salesId") ?? undefined;
   const salesId = rawSalesId?.trim() || undefined;
 
@@ -93,7 +108,7 @@ export async function GET(request: Request) {
   // share a group, so visibility is intentional.
   const effectiveScope: DataScope = salesId ? "all" : dataScope;
 
-  const result = await getBookings(profileId, effectiveScope, { page, pageSize, search, venueId, category: "WEDDINGS", recordStatus, dateFrom, dateTo, year, salesId, approvalStatus, sourceOfInformationId });
+  const result = await getBookings(profileId, effectiveScope, { page, pageSize, search, venueId, category: "WEDDINGS", recordStatus, dateFrom, dateTo, year, salesId, approvalStatus, bookingStatus, sourceOfInformationId });
 
   const transformed = {
     ...result,

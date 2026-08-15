@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tansta
 import type { BookingsResult, BookingDetail, ApprovalStatusFilter } from "@/lib/queries/bookings";
 import { createBooking, updateBooking, cancelBooking, deleteBooking, transferBooking, transferBookingManager } from "@/actions/booking";
 import type { BookingInput, UpdateBookingInput } from "@/lib/validations/booking";
+import type { BookingStatus } from "@prisma/client";
 
 interface BookingsParams {
   page: number;
@@ -15,6 +16,7 @@ interface BookingsParams {
   dateTo?: string;
   year?: number;
   approvalStatus?: ApprovalStatusFilter;
+  bookingStatus?: BookingStatus;
   salesId?: string;
   sourceOfInformationId?: string;
 }
@@ -30,6 +32,7 @@ async function fetchBookings(params: BookingsParams): Promise<BookingsResult> {
     ...(params.dateTo ? { dateTo: params.dateTo } : {}),
     ...(params.year ? { year: String(params.year) } : {}),
     ...(params.approvalStatus ? { approvalStatus: params.approvalStatus } : {}),
+    ...(params.bookingStatus ? { bookingStatus: params.bookingStatus } : {}),
     ...(params.salesId ? { salesId: params.salesId } : {}),
     ...(params.sourceOfInformationId ? { sourceOfInformationId: params.sourceOfInformationId } : {}),
   });
@@ -53,10 +56,11 @@ export function useBookings(params: BookingsParams, initialData?: BookingsResult
     !params.dateTo &&
     params.year === undefined &&
     !params.approvalStatus &&
+    !params.bookingStatus &&
     !params.salesId &&
     !params.sourceOfInformationId;
   return useQuery({
-    queryKey: ["bookings", params.page, params.pageSize, params.search, params.venueId, params.recordStatus ?? "saved", params.dateFrom ?? "", params.dateTo ?? "", params.year ?? "", params.approvalStatus ?? "", params.salesId ?? "", params.sourceOfInformationId ?? ""],
+    queryKey: ["bookings", params.page, params.pageSize, params.search, params.venueId, params.recordStatus ?? "saved", params.dateFrom ?? "", params.dateTo ?? "", params.year ?? "", params.approvalStatus ?? "", params.bookingStatus ?? "", params.salesId ?? "", params.sourceOfInformationId ?? ""],
     queryFn: () => fetchBookings(params),
     initialData: isDefaultQuery ? initialData : undefined,
     placeholderData: keepPreviousData,

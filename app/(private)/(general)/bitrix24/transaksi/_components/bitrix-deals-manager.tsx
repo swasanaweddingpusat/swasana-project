@@ -47,11 +47,12 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { Skeleton } from "@/components/ui/skeleton";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { cn } from "@/lib/utils";
 import { BitrixDealDetailModal } from "./bitrix-deal-detail-modal";
 
 const PAGE_SIZE = 50;
-const COLSPAN = 15;
+const COLSPAN = 16;
 
 // Pipeline (CATEGORY_ID) options — hardcoded from the Bitrix portal's
 // crm.category.list so the filter is stable regardless of the current page's
@@ -59,6 +60,8 @@ const COLSPAN = 15;
 const PIPELINE_ALL = "__all__";
 const STAGE_ALL = "__all__";
 const ISSUE_ALL = "__all__";
+const SUB_ISSUE_ALL = "__all__";
+const SALES_ALL = "__all__";
 const PIPELINE_OPTIONS: { id: string; name: string }[] = [
   { id: "5", name: "Kediaman" },
   { id: "0", name: "Swasana" },
@@ -94,6 +97,7 @@ export interface Deal {
   assignedById: string | null;
   assignedBy: string | null;
   issue: string | null;
+  subIssue: string | null;
   adsUrl: string | null;
   adsHeadline: string | null;
   adsBody: string | null;
@@ -107,6 +111,7 @@ interface ApiResponse {
   next: number | null;
   stageCatalog: StageCatalogItem[];
   issueCatalog: string[];
+  subIssueCatalog: string[];
   error?: string;
 }
 
@@ -148,10 +153,14 @@ export function BitrixDealsManager() {
   const [pipeline, setPipeline] = useState<string>("");
   const [stage, setStage] = useState<string>("");
   const [issue, setIssue] = useState<string>("");
+  const [subIssue, setSubIssue] = useState<string>("");
+  const [salesId, setSalesId] = useState<string>("");
   const [createdRange, setCreatedRange] = useState<DateRange | undefined>();
   const [dbRange, setDbRange] = useState<DateRange | undefined>();
   const [stageCatalog, setStageCatalog] = useState<StageCatalogItem[]>([]);
   const [issueCatalog, setIssueCatalog] = useState<string[]>([]);
+  const [subIssueCatalog, setSubIssueCatalog] = useState<string[]>([]);
+  const [salesOptions, setSalesOptions] = useState<{ id: string; name: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
@@ -168,6 +177,8 @@ export function BitrixDealsManager() {
       if (pipeline) params.set("pipeline", pipeline);
       if (stage) params.set("stage", stage);
       if (issue) params.set("issue", issue);
+      if (subIssue) params.set("subIssue", subIssue);
+      if (salesId) params.set("salesId", salesId);
       if (createdFrom) params.set("createdFrom", createdFrom);
       if (createdTo) params.set("createdTo", createdTo);
       if (dbFrom) params.set("dbFrom", dbFrom);
@@ -199,6 +210,23 @@ export function BitrixDealsManager() {
   const dbFrom = dbRange?.from ? toIsoDay(dbRange.from) : "";
   const dbTo = dbRange?.from ? toIsoDay(dbRange.to ?? dbRange.from) : "";
 
+  // Load sales options once for the filter dropdown.
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch("/api/bitrix/sales");
+        const json = (await res.json()) as { id: string; name: string }[] | { error?: string };
+        if (!cancelled && Array.isArray(json)) setSalesOptions(json);
+      } catch {
+        // Non-fatal — filter falls back to showing only the selected id.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   // Debounce the search box → server query. Resets paging to the first page.
   useEffect(() => {
     const t = setTimeout(() => {
@@ -218,6 +246,8 @@ export function BitrixDealsManager() {
         if (pipeline) params.set("filter[CATEGORY_ID]", pipeline);
         if (stage) params.set("stage", stage);
         if (issue) params.set("issue", issue);
+        if (subIssue) params.set("subIssue", subIssue);
+        if (salesId) params.set("salesId", salesId);
         if (createdFrom) params.set("createdFrom", createdFrom);
         if (createdTo) params.set("createdTo", createdTo);
         if (dbFrom) params.set("dbFrom", dbFrom);
@@ -235,6 +265,7 @@ export function BitrixDealsManager() {
         setTotal(json.total ?? 0);
         if (json.stageCatalog?.length) setStageCatalog(json.stageCatalog);
         if (json.issueCatalog?.length) setIssueCatalog(json.issueCatalog);
+        if (json.subIssueCatalog?.length) setSubIssueCatalog(json.subIssueCatalog);
       } catch {
         if (!cancelled) setError("Gagal terhubung ke server.");
       } finally {
@@ -244,7 +275,7 @@ export function BitrixDealsManager() {
     return () => {
       cancelled = true;
     };
-  }, [start, pipeline, stage, issue, createdFrom, createdTo, dbFrom, dbTo, query, reloadKey]);
+  }, [start, pipeline, stage, issue, subIssue, salesId, createdFrom, createdTo, dbFrom, dbTo, query, reloadKey]);
 
   const pageFrom = total === 0 ? 0 : start + 1;
   const pageTo = Math.min(start + PAGE_SIZE, total);
@@ -256,6 +287,8 @@ export function BitrixDealsManager() {
     (pipeline ? 1 : 0) +
     (stage ? 1 : 0) +
     (issue ? 1 : 0) +
+    (subIssue ? 1 : 0) +
+    (salesId ? 1 : 0) +
     (createdRange?.from ? 1 : 0) +
     (dbRange?.from ? 1 : 0);
 
@@ -263,12 +296,16 @@ export function BitrixDealsManager() {
     pipeline: string;
     stage: string;
     issue: string;
+    subIssue: string;
+    salesId: string;
     createdRange: DateRange | undefined;
     dbRange: DateRange | undefined;
   }) {
     setPipeline(next.pipeline);
     setStage(next.stage);
     setIssue(next.issue);
+    setSubIssue(next.subIssue);
+    setSalesId(next.salesId);
     setCreatedRange(next.createdRange);
     setDbRange(next.dbRange);
     setStart(0);
@@ -279,6 +316,8 @@ export function BitrixDealsManager() {
     setPipeline("");
     setStage("");
     setIssue("");
+    setSubIssue("");
+    setSalesId("");
     setCreatedRange(undefined);
     setDbRange(undefined);
     setStart(0);
@@ -355,10 +394,14 @@ export function BitrixDealsManager() {
                 pipeline={pipeline}
                 stage={stage}
                 issue={issue}
+                subIssue={subIssue}
+                salesId={salesId}
                 createdRange={createdRange}
                 dbRange={dbRange}
                 stageCatalog={stageCatalog}
                 issueCatalog={issueCatalog}
+                subIssueCatalog={subIssueCatalog}
+                salesOptions={salesOptions}
                 onApply={applyFilters}
                 onReset={resetFilters}
               />
@@ -395,6 +438,7 @@ export function BitrixDealsManager() {
                     <TableHead className={cn("px-3", "py-2", "text-muted-foreground", "min-w-28")}>Pipeline</TableHead>
                     <TableHead className={cn("px-3", "py-2", "text-muted-foreground", "min-w-48")}>Sumber Informasi</TableHead>
                     <TableHead className={cn("px-3", "py-2", "text-muted-foreground", "min-w-36")}>Issue</TableHead>
+                    <TableHead className={cn("px-3", "py-2", "text-muted-foreground", "min-w-36")}>Sub Issue</TableHead>
                     <TableHead className={cn("px-3", "py-2", "text-muted-foreground", "text-right", "min-w-32")}>Nilai</TableHead>
                     <TableHead className={cn("px-3", "py-2", "text-muted-foreground", "min-w-52")}>Ads Source URL</TableHead>
                     <TableHead className={cn("px-3", "py-2", "text-muted-foreground", "min-w-48")}>Ads Headline</TableHead>
@@ -510,6 +554,17 @@ export function BitrixDealsManager() {
                           )}
                         </TableCell>
 
+                        {/* Sub Issue */}
+                        <TableCell className="px-3 py-2">
+                          {d.subIssue ? (
+                            <Badge variant="secondary" className="rounded-full font-normal">
+                              {d.subIssue}
+                            </Badge>
+                          ) : (
+                            <span className="text-muted-foreground">-</span>
+                          )}
+                        </TableCell>
+
                         {/* Nilai */}
                         <TableCell className="px-3 py-2 text-right text-sm font-medium">
                           {formatMoney(d.opportunity, d.currency)}
@@ -612,24 +667,34 @@ function FilterPanel({
   pipeline: initialPipeline,
   stage: initialStage,
   issue: initialIssue,
+  subIssue: initialSubIssue,
+  salesId: initialSalesId,
   createdRange: initialCreatedRange,
   dbRange: initialDbRange,
   stageCatalog,
   issueCatalog,
+  subIssueCatalog,
+  salesOptions,
   onApply,
   onReset,
 }: {
   pipeline: string;
   stage: string;
   issue: string;
+  subIssue: string;
+  salesId: string;
   createdRange: DateRange | undefined;
   dbRange: DateRange | undefined;
   stageCatalog: StageCatalogItem[];
   issueCatalog: string[];
+  subIssueCatalog: string[];
+  salesOptions: { id: string; name: string }[];
   onApply: (next: {
     pipeline: string;
     stage: string;
     issue: string;
+    subIssue: string;
+    salesId: string;
     createdRange: DateRange | undefined;
     dbRange: DateRange | undefined;
   }) => void;
@@ -638,8 +703,44 @@ function FilterPanel({
   const [pipeline, setPipeline] = useState(initialPipeline);
   const [stage, setStage] = useState(initialStage);
   const [issue, setIssue] = useState(initialIssue);
+  const [subIssue, setSubIssue] = useState(initialSubIssue);
+  const [salesId, setSalesId] = useState(initialSalesId);
   const [createdRange, setCreatedRange] = useState<DateRange | undefined>(initialCreatedRange);
   const [dbRange, setDbRange] = useState<DateRange | undefined>(initialDbRange);
+
+  // Sales search — server-side. Empty query falls back to the preloaded
+  // full list (salesOptions); a non-empty query hits /api/bitrix/sales?q=
+  // via user.search on the Bitrix side.
+  const [salesQuery, setSalesQuery] = useState("");
+  const [salesSearchResults, setSalesSearchResults] = useState<{ id: string; name: string }[] | null>(null);
+  const [salesSearching, setSalesSearching] = useState(false);
+
+  useEffect(() => {
+    const q = salesQuery.trim();
+    if (!q) {
+      setSalesSearchResults(null);
+      setSalesSearching(false);
+      return;
+    }
+    let cancelled = false;
+    setSalesSearching(true);
+    void (async () => {
+      try {
+        const res = await fetch(`/api/bitrix/sales?q=${encodeURIComponent(q)}`);
+        const json = (await res.json()) as { id: string; name: string }[] | { error?: string };
+        if (!cancelled && Array.isArray(json)) setSalesSearchResults(json);
+      } catch {
+        // Non-fatal — keep the previous results on the screen.
+      } finally {
+        if (!cancelled) setSalesSearching(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [salesQuery]);
+
+  const salesDisplayOptions = salesSearchResults ?? salesOptions;
 
   return (
     <div className="flex flex-col">
@@ -649,7 +750,7 @@ function FilterPanel({
       </div>
 
       <div className="max-h-[60vh] space-y-4 overflow-y-auto px-4 py-4">
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           {/* By pipeline */}
           <div className="space-y-1.5">
             <Label className="text-xs text-muted-foreground">Pipeline</Label>
@@ -703,6 +804,44 @@ function FilterPanel({
               </SelectContent>
             </Select>
           </div>
+
+          {/* By sub issue */}
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">Sub Issue</Label>
+            <Select value={subIssue === "" ? SUB_ISSUE_ALL : subIssue} onValueChange={(v) => setSubIssue(v === SUB_ISSUE_ALL ? "" : v)}>
+              <SelectTrigger className="w-full rounded-full">
+                <SelectValue placeholder="Semua sub issue" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={SUB_ISSUE_ALL}>Semua sub issue</SelectItem>
+                {subIssueCatalog.map((label) => (
+                  <SelectItem key={label} value={label}>
+                    {label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* By sales — search hits the server (Bitrix user.search) once the
+              user types; the initial list is the preloaded full roster. */}
+          <div className="space-y-1.5 sm:col-span-2">
+            <Label className="text-xs text-muted-foreground">Sales</Label>
+            <SearchableSelect
+              options={[
+                { id: SALES_ALL, name: "Semua sales" },
+                ...salesDisplayOptions.map((s) => ({ id: s.id, name: s.name })),
+              ]}
+              value={salesId === "" ? SALES_ALL : salesId}
+              onChange={(v) => setSalesId(v === SALES_ALL ? "" : v)}
+              onSearchChange={setSalesQuery}
+              loading={salesSearching}
+              placeholder="Semua sales"
+              searchPlaceholder="Cari sales..."
+              emptyText="Sales tidak ditemukan"
+              className="w-full"
+            />
+          </div>
         </div>
 
         {/* Date ranges — created vs database date, side by side on wider screens */}
@@ -750,7 +889,7 @@ function FilterPanel({
           <CloseCircle weight="BoldDuotone" className="h-4 w-4" />
           Reset
         </Button>
-        <Button size="sm" className="rounded-full" onClick={() => onApply({ pipeline, stage, issue, createdRange, dbRange })}>
+        <Button size="sm" className="rounded-full" onClick={() => onApply({ pipeline, stage, issue, subIssue, salesId, createdRange, dbRange })}>
           Terapkan
         </Button>
       </div>

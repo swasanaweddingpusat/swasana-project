@@ -12,6 +12,7 @@ import {
 // Custom (UF_CRM_*) fields carrying the ad-tracking + issue data. These ids are
 // specific to this Bitrix portal — discovered from crm.deal.fields.
 const UF_ISSUE = "UF_CRM_1768930533046"; // enum: Leads / No Response / Spam / Komplain …
+const UF_SUB_ISSUE = "UF_CRM_1774952346733"; // enum: Lokasi Terlalu Jauh / Pernikahan Batal / Catering …
 const UF_ADS_URL = "UF_CRM_1770698079121"; // ad source URL (IG/FB post link)
 const UF_ADS_HEADLINE = "UF_CRM_1770698102639"; // ad headline
 const UF_ADS_BODY = "UF_CRM_1770698208232"; // ad body / caption
@@ -31,6 +32,7 @@ const DEAL_SELECT = [
   "ASSIGNED_BY_ID",
   "DATE_CREATE",
   UF_ISSUE,
+  UF_SUB_ISSUE,
   UF_ADS_URL,
   UF_ADS_HEADLINE,
   UF_ADS_BODY,
@@ -100,6 +102,12 @@ export async function GET(request: Request) {
   // to the enum item ID and filter UF_ISSUE by it.
   const issueName = searchParams.get("issue")?.trim();
 
+  // Sub Issue filter — same pattern as issue, against UF_SUB_ISSUE.
+  const subIssueName = searchParams.get("subIssue")?.trim();
+
+  // Sales filter — ASSIGNED_BY_ID is a Bitrix user id (the deal's PIC).
+  const salesId = searchParams.get("salesId")?.trim();
+
   // Date-range filters (ISO day strings, all optional). Two independent ranges:
   //   created* → DATE_CREATE (datetime; +03:00 in Bitrix, filtered on bare date)
   //   db*      → UF_DB_DATE  ("Tanggal Database", a date-only custom field)
@@ -114,9 +122,10 @@ export async function GET(request: Request) {
   try {
     // Meta is cached (10-min TTL); await it up front so the stage name → IDs
     // mapping is available before the list call is built.
-    const [meta, enums] = await Promise.all([getBitrixCrmMeta(), getBitrixDealEnums([UF_ISSUE])]);
+    const [meta, enums] = await Promise.all([getBitrixCrmMeta(), getBitrixDealEnums([UF_ISSUE, UF_SUB_ISSUE])]);
 
     const issueEnum = enums[UF_ISSUE] ?? {};
+    const subIssueEnum = enums[UF_SUB_ISSUE] ?? {};
 
     // Bitrix matches STAGE_ID against an array of STATUS_IDs, so the stage
     // filter value is a string[] — widen the type from the string-only URL map.
@@ -132,6 +141,11 @@ export async function GET(request: Request) {
       // Unknown issue label → no rows, rather than silently ignoring the filter.
       stageFilter[UF_ISSUE] = issueId ?? "__none__";
     }
+    if (subIssueName) {
+      const subIssueId = Object.entries(subIssueEnum).find(([, label]) => label === subIssueName)?.[0];
+      stageFilter[UF_SUB_ISSUE] = subIssueId ?? "__none__";
+    }
+    if (salesId) stageFilter.ASSIGNED_BY_ID = salesId;
 
     // Tanggal Dibuat range → DATE_CREATE. The "to" bound is exclusive on the
     // next day so the whole end day is included.
@@ -158,6 +172,7 @@ export async function GET(request: Request) {
     const rows = items.map((d) => {
       const contact = d.CONTACT_ID ? contactMap[d.CONTACT_ID] : undefined;
       const issueId = d[UF_ISSUE];
+      const subIssueId = d[UF_SUB_ISSUE];
       return {
       id: d.ID,
       title: d.TITLE ?? "Tanpa judul",
@@ -179,6 +194,7 @@ export async function GET(request: Request) {
       assignedById: d.ASSIGNED_BY_ID,
       assignedBy: (d.ASSIGNED_BY_ID && userMap[d.ASSIGNED_BY_ID]) ?? null,
       issue: (issueId && issueEnum[issueId]) ?? null,
+      subIssue: (subIssueId && subIssueEnum[subIssueId]) ?? null,
       adsUrl: d[UF_ADS_URL]?.trim() || null,
       adsHeadline: d[UF_ADS_HEADLINE]?.trim() || null,
       adsBody: cleanBbcode(d[UF_ADS_BODY]),
@@ -196,6 +212,8 @@ export async function GET(request: Request) {
       stageCatalog: meta.stageCatalog,
       // Distinct issue labels — powers the issue filter dropdown on the client.
       issueCatalog: Object.values(issueEnum),
+      // Distinct sub issue labels — powers the sub issue filter dropdown on the client.
+      subIssueCatalog: Object.values(subIssueEnum),
     });
   } catch (e) {
     if (e instanceof BitrixApiError) {

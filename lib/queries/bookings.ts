@@ -164,7 +164,7 @@ export type ApprovalStatusFilter =
 export async function getBookings(
   profileId?: string,
   dataScope?: DataScope,
-  options?: { page?: number; pageSize?: number; search?: string; venueId?: string; category?: "WEDDINGS" | "MICE"; recordStatus?: "saved" | "draft" | "all"; dateFrom?: string; dateTo?: string; year?: number; salesId?: string; approvalStatus?: ApprovalStatusFilter; sourceOfInformationId?: string },
+  options?: { page?: number; pageSize?: number; search?: string; venueId?: string; category?: "WEDDINGS" | "MICE"; recordStatus?: "saved" | "draft" | "all"; dateFrom?: string; dateTo?: string; year?: number; salesId?: string; approvalStatus?: ApprovalStatusFilter; bookingStatus?: BookingStatus; sourceOfInformationId?: string },
 ): Promise<PaginatedBookings> {
   const scopeFilter = await buildScopeFilter(profileId, dataScope);
   const searchFilter = buildSearchFilter(options?.search);
@@ -184,6 +184,8 @@ export async function getBookings(
   const salesIdFilter: Prisma.BookingWhereInput =
     options?.salesId === "__none__" ? { salesId: null } :
     options?.salesId ? { salesId: options.salesId } : {};
+  const bookingStatusFilter: Prisma.BookingWhereInput =
+    options?.bookingStatus ? { bookingStatus: options.bookingStatus } : {};
   let approvalStatusFilter: Prisma.BookingWhereInput = {};
   const stageMatch = options?.approvalStatus?.match(/^(sales|manager|finance|client)-(approved|pending)$/);
   if (stageMatch) {
@@ -245,7 +247,7 @@ export async function getBookings(
         ? { id: { in: approvedIds } }
         : { id: { notIn: approvedIds } };
   }
-  const where: Prisma.BookingWhereInput = { ...recordStatusFilter, ...scopeFilter, ...searchFilter, ...venueFilter, ...categoryFilter, ...sourceOfInformationFilter, ...dateFilter, ...salesIdFilter, ...approvalStatusFilter };
+  const where: Prisma.BookingWhereInput = { ...recordStatusFilter, ...scopeFilter, ...searchFilter, ...venueFilter, ...categoryFilter, ...sourceOfInformationFilter, ...dateFilter, ...salesIdFilter, ...approvalStatusFilter, ...bookingStatusFilter };
 
   const page = Math.max(1, options?.page ?? 1);
   const pageSize = Math.min(100, Math.max(1, options?.pageSize ?? 10));

@@ -112,6 +112,8 @@ export interface EditBookingForm {
   // submit state
   isSavingClientInfo: boolean;
   isSubmitting: boolean;
+  showSubmitConfirm: boolean;
+  setShowSubmitConfirm: (v: boolean) => void;
 
   // validation
   errors: Record<string, string>;
@@ -260,6 +262,7 @@ export function useEditBookingForm(
   // â”€â”€ Submit state â”€â”€
   const [isSavingClientInfo, setIsSavingClientInfo] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showSubmitConfirm, setShowSubmitConfirm] = useState(false);
 
   // â”€â”€ Data queries â”€â”€
   const { data: detail } = useQuery({
@@ -595,6 +598,8 @@ export function useEditBookingForm(
     availability,
     isSavingClientInfo,
     isSubmitting,
+    showSubmitConfirm,
+    setShowSubmitConfirm,
     errors,
     clearError,
     validateField,
