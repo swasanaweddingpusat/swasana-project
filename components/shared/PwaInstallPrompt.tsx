@@ -18,6 +18,9 @@ export function PwaInstallPrompt() {
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
+    // Install prompt hanya untuk mobile — desktop tidak menampilkan banner ini.
+    if (!window.matchMedia("(max-width: 767px)").matches) return;
+
     try {
       const dismissed = localStorage.getItem(DISMISS_KEY);
       if (dismissed) {
