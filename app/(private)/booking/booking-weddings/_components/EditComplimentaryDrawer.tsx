@@ -17,7 +17,7 @@ import { firstError, complimentaryRowsSchema } from "@/lib/validations/booking-f
 import { createComplimentary } from "@/actions/complimentary";
 import { useComplimentaries } from "@/hooks/use-complimentaries";
 import { usePermissions } from "@/hooks/use-permissions";
-import { ComplimentarySelect } from "@/app/(private)/booking/booking-weddings/_components/ComplimentarySelect";
+import { ComplimentarySelect } from "@/components/shared/ComplimentarySelect";
 import type { BookingDetail } from "@/lib/queries/bookings";
 
 // --- Types -------------------------------------------------------------------

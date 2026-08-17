@@ -119,6 +119,22 @@ export async function createQuotation(
           },
         }),
       ),
+      // 2b. Create complimentaries
+      ...input.complimentaries.map((c, idx) =>
+        db.quotationComplimentary.create({
+          data: {
+            id: crypto.randomUUID(),
+            quotationId,
+            complimentaryId: c.complimentaryId ?? null,
+            name: c.name,
+            price: c.price,
+            isShowPrice: c.isShowPrice,
+            description: c.description ?? null,
+            qty: c.qty,
+            sortOrder: idx,
+          },
+        }),
+      ),
     ];
 
     // 3. Create approval record + steps (if flow is resolved)
@@ -259,6 +275,27 @@ export async function updateQuotation(
                   price: item.price,
                   total: item.total,
                   manualTotal: item.manualTotal,
+                  sortOrder: idx,
+                },
+              }),
+            ),
+          ]
+        : []),
+      // 3. Replace complimentaries — only when complimentaries payload is present
+      ...(input.complimentaries !== undefined
+        ? [
+            db.quotationComplimentary.deleteMany({ where: { quotationId: input.id } }),
+            ...(input.complimentaries ?? []).map((c, idx) =>
+              db.quotationComplimentary.create({
+                data: {
+                  id: crypto.randomUUID(),
+                  quotationId: input.id,
+                  complimentaryId: c.complimentaryId ?? null,
+                  name: c.name,
+                  price: c.price,
+                  isShowPrice: c.isShowPrice,
+                  description: c.description ?? null,
+                  qty: c.qty,
                   sortOrder: idx,
                 },
               }),

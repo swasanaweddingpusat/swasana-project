@@ -253,6 +253,7 @@ export const rolePermissionMap: Record<string, Record<string, string[]>> = {
     "settings-quotation-templates": ["view", "create", "edit", "delete"],
     "settings-daily-activity-segment": ["view", "create", "edit", "delete"],
     "package-mice": ["view", "create", "edit", "delete", "set-harga", "set-status"],
+    complimentary: ["view", "create", "edit", "delete"],
     bitrix: ["view"],
   },
   "procurement-manager": {

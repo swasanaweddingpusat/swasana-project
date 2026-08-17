@@ -1155,15 +1155,16 @@ model SnapBonus {
 // ─── Complimentary Master ─────────────────────────────────────────────────────
 
 model Complimentary {
-  id                  String              @id @default(uuid())
-  name                String
-  price               Int                 @default(0)
-  description         String?
-  isShowPrice         Boolean             @default(false)
-  isActive            Boolean             @default(true)
-  createdAt           DateTime            @default(now())
-  updatedAt           DateTime            @updatedAt
-  snapComplimentaries SnapComplimentary[]
+  id                        String                    @id @default(uuid())
+  name                      String
+  price                     Int                       @default(0)
+  description               String?
+  isShowPrice               Boolean                   @default(false)
+  isActive                  Boolean                   @default(true)
+  createdAt                 DateTime                  @default(now())
+  updatedAt                 DateTime                  @updatedAt
+  snapComplimentaries       SnapComplimentary[]
+  quotationComplimentaries  QuotationComplimentary[]
 
   @@map("complimentaries")
 }
@@ -1186,6 +1187,26 @@ model SnapComplimentary {
   @@index([bookingId])
   @@index([complimentaryId])
   @@map("snap_complimentaries")
+}
+
+model QuotationComplimentary {
+  id              String         @id @default(uuid())
+  quotationId     String
+  complimentaryId String?
+  name            String
+  price           Int            @default(0)
+  isShowPrice     Boolean        @default(false)
+  description     String?
+  qty             Int            @default(1)
+  sortOrder       Int            @default(0)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  quotation       Quotation      @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+  complimentary   Complimentary? @relation(fields: [complimentaryId], references: [id], onDelete: SetNull)
+
+  @@index([quotationId])
+  @@index([complimentaryId])
+  @@map("quotation_complimentaries")
 }
 
 model SnapVendorItem {
@@ -1987,8 +2008,9 @@ model Quotation {
   eventType     EventType?     @relation(fields: [eventTypeId], references: [id], onDelete: SetNull)
   paymentMethod PaymentMethod? @relation(fields: [paymentMethodId], references: [id], onDelete: SetNull)
 
-  items QuotationItem[]
-  terms QuotationTerm[]
+  items           QuotationItem[]
+  terms           QuotationTerm[]
+  complimentaries QuotationComplimentary[]
 
   @@index([salesId])
   @@index([venueId])
