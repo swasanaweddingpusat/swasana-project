@@ -8,7 +8,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { SearchableSelect } from "@/components/ui/searchable-select";
-import { BitrixDealSelect } from "../bitrix-deal-select";
 import { ContactEntry, parseStoredPhone } from "@/components/shared/PhoneInput";
 import { LBL } from "./useEditBookingForm";
 import { validateIdNumber } from "@/lib/validations/booking-form";
@@ -165,9 +164,10 @@ export function ClientInfoStep({ form }: { form: EditBookingForm }) {
             <label className={LBL}>
               Bitrix ID <span className="text-destructive">*</span>
             </label>
-            <BitrixDealSelect
+            <Input
+              placeholder="Masukkan Bitrix ID"
               value={contactBitrixId}
-              onChange={(id) => { setContactBitrixId(id); clearError("bitrixId"); }}
+              onChange={(e) => { setContactBitrixId(e.target.value); clearError("bitrixId"); }}
             />
             {errors.bitrixId && <p className="mt-1 text-sm text-destructive">{errors.bitrixId}</p>}
           </div>
