@@ -67,6 +67,16 @@ export interface QuotationLineItem {
   manualTotal?: boolean;
 }
 
+export interface QuotationComplimentaryItem {
+  id: string;
+  complimentaryId: string | null;
+  name: string;
+  price: number;
+  isShowPrice: boolean;
+  description?: string;
+  qty: number;
+}
+
 export interface QuotationItem {
   id: string;
   /** Nomor dokumen, mis. "#221-MICE". Optional — di-derive kalau kosong. */

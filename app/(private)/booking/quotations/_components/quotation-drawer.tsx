@@ -289,7 +289,6 @@ interface SortableItemRowProps {
   fieldItem: { id: string };
   index: number;
   arrayName: "items";
-  fields: Array<{ id: string }>;
   remove: (index: number) => void;
   form: UseFormReturn<QuotationFormValues>;
   expandedSet: Set<string>;
@@ -303,7 +302,6 @@ function SortableItemRow({
   fieldItem,
   index,
   arrayName,
-  fields,
   remove,
   form,
   expandedSet,
@@ -391,7 +389,6 @@ function SortableItemRow({
               e.stopPropagation();
               remove(index);
             }}
-            disabled={fields.length === 1}
             aria-label="Hapus item"
             className="shrink-0 h-7 w-7 text-destructive hover:bg-destructive/10"
           >
@@ -604,7 +601,6 @@ function ItemListEditor({
               fieldItem={fieldItem}
               index={index}
               arrayName={arrayName}
-              fields={fields}
               remove={remove}
               form={form}
               expandedSet={expandedSet}
@@ -1172,6 +1168,7 @@ export function QuotationDrawer({
       eventTypeName: values.eventTypeName || null,
       category: "MICE" as const,
       weddingSession: null,
+      complimentaries: [],
       eventDate: values.eventDate || null,
       time: values.time || null,
       place: values.place || null,
@@ -1659,15 +1656,7 @@ export function QuotationDrawer({
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <p className={LABEL_CLASS}>Items</p>
-                    <span className="text-xs text-muted-foreground">
-                      Total = Qty × Harga (bisa manual)
-                    </span>
                   </div>
-                  <p className="text-xs text-muted-foreground">
-                    Awali judul dengan &quot;A. / B. / C.&quot; atau akhiri dengan
-                    &quot;:&quot; untuk jadi judul section (mis. &quot;A. Ballroom
-                    Facilities&quot;). Harga boleh dikosongkan untuk item tanpa biaya.
-                  </p>
 
                   <ItemListEditor
                     arrayName="items"

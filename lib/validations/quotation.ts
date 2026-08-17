@@ -10,6 +10,16 @@ const quotationItemSchema = z.object({
   sortOrder: z.coerce.number().int().default(0),
 });
 
+const quotationComplimentarySchema = z.object({
+  complimentaryId: z.string().optional().nullable(),
+  name: z.string().min(1),
+  price: z.coerce.number().int().min(0).default(0),
+  isShowPrice: z.boolean().default(false),
+  description: z.string().optional().nullable(),
+  qty: z.coerce.number().int().min(1).default(1),
+  sortOrder: z.coerce.number().int().default(0),
+});
+
 export const createQuotationSchema = z.object({
   // Step 1 — Informasi
   clientName: z.string().min(1, "Nama client wajib diisi"),
@@ -28,7 +38,8 @@ export const createQuotationSchema = z.object({
   place: z.string().optional().nullable(),
   details: z.string().optional().nullable(),
   // Step 2 — Items + pricing
-  items: z.array(quotationItemSchema).min(1, "Minimal satu item wajib diisi"),
+  items: z.array(quotationItemSchema).default([]),
+  complimentaries: z.array(quotationComplimentarySchema).default([]),
   discount: z.coerce.number().int().min(0).default(0),
   // Booking fee for the Term & Payment boilerplate (optional; auto-loaded from
   // the per-venue template, editable per quotation).

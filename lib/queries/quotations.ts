@@ -33,6 +33,10 @@ const quotationListSelect = {
   paymentMethod: { select: { id: true, bankName: true, bankAccountNumber: true, bankRecipient: true } },
   eventType: { select: { id: true, name: true } },
   items: { orderBy: { sortOrder: "asc" as const }, select: { id: true, title: true, description: true, qty: true, price: true, total: true, manualTotal: true, sortOrder: true } },
+  complimentaries: {
+    orderBy: { sortOrder: "asc" as const },
+    select: { id: true, complimentaryId: true, name: true, price: true, isShowPrice: true, description: true, qty: true, sortOrder: true },
+  },
 } as const;
 
 export type QuotationListRow = Awaited<ReturnType<typeof db.quotation.findMany<{ select: typeof quotationListSelect }>>>[number];
