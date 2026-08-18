@@ -1,6 +1,28 @@
 import { cacheTag, cacheLife } from "next/cache";
 import { db } from "@/lib/db";
 
+/** Extract phone numbers from a Customer.mobileNumber value (Json array of
+ *  `{ name, number }`, or legacy comma-separated string) into a single display
+ *  string. Kept local to avoid importing `lib/validations/customer` — that
+ *  module evaluates `customerSchema.partial()` at load, which throws in Zod v4
+ *  and would poison any route bundle (e.g. /api/booking-mice) that pulls it in. */
+function formatMobileNumbers(raw: unknown): string {
+  if (Array.isArray(raw)) {
+    return (raw as Array<{ number?: unknown }>)
+      .map((m) => (typeof m?.number === "string" ? m.number.trim() : ""))
+      .filter(Boolean)
+      .join(", ");
+  }
+  if (typeof raw === "string") {
+    return raw
+      .split(",")
+      .map((n) => n.trim())
+      .filter(Boolean)
+      .join(", ");
+  }
+  return "";
+}
+
 const bookingListInclude = {
   snapCustomer: { select: { name: true, mobileNumber: true } },
   // Drafts have no snapshot yet — fall back to the live customer for display.
@@ -310,14 +332,22 @@ export interface BookingExportFilters {
   dealingTo?: string;
 }
 
-/** Satu baris siap-export — sudah dipetakan ke 6 kolom laporan. */
+/** Satu baris siap-export — sudah dipetakan ke kolom laporan. `bitrixId` dibawa
+ *  mentah (deal id) supaya route bisa meng-enrich `adsUrl` dari Bitrix. */
 export interface BookingExportRow {
   clientName: string;
+  phone: string;
   dealingDate: Date;
   eventDate: Date | null;
   marketingName: string;
   dealingSource: string;
   status: string;
+  /** Bitrix deal id (dari customer) — dipakai route buat ambil adsUrl. */
+  bitrixId: string | null;
+  brand: string;
+  packageName: string;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 const EXPORT_MAX_ROWS = 10000;
@@ -366,10 +396,15 @@ export async function getBookingsForExport(
     take: EXPORT_MAX_ROWS,
     select: {
       createdAt: true,
+      updatedAt: true,
       eventDate: true,
       bookingStatus: true,
-      snapCustomer: { select: { name: true } },
-      customer: { select: { name: true } },
+      snapCustomer: { select: { name: true, mobileNumber: true } },
+      customer: { select: { name: true, mobileNumber: true, bitrixId: true } },
+      snapVenue: { select: { brandName: true } },
+      venue: { select: { brand: { select: { name: true } } } },
+      snapPackage: { select: { packageName: true } },
+      package: { select: { packageName: true } },
       sales: { select: { fullName: true } },
       sourceOfInformation: { select: { name: true } },
     },
@@ -378,11 +413,17 @@ export async function getBookingsForExport(
   return rows.map((r) => ({
     // Snapshot-first (frozen at signing), fall back to live customer for drafts/pending.
     clientName: r.snapCustomer?.name ?? r.customer?.name ?? "",
+    phone: r.snapCustomer?.mobileNumber ?? formatMobileNumbers(r.customer?.mobileNumber),
     dealingDate: r.createdAt,
     eventDate: r.eventDate,
     marketingName: r.sales?.fullName ?? "",
     dealingSource: r.sourceOfInformation?.name ?? "",
     status: r.bookingStatus,
+    bitrixId: r.customer?.bitrixId?.trim() || null,
+    brand: r.snapVenue?.brandName ?? r.venue?.brand?.name ?? "",
+    packageName: r.snapPackage?.packageName ?? r.package?.packageName ?? "",
+    createdAt: r.createdAt,
+    updatedAt: r.updatedAt,
   }));
 }
 

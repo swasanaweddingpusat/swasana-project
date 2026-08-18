@@ -48,8 +48,6 @@ function buildRouteMetaFromNavTrees(): Record<string, RouteMeta> {
 const DERIVED_ROUTE_META = buildRouteMetaFromNavTrees();
 
 const DYNAMIC_ROUTE_META: Record<string, RouteMeta> = {
-  // Root landing + Settings root — no longer sidebar-nav entries, so keep their
-  // header meta here (Settings is pinned to the sidebar bottom; "/" is retired).
   "/": { title: "Dashboard", subtitle: "Ringkasan aktivitas" },
   "/settings": { title: "Settings", subtitle: "Kelola pengaturan sistem" },
   "/booking/groups/[groupId]": { title: "Detail Group", subtitle: "Kinerja dan target penjualan tim", parent: "/booking/groups" },
@@ -57,7 +55,7 @@ const DYNAMIC_ROUTE_META: Record<string, RouteMeta> = {
   "/wedding-indicators/create": { title: "Buat Kuesioner Pernikahan", subtitle: "Isi form untuk membuat kuesioner penilaian kepuasan", parent: "/wedding-indicators" },
   "/wedding-indicators/[id]": { title: "Detail Kuesioner Pernikahan", subtitle: "Lihat dan edit detail kuesioner pernikahan", parent: "/wedding-indicators" },
   "/purchase/vendor-specialist/evaluations/create": { title: "Buat Evaluasi", subtitle: "Buat evaluasi vendor pasca event", parent: "/purchase/vendor-specialist/evaluations" },
-  // Settings subtree (not in nav trees as individual entries) — keep the meaningful ones:
+  // Settings subtree
   "/settings/users": { title: "Users", subtitle: "Kelola data user, undangan, dan akses", parent: "/settings" },
   "/settings/roles": { title: "Roles", subtitle: "Kelola role dan permission", parent: "/settings" },
   "/settings/venues": { title: "Venue Management", subtitle: "Kelola daftar venue dan alamat", parent: "/settings" },
@@ -78,10 +76,16 @@ const DYNAMIC_ROUTE_META: Record<string, RouteMeta> = {
   "/settings/tutorial": { title: "Tutorial CMS", subtitle: "Kelola konten tutorial aplikasi", parent: "/settings" },
   "/settings/quotation-templates": { title: "Quotation Templates", subtitle: "Kelola template quotation", parent: "/settings" },
   "/profile": { title: "Profile", subtitle: "Kelola informasi pribadi dan keamanan akun Anda.", parent: "/settings" },
-  // Reachable from the header (bell / tutorial), no longer in the sidebar nav —
-  // keep their header meta so the page title/subtitle still resolve.
   "/notifications": { title: "Notifikasi", subtitle: "Semua notifikasi" },
   "/tutorial": { title: "Tutorial", subtitle: "Panduan penggunaan aplikasi" },
+  // Internal FAQ
+  "/internal-faq": { title: "Internal FAQ", subtitle: "Kelola memo internal dan product knowledge" },
+  "/internal-faq/memo": { title: "Memo", subtitle: "Kelola memo internal perusahaan", parent: "/internal-faq" },
+  "/internal-faq/memo/[id]": { title: "Detail Memo", subtitle: "Lihat detail, diskusi, dan status pembacaan memo", parent: "/internal-faq/memo" },
+  "/internal-faq/product-knowledge": { title: "Product Knowledge", subtitle: "Kelola dokumen product knowledge", parent: "/internal-faq" },
+  // Announcement
+  "/announcement": { title: "Announcement", subtitle: "Kumpulan pengumuman untuk seluruh karyawan" },
+  "/announcement/[id]": { title: "Detail Announcement", subtitle: "Lihat detail dan diskusi pengumuman", parent: "/announcement" },
 };
 
 export const ROUTE_META: Record<string, RouteMeta> = { ...DERIVED_ROUTE_META, ...DYNAMIC_ROUTE_META };

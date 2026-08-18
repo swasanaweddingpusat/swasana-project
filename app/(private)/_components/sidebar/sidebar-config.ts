@@ -120,6 +120,7 @@ export const MODULE_NAV_MAP: Record<ModuleKey, NavItem[]> = {
     { name: "Slip Gaji", href: "/hrd/slip-gaji", icon: FileText, subtitle: "Rekap slip gaji seluruh karyawan", permission: { module: "hr", action: "view" } },
     { name: "Sistem Cuti", href: "/hrd/sistem-cuti", icon: CalendarDate, subtitle: "Pengajuan dan saldo cuti karyawan", permission: { module: "hr", action: "view" } },
     { name: "Rekrutmen & Onboarding", href: "/hrd/rekrutmen-onboarding", icon: UserPlus, subtitle: "Pipeline rekrutmen hingga onboarding", permission: { module: "hr-recruitment", action: "view" } },
+    { name: "Onboarding Karyawan", href: "/hrd/onboarding-karyawan", icon: ClipboardCheck, subtitle: "Formulir data karyawan baru & link form publik", permission: { module: "hr", action: "create" } },
     { name: "Pengembangan SDM", href: "/hrd/pengembangan-sdm", icon: GraphUp, subtitle: "Pelatihan, pengembangan, dan sertifikasi", permission: { module: "hr", action: "view" } },
     { name: "Manajemen Kinerja", href: "/hrd/manajemen-kinerja", icon: CupStar, subtitle: "Review kinerja dan KPI karyawan", permission: { module: "hr", action: "view" } },
     { name: "Manajemen Kesehatan", href: "/hrd/manajemen-kesehatan", icon: Heart, subtitle: "Rekam medis dan asuransi karyawan", permission: { module: "hr", action: "view" } },
@@ -185,6 +186,12 @@ export const GENERAL_NAV: NavItem[] = [
       { name: "Pengumuman", href: "/procurement/pengumuman", icon: BellBing, permission: { module: "procurement-announcement", action: "view" } },
       { name: "Anggaran Venue", href: "/procurement/anggaran-venue", icon: Wallet2, permission: { module: "procurement-budget", action: "view" } },
     ] },
+  { name: "Internal FAQ", href: "/internal-faq", icon: Documents, subtitle: "Kelola memo internal dan product knowledge", permission: { module: "internal-faq", action: "view" },
+    submenu: [
+      { name: "Memo", href: "/internal-faq/memo", icon: FileText, subtitle: "Kelola memo internal perusahaan" },
+      { name: "Product Knowledge", href: "/internal-faq/product-knowledge", icon: Notebook, subtitle: "Kelola dokumen product knowledge" },
+    ] },
+  { name: "Announcement", href: "/announcement", icon: BellBing, subtitle: "Kumpulan pengumuman untuk seluruh karyawan", permission: { module: "announcement", action: "view" } },
   { name: "Pengajuan Cuti", href: "/cuti", icon: CalendarDate, subtitle: "Pengajuan dan saldo cuti" },
   { name: "Slip Gaji", href: "/slip-gaji", icon: FileText, subtitle: "Lihat slip gaji bulanan saya" },
 ];

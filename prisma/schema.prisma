@@ -227,6 +227,13 @@ model Profile {
   guestbookHosted             GuestbookEntry[]     @relation("GuestbookHost")
   guestbookCreated            GuestbookEntry[]     @relation("GuestbookCreator")
   blacklistCreated            BlacklistEntry[]     @relation("BlacklistCreator")
+  memosCreated                Memo[]               @relation("MemoCreator")
+  memoComments                MemoComment[]        @relation("MemoCommentAuthor")
+  memoReads                   MemoReader[]         @relation("MemoReader")
+  announcementsCreated        Announcement[]       @relation("AnnouncementCreator")
+  announcementComments        AnnouncementComment[] @relation("AnnouncementCommentAuthor")
+  announcementReads           AnnouncementReader[] @relation("AnnouncementReader")
+  onboardingFormLinksCreated  OnboardingFormLink[] @relation("OnboardingFormLinkCreator")
   @@map("profiles")
 }
 
@@ -370,6 +377,9 @@ model Venue {
 
   @@index([brandId])
   guestbookEntries       GuestbookEntry[]
+  memos                  Memo[]
+  announcements          Announcement[]
+  onboardingFormSubmissions OnboardingFormSubmission[]
   @@map("venues")
 }
 
@@ -2799,6 +2809,70 @@ model OnboardingTask {
   @@map("onboarding_tasks")
 }
 
+// --- Onboarding Form Link ----------------------------------------------------
+
+model OnboardingFormLink {
+  id         String                   @id @default(uuid())
+  name       String
+  token      String                   @unique
+  accessCode String
+  status     OnboardingFormLinkStatus @default(Active)
+  viewedAt   DateTime?
+  expiresAt  DateTime?
+  createdBy  String
+  createdAt  DateTime                 @default(now())
+  updatedAt  DateTime                 @updatedAt
+
+  creator    Profile                  @relation("OnboardingFormLinkCreator", fields: [createdBy], references: [id])
+  submission OnboardingFormSubmission?
+
+  @@index([token])
+  @@map("onboarding_form_links")
+}
+
+enum OnboardingFormLinkStatus {
+  Active
+  Revoked
+}
+
+model OnboardingFormSubmission {
+  id                    String   @id @default(uuid())
+  formLinkId            String   @unique
+  divisi                String
+  jabatan               String
+  venueId               String
+  joinDate              DateTime
+  fullName              String
+  nickName              String
+  placeOfBirth          String
+  dateOfBirth           DateTime
+  phoneNumber           String
+  email                 String
+  maritalStatus         String
+  ktpAddress            String
+  currentAddress        String
+  motherName            String
+  numberOfChildren      Int      @default(0)
+  lastEducation         String
+  emergencyContactName  String
+  emergencyContactRel   String
+  emergencyContactPhone String
+  bankName              String
+  bankAccountNumber     String
+  ktpFileUrl            String?
+  kkFileUrl             String?
+  photoUrl              String?
+  submittedAt           DateTime @default(now())
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  formLink OnboardingFormLink @relation(fields: [formLinkId], references: [id], onDelete: Cascade)
+  venue    Venue              @relation(fields: [venueId], references: [id])
+
+  @@index([formLinkId])
+  @@map("onboarding_form_submissions")
+}
+
 // ─── Discount / Promo ─────────────────────────────────────────────────────────
 
 enum DiscountType {
@@ -3377,4 +3451,144 @@ model ModulePermissionMap {
 
   @@unique([moduleId, permissionModule])
   @@map("module_permission_maps")
+}
+
+// ─── Memo ──────────────────────────────────────────────────────────────────────
+
+enum MemoStatus {
+  draft
+  review
+  published
+
+  @@map("memo_status")
+}
+
+model Memo {
+  id             String     @id @default(uuid())
+  noMemo         String     @unique
+  judul          String
+  perihal        String?
+  ruangLingkup   String?
+  kepada         String?
+  tembusan       String?
+  jenisInformasi String?
+  klasifikasi    String?
+  yangMenyetujui String?
+  yangMengetahui String?
+  isiMemo        String?
+  status         MemoStatus @default(draft)
+  venueId        String?
+  createdById    String
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  createdBy Profile      @relation("MemoCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  venue     Venue?       @relation(fields: [venueId], references: [id], onDelete: SetNull)
+  comments  MemoComment[]
+  readers   MemoReader[]
+
+  @@index([createdById])
+  @@index([venueId])
+  @@index([status])
+  @@map("memos")
+}
+
+model MemoComment {
+  id        String   @id @default(uuid())
+  memoId    String
+  authorId  String
+  content   String
+  createdAt DateTime @default(now())
+
+  memo   Memo    @relation(fields: [memoId], references: [id], onDelete: Cascade)
+  author Profile @relation("MemoCommentAuthor", fields: [authorId], references: [id], onDelete: Restrict)
+
+  @@index([memoId])
+  @@index([authorId])
+  @@map("memo_comments")
+}
+
+model MemoReader {
+  id       String   @id @default(uuid())
+  memoId   String
+  readerId String
+  seenAt   DateTime @default(now())
+
+  memo   Memo    @relation(fields: [memoId], references: [id], onDelete: Cascade)
+  reader Profile @relation("MemoReader", fields: [readerId], references: [id], onDelete: Restrict)
+
+  @@unique([memoId, readerId])
+  @@index([memoId])
+  @@index([readerId])
+  @@map("memo_readers")
+}
+
+// ─── Announcement Models ──────────────────────────────────────────────────────
+
+enum AnnouncementPriority {
+  high
+  normal
+
+  @@map("announcement_priority")
+}
+
+enum AnnouncementStatus {
+  draft
+  published
+
+  @@map("announcement_status")
+}
+
+model Announcement {
+  id             String              @id @default(uuid())
+  title          String
+  category       String?
+  content        String?
+  priority       AnnouncementPriority @default(normal)
+  targetAudience String?
+  status         AnnouncementStatus   @default(draft)
+  publishedAt    DateTime?
+  venueId        String?
+  createdById    String
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+
+  createdBy Profile              @relation("AnnouncementCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  venue     Venue?               @relation(fields: [venueId], references: [id], onDelete: SetNull)
+  comments  AnnouncementComment[]
+  readers   AnnouncementReader[]
+
+  @@index([createdById])
+  @@index([status])
+  @@map("announcements")
+}
+
+model AnnouncementComment {
+  id             String   @id @default(uuid())
+  announcementId String
+  authorId       String
+  content        String
+  createdAt      DateTime @default(now())
+
+  announcement Announcement @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+  author       Profile      @relation("AnnouncementCommentAuthor", fields: [authorId], references: [id], onDelete: Restrict)
+
+  @@index([announcementId])
+  @@index([authorId])
+  @@map("announcement_comments")
+}
+
+model AnnouncementReader {
+  id             String   @id @default(uuid())
+  announcementId String
+  readerId       String
+  seenAt         DateTime @default(now())
+
+  announcement Announcement @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+  reader       Profile      @relation("AnnouncementReader", fields: [readerId], references: [id], onDelete: Restrict)
+
+  @@unique([announcementId, readerId])
+  @@index([announcementId])
+  @@index([readerId])
+  @@map("announcement_readers")
 }
