@@ -11,6 +11,7 @@ import { SearchableSelect } from "@/components/ui/searchable-select";
 import { ContactEntry, parseStoredPhone } from "@/components/shared/PhoneInput";
 import { LBL } from "./useEditBookingForm";
 import { validateIdNumber } from "@/lib/validations/booking-form";
+import { BitrixIdField } from "../BitrixIdField";
 import type { EditBookingForm } from "./useEditBookingForm";
 
 // ─── ClientInfoStep ───────────────────────────────────────────────────────────
@@ -164,10 +165,9 @@ export function ClientInfoStep({ form }: { form: EditBookingForm }) {
             <label className={LBL}>
               Bitrix ID <span className="text-destructive">*</span>
             </label>
-            <Input
-              placeholder="Masukkan Bitrix ID"
+            <BitrixIdField
               value={contactBitrixId}
-              onChange={(e) => { setContactBitrixId(e.target.value); clearError("bitrixId"); }}
+              onChange={(id) => { setContactBitrixId(id); clearError("bitrixId"); }}
             />
             {errors.bitrixId && <p className="mt-1 text-sm text-destructive">{errors.bitrixId}</p>}
           </div>

@@ -206,6 +206,7 @@ export function BitrixDealSelect({
                 />
                 <div className="min-w-0">
                   <p className="truncate font-medium text-foreground">{opt.client ?? opt.title}</p>
+                  <p className="truncate font-mono text-[11px] text-muted-foreground">ID: {opt.id}</p>
                   <p className="flex items-center gap-1 text-xs text-muted-foreground">
                     <UserCircle weight="BoldDuotone" className="h-3 w-3 shrink-0" />
                     <span className="truncate">{opt.assignedBy ?? "-"}</span>
