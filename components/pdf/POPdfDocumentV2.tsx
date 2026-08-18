@@ -145,7 +145,7 @@ function joinCppCpw(cpp?: string | null, cpw?: string | null): string {
 }
 
 /** Mirrors POPdfDocument's buildTableRows: header (venue+pax+price) → notes →
- *  internal items (benefit first) → vendor items, each item group separated by a spacer row. */
+ *  internal items (in editor/sortOrder order) → vendor items, each item group separated by a spacer row. */
 function buildPackageRows(booking: POPdfBooking): PackageRow[] {
   const venueName = booking.snapVenue?.venueName ?? "";
   const packageName = booking.snapPackage?.packageName ?? "";
@@ -161,19 +161,12 @@ function buildPackageRows(booking: POPdfBooking): PackageRow[] {
   rows.push({ no: "1", desc: `${venueName} ${packageName}${tierSuffix}${pax ? ` untuk ${pax} orang, termasuk:` : ""}`, descBold: true, total: price });
   notes.forEach((note) => rows.push({ no: "", desc: note, total: "" }));
 
-  const benefitItems = internalItems.filter((i) => i.itemName.toLowerCase().includes("benefit"));
-  const nonBenefitItems = internalItems.filter((i) => !i.itemName.toLowerCase().includes("benefit"));
-
-  benefitItems.forEach((item) => {
-    rows.push({ no: "2", desc: item.itemName, descBold: true, total: "" });
-    htmlToLines(item.itemDescription).forEach((line) => rows.push({ no: "", desc: line, total: "" }));
-    rows.push({ no: "", desc: "", total: "", isSpacer: true });
-  });
-
   // Internal items first (A, B, C…), then vendor items — each group numbered from
   // its own sortOrder, so keep the two lists contiguous rather than merge-sorting them.
+  // Internal items render strictly in their editor drag order — NO special-casing
+  // hoists "benefit"-named items to the top (that broke the user-defined sortOrder).
   let alpha = 0;
-  nonBenefitItems.forEach((item) => {
+  internalItems.forEach((item) => {
     const letter = String.fromCharCode(65 + alpha++);
     rows.push({ no: "", desc: `${letter}. ${item.itemName}`, descBold: true, total: "" });
     htmlToLines(item.itemDescription).forEach((line) => rows.push({ no: "", desc: line, total: "" }));
