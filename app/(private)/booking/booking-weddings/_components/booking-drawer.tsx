@@ -8,6 +8,7 @@ import { format, startOfMonth } from "date-fns";
 import { Calendar as CalendarIcon, CloseCircle, AltArrowDown } from "@solar-icons/react";
 import { CreatePaymentStep } from "@/app/(private)/booking/booking-weddings/_components/_create-booking/CreatePaymentStep";
 import { CreatePaymentRecordStep, type CreatePaymentEntry } from "@/app/(private)/booking/booking-weddings/_components/_create-booking/CreatePaymentRecordStep";
+import { BitrixIdField } from "@/app/(private)/booking/booking-weddings/_components/BitrixIdField";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import SignatureCanvas from "react-signature-canvas";
 import { Drawer } from "@/components/shared/drawer";
@@ -1833,12 +1834,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
                   {isBitrixSource && (
                     <div>
                       <FormLabel className={cn('text-sm', 'font-medium', 'text-foreground')}>Bitrix ID <span className="text-destructive">*</span></FormLabel>
-                      <Input
-                        placeholder="Masukkan Bitrix ID"
-                        value={contactBitrixId}
-                        onChange={(e) => setContactBitrixId(e.target.value)}
-                        className="mt-1"
-                      />
+                      <BitrixIdField value={contactBitrixId} onChange={setContactBitrixId} />
                     </div>
                   )}
                   </div>
