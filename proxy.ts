@@ -10,6 +10,7 @@ const PUBLIC_EXACT = new Set<string>([
   "/client-agreement",
   "/wedding-indicator",
   "/recruitment-form",
+  "/onboarding-form",
   "/offline", // PWA offline shell — must never redirect to login (SW precaches it)
 ]);
 
@@ -29,6 +30,7 @@ const PUBLIC_PREFIXES = [
   "/api/client-agreement/",
   "/api/wedding-indicator-share/",
   "/api/recruitment-form/",
+  "/api/onboarding-form/",
   "/api/health", // container/Dokploy liveness probe — must bypass auth redirect
 ];
 
