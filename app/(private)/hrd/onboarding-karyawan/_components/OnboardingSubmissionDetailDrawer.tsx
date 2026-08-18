@@ -27,6 +27,14 @@ interface OnboardingSubmissionDetailDrawerProps {
   item: OnboardingFormLinkItem | null;
 }
 
+function resolveFileUrl(key: string | null | undefined): string | null {
+  if (!key) return null;
+  if (key.startsWith("http")) return key;
+  const base = process.env.NEXT_PUBLIC_S3_PUBLIC_URL;
+  if (!base) return null;
+  return `${base}/${key}`;
+}
+
 function formatDate(value: string | Date | null | undefined): string {
   if (!value) return "-";
   return new Date(value).toLocaleDateString("id-ID", {
@@ -212,9 +220,9 @@ export function OnboardingSubmissionDetailDrawer({
 
           {/* Dokumen */}
           <Section title="Dokumen">
-            <FilePreview label="Foto KTP" url={sub.ktpFileUrl} />
-            <FilePreview label="Foto KK" url={sub.kkFileUrl} />
-            <FilePreview label="Pas Foto" url={sub.photoUrl} />
+            <FilePreview label="Foto KTP" url={resolveFileUrl(sub.ktpFileUrl)} />
+            <FilePreview label="Foto KK" url={resolveFileUrl(sub.kkFileUrl)} />
+            <FilePreview label="Pas Foto" url={resolveFileUrl(sub.photoUrl)} />
           </Section>
 
           {/* Footer */}
