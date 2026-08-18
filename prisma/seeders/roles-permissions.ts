@@ -80,6 +80,10 @@ export const moduleActions: Record<string, string[]> = {
   "hr-recruitment": ["view", "create", "edit", "delete", "hire"],
   // Finance AP — customer payout (cashback program + overpay refund)
   "finance-ap": ["view", "create", "edit", "delete"],
+  // Internal FAQ / Memo — general knowledge-base module
+  "internal-faq": ["view", "create", "edit", "delete"],
+  // Announcement — company-wide announcements module
+  "announcement": ["view", "create", "edit", "delete"],
 };
 
 // Modules removed (not used in code):
@@ -114,6 +118,8 @@ export const rolePermissionMap: Record<string, Record<string, string[]>> = {
     guestbook: ["view", "create", "edit"],
     promo: ["view"],
     bitrix: ["view"],
+    "internal-faq": ["view"],
+    announcement: ["view"],
   },
   // Manager: CRUD only on dashboard, calendar-event, groups, booking-weddings,
   // package, complimentary, vendors, and customers.
@@ -134,6 +140,8 @@ export const rolePermissionMap: Record<string, Record<string, string[]>> = {
     "procurement-budget": ["view", "create", "edit", "delete"],
     hr: ["view", "create", "edit", "delete", "approve"],
     bitrix: ["view"],
+    "internal-faq": ["view", "create", "edit", "delete"],
+    announcement: ["view", "create", "edit", "delete"],
   },
   "direktur-operational": {
     booking: ["view", "create", "edit", "approve", "comment", "print"],
@@ -148,6 +156,8 @@ export const rolePermissionMap: Record<string, Record<string, string[]>> = {
     "procurement-announcement": ["view", "create", "edit", "delete"],
     "procurement-budget": ["view", "create", "edit", "delete"],
     bitrix: ["view"],
+    "internal-faq": ["view", "create", "edit", "delete"],
+    announcement: ["view", "create", "edit", "delete"],
   },
   // Operational — persis daftar menu yang disepakati:
   //   Procurement (4 tab, CRUD) · Vendor (view) · Purchase Order (view) ·
@@ -162,6 +172,8 @@ export const rolePermissionMap: Record<string, Record<string, string[]>> = {
     vendor: ["view"],
     "vendor-specialist": ["view"],
     guestbook: ["view", "create", "edit"],
+    "internal-faq": ["view"],
+    announcement: ["view"],
   },
   finance: {
     // Lean scope per spec — sidebar Finance hanya: Overview, Report & Analytics,
@@ -210,6 +222,8 @@ export const rolePermissionMap: Record<string, Record<string, string[]>> = {
     complimentary: ["view", "create"],
     promo: ["view", "create", "edit", "delete"],
     bitrix: ["view"],
+    "internal-faq": ["view"],
+    announcement: ["view"],
   },
   "vendor-specialist": {
     "vendor-specialist": ["view", "create", "edit", "delete"],
@@ -229,6 +243,8 @@ export const rolePermissionMap: Record<string, Record<string, string[]>> = {
     "settings-users": ["view", "create", "edit", "delete"],
     "settings-education-level": ["view", "create", "edit", "delete"],
     guestbook: ["view", "create", "edit"],
+    "internal-faq": ["view"],
+    announcement: ["view"],
   },
   "sales-mice": {
     "booking-mice": ["view", "create", "edit", "comment", "client-agreement"],
@@ -242,6 +258,8 @@ export const rolePermissionMap: Record<string, Record<string, string[]>> = {
     // sales-mice can view/create/edit packages but NOT set-harga and NOT delete
     "package-mice": ["view", "create", "edit"],
     bitrix: ["view"],
+    "internal-faq": ["view"],
+    announcement: ["view"],
   },
   "manager-mice": {
     "booking-mice": ["view", "create", "edit", "delete", "print", "approve", "mark-lost", "restore", "transfer", "reject", "comment", "client-agreement"],
@@ -255,6 +273,8 @@ export const rolePermissionMap: Record<string, Record<string, string[]>> = {
     "package-mice": ["view", "create", "edit", "delete", "set-harga", "set-status"],
     complimentary: ["view", "create", "edit", "delete"],
     bitrix: ["view"],
+    "internal-faq": ["view"],
+    announcement: ["view"],
   },
   "procurement-manager": {
     procurement: ["view", "create", "edit", "delete", "approve"],
