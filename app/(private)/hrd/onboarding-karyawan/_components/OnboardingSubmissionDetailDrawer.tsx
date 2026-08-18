@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import {
   Book2,
   Buildings,
@@ -8,6 +7,7 @@ import {
   CardReceive,
   ClipboardText,
   DocumentText,
+  DownloadMinimalistic,
   Home,
   Letter,
   Phone,
@@ -17,6 +17,7 @@ import {
 } from "@solar-icons/react";
 import type { IconProps } from "@solar-icons/react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Drawer } from "@/components/shared/drawer";
 import type { OnboardingFormLinkItem } from "@/lib/queries/onboardingFormLinks";
 
@@ -95,9 +96,17 @@ function FilePreview({
 
   return (
     <div className="flex flex-col gap-2 py-2.5">
-      <div className="flex items-center gap-3">
-        <DocumentText weight="BoldDuotone" className="h-4 w-4 shrink-0 text-muted-foreground" />
-        <span className="text-xs text-muted-foreground">{label}</span>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <DocumentText weight="BoldDuotone" className="h-4 w-4 shrink-0 text-muted-foreground" />
+          <span className="text-xs text-muted-foreground">{label}</span>
+        </div>
+        <a href={url} target="_blank" rel="noopener noreferrer" download>
+          <Button type="button" size="sm" variant="outline" className="rounded-full gap-1.5 text-xs">
+            <DownloadMinimalistic weight="BoldDuotone" className="h-3.5 w-3.5" />
+            Unduh
+          </Button>
+        </a>
       </div>
       <a
         href={url}
@@ -105,12 +114,10 @@ function FilePreview({
         rel="noopener noreferrer"
         className="ml-7 block overflow-hidden rounded-xl border border-border"
       >
-        <Image
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
           src={url}
           alt={label}
-          width={400}
-          height={160}
-          unoptimized
           className="h-40 w-full object-cover transition-opacity hover:opacity-80"
         />
       </a>
