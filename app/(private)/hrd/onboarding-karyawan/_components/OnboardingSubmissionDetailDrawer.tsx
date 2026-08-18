@@ -15,6 +15,7 @@ import {
   User,
   UserCircle,
 } from "@solar-icons/react";
+import type { IconProps } from "@solar-icons/react";
 import { Badge } from "@/components/ui/badge";
 import { Drawer } from "@/components/shared/drawer";
 import type { OnboardingFormLinkItem } from "@/lib/queries/onboardingFormLinks";
@@ -39,7 +40,7 @@ function InfoRow({
   label,
   value,
 }: {
-  icon: React.ComponentType<{ weight?: string; className?: string }>;
+  icon: React.ForwardRefExoticComponent<Omit<IconProps, "ref"> & React.RefAttributes<SVGSVGElement>>;
   label: string;
   value: string | number | null | undefined;
 }) {
