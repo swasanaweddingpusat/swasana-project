@@ -2,6 +2,7 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { apiLimiter, rateLimitResponse } from "@/lib/rate-limit";
 import { getBookingsForExport, type BookingExportFilters } from "@/lib/queries/bookings";
+import { bitrixList } from "@/lib/bitrix";
 import type { DataScope } from "@/types/user";
 
 const STATUS_LABEL: Record<string, string> = {
@@ -13,6 +14,15 @@ const STATUS_LABEL: Record<string, string> = {
   Lost: "Lost",
 };
 
+// Custom (UF_CRM_*) field carrying the ad source URL on a Bitrix deal. Portal-
+// specific id — mirror of the const used in /api/bitrix/deals.
+const UF_ADS_URL = "UF_CRM_1770698079121";
+
+interface AdsDeal {
+  ID: string;
+  [key: string]: string | null | undefined;
+}
+
 /** Format a Date as dd/MM/yyyy in WIB (UTC+7) for the report cell. */
 function fmtDate(value: Date | null): string {
   if (!value) return "";
@@ -21,6 +31,50 @@ function fmtDate(value: Date | null): string {
   const mm = String(wib.getUTCMonth() + 1).padStart(2, "0");
   const yyyy = wib.getUTCFullYear();
   return `${dd}/${mm}/${yyyy}`;
+}
+
+/** Format a Date as dd/MM/yyyy HH:mm in WIB (UTC+7) — for Created/Update cells. */
+function fmtDateTime(value: Date | null): string {
+  if (!value) return "";
+  const wib = new Date(value.getTime() + 7 * 60 * 60 * 1000);
+  const hh = String(wib.getUTCHours()).padStart(2, "0");
+  const min = String(wib.getUTCMinutes()).padStart(2, "0");
+  return `${fmtDate(value)} ${hh}:${min}`;
+}
+
+/**
+ * Resolve `bitrixId` (deal id) → ad source URL for the given deal ids.
+ * Batches the ids in chunks of 50 (one Bitrix `crm.deal.list` page each) and
+ * runs the chunks concurrently. Bitrix failures degrade gracefully to an empty
+ * map so the export never fails because Bitrix is unreachable.
+ */
+async function fetchAdsUrlMap(dealIds: string[]): Promise<Map<string, string>> {
+  const map = new Map<string, string>();
+  const unique = [...new Set(dealIds.filter(Boolean))];
+  if (unique.length === 0) return map;
+
+  const chunks: string[][] = [];
+  for (let i = 0; i < unique.length; i += 50) chunks.push(unique.slice(i, i + 50));
+
+  try {
+    const results = await Promise.all(
+      chunks.map((ids) =>
+        bitrixList<AdsDeal>("crm.deal.list", {
+          filter: { "@ID": ids },
+          select: ["ID", UF_ADS_URL],
+        }),
+      ),
+    );
+    for (const { items } of results) {
+      for (const d of items) {
+        const url = d[UF_ADS_URL]?.trim();
+        if (url) map.set(String(d.ID), url);
+      }
+    }
+  } catch (err) {
+    console.error("[BOOKING] Bitrix adsUrl lookup failed:", err);
+  }
+  return map;
 }
 
 // ─── GET /api/booking/export — Excel export of wedding bookings ───────────────
@@ -51,6 +105,11 @@ export async function GET(req: Request): Promise<Response> {
 
     const rows = await getBookingsForExport(profileId, dataScope, filters);
 
+    // Enrich each row's Bitrix deal id with its ad source URL (batched).
+    const adsUrlMap = await fetchAdsUrlMap(
+      rows.map((r) => r.bitrixId).filter((v): v is string => !!v),
+    );
+
     const headers = [
       "NAMA CLIENT",
       "TANGGAL DEALING",
@@ -58,6 +117,12 @@ export async function GET(req: Request): Promise<Response> {
       "NAMA MARKETING",
       "SUMBER DEALING",
       "STATUS",
+      "PHONE",
+      "URL ADS BITRIX",
+      "BRAND",
+      "PACKAGE",
+      "CREATED",
+      "UPDATE",
     ];
 
     const ExcelJS = await import("exceljs");
@@ -80,6 +145,12 @@ export async function GET(req: Request): Promise<Response> {
         r.marketingName,
         r.dealingSource,
         STATUS_LABEL[r.status] ?? r.status,
+        r.phone,
+        r.bitrixId ? (adsUrlMap.get(r.bitrixId) ?? "") : "",
+        r.brand,
+        r.packageName,
+        fmtDateTime(r.createdAt),
+        fmtDateTime(r.updatedAt),
       ]);
     });
 
