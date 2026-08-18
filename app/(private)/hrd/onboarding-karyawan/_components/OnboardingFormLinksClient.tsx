@@ -37,6 +37,7 @@ import {
 import type { OnboardingFormLinkItem } from "@/lib/queries/onboardingFormLinks";
 import { OnboardingForm } from "@/app/(private)/hrd/onboarding-karyawan/_components/OnboardingForm";
 import { OnboardingFormLinkDrawer } from "@/app/(private)/hrd/onboarding-karyawan/_components/OnboardingFormLinkDrawer";
+import { OnboardingSubmissionDetailDrawer } from "@/app/(private)/hrd/onboarding-karyawan/_components/OnboardingSubmissionDetailDrawer";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -191,6 +192,7 @@ function LinkFormCell({
 export function OnboardingFormLinksClient() {
   const [activeTab, setActiveTab] = useState("form-internal");
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [detailItem, setDetailItem] = useState<OnboardingFormLinkItem | null>(null);
 
   const { data: formLinks = [], isLoading } = useOnboardingFormLinks();
   const regenerateMutation = useRegenerateOnboardingFormLink();
@@ -358,6 +360,17 @@ export function OnboardingFormLinksClient() {
                         {/* Aksi */}
                         <TableCell>
                           <div className="flex items-center justify-end gap-2">
+                            {item.submission ? (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-8 w-8 rounded-full p-0"
+                                title="Lihat Detail"
+                                onClick={() => setDetailItem(item)}
+                              >
+                                <Eye weight="BoldDuotone" className="h-4 w-4 text-muted-foreground" />
+                              </Button>
+                            ) : null}
                             <Button
                               size="sm"
                               variant="ghost"
@@ -390,10 +403,17 @@ export function OnboardingFormLinksClient() {
         </TabsContent>
       </Tabs>
 
-      {/* Drawer */}
+      {/* Drawer: Buat Link */}
       <OnboardingFormLinkDrawer
         isOpen={drawerOpen}
         onClose={() => setDrawerOpen(false)}
+      />
+
+      {/* Drawer: Detail Submission */}
+      <OnboardingSubmissionDetailDrawer
+        isOpen={detailItem !== null}
+        onClose={() => setDetailItem(null)}
+        item={detailItem}
       />
     </div>
   );
