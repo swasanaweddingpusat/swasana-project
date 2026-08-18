@@ -1,5 +1,6 @@
 import { cacheTag, cacheLife } from "next/cache";
 import { db } from "@/lib/db";
+import { parseMobileNumbers } from "@/lib/validations/customer";
 
 const bookingListInclude = {
   snapCustomer: { select: { name: true, mobileNumber: true } },
@@ -310,14 +311,22 @@ export interface BookingExportFilters {
   dealingTo?: string;
 }
 
-/** Satu baris siap-export — sudah dipetakan ke 6 kolom laporan. */
+/** Satu baris siap-export — sudah dipetakan ke kolom laporan. `bitrixId` dibawa
+ *  mentah (deal id) supaya route bisa meng-enrich `adsUrl` dari Bitrix. */
 export interface BookingExportRow {
   clientName: string;
+  phone: string;
   dealingDate: Date;
   eventDate: Date | null;
   marketingName: string;
   dealingSource: string;
   status: string;
+  /** Bitrix deal id (dari customer) — dipakai route buat ambil adsUrl. */
+  bitrixId: string | null;
+  brand: string;
+  packageName: string;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 const EXPORT_MAX_ROWS = 10000;
@@ -366,10 +375,15 @@ export async function getBookingsForExport(
     take: EXPORT_MAX_ROWS,
     select: {
       createdAt: true,
+      updatedAt: true,
       eventDate: true,
       bookingStatus: true,
-      snapCustomer: { select: { name: true } },
-      customer: { select: { name: true } },
+      snapCustomer: { select: { name: true, mobileNumber: true } },
+      customer: { select: { name: true, mobileNumber: true, bitrixId: true } },
+      snapVenue: { select: { brandName: true } },
+      venue: { select: { brand: { select: { name: true } } } },
+      snapPackage: { select: { packageName: true } },
+      package: { select: { packageName: true } },
       sales: { select: { fullName: true } },
       sourceOfInformation: { select: { name: true } },
     },
@@ -378,11 +392,22 @@ export async function getBookingsForExport(
   return rows.map((r) => ({
     // Snapshot-first (frozen at signing), fall back to live customer for drafts/pending.
     clientName: r.snapCustomer?.name ?? r.customer?.name ?? "",
+    phone:
+      r.snapCustomer?.mobileNumber ??
+      parseMobileNumbers(r.customer?.mobileNumber)
+        .map((m) => m.number)
+        .filter(Boolean)
+        .join(", "),
     dealingDate: r.createdAt,
     eventDate: r.eventDate,
     marketingName: r.sales?.fullName ?? "",
     dealingSource: r.sourceOfInformation?.name ?? "",
     status: r.bookingStatus,
+    bitrixId: r.customer?.bitrixId?.trim() || null,
+    brand: r.snapVenue?.brandName ?? r.venue?.brand?.name ?? "",
+    packageName: r.snapPackage?.packageName ?? r.package?.packageName ?? "",
+    createdAt: r.createdAt,
+    updatedAt: r.updatedAt,
   }));
 }
 
