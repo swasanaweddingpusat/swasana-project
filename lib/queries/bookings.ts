@@ -1,6 +1,27 @@
 import { cacheTag, cacheLife } from "next/cache";
 import { db } from "@/lib/db";
-import { parseMobileNumbers } from "@/lib/validations/customer";
+
+/** Extract phone numbers from a Customer.mobileNumber value (Json array of
+ *  `{ name, number }`, or legacy comma-separated string) into a single display
+ *  string. Kept local to avoid importing `lib/validations/customer` — that
+ *  module evaluates `customerSchema.partial()` at load, which throws in Zod v4
+ *  and would poison any route bundle (e.g. /api/booking-mice) that pulls it in. */
+function formatMobileNumbers(raw: unknown): string {
+  if (Array.isArray(raw)) {
+    return (raw as Array<{ number?: unknown }>)
+      .map((m) => (typeof m?.number === "string" ? m.number.trim() : ""))
+      .filter(Boolean)
+      .join(", ");
+  }
+  if (typeof raw === "string") {
+    return raw
+      .split(",")
+      .map((n) => n.trim())
+      .filter(Boolean)
+      .join(", ");
+  }
+  return "";
+}
 
 const bookingListInclude = {
   snapCustomer: { select: { name: true, mobileNumber: true } },
@@ -392,12 +413,7 @@ export async function getBookingsForExport(
   return rows.map((r) => ({
     // Snapshot-first (frozen at signing), fall back to live customer for drafts/pending.
     clientName: r.snapCustomer?.name ?? r.customer?.name ?? "",
-    phone:
-      r.snapCustomer?.mobileNumber ??
-      parseMobileNumbers(r.customer?.mobileNumber)
-        .map((m) => m.number)
-        .filter(Boolean)
-        .join(", "),
+    phone: r.snapCustomer?.mobileNumber ?? formatMobileNumbers(r.customer?.mobileNumber),
     dealingDate: r.createdAt,
     eventDate: r.eventDate,
     marketingName: r.sales?.fullName ?? "",
