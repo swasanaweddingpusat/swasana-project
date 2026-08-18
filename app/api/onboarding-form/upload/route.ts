@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { mutationLimiter, rateLimitResponse } from "@/lib/rate-limit";
 import { validateOnboardingFormToken } from "@/lib/onboarding-form-auth";
 import { uploadToStorage, generateStorageKey } from "@/lib/storage";
-import { compressToWebp } from "@/lib/image";
 
 const ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"] as const;
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
@@ -53,9 +52,9 @@ export async function POST(req: Request): Promise<Response> {
       }
 
       const raw = Buffer.from(await file.arrayBuffer());
-      const compressed = await compressToWebp(raw);
-      const key = generateStorageKey("onboarding-form", "webp");
-      await uploadToStorage(compressed, key, "image/webp");
+      const ext = file.name.split(".").pop()?.toLowerCase() ?? "jpg";
+      const key = generateStorageKey("onboarding-form", ext);
+      await uploadToStorage(raw, key, file.type);
 
       return NextResponse.json({ key });
     }
@@ -73,16 +72,9 @@ export async function POST(req: Request): Promise<Response> {
     }
 
     const raw = Buffer.from(await file.arrayBuffer());
-
-    if (file.type === "application/pdf") {
-      const key = generateStorageKey("onboarding-form", "pdf");
-      await uploadToStorage(raw, key, "application/pdf");
-      return NextResponse.json({ key });
-    }
-
-    const compressed = await compressToWebp(raw);
-    const key = generateStorageKey("onboarding-form", "webp");
-    await uploadToStorage(compressed, key, "image/webp");
+    const ext = file.type === "application/pdf" ? "pdf" : (file.name.split(".").pop()?.toLowerCase() ?? "jpg");
+    const key = generateStorageKey("onboarding-form", ext);
+    await uploadToStorage(raw, key, file.type);
 
     return NextResponse.json({ key });
   } catch (e) {
