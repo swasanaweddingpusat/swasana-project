@@ -5,6 +5,8 @@
 // client component. All calls are POST with a JSON body, which is what Bitrix
 // expects for list methods with filter/select/order params.
 
+import { withBitrixCache } from "@/lib/bitrix-cache";
+
 const BASE = process.env.BITRIX_WEBHOOK_BASE;
 
 export interface BitrixError {
@@ -22,8 +24,20 @@ export class BitrixApiError extends Error {
   }
 }
 
+// Only read methods are safe to cache. Everything else (any future write
+// method) bypasses withBitrixCache entirely and always hits Bitrix live.
+function isCacheableMethod(method: string): boolean {
+  return (
+    method === "batch" ||
+    method.endsWith(".list") ||
+    method.endsWith(".get") ||
+    method.endsWith(".fields") ||
+    method.endsWith(".search")
+  );
+}
+
 /**
- * Low-level call to a Bitrix REST method.
+ * Low-level call to a Bitrix REST method — always hits Bitrix live, no cache.
  *
  * @param method dotted REST method, e.g. "crm.deal.list"
  * @param params request payload (filter/select/order/start/fields/id ...)
@@ -31,7 +45,7 @@ export class BitrixApiError extends Error {
  * @throws BitrixApiError when the webhook is unconfigured, the HTTP call fails,
  *         or Bitrix returns an `error` envelope.
  */
-export async function bitrixCall<T = unknown>(
+async function rawBitrixCall<T = unknown>(
   method: string,
   params: Record<string, unknown> = {},
 ): Promise<{ result: T; total?: number; next?: number }> {
@@ -66,6 +80,25 @@ export async function bitrixCall<T = unknown>(
   }
 
   return { result: json.result as T, total: json.total, next: json.next };
+}
+
+/**
+ * Call a Bitrix REST method — read methods (`.list`/`.get`/`.fields`/`.search`/
+ * `batch`) go through the Redis read-through cache (see lib/bitrix-cache.ts);
+ * everything else always hits Bitrix live.
+ *
+ * @param method dotted REST method, e.g. "crm.deal.list"
+ * @param params request payload (filter/select/order/start/fields/id ...)
+ * @returns the parsed `result` field of the Bitrix envelope
+ * @throws BitrixApiError when the webhook is unconfigured, the HTTP call fails,
+ *         or Bitrix returns an `error` envelope.
+ */
+export async function bitrixCall<T = unknown>(
+  method: string,
+  params: Record<string, unknown> = {},
+): Promise<{ result: T; total?: number; next?: number }> {
+  if (!isCacheableMethod(method)) return rawBitrixCall<T>(method, params);
+  return withBitrixCache(method, params, () => rawBitrixCall<T>(method, params));
 }
 
 /**

@@ -18,8 +18,11 @@ const UF_ADS_HEADLINE = "UF_CRM_1770698102639"; // ad headline
 const UF_ADS_BODY = "UF_CRM_1770698208232"; // ad body / caption
 const UF_DB_DATE = "UF_CRM_1786680629702"; // date: "Tanggal Database" — when the lead entered the database
 
-// Fields pulled for the Transaksi (deals) table.
-const DEAL_SELECT = [
+// Fields pulled for the Transaksi (deals) table. Exported so the daily cron
+// warmer (lib/bitrix-warm-targets.ts) can request the exact same default-view
+// params — any drift here would warm a different Redis cache key than the one
+// this route actually reads.
+export const DEAL_SELECT = [
   "ID",
   "TITLE",
   "STAGE_ID",
