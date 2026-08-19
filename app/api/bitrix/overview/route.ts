@@ -15,7 +15,10 @@ const UF_VENUE = "UF_CRM_1767957579717"; // enum: venue name
 const UF_REASON = "UF_CRM_1774952346733"; // enum: includes "Getback"
 const UF_ISSUE = "UF_CRM_1768930533046"; // enum: Leads / No Response / Spam / Komplain …
 
-const DEAL_SELECT = [
+// Exported so the daily cron warmer (lib/bitrix-warm-targets.ts) can request
+// the exact same default-view params — any drift here would warm a different
+// Redis cache key than the one this route actually reads.
+export const OVERVIEW_DEAL_SELECT = [
   "ID",
   "TITLE",
   "STAGE_ID",
@@ -127,7 +130,7 @@ export async function GET(request: Request) {
     }
 
     const { items: allItems } = await bitrixListAll<RawDeal>("crm.deal.list", {
-      select: DEAL_SELECT,
+      select: OVERVIEW_DEAL_SELECT,
       filter,
       order: { DATE_CREATE: "ASC" },
     });

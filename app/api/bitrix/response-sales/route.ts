@@ -1,14 +1,13 @@
 import { requirePermissionForRoute } from "@/lib/permissions";
 import { apiLimiter, rateLimitResponse } from "@/lib/rate-limit";
 import {
-  bitrixCall,
   bitrixListAll,
   resolveBitrixUsers,
   stripImol,
   BitrixApiError,
 } from "@/lib/bitrix";
-import type { SessionHistory } from "@/lib/bitrix";
-import { parseResponseSamples, avgSeconds, type ResponseSample } from "@/lib/bitrix-response";
+import { avgSeconds, type ResponseSample } from "@/lib/bitrix-response";
+import { resolveSessionMetrics } from "@/lib/bitrix-session-metrics";
 import { parseSubject, channelFromSourceId } from "@/lib/bitrix-conversation";
 
 const PROVIDER_ID = "IMOPENLINES_SESSION";
@@ -25,6 +24,7 @@ const ACTIVITY_SELECT = [
   "START_TIME",
   "END_TIME",
   "COMPLETED",
+  "LAST_UPDATED",
 ];
 
 interface RawActivity {
@@ -39,6 +39,7 @@ interface RawActivity {
   START_TIME: string | null;
   END_TIME: string | null;
   COMPLETED: string | null;
+  LAST_UPDATED: string | null;
 }
 
 interface ConversationItem {
@@ -108,32 +109,29 @@ export async function GET(request: Request) {
     const samplesByUser = new Map<string, ResponseSample[]>();
     const sessionSamples = new Map<string, Map<string, ResponseSample[]>>();
 
-    for (const chunk of chunkArray([...activityBySession.keys()], 50)) {
-      const cmd: Record<string, string> = {};
-      for (const id of chunk) cmd[`h${id}`] = `imopenlines.session.history.get?SESSION_ID=${id}`;
+    const sessions = [...activityBySession.entries()].map(([sessionId, a]) => ({
+      sessionId,
+      lastUpdated: a.LAST_UPDATED,
+    }));
+    const sessionMetrics = await resolveSessionMetrics(sessions);
 
-      const batch = await bitrixCall("batch", { cmd, halt: 0 });
-      const results = (batch.result ?? {}) as { result?: Record<string, SessionHistory> };
+    for (const [sessionId, metrics] of Object.entries(sessionMetrics)) {
+      const { samples } = metrics;
+      if (samples.length === 0) continue;
 
-      for (const [key, history] of Object.entries(results.result ?? {})) {
-        const sessionId = key.startsWith("h") ? key.slice(1) : key;
-        if (!history?.message) continue;
+      const byUser = sessionSamples.get(sessionId) ?? new Map<string, ResponseSample[]>();
 
-        const { samples } = parseResponseSamples(history);
-        const byUser = sessionSamples.get(sessionId) ?? new Map<string, ResponseSample[]>();
+      for (const s of samples) {
+        const all = samplesByUser.get(s.userId) ?? [];
+        all.push(s);
+        samplesByUser.set(s.userId, all);
 
-        for (const s of samples) {
-          const all = samplesByUser.get(s.userId) ?? [];
-          all.push(s);
-          samplesByUser.set(s.userId, all);
-
-          const perSession = byUser.get(s.userId) ?? [];
-          perSession.push(s);
-          byUser.set(s.userId, perSession);
-        }
-
-        if (byUser.size > 0) sessionSamples.set(sessionId, byUser);
+        const perSession = byUser.get(s.userId) ?? [];
+        perSession.push(s);
+        byUser.set(s.userId, perSession);
       }
+
+      if (byUser.size > 0) sessionSamples.set(sessionId, byUser);
     }
 
     const rows: ResponseSalesRow[] = [...samplesByUser.entries()]
@@ -213,12 +211,6 @@ function nextDay(day: string): string {
   const dt = new Date(Date.UTC(y, m - 1, d));
   dt.setUTCDate(dt.getUTCDate() + 1);
   return dt.toISOString().slice(0, 10);
-}
-
-function chunkArray<T>(arr: T[], size: number): T[][] {
-  const out: T[][] = [];
-  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
-  return out;
 }
 
 function formatHours(totalSeconds: number): string {

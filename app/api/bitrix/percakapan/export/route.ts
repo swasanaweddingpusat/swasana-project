@@ -1,8 +1,8 @@
 import { requirePermissionForRoute } from "@/lib/permissions";
 import { apiLimiter, rateLimitResponse } from "@/lib/rate-limit";
-import { bitrixListAll, bitrixCall, resolveBitrixUsers, BitrixApiError } from "@/lib/bitrix";
-import type { SessionHistory } from "@/lib/bitrix";
-import { parseResponseSamples, avgSeconds } from "@/lib/bitrix-response";
+import { bitrixListAll, resolveBitrixUsers, BitrixApiError } from "@/lib/bitrix";
+import { avgSeconds } from "@/lib/bitrix-response";
+import { resolveSessionMetrics } from "@/lib/bitrix-session-metrics";
 import { parseSubject, channelFromSourceId } from "@/lib/bitrix-conversation";
 
 const PROVIDER_ID = "IMOPENLINES_SESSION";
@@ -123,16 +123,18 @@ async function fetchFilteredConversations(searchParams: URLSearchParams): Promis
 
   const userMap = await resolveBitrixUsers(items.map((a) => a.RESPONSIBLE_ID ?? "").filter(Boolean));
 
-  const sessionIds = items
-    .map((a) => a.ASSOCIATED_ENTITY_ID ?? stripImol(a.ORIGIN_ID) ?? a.ID)
-    .filter(Boolean);
-  const sessionInfo = await resolveSessionInfo(sessionIds);
+  const sessions = items.map((a) => ({
+    sessionId: a.ASSOCIATED_ENTITY_ID ?? stripImol(a.ORIGIN_ID) ?? a.ID,
+    lastUpdated: a.LAST_UPDATED,
+  }));
+  const sessionMetrics = await resolveSessionMetrics(sessions);
 
   return items
     .map((a) => {
       const parsed = parseSubject(a.SUBJECT);
       const sessionId = a.ASSOCIATED_ENTITY_ID ?? stripImol(a.ORIGIN_ID) ?? a.ID;
       const dealId = a.OWNER_TYPE_ID === "2" ? a.OWNER_ID : null;
+      const m = sessionMetrics[sessionId] ?? { samples: [], events: [] };
 
       return {
         id: a.ID,
@@ -150,9 +152,9 @@ async function fetchFilteredConversations(searchParams: URLSearchParams): Promis
         closedAt: a.COMPLETED === "Y" ? a.END_TIME : null,
         lastMessageAt: a.LAST_UPDATED,
         durationSec: durationSeconds(a.START_TIME, a.END_TIME),
-        avgResponseSec: sessionInfo[sessionId]?.avgResponseSec ?? null,
-        transferCount: sessionInfo[sessionId]?.transferCount ?? 0,
-        transferred: (sessionInfo[sessionId]?.transferCount ?? 0) > 0,
+        avgResponseSec: m.samples.length > 0 ? avgSeconds(m.samples) : null,
+        transferCount: m.events.length,
+        transferred: m.events.length > 0,
       };
     })
     .filter((r) => {
@@ -177,46 +179,6 @@ function stripImol(origin: string | null): string | null {
   if (!origin) return null;
   const m = origin.match(/IMOL_(\d+)/);
   return m ? m[1] : origin;
-}
-
-async function resolveSessionInfo(
-  sessionIds: string[],
-): Promise<Record<string, { avgResponseSec: number | null; transferCount: number }>> {
-  const out: Record<string, { avgResponseSec: number | null; transferCount: number }> = {};
-  const unique = [...new Set(sessionIds)];
-
-  for (const chunk of chunkArray(unique, 50)) {
-    const cmd: Record<string, string> = {};
-    for (const id of chunk) cmd[`h${id}`] = `imopenlines.session.history.get?SESSION_ID=${id}`;
-
-    const batch = await bitrixCall("batch", { cmd, halt: 0 });
-    const results = (batch.result ?? {}) as { result?: Record<string, SessionHistory> };
-
-    for (const [key, history] of Object.entries(results.result ?? {})) {
-      const sessionId = key.startsWith("h") ? key.slice(1) : key;
-      if (!history?.message) {
-        out[sessionId] = { avgResponseSec: null, transferCount: 0 };
-        continue;
-      }
-      const { samples, events } = parseResponseSamples(history);
-      out[sessionId] = {
-        avgResponseSec: samples.length > 0 ? avgSeconds(samples) : null,
-        transferCount: events.length,
-      };
-    }
-
-    for (const id of chunk) {
-      if (!(id in out)) out[id] = { avgResponseSec: null, transferCount: 0 };
-    }
-  }
-
-  return out;
-}
-
-function chunkArray<T>(arr: T[], size: number): T[][] {
-  const chunks: T[][] = [];
-  for (let i = 0; i < arr.length; i += size) chunks.push(arr.slice(i, i + size));
-  return chunks;
 }
 
 function durationSeconds(start: string | null, end: string | null): number | null {

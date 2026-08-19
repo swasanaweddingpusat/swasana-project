@@ -1,17 +1,22 @@
 import { requirePermissionForRoute } from "@/lib/permissions";
 import { apiLimiter, rateLimitResponse } from "@/lib/rate-limit";
-import { bitrixList, bitrixCall, resolveBitrixUsers, BitrixApiError } from "@/lib/bitrix";
-import type { SessionHistory } from "@/lib/bitrix";
-import { parseResponseSamples, avgSeconds } from "@/lib/bitrix-response";
+import { bitrixList, resolveBitrixUsers, BitrixApiError } from "@/lib/bitrix";
+import { avgSeconds } from "@/lib/bitrix-response";
+import { resolveSessionMetrics } from "@/lib/bitrix-session-metrics";
 import { parseSubject, channelFromSourceId } from "@/lib/bitrix-conversation";
 
 // Open Lines conversations ("Percakapan") are stored as CRM activities whose
 // PROVIDER_ID marks them as chat sessions. There is no imopenlines.session.list
 // REST method on an inbound webhook, so this is the reliable source.
-const PROVIDER_ID = "IMOPENLINES_SESSION";
+//
+// Both consts below are exported so the daily cron warmer
+// (lib/bitrix-warm-targets.ts) can request the exact same default-view params
+// — any drift here would warm a different Redis cache key than the one this
+// route actually reads.
+export const PROVIDER_ID = "IMOPENLINES_SESSION";
 
 // Fields pulled per session — everything the Percakapan table renders.
-const ACTIVITY_SELECT = [
+export const ACTIVITY_SELECT = [
   "ID",
   "OWNER_ID",
   "OWNER_TYPE_ID",
@@ -115,12 +120,14 @@ export async function GET(request: Request) {
     const userMap = await resolveBitrixUsers(items.map((a) => a.RESPONSIBLE_ID ?? "").filter(Boolean));
 
     // Compute each row's average response time (assign/transfer → agent's first
-    // message) from session history. Bitrix has no bulk stat for this, so walk
-    // the current page's sessions in batches of 50 and derive it locally.
-    const sessionIds = items
-      .map((a) => a.ASSOCIATED_ENTITY_ID ?? stripImol(a.ORIGIN_ID) ?? a.ID)
-      .filter(Boolean);
-    const sessionInfo = await resolveSessionInfo(sessionIds);
+    // message) from session history. Bitrix has no bulk stat for this — the
+    // shared helper walks each session's history (batched 50 at a time),
+    // read-through cached per session in Redis.
+    const sessions = items.map((a) => ({
+      sessionId: a.ASSOCIATED_ENTITY_ID ?? stripImol(a.ORIGIN_ID) ?? a.ID,
+      lastUpdated: a.LAST_UPDATED,
+    }));
+    const sessionMetrics = await resolveSessionMetrics(sessions);
 
     const rows = items
       .map((a) => {
@@ -130,6 +137,7 @@ export async function GET(request: Request) {
         // OWNER_ID, but only when the owner type is a deal (2).
         const sessionId = a.ASSOCIATED_ENTITY_ID ?? stripImol(a.ORIGIN_ID) ?? a.ID;
         const dealId = a.OWNER_TYPE_ID === "2" ? a.OWNER_ID : null;
+        const m = sessionMetrics[sessionId] ?? { samples: [], events: [] };
 
         return {
           id: a.ID,
@@ -147,9 +155,9 @@ export async function GET(request: Request) {
           closedAt: a.COMPLETED === "Y" ? a.END_TIME : null,
           lastMessageAt: a.LAST_UPDATED,
           durationSec: durationSeconds(a.START_TIME, a.END_TIME),
-          avgResponseSec: sessionInfo[sessionId]?.avgResponseSec ?? null,
-          transferCount: sessionInfo[sessionId]?.transferCount ?? 0,
-          transferred: (sessionInfo[sessionId]?.transferCount ?? 0) > 0,
+          avgResponseSec: m.samples.length > 0 ? avgSeconds(m.samples) : null,
+          transferCount: m.events.length,
+          transferred: m.events.length > 0,
         };
       })
       .filter((r) => {
@@ -189,49 +197,6 @@ function stripImol(origin: string | null): string | null {
   if (!origin) return null;
   const m = origin.match(/IMOL_(\d+)/);
   return m ? m[1] : origin;
-}
-
-// Fetch session histories in chunks of 50 and return sessionId → avg response
-// seconds + transfer count. A missing/empty history resolves to null / 0.
-async function resolveSessionInfo(
-  sessionIds: string[],
-): Promise<Record<string, { avgResponseSec: number | null; transferCount: number }>> {
-  const out: Record<string, { avgResponseSec: number | null; transferCount: number }> = {};
-  const unique = [...new Set(sessionIds)];
-
-  for (const chunk of chunkArray(unique, 50)) {
-    const cmd: Record<string, string> = {};
-    for (const id of chunk) cmd[`h${id}`] = `imopenlines.session.history.get?SESSION_ID=${id}`;
-
-    const batch = await bitrixCall("batch", { cmd, halt: 0 });
-    const results = (batch.result ?? {}) as { result?: Record<string, SessionHistory> };
-
-    for (const [key, history] of Object.entries(results.result ?? {})) {
-      const sessionId = key.startsWith("h") ? key.slice(1) : key;
-      if (!history?.message) {
-        out[sessionId] = { avgResponseSec: null, transferCount: 0 };
-        continue;
-      }
-      const { samples, events } = parseResponseSamples(history);
-      out[sessionId] = {
-        avgResponseSec: samples.length > 0 ? avgSeconds(samples) : null,
-        transferCount: events.length,
-      };
-    }
-
-    // Preserve null/0 for sessions missing from the batch result (e.g. error).
-    for (const id of chunk) {
-      if (!(id in out)) out[id] = { avgResponseSec: null, transferCount: 0 };
-    }
-  }
-
-  return out;
-}
-
-function chunkArray<T>(arr: T[], size: number): T[][] {
-  const chunks: T[][] = [];
-  for (let i = 0; i < arr.length; i += size) chunks.push(arr.slice(i, i + size));
-  return chunks;
 }
 
 // Conversation duration in seconds from START/END; null when either is missing.
