@@ -491,7 +491,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
     defaultValues: {
       eventDate: "", customerId: "", venueId: "", packageId: "",
       salesId: null,
-      paymentMethodId: null, sourceOfInformationId: null,
+      paymentMethodId: null, sourceOfInformationId: null, sourceOfInformationDetail: null,
       weddingSession: null, weddingType: null, bonuses: [], termOfPayments: [],
       specialBonusName: null, specialBonusAmount: null,
       signingLocation: null, signatureSales: null,
@@ -932,6 +932,9 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
     if (resumeDraftDetail.sourceOfInformationId) {
       form.setValue("sourceOfInformationId", resumeDraftDetail.sourceOfInformationId);
     }
+    if (resumeDraftDetail.sourceOfInformationDetail) {
+      form.setValue("sourceOfInformationDetail", resumeDraftDetail.sourceOfInformationDetail);
+    }
     // eventDate
     if (resumeDraftDetail.eventDate) {
       form.setValue("eventDate", resumeDraftDetail.eventDate);
@@ -1177,6 +1180,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
           packageId: form.getValues("packageId") || null,
           salesId: form.getValues("salesId") || null,
           sourceOfInformationId: form.getValues("sourceOfInformationId") || null,
+          sourceOfInformationDetail: form.getValues("sourceOfInformationDetail") || null,
           weddingSession: form.getValues("weddingSession") || null,
           weddingType: form.getValues("weddingType") || null,
           customerId: form.getValues("customerId") || null,
@@ -1826,6 +1830,21 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
                           searchPlaceholder="Cari sumber..."
                           emptyText="Tidak ada data"
                         />
+                      <FormMessage />
+                    </FormItem>
+                  )} />
+
+                  {/* Detail Sumber — freetext, opsional */}
+                  <FormField control={form.control} name="sourceOfInformationDetail" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className={cn('text-sm', 'font-medium', 'text-foreground')}>Detail Sumber</FormLabel>
+                      <Textarea
+                        className="mt-1"
+                        rows={2}
+                        value={field.value ?? ""}
+                        onChange={field.onChange}
+                        placeholder="Contoh: nama yang mereferensikan, catatan tambahan"
+                      />
                       <FormMessage />
                     </FormItem>
                   )} />

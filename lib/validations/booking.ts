@@ -25,6 +25,7 @@ export const bookingSchema = z.object({
   salesId: z.string().optional().nullable(),
   paymentMethodId: z.string().optional().nullable(),
   sourceOfInformationId: z.string().optional().nullable(),
+  sourceOfInformationDetail: z.string().optional().nullable(),
   specialBonusName: z.string().optional().nullable(),
   specialBonusAmount: z.coerce.number().optional().nullable(),
   bonuses: z.array(z.object({
@@ -116,6 +117,7 @@ export const editBookingSchema = z.object({
   packageId: z.string().min(1, "Package wajib dipilih"),
   paymentMethodId: z.string().optional().nullable(),
   sourceOfInformationId: z.string().optional().nullable(),
+  sourceOfInformationDetail: z.string().optional().nullable(),
   signingLocation: z.string().optional().nullable(),
   eventTime: z.string().optional().nullable(),
   notes: z.string().optional().nullable(),
@@ -201,6 +203,7 @@ export const updateBookingClientInfoSchema = z.object({
   contactBitrixId: z.string().optional().default(""),
   salesId: z.string().optional().nullable(),
   sourceOfInformationId: z.string().optional().nullable(),
+  sourceOfInformationDetail: z.string().optional().nullable(),
 }).superRefine((data, ctx) => {
   const nikCpp = data.contactNikCpp ?? "";
   if (nikCpp !== "") {

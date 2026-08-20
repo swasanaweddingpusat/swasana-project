@@ -154,6 +154,11 @@ export function BookingDetailModal({ open, onClose, bookingId }: Props) {
   // The BITRIX tab is only relevant when this booking's customer carries a Bitrix
   // deal id (captured at create/edit when the source of information is Bitrix).
   const bitrixId = booking?.customer?.bitrixId?.trim() || null;
+  const sourceOfInformationLabel = booking?.sourceOfInformation?.name
+    ? booking.sourceOfInformation.name === "Bitrix" && bitrixId
+      ? `${booking.sourceOfInformation.name} - ${bitrixId}`
+      : booking.sourceOfInformation.name
+    : "-";
   const tabs = [
     { key: "booking" as const, label: "Booking Details" },
     { key: "vendor" as const, label: "Vendor Details" },
@@ -269,11 +274,11 @@ export function BookingDetailModal({ open, onClose, bookingId }: Props) {
                         })()}
                       </MobileField>
                       <MobileField label="Sumber Informasi">
-                        {booking.sourceOfInformation?.name ?? "-"}
+                        {sourceOfInformationLabel}
                       </MobileField>
-                      {booking.customer?.bitrixId && (
-                        <MobileField label="Bitrix ID">
-                          {booking.customer.bitrixId}
+                      {booking.sourceOfInformationDetail && (
+                        <MobileField label="Detail Sumber">
+                          {booking.sourceOfInformationDetail}
                         </MobileField>
                       )}
                     </MobileCard>
@@ -406,11 +411,11 @@ export function BookingDetailModal({ open, onClose, bookingId }: Props) {
                       <p className={lbl + " mt-4"}>Package Type</p>
                       <p className={val}>{booking.snapPackage?.packageName ?? "-"}</p>
                       <p className={lbl + " mt-4"}>Sumber Informasi</p>
-                      <p className={val}>{booking.sourceOfInformation?.name ?? "-"}</p>
-                      {booking.customer?.bitrixId && (
+                      <p className={val}>{sourceOfInformationLabel}</p>
+                      {booking.sourceOfInformationDetail && (
                         <>
-                          <p className={lbl + " mt-4"}>Bitrix ID</p>
-                          <p className={val}>{booking.customer.bitrixId}</p>
+                          <p className={lbl + " mt-4"}>Detail Sumber</p>
+                          <p className={val}>{booking.sourceOfInformationDetail}</p>
                         </>
                       )}
                     </div>

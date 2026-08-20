@@ -83,6 +83,8 @@ export interface EditBookingForm {
   setContactBitrixId: (v: string) => void;
   sourceOfInformationId: string;
   setSourceOfInformationId: (v: string) => void;
+  sourceOfInformationDetail: string;
+  setSourceOfInformationDetail: (v: string) => void;
   salesId: string | null;
   setSalesId: (v: string | null) => void;
 
@@ -206,6 +208,7 @@ export function useEditBookingForm(
   const [contactCpwAddress, setContactCpwAddress] = useState("");
   const [contactBitrixId, setContactBitrixId] = useState("");
   const [sourceOfInformationId, setSourceOfInformationId] = useState("");
+  const [sourceOfInformationDetail, setSourceOfInformationDetail] = useState("");
   const [salesId, setSalesId] = useState<string | null>(null);
 
   // â”€â”€ Step 2: Venue / Package / Event â”€â”€
@@ -323,6 +326,7 @@ export function useEditBookingForm(
 
     setSalesId(booking.salesId ?? null);
     setSourceOfInformationId(booking.sourceOfInformationId ?? "");
+    setSourceOfInformationDetail(booking.sourceOfInformationDetail ?? "");
 
     setVenueId(booking.venueId ?? "");
     setPackageId(booking.packageId ?? "");
@@ -466,6 +470,7 @@ export function useEditBookingForm(
         contactBitrixId: isBitrixSource ? contactBitrixId : "",
         salesId: salesId || null,
         sourceOfInformationId: sourceOfInformationId || null,
+        sourceOfInformationDetail: sourceOfInformationDetail || null,
       });
       if (!r.success) { toast.error(r.error); return; }
       qc.invalidateQueries({ queryKey: ["bookings"] });
@@ -496,6 +501,7 @@ export function useEditBookingForm(
         contactBitrixId: isBitrixSource ? contactBitrixId : "",
         salesId: salesId || null,
         sourceOfInformationId: sourceOfInformationId || null,
+        sourceOfInformationDetail: sourceOfInformationDetail || null,
         venueId,
         packageId,
         eventDate: bookingDate,
@@ -575,6 +581,8 @@ export function useEditBookingForm(
     setContactBitrixId,
     sourceOfInformationId,
     setSourceOfInformationId,
+    sourceOfInformationDetail,
+    setSourceOfInformationDetail,
     salesId,
     setSalesId,
     venueId,

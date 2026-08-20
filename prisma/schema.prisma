@@ -897,6 +897,7 @@ model Booking {
   packageId             String?
   paymentMethodId       String?
   sourceOfInformationId String?
+  sourceOfInformationDetail String?
   // When a booking draft was created from a lead (Deal flow), leadId is set.
   // This allows the availability endpoint to block the slot even for drafts
   // (only draft-from-lead blocks; manually created drafts do not).
