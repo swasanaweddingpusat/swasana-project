@@ -32,6 +32,7 @@ export function ClientInfoStep({ form }: { form: EditBookingForm }) {
     contactCpwAddress, setContactCpwAddress,
     contactBitrixId, setContactBitrixId,
     sourceOfInformationId, setSourceOfInformationId,
+    sourceOfInformationDetail, setSourceOfInformationDetail,
     salesId, setSalesId,
     salesUsers,
     sources,
@@ -157,6 +158,17 @@ export function ClientInfoStep({ form }: { form: EditBookingForm }) {
             placeholder="Pilih sumber informasi"
             searchPlaceholder="Cari sumber..."
             emptyText="Tidak ada data"
+          />
+        </div>
+
+        <div>
+          <label className={LBL}>Detail Sumber</label>
+          <Textarea
+            className="mt-1"
+            rows={2}
+            value={sourceOfInformationDetail}
+            onChange={(e) => setSourceOfInformationDetail(e.target.value)}
+            placeholder="Contoh: nama yang mereferensikan, catatan tambahan"
           />
         </div>
 
