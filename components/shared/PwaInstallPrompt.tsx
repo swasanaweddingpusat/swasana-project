@@ -8,9 +8,30 @@ interface BeforeInstallPromptEvent extends Event {
   userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
 }
 
-const DISMISS_KEY = "pwa-install-dismissed";
+const SNOOZE_KEY = "pwa-install-snooze-until"; // timestamp (ms) sampai kapan banner ditahan
 const VISIT_KEY = "pwa-visit-count";
-const DISMISS_DAYS = 7;
+const DAY = 1000 * 60 * 60 * 24;
+
+// Cooldown per jenis interaksi — makin sengaja nolaknya, makin lama ditahan.
+const SHOWN_COOLDOWN = 3 * DAY;    // begitu tampil, jangan nag lagi minimal 3 hari
+const DISMISS_COOLDOWN = 14 * DAY; // klik ✕ → tahan 14 hari
+const INSTALLED_COOLDOWN = 365 * DAY; // udah install → praktis stop
+
+function snooze(ms: number): void {
+  try {
+    localStorage.setItem(SNOOZE_KEY, String(Date.now() + ms));
+  } catch {
+    /* localStorage unavailable — noop */
+  }
+}
+
+function isStandalone(): boolean {
+  return (
+    window.matchMedia("(display-mode: standalone)").matches ||
+    // iOS Safari
+    (window.navigator as Navigator & { standalone?: boolean }).standalone === true
+  );
+}
 
 export function PwaInstallPrompt() {
   const [deferredPrompt, setDeferredPrompt] =
@@ -18,16 +39,14 @@ export function PwaInstallPrompt() {
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
-    // Install prompt hanya untuk mobile — desktop tidak menampilkan banner ini.
+    // Banner install hanya untuk mobile — desktop tidak menampilkannya.
     if (!window.matchMedia("(max-width: 767px)").matches) return;
+    // Sudah terpasang sebagai PWA → jangan pernah tampilkan.
+    if (isStandalone()) return;
 
     try {
-      const dismissed = localStorage.getItem(DISMISS_KEY);
-      if (dismissed) {
-        const dismissedAt = Number(dismissed);
-        const daysSince = (Date.now() - dismissedAt) / (1000 * 60 * 60 * 24);
-        if (daysSince < DISMISS_DAYS) return;
-      }
+      const snoozeUntil = Number(localStorage.getItem(SNOOZE_KEY) || "0");
+      if (Date.now() < snoozeUntil) return;
 
       const visits = Number(localStorage.getItem(VISIT_KEY) || "0") + 1;
       localStorage.setItem(VISIT_KEY, String(visits));
@@ -40,23 +59,35 @@ export function PwaInstallPrompt() {
       e.preventDefault();
       setDeferredPrompt(e as BeforeInstallPromptEvent);
       setVisible(true);
+      // Tampil sekali ini saja untuk beberapa hari, walau user hanya mengabaikannya.
+      snooze(SHOWN_COOLDOWN);
+    };
+    const onInstalled = () => {
+      snooze(INSTALLED_COOLDOWN);
+      setVisible(false);
+      setDeferredPrompt(null);
     };
     window.addEventListener("beforeinstallprompt", handler);
-    return () => window.removeEventListener("beforeinstallprompt", handler);
+    window.addEventListener("appinstalled", onInstalled);
+    return () => {
+      window.removeEventListener("beforeinstallprompt", handler);
+      window.removeEventListener("appinstalled", onInstalled);
+    };
   }, []);
 
   const handleInstall = useCallback(async () => {
     if (!deferredPrompt) return;
     await deferredPrompt.prompt();
     const { outcome } = await deferredPrompt.userChoice;
-    if (outcome === "accepted") {
-      setVisible(false);
-    }
+    // Batal di popup native pun tetap ditahan (pakai cooldown "tampil"),
+    // jadi tidak balik lagi di navigasi berikutnya.
+    if (outcome === "accepted") snooze(INSTALLED_COOLDOWN);
+    setVisible(false);
     setDeferredPrompt(null);
   }, [deferredPrompt]);
 
   const handleDismiss = useCallback(() => {
-    try { localStorage.setItem(DISMISS_KEY, String(Date.now())); } catch { /* noop */ }
+    snooze(DISMISS_COOLDOWN);
     setVisible(false);
   }, []);
 
@@ -84,6 +115,7 @@ export function PwaInstallPrompt() {
           type="button"
           onClick={handleDismiss}
           className="shrink-0 rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-accent"
+          aria-label="Tutup"
         >
           <CloseCircle weight="BoldDuotone" className="h-4 w-4" />
         </button>

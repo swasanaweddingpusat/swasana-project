@@ -523,7 +523,7 @@ export async function finalizeDraftMiceBooking(data: unknown): Promise<FinalizeM
         title: "Booking MICE Baru",
         message: `${session!.user.name ?? "User"} membuat booking MICE untuk ${draft.customer?.name ?? "Unknown"}.`,
         type: "booking_created",
-        entityType: "booking",
+        entityType: "booking-mice",
         entityId: draftId,
       },
       session!.user.profileId!

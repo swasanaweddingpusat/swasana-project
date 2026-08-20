@@ -72,18 +72,30 @@ export async function sendPushNotification(
   }
 }
 
-export function getNotificationUrl(type: string, entityId?: string | null): string {
+export function getNotificationUrl(
+  type: string,
+  entityId?: string | null,
+  entityType?: string | null,
+): string {
   if (type === "leave_approved" || type === "leave_rejected") {
     return "/hrd/sistem-cuti";
   }
   if (type === "payslip_generated") {
     return "/hrd/slip-gaji";
   }
+  if (type === "comment_mention" && entityId) {
+    return `/booking/booking-weddings/${entityId}?openComments=true`;
+  }
+  // MICE booking has no detail page yet → land on the MICE list.
+  if (entityType === "booking-mice") {
+    return "/booking/booking-mice";
+  }
+  // Wedding booking → deep-link straight to its standalone detail page.
+  if (type.startsWith("booking_") && entityType === "booking" && entityId) {
+    return `/booking/booking-weddings/${entityId}`;
+  }
   if (type.startsWith("booking_")) {
     return "/booking/booking-weddings";
-  }
-  if (type === "comment_mention" && entityId) {
-    return `/booking/booking-weddings?bookingId=${entityId}&openComments=true`;
   }
   return "/notifications";
 }

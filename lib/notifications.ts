@@ -46,7 +46,7 @@ export async function createNotifications(inputs: CreateNotificationInput[]): Pr
       sendPushNotification(input.userId, {
         title: input.title,
         body: input.message,
-        url: getNotificationUrl(input.type, input.entityId),
+        url: getNotificationUrl(input.type, input.entityId, input.entityType),
         tag: input.type,
       }).catch(() => {});
     }
@@ -74,7 +74,7 @@ export async function notifyRole(roleId: string, notification: Omit<CreateNotifi
       sendPushNotification(p.id, {
         title: notification.title,
         body: notification.message,
-        url: getNotificationUrl(notification.type, notification.entityId),
+        url: getNotificationUrl(notification.type, notification.entityId, notification.entityType),
         tag: notification.type,
       }).catch(() => {});
     }
@@ -104,7 +104,7 @@ export async function notifySuperAdmins(notification: Omit<CreateNotificationInp
       sendPushNotification(p.id, {
         title: notification.title,
         body: notification.message,
-        url: getNotificationUrl(notification.type, notification.entityId),
+        url: getNotificationUrl(notification.type, notification.entityId, notification.entityType),
         tag: notification.type,
       }).catch(() => {});
     }
