@@ -15,6 +15,29 @@ async function fetchNotifications(): Promise<NotificationsResponse> {
   return res.json() as Promise<NotificationsResponse>;
 }
 
+/**
+ * Resolve where a notification should navigate on click. Single source of truth
+ * shared by the header bell and the full notifications page so both deep-link
+ * consistently. Returns `null` when there's nowhere sensible to go.
+ */
+export function notificationHref(n: NotificationItem): string | null {
+  // Comment mention → open the booking's detail page with the comment panel + highlight.
+  if (n.type === "comment_mention" && n.entityId) {
+    const params = new URLSearchParams({ openComments: "true" });
+    if (n.commentId) params.set("highlightComment", n.commentId);
+    return `/booking/booking-weddings/${n.entityId}?${params.toString()}`;
+  }
+  // Wedding booking → deep-link straight to its standalone detail page.
+  if (n.entityType === "booking" && n.entityId) {
+    return `/booking/booking-weddings/${n.entityId}`;
+  }
+  // MICE booking has no detail page yet → land on the MICE list.
+  if (n.entityType === "booking-mice") return "/booking/booking-mice";
+  // Booking notification without an id → fall back to the wedding list.
+  if (n.entityType === "booking") return "/booking/booking-weddings";
+  return null;
+}
+
 export function useNotifications() {
   return useQuery({
     queryKey: ["notifications"],

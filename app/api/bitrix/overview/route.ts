@@ -6,6 +6,7 @@ import {
   getBitrixDealEnums,
   resolveBitrixUsers,
   resolveBitrixContactInfo,
+  labelFromSourceId,
   BitrixApiError,
 } from "@/lib/bitrix";
 
@@ -273,15 +274,4 @@ function bucketize<T>(rows: T[], keyOf: (row: T) => string, labelOf: (key: strin
   return [...counts.entries()]
     .map(([key, count]) => ({ key, label: labelOf(key), count }))
     .sort((a, b) => b.count - a.count);
-}
-
-// Fallback label when a SOURCE_ID isn't in the resolved status map.
-function labelFromSourceId(source: string): string {
-  if (source === "UNKNOWN") return "Tidak diketahui";
-  const raw = source.split("|").pop() ?? source;
-  if (/tiktok/i.test(raw)) return "TikTok";
-  if (/instagram|ig_|fbinstagram/i.test(raw)) return "Instagram";
-  if (/whatsapp|_wa_|wazzup/i.test(raw)) return "WhatsApp";
-  if (/facebook|fb_/i.test(raw)) return "Facebook";
-  return raw.replace(/ASKARASOFT_CONN_/i, "").replace(/_/g, " ");
 }

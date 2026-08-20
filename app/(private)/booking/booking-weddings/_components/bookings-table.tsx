@@ -208,6 +208,10 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
   const prefetchDetail = (id: string) => {
     qc.prefetchQuery({ queryKey: ["booking-detail", id], queryFn: () => fetchBookingDetail(id), staleTime: 30_000 });
   };
+  // Explicit "Lihat Detail" action → full detail page (row/card click still opens
+  // the modal). Prefetch the route on hover/focus so navigation feels instant.
+  const goToDetailPage = (id: string) => { routerNav.push(`/booking/booking-weddings/${id}`); };
+  const prefetchDetailPage = (id: string) => { routerNav.prefetch(`/booking/booking-weddings/${id}`); };
   // Mark a booking's cached detail stale after a mutation so the next open/refresh
   // refetches fresh data instead of serving a pre-mutation snapshot.
   const invalidateDetail = (id: string) => {
@@ -404,7 +408,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
     if (booking.bookingStatus === "Canceled") {
       return (
         <>
-          <DropdownMenuItem className="cursor-pointer" onClick={() => setDetailTarget(booking.id)} onMouseEnter={() => prefetchDetail(booking.id)} onFocus={() => prefetchDetail(booking.id)}>
+          <DropdownMenuItem className="cursor-pointer" onClick={() => goToDetailPage(booking.id)} onMouseEnter={() => prefetchDetailPage(booking.id)} onFocus={() => prefetchDetailPage(booking.id)}>
             <Eye weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4', 'text-primary')} /> Lihat Detail
           </DropdownMenuItem>
           {can("booking", "restore") && (
@@ -420,7 +424,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
     }
     return (
       <>
-        <DropdownMenuItem className="cursor-pointer" onClick={() => setDetailTarget(booking.id)} onMouseEnter={() => prefetchDetail(booking.id)} onFocus={() => prefetchDetail(booking.id)}>
+        <DropdownMenuItem className="cursor-pointer" onClick={() => goToDetailPage(booking.id)} onMouseEnter={() => prefetchDetailPage(booking.id)} onFocus={() => prefetchDetailPage(booking.id)}>
           <Eye weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4', 'text-primary')} /> Lihat Detail
         </DropdownMenuItem>
         <DropdownMenuSeparator />
@@ -1405,9 +1409,9 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                             <button
                               type="button"
                               className={cn('flex', 'flex-col', 'items-center', 'justify-center', 'gap-0.5', 'w-14', 'rounded-xl', 'py-1.5', 'px-1', 'cursor-pointer', 'transition-colors', 'hover:bg-accent')}
-                              onClick={() => setDetailTarget(booking.id)}
-                              onMouseEnter={() => prefetchDetail(booking.id)}
-                              onFocus={() => prefetchDetail(booking.id)}
+                              onClick={() => goToDetailPage(booking.id)}
+                              onMouseEnter={() => prefetchDetailPage(booking.id)}
+                              onFocus={() => prefetchDetailPage(booking.id)}
                               aria-label={`Lihat detail booking ${booking.snapCustomer?.name ?? ""}`}
                             >
                               <Eye weight="BoldDuotone" aria-hidden="true" className={cn('h-5', 'w-5', 'text-primary')} />

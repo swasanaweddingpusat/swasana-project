@@ -51,6 +51,7 @@ const DYNAMIC_ROUTE_META: Record<string, RouteMeta> = {
   "/": { title: "Dashboard", subtitle: "Ringkasan aktivitas" },
   "/settings": { title: "Settings", subtitle: "Kelola pengaturan sistem" },
   "/booking/groups/[groupId]": { title: "Detail Group", subtitle: "Kinerja dan target penjualan tim", parent: "/booking/groups" },
+  "/booking/booking-weddings/[id]": { title: "Detail Booking", subtitle: "Informasi lengkap booking wedding", parent: "/booking/booking-weddings" },
   "/hrd/database-karyawan/[id]": { title: "Detail Karyawan", subtitle: "Informasi lengkap karyawan", parent: "/hrd/database-karyawan" },
   "/wedding-indicators/create": { title: "Buat Kuesioner Pernikahan", subtitle: "Isi form untuk membuat kuesioner penilaian kepuasan", parent: "/wedding-indicators" },
   "/wedding-indicators/[id]": { title: "Detail Kuesioner Pernikahan", subtitle: "Lihat dan edit detail kuesioner pernikahan", parent: "/wedding-indicators" },
