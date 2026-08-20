@@ -51,6 +51,7 @@ export interface UnfinishedDraft {
   eventTime: string | null;
   notes: string | null;
   sourceOfInformationId: string | null;
+  sourceOfInformationDetail: string | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -68,6 +69,7 @@ export interface DraftBookingDetail {
   eventTime: string | null;
   notes: string | null;
   sourceOfInformationId: string | null;
+  sourceOfInformationDetail: string | null;
   eventDate: string | null;
   paymentMethodId: string | null;
   discountName: string | null;
@@ -320,6 +322,7 @@ export async function createDraftBooking(data: unknown): Promise<DraftResult> {
             venueId: input.venueId,
             packageId: input.packageId ?? null,
             sourceOfInformationId: input.sourceOfInformationId ?? null,
+            sourceOfInformationDetail: input.sourceOfInformationDetail ?? null,
             weddingSession: input.weddingSession ?? null,
             weddingType: input.weddingType ?? null,
             eventTime: input.eventTime ?? null,
@@ -355,6 +358,7 @@ export async function createDraftBooking(data: unknown): Promise<DraftResult> {
           venueId: input.venueId,
           packageId: input.packageId ?? null,
           sourceOfInformationId: input.sourceOfInformationId ?? null,
+          sourceOfInformationDetail: input.sourceOfInformationDetail ?? null,
           weddingSession: input.weddingSession ?? null,
           weddingType: input.weddingType ?? null,
           eventTime: input.eventTime ?? null,
@@ -1228,6 +1232,7 @@ export async function getUserUnfinishedDraft(
       eventTime: true,
       notes: true,
       sourceOfInformationId: true,
+      sourceOfInformationDetail: true,
       createdAt: true,
       updatedAt: true,
       customer: { select: { name: true } },
@@ -1250,6 +1255,7 @@ export async function getUserUnfinishedDraft(
     eventTime: draft.eventTime ?? null,
     notes: draft.notes ?? null,
     sourceOfInformationId: draft.sourceOfInformationId ?? null,
+    sourceOfInformationDetail: draft.sourceOfInformationDetail ?? null,
     createdAt: draft.createdAt,
     updatedAt: draft.updatedAt,
   };
@@ -1278,6 +1284,7 @@ export async function getDraftBookingDetail(
       eventTime: true,
       notes: true,
       sourceOfInformationId: true,
+      sourceOfInformationDetail: true,
       eventDate: true,
       paymentMethodId: true,
       discountName: true,
@@ -1403,6 +1410,7 @@ export async function getDraftBookingDetail(
     eventTime: draft.eventTime ?? null,
     notes: draft.notes ?? null,
     sourceOfInformationId: draft.sourceOfInformationId ?? null,
+    sourceOfInformationDetail: draft.sourceOfInformationDetail ?? null,
     eventDate: draft.eventDate
       ? `${draft.eventDate.getUTCFullYear()}-${String(draft.eventDate.getUTCMonth() + 1).padStart(2, "0")}-${String(draft.eventDate.getUTCDate()).padStart(2, "0")}`
       : null,

@@ -389,6 +389,7 @@ export async function createBooking(data: unknown) {
           packageId: input.packageId,
           paymentMethodId: input.paymentMethodId ?? null,
           sourceOfInformationId: input.sourceOfInformationId ?? null,
+          sourceOfInformationDetail: input.sourceOfInformationDetail ?? null,
           weddingSession: input.weddingSession ?? null,
           weddingType: input.weddingType ?? null,
           signingLocation: input.signingLocation ?? null,
@@ -1004,7 +1005,7 @@ export async function updateBookingClientInfo(data: unknown): Promise<{ success:
   const parsed = updateBookingClientInfoSchema.safeParse(data);
   if (!parsed.success) return { success: false, error: parsed.error.issues[0]?.message ?? "Validasi gagal." };
 
-  const { id, customerName, contactNumbers, contactEmailCpp, contactEmailCpw, contactIdTypeCpp, contactIdTypeCpw, contactNikCpp, contactNikCpw, contactCppAddress, contactCpwAddress, contactBitrixId, salesId, sourceOfInformationId } = parsed.data;
+  const { id, customerName, contactNumbers, contactEmailCpp, contactEmailCpw, contactIdTypeCpp, contactIdTypeCpw, contactNikCpp, contactNikCpw, contactCppAddress, contactCpwAddress, contactBitrixId, salesId, sourceOfInformationId, sourceOfInformationDetail } = parsed.data;
 
   if (!session!.user.profileId) return { success: false, error: "Sesi tidak valid, silakan login ulang." };
   const scope = await getProfileDataScope(session!.user.profileId);
@@ -1031,6 +1032,7 @@ export async function updateBookingClientInfo(data: unknown): Promise<{ success:
         where: { id },
         data: {
           sourceOfInformationId: sourceOfInformationId ?? undefined,
+          sourceOfInformationDetail: sourceOfInformationDetail ?? undefined,
           ...(salesId != null ? { salesId } : {}),
         },
       }),
@@ -1116,7 +1118,7 @@ export async function editBooking(data: unknown) {
       select: {
         customerId: true, salesId: true, venueId: true, packageId: true,
         eventDate: true, eventTime: true, notes: true, weddingSession: true, weddingType: true,
-        paymentMethodId: true, sourceOfInformationId: true,
+        paymentMethodId: true, sourceOfInformationId: true, sourceOfInformationDetail: true,
         discountName: true, discountAmount: true, currentRevisionId: true, poNumber: true,
         snapshotFrozenAt: true,
         snapCustomer: { select: { name: true, mobileNumber: true, emailCpp: true, emailCpw: true } },
@@ -1379,6 +1381,7 @@ export async function editBooking(data: unknown) {
           packageId: rest.packageId,
           paymentMethodId: rest.paymentMethodId ?? null,
           sourceOfInformationId: rest.sourceOfInformationId ?? null,
+          sourceOfInformationDetail: rest.sourceOfInformationDetail ?? null,
           weddingSession: rest.weddingSession ?? null,
           weddingType: rest.weddingType ?? null,
           signingLocation: rest.signingLocation ?? null,
@@ -1914,6 +1917,9 @@ export async function editBooking(data: unknown) {
           }
           if (rest.sourceOfInformationId !== undefined && (rest.sourceOfInformationId ?? "") !== (booking.sourceOfInformationId ?? "")) {
             diff.sourceOfInformationId = { from: booking.sourceOfInformationId ?? "", to: rest.sourceOfInformationId ?? "" };
+          }
+          if (rest.sourceOfInformationDetail !== undefined && (rest.sourceOfInformationDetail ?? "") !== (booking.sourceOfInformationDetail ?? "")) {
+            diff.sourceOfInformationDetail = { from: booking.sourceOfInformationDetail ?? "", to: rest.sourceOfInformationDetail ?? "" };
           }
 
           if (hasMaterialChange) {

@@ -12,6 +12,7 @@ export const createDraftStep1Schema = z.object({
   packageId: z.string().optional().nullable(),
   salesId: z.string().optional().nullable(),
   sourceOfInformationId: z.string().optional().nullable(),
+  sourceOfInformationDetail: z.string().optional().nullable(),
   weddingSession: z.enum(["morning", "evening", "fullday"]).optional().nullable(),
   weddingType: z.string().optional().nullable(),
 
