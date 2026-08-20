@@ -290,6 +290,17 @@ export async function getBitrixCrmMeta(): Promise<BitrixCrmMeta> {
   return data;
 }
 
+/** Fallback label when a SOURCE_ID isn't in `BitrixCrmMeta.sources`. */
+export function labelFromSourceId(source: string): string {
+  if (source === "UNKNOWN") return "Tidak diketahui";
+  const raw = source.split("|").pop() ?? source;
+  if (/tiktok/i.test(raw)) return "TikTok";
+  if (/instagram|ig_|fbinstagram/i.test(raw)) return "Instagram";
+  if (/whatsapp|_wa_|wazzup/i.test(raw)) return "WhatsApp";
+  if (/facebook|fb_/i.test(raw)) return "Facebook";
+  return raw.replace(/ASKARASOFT_CONN_/i, "").replace(/_/g, " ");
+}
+
 // Cache of ALL deal enumeration fields (UF_CRM_* of type "enumeration") →
 // { fieldName → { itemId → label } }. `crm.deal.fields` returns every field in
 // one call, so we cache the complete map and let each caller pick the subset it

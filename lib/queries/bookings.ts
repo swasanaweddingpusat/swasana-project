@@ -344,6 +344,7 @@ export interface BookingExportRow {
   status: string;
   /** Bitrix deal id (dari customer) — dipakai route buat ambil adsUrl. */
   bitrixId: string | null;
+  venue: string;
   brand: string;
   packageName: string;
   createdAt: Date;
@@ -401,8 +402,8 @@ export async function getBookingsForExport(
       bookingStatus: true,
       snapCustomer: { select: { name: true, mobileNumber: true } },
       customer: { select: { name: true, mobileNumber: true, bitrixId: true } },
-      snapVenue: { select: { brandName: true } },
-      venue: { select: { brand: { select: { name: true } } } },
+      snapVenue: { select: { venueName: true, brandName: true } },
+      venue: { select: { name: true, brand: { select: { name: true } } } },
       snapPackage: { select: { packageName: true } },
       package: { select: { packageName: true } },
       sales: { select: { fullName: true } },
@@ -420,6 +421,7 @@ export async function getBookingsForExport(
     dealingSource: r.sourceOfInformation?.name ?? "",
     status: r.bookingStatus,
     bitrixId: r.customer?.bitrixId?.trim() || null,
+    venue: r.snapVenue?.venueName ?? r.venue?.name ?? "",
     brand: r.snapVenue?.brandName ?? r.venue?.brand?.name ?? "",
     packageName: r.snapPackage?.packageName ?? r.package?.packageName ?? "",
     createdAt: r.createdAt,

@@ -1,0 +1,16 @@
+-- Backfill customers.bitrixId for 1 more booking-linked customer whose
+-- sourceOfInformation is "Bitrix" but had no bitrixId recorded (left out of
+-- the earlier 12-row backfill because the phone number matched multiple
+-- Bitrix deals across multiple contacts).
+--
+-- Disambiguated by comparing each candidate deal's venue text (embedded in
+-- the Bitrix deal TITLE) against this booking's actual venue: only deal
+-- 50661 ("Guest - GUNAWARMAN SAMISARA SOPODEL") matches the booking's venue
+-- "Samisara Sopodel" (PO code GNW/SAMISARA) — the other 3 candidate deals for
+-- this phone number point to different venues ("Pakubuwono Graha Paramitha")
+-- or are generic ("Kediaman"), so they were left out.
+--
+-- Guarded so it never overwrites a bitrixId a user may have since set
+-- manually (only fills when still empty). Idempotent: re-running finds
+-- nothing left to update.
+UPDATE "customers" SET "bitrixId" = '50661' WHERE id = '9a6e5b62-44e2-4300-bf22-40bcaf47a2bb' AND ("bitrixId" IS NULL OR TRIM("bitrixId") = '');

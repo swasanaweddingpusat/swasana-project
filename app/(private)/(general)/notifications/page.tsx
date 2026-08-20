@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Bell, CheckRead, CalendarAdd, CalendarMark, Calendar, DangerTriangle, TransferHorizontal, FileText, Eye, UserPlus, Shop, ChefHat, MentionCircle } from "@solar-icons/react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { useNotifications, useMarkNotificationRead, useMarkAllRead } from "@/hooks/use-notifications";
+import { useNotifications, useMarkNotificationRead, useMarkAllRead, notificationHref } from "@/hooks/use-notifications";
 import { formatDistanceToNow } from "date-fns";
 import { id as localeId } from "date-fns/locale";
 import { cn } from "@/lib/utils";
@@ -51,7 +51,8 @@ export default function NotificationsPage() {
 
   const handleClick = (n: typeof notifications[number]) => {
     if (!n.isRead) markRead.mutate(n.id);
-    if (n.entityType === "booking") router.push("/booking/booking-weddings");
+    const href = notificationHref(n);
+    if (href) router.push(href);
   };
 
   return (

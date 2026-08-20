@@ -2,7 +2,7 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { apiLimiter, rateLimitResponse } from "@/lib/rate-limit";
 import { getBookingsForExport, type BookingExportFilters } from "@/lib/queries/bookings";
-import { bitrixList } from "@/lib/bitrix";
+import { bitrixList, getBitrixCrmMeta, labelFromSourceId, resolveBitrixContactInfo } from "@/lib/bitrix";
 import type { DataScope } from "@/types/user";
 
 const STATUS_LABEL: Record<string, string> = {
@@ -42,14 +42,22 @@ function fmtDateTime(value: Date | null): string {
   return `${fmtDate(value)} ${hh}:${min}`;
 }
 
+interface DealExtras {
+  adsUrl: string;
+  sourceLabel: string;
+  /** Contact's phone from the Bitrix deal — distinct from the system's own `phone`. */
+  bitrixPhone: string;
+}
+
 /**
- * Resolve `bitrixId` (deal id) → ad source URL for the given deal ids.
- * Batches the ids in chunks of 50 (one Bitrix `crm.deal.list` page each) and
- * runs the chunks concurrently. Bitrix failures degrade gracefully to an empty
- * map so the export never fails because Bitrix is unreachable.
+ * Resolve `bitrixId` (deal id) → { ad source URL, "Sumber Database" label,
+ * Bitrix contact phone } for the given deal ids. Batches the ids in chunks of
+ * 50 (one Bitrix `crm.deal.list` page each) and runs the chunks concurrently.
+ * Bitrix failures degrade gracefully to an empty map so the export never
+ * fails because Bitrix is unreachable.
  */
-async function fetchAdsUrlMap(dealIds: string[]): Promise<Map<string, string>> {
-  const map = new Map<string, string>();
+async function fetchDealExtrasMap(dealIds: string[]): Promise<Map<string, DealExtras>> {
+  const map = new Map<string, DealExtras>();
   const unique = [...new Set(dealIds.filter(Boolean))];
   if (unique.length === 0) return map;
 
@@ -57,22 +65,30 @@ async function fetchAdsUrlMap(dealIds: string[]): Promise<Map<string, string>> {
   for (let i = 0; i < unique.length; i += 50) chunks.push(unique.slice(i, i + 50));
 
   try {
-    const results = await Promise.all(
-      chunks.map((ids) =>
-        bitrixList<AdsDeal>("crm.deal.list", {
-          filter: { "@ID": ids },
-          select: ["ID", UF_ADS_URL],
-        }),
+    const [meta, results] = await Promise.all([
+      getBitrixCrmMeta(),
+      Promise.all(
+        chunks.map((ids) =>
+          bitrixList<AdsDeal>("crm.deal.list", {
+            filter: { "@ID": ids },
+            select: ["ID", "SOURCE_ID", "CONTACT_ID", UF_ADS_URL],
+          }),
+        ),
       ),
-    );
-    for (const { items } of results) {
-      for (const d of items) {
-        const url = d[UF_ADS_URL]?.trim();
-        if (url) map.set(String(d.ID), url);
-      }
+    ]);
+    const deals = results.flatMap((r) => r.items);
+    const contactMap = await resolveBitrixContactInfo(deals.map((d) => d.CONTACT_ID ?? "").filter(Boolean));
+
+    for (const d of deals) {
+      const sourceId = d.SOURCE_ID ?? "";
+      map.set(String(d.ID), {
+        adsUrl: d[UF_ADS_URL]?.trim() ?? "",
+        sourceLabel: sourceId ? meta.sources[sourceId] ?? labelFromSourceId(sourceId) : "",
+        bitrixPhone: (d.CONTACT_ID ? contactMap[d.CONTACT_ID]?.phone : null) ?? "",
+      });
     }
   } catch (err) {
-    console.error("[BOOKING] Bitrix adsUrl lookup failed:", err);
+    console.error("[BOOKING] Bitrix deal extras lookup failed:", err);
   }
   return map;
 }
@@ -105,8 +121,8 @@ export async function GET(req: Request): Promise<Response> {
 
     const rows = await getBookingsForExport(profileId, dataScope, filters);
 
-    // Enrich each row's Bitrix deal id with its ad source URL (batched).
-    const adsUrlMap = await fetchAdsUrlMap(
+    // Enrich each row's Bitrix deal id with its ad source URL + SOURCE_ID label (batched).
+    const dealExtrasMap = await fetchDealExtrasMap(
       rows.map((r) => r.bitrixId).filter((v): v is string => !!v),
     );
 
@@ -116,10 +132,13 @@ export async function GET(req: Request): Promise<Response> {
       "TANGGAL EVENT",
       "NAMA MARKETING",
       "SUMBER DEALING",
+      "SUMBER DATABASE",
+      "VENUE",
+      "BRAND",
       "STATUS",
       "PHONE",
+      "PHONE LEADS (BITRIX)",
       "URL ADS BITRIX",
-      "BRAND",
       "PACKAGE",
       "CREATED",
       "UPDATE",
@@ -138,16 +157,20 @@ export async function GET(req: Request): Promise<Response> {
     });
 
     rows.forEach((r) => {
+      const extras = r.bitrixId ? dealExtrasMap.get(r.bitrixId) : undefined;
       sheet.addRow([
         r.clientName,
         fmtDate(r.dealingDate),
         fmtDate(r.eventDate),
         r.marketingName,
         r.dealingSource,
+        extras?.sourceLabel ?? "",
+        r.venue,
+        r.brand,
         STATUS_LABEL[r.status] ?? r.status,
         r.phone,
-        r.bitrixId ? (adsUrlMap.get(r.bitrixId) ?? "") : "",
-        r.brand,
+        extras?.bitrixPhone ?? "",
+        extras?.adsUrl ?? "",
         r.packageName,
         fmtDateTime(r.createdAt),
         fmtDateTime(r.updatedAt),

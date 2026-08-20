@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import { Bell, CheckRead, CalendarAdd, CalendarMark, Calendar, DangerTriangle, TransferHorizontal, FileText, Eye, UserPlus, Shop, ChefHat, Refresh, MentionCircle } from "@solar-icons/react";
 import { Button } from "@/components/ui/button";
-import { useNotifications, useMarkNotificationRead, useMarkAllRead } from "@/hooks/use-notifications";
+import { useNotifications, useMarkNotificationRead, useMarkAllRead, notificationHref } from "@/hooks/use-notifications";
 import { formatDistanceToNow } from "date-fns";
 import { id as localeId } from "date-fns/locale";
 import { useRouter } from "next/navigation";
@@ -48,20 +48,8 @@ export function NotificationBell() {
   const handleClick = (n: NotificationItem) => {
     if (!n.isRead) markRead.mutate(n.id);
     setOpen(false);
-
-    // Deep-link untuk comment mention: buka booking + comment panel + highlight comment
-    if (n.type === "comment_mention" && n.entityId) {
-      const params = new URLSearchParams({
-        bookingId: n.entityId,
-        openComments: "true",
-      });
-      if (n.commentId) params.set("highlightComment", n.commentId);
-      router.push(`/booking/booking-weddings?${params.toString()}`);
-      return;
-    }
-
-    // Default: navigate ke booking weddings
-    router.push("/booking/booking-weddings");
+    const href = notificationHref(n);
+    if (href) router.push(href);
   };
 
   return (
