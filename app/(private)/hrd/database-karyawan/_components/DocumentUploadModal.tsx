@@ -22,6 +22,8 @@ import {
 } from "@/components/ui/select";
 import { useUploadEmployeeDocument } from "@/hooks/use-employees";
 import { Upload } from "@solar-icons/react";
+import { compressImageToWebp, uploadFileDirect } from "@/lib/upload-client";
+import { MAX_UPLOAD_SIZE_BYTES } from "@/lib/validations/upload";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -36,7 +38,7 @@ const DOC_TYPE_OPTIONS = [
   { value: "other", label: "Lainnya" },
 ];
 
-const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
+const MAX_FILE_SIZE = MAX_UPLOAD_SIZE_BYTES;
 const ACCEPTED_TYPES = ".pdf,.jpg,.jpeg,.png,.doc,.docx";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -69,6 +71,7 @@ export function DocumentUploadModal({
     expiresAt: "",
   });
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
 
   const resetForm = useCallback(() => {
     setForm({ type: "", name: "", expiresAt: "" });
@@ -106,7 +109,7 @@ export function DocumentUploadModal({
     []
   );
 
-  const handleSubmit = useCallback(() => {
+  const handleSubmit = useCallback(async () => {
     if (!form.type) {
       toast.error("Tipe dokumen wajib dipilih");
       return;
@@ -124,31 +127,43 @@ export function DocumentUploadModal({
       return;
     }
 
-    const formData = new FormData();
-    formData.append("file", selectedFile);
-    formData.append("type", form.type);
-    formData.append("name", form.name.trim());
-    if (form.expiresAt) {
-      formData.append("expiresAt", form.expiresAt);
-    }
+    setUploading(true);
+    try {
+      const compressed = await compressImageToWebp(selectedFile);
+      const { key } = await uploadFileDirect(compressed, "employees-documents");
 
-    uploadMutation.mutate(
-      { profileId: employeeId, formData },
-      {
-        onSuccess: (result) => {
-          if (result.success) {
-            toast.success("Dokumen berhasil diunggah");
-            resetForm();
-            onOpenChange(false);
-          } else {
-            toast.error(result.error ?? "Gagal mengunggah dokumen");
-          }
+      uploadMutation.mutate(
+        {
+          profileId: employeeId,
+          document: {
+            type: form.type,
+            name: form.name.trim(),
+            expiresAt: form.expiresAt ? new Date(form.expiresAt) : undefined,
+            key,
+            mimeType: compressed.type,
+            fileSize: compressed.size,
+          },
         },
-        onError: () => {
-          toast.error("Terjadi kesalahan saat mengunggah");
-        },
-      }
-    );
+        {
+          onSuccess: (result) => {
+            if (result.success) {
+              toast.success("Dokumen berhasil diunggah");
+              resetForm();
+              onOpenChange(false);
+            } else {
+              toast.error(result.error ?? "Gagal mengunggah dokumen");
+            }
+          },
+          onError: () => {
+            toast.error("Terjadi kesalahan saat mengunggah");
+          },
+        }
+      );
+    } catch {
+      toast.error("Gagal mengunggah file");
+    } finally {
+      setUploading(false);
+    }
   }, [form, selectedFile, employeeId, uploadMutation, resetForm, onOpenChange]);
 
   return (
@@ -231,17 +246,17 @@ export function DocumentUploadModal({
             variant="outline"
             className="rounded-full"
             onClick={() => handleOpenChange(false)}
-            disabled={uploadMutation.isPending}
+            disabled={uploading || uploadMutation.isPending}
           >
             Batal
           </Button>
           <Button
             className="rounded-full gap-1.5"
             onClick={handleSubmit}
-            disabled={uploadMutation.isPending}
+            disabled={uploading || uploadMutation.isPending}
           >
             <Upload weight="BoldDuotone" className="h-4 w-4" />
-            {uploadMutation.isPending ? "Mengunggah..." : "Upload"}
+            {uploading || uploadMutation.isPending ? "Mengunggah..." : "Upload"}
           </Button>
         </DialogFooter>
       </DialogContent>

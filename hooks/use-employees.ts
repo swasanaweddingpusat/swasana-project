@@ -103,11 +103,18 @@ export function useUploadEmployeeDocument() {
   return useMutation({
     mutationFn: ({
       profileId,
-      formData,
+      document,
     }: {
       profileId: string;
-      formData: FormData;
-    }) => uploadEmployeeDocument(profileId, formData),
+      document: {
+        type: string;
+        name: string;
+        expiresAt?: Date;
+        key: string;
+        mimeType: string;
+        fileSize: number;
+      };
+    }) => uploadEmployeeDocument(profileId, document),
     onSuccess: (_data, vars) =>
       qc.invalidateQueries({ queryKey: ["employees", vars.profileId] }),
   });

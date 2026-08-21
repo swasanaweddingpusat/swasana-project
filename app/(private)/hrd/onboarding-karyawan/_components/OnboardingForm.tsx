@@ -16,6 +16,8 @@ import {
 } from "@/components/ui/select";
 import { useVenues } from "@/hooks/use-venues";
 import { useSubmitOnboarding } from "@/hooks/use-employee-onboarding";
+import { compressImageToWebp, uploadFileDirect } from "@/lib/upload-client";
+import { ALLOWED_UPLOAD_MIME_TYPES, MAX_UPLOAD_SIZE_BYTES } from "@/lib/validations/upload";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -138,7 +140,7 @@ function FileUploadField({
           <span className="text-sm text-muted-foreground">
             Klik untuk upload atau seret file ke sini
             <br />
-            <span className="text-xs">JPG, PNG, PDF maks. 5MB</span>
+            <span className="text-xs">JPG, PNG, PDF maks. 10MB</span>
           </span>
         )}
       </button>
@@ -161,6 +163,7 @@ export function OnboardingForm() {
   const [ktpFile, setKtpFile] = useState<File | null>(null);
   const [kkFile, setKkFile] = useState<File | null>(null);
   const [errors, setErrors] = useState<FormErrors>({});
+  const [uploading, setUploading] = useState(false);
 
   const { data: venuesData } = useVenues();
   const venues = venuesData ?? [];
@@ -212,7 +215,12 @@ export function OnboardingForm() {
     }
 
     if (!ktpFile) next.ktpFile = "KTP wajib diupload";
+    else if (!(ALLOWED_UPLOAD_MIME_TYPES as readonly string[]).includes(ktpFile.type)) next.ktpFile = "Tipe file tidak didukung";
+    else if (ktpFile.size > MAX_UPLOAD_SIZE_BYTES) next.ktpFile = "Ukuran file maksimal 10MB";
+
     if (!kkFile) next.kkFile = "Kartu Keluarga wajib diupload";
+    else if (!(ALLOWED_UPLOAD_MIME_TYPES as readonly string[]).includes(kkFile.type)) next.kkFile = "Tipe file tidak didukung";
+    else if (kkFile.size > MAX_UPLOAD_SIZE_BYTES) next.kkFile = "Ukuran file maksimal 10MB";
 
     setErrors(next);
     return Object.keys(next).length === 0;
@@ -248,8 +256,39 @@ export function OnboardingForm() {
     fd.append("emergencyContactPhone", form.emergencyContactPhone);
     fd.append("bankName", form.bankName);
     fd.append("bankAccountNumber", form.bankAccountNumber);
-    if (ktpFile) fd.append("ktpFile", ktpFile);
-    if (kkFile) fd.append("kkFile", kkFile);
+
+    setUploading(true);
+    try {
+      const [ktpCompressed, kkCompressed] = await Promise.all([
+        compressImageToWebp(ktpFile!),
+        compressImageToWebp(kkFile!),
+      ]);
+      const [ktpUploaded, kkUploaded] = await Promise.all([
+        uploadFileDirect(ktpCompressed, "employees-documents"),
+        uploadFileDirect(kkCompressed, "employees-documents"),
+      ]);
+      fd.append(
+        "ktpFile",
+        JSON.stringify({
+          key: ktpUploaded.key,
+          mimeType: ktpCompressed.type,
+          fileSize: ktpCompressed.size,
+        })
+      );
+      fd.append(
+        "kkFile",
+        JSON.stringify({
+          key: kkUploaded.key,
+          mimeType: kkCompressed.type,
+          fileSize: kkCompressed.size,
+        })
+      );
+    } catch {
+      setUploading(false);
+      toast.error("Gagal mengunggah file KTP/KK");
+      return;
+    }
+    setUploading(false);
 
     try {
       const result = await mutation.mutateAsync(fd);
@@ -707,11 +746,15 @@ export function OnboardingForm() {
       <Button
         type="submit"
         size="lg"
-        disabled={mutation.isPending}
+        disabled={uploading || mutation.isPending}
         className="w-full rounded-full"
       >
         <UserPlus weight="BoldDuotone" className="mr-2 h-5 w-5" />
-        {mutation.isPending ? "Menyimpan..." : "Daftarkan Karyawan"}
+        {uploading
+          ? "Mengunggah dokumen..."
+          : mutation.isPending
+            ? "Menyimpan..."
+            : "Daftarkan Karyawan"}
       </Button>
     </form>
   );

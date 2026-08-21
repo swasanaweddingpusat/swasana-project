@@ -13,13 +13,13 @@ import {
   List,
   Diploma,
   CalendarMark,
-  UserRounded,
   Route,
   Sledgehammer,
   Document,
   Book,
   Buildings2,
   Widget,
+  ClipboardList,
   type IconProps,
 } from "@solar-icons/react";
 import type { ComponentType } from "react";
@@ -74,11 +74,11 @@ const GROUPS: SettingGroup[] = [
         module: "settings-role-permission",
       },
       {
-        title: "Customers",
-        description: "Kelola data customer, member status, dan riwayat booking.",
-        icon: UserRounded,
-        href: "/settings/customer",
-        module: "customers",
+        title: "Booking Activity Log",
+        description: "Monitoring gabungan activity log booking Wedding & MICE.",
+        icon: ClipboardList,
+        href: "/settings/booking-log",
+        module: "settings-booking-log",
       },
     ],
   },
@@ -194,11 +194,12 @@ export default async function SettingsHubPage() {
     "settings-source-of-information", "settings-education-level",
     "settings-event-types", "settings-order-status",
     "settings-quotation-templates", "settings-tutorial",
-    "customers", "settings-role-permission",
+    "settings-role-permission",
     "settings-daily-activity-segment",
     "settings-maintenance-category",
     "settings-maintenance-priority",
     "settings-maintenance-status",
+    "settings-booking-log",
   ]);
 
   const session = await auth();

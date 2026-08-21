@@ -7,6 +7,8 @@ import { cn } from "@/lib/utils";
 import { Textarea } from "@/components/ui/textarea";
 import { useCancelBooking } from "@/hooks/use-bookings";
 import type { BookingListItem } from "@/lib/queries/bookings";
+import { compressImageToWebp, uploadFileDirect } from "@/lib/upload-client";
+import { ALLOWED_UPLOAD_MIME_TYPES, MAX_UPLOAD_SIZE_BYTES } from "@/lib/validations/upload";
 
 export interface CancelBookingDialogProps {
   open: boolean;
@@ -22,6 +24,8 @@ export function CancelBookingDialog({
   const cancelMut = useCancelBooking();
   const [cancelReason, setCancelReason] = useState("");
   const [file, setFile] = useState<File | null>(null);
+  const [fileError, setFileError] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   if (!open || !booking) return null;
@@ -29,6 +33,7 @@ export function CancelBookingDialog({
   function reset(): void {
     setCancelReason("");
     setFile(null);
+    setFileError(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
   }
 
@@ -37,14 +42,59 @@ export function CancelBookingDialog({
     onClose();
   }
 
-  const canSubmit = cancelReason.trim().length >= 3 && !cancelMut.isPending;
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>): void {
+    const selected = e.target.files?.[0] ?? null;
+    if (!selected) {
+      setFile(null);
+      setFileError(null);
+      return;
+    }
+    if (!(ALLOWED_UPLOAD_MIME_TYPES as readonly string[]).includes(selected.type)) {
+      setFile(null);
+      setFileError("Tipe file tidak didukung");
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      return;
+    }
+    if (selected.size > MAX_UPLOAD_SIZE_BYTES) {
+      setFile(null);
+      setFileError("Ukuran file maksimal 10MB");
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      return;
+    }
+    setFile(selected);
+    setFileError(null);
+  }
+
+  const canSubmit = cancelReason.trim().length >= 3 && !cancelMut.isPending && !uploading;
 
   async function handleSubmit(): Promise<void> {
     if (!booking || !canSubmit) return;
     const fd = new FormData();
     fd.append("id", booking.id);
     fd.append("cancelReason", cancelReason.trim());
-    if (file) fd.append("document", file);
+
+    if (file) {
+      setUploading(true);
+      try {
+        const compressed = await compressImageToWebp(file);
+        const { key } = await uploadFileDirect(compressed, "booking-documents");
+        fd.append(
+          "document",
+          JSON.stringify({
+            key,
+            name: compressed.name,
+            mimeType: compressed.type,
+            fileSize: compressed.size,
+          })
+        );
+      } catch {
+        setUploading(false);
+        toast.error("Gagal mengunggah dokumen");
+        return;
+      }
+      setUploading(false);
+    }
+
     const r = await cancelMut.mutateAsync(fd);
     if (!r.success) {
       toast.error(r.error);
@@ -101,7 +151,7 @@ export function CancelBookingDialog({
               id="cancel-document"
               type="file"
               accept=".pdf,image/*"
-              onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+              onChange={handleFileChange}
               className={cn(
                 "block",
                 "w-full",
@@ -128,6 +178,7 @@ export function CancelBookingDialog({
                 {file.name}
               </p>
             ) : null}
+            {fileError ? <p className={cn("text-xs", "text-destructive")}>{fileError}</p> : null}
           </div>
         </div>
 
@@ -150,10 +201,10 @@ export function CancelBookingDialog({
             disabled={!canSubmit}
             onClick={handleSubmit}
           >
-            {cancelMut.isPending ? (
+            {uploading || cancelMut.isPending ? (
               <span className={cn("flex", "items-center", "justify-center", "gap-1.5")}>
                 <SquareX weight="BoldDuotone" className={cn("h-4", "w-4", "animate-spin")} />
-                Memproses...
+                {uploading ? "Mengunggah..." : "Memproses..."}
               </span>
             ) : (
               "Cancel Booking"

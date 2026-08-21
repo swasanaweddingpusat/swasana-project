@@ -4,27 +4,18 @@ import { revalidateTag } from "next/cache";
 import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
-import { uploadToStorage, deleteFromStorage, generateStorageKey } from "@/lib/storage";
-import { compressToWebp } from "@/lib/image";
+import { deleteFromStorage } from "@/lib/storage";
 import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
 import { canAccessBooking, getProfileDataScope } from "@/lib/access-control";
+import { isAllowedUploadMimeType, MAX_UPLOAD_SIZE_BYTES } from "@/lib/validations/upload";
+import { z } from "zod";
 
-const IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"] as const;
-const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB raw input
-
-async function processFile(
-  buffer: Buffer,
-  contentType: string,
-  fileName: string,
-): Promise<{ data: Buffer; type: string; name: string; ext: string }> {
-  if ((IMAGE_TYPES as readonly string[]).includes(contentType)) {
-    const compressed = await compressToWebp(buffer);
-    const newName = fileName.replace(/\.[^.]+$/, ".webp");
-    return { data: compressed, type: "image/webp", name: newName, ext: "webp" };
-  }
-  const ext = fileName.split(".").pop() ?? "bin";
-  return { data: buffer, type: contentType, name: fileName, ext };
-}
+const uploadedDocumentSchema = z.object({
+  key: z.string().min(1),
+  name: z.string().min(1),
+  mimeType: z.string().min(1),
+  size: z.number().int().positive().max(MAX_UPLOAD_SIZE_BYTES),
+});
 
 export async function uploadBookingDocument(formData: FormData) {
   const { session, error } = await requirePermission({ module: "booking", action: "create" });
@@ -34,10 +25,24 @@ export async function uploadBookingDocument(formData: FormData) {
   const bookingId = formData.get("bookingId") as string;
   const docName = formData.get("name") as string;
   const description = (formData.get("description") as string) || null;
-  const files = formData.getAll("files") as File[];
+  const documentsRaw = formData.get("documents") as string | null;
 
-  if (!bookingId || !docName || files.length === 0) {
+  if (!bookingId || !docName || !documentsRaw) {
     return { success: false, error: "Data tidak lengkap." };
+  }
+
+  let documents: z.infer<typeof uploadedDocumentSchema>[];
+  try {
+    const parsed = z.array(uploadedDocumentSchema).safeParse(JSON.parse(documentsRaw));
+    if (!parsed.success || parsed.data.length === 0) return { success: false, error: "Data file tidak valid." };
+    documents = parsed.data;
+  } catch {
+    return { success: false, error: "Data file tidak valid." };
+  }
+
+  for (const doc of documents) {
+    if (!doc.key.startsWith("booking-documents/")) return { success: false, error: "Key file tidak valid." };
+    if (!isAllowedUploadMimeType(doc.mimeType)) return { success: false, error: "Tipe file tidak diizinkan." };
   }
 
   const scope = await getProfileDataScope(session!.user.profileId);
@@ -46,45 +51,34 @@ export async function uploadBookingDocument(formData: FormData) {
   }
 
   try {
-    let uploadCount = 0;
-
-    for (const file of files) {
-      if (file.size > MAX_FILE_SIZE) {
-        return { success: false, error: `${file.name} terlalu besar (max 10MB).` };
-      }
-
-      const buffer = Buffer.from(await file.arrayBuffer());
-      const { data, type, name, ext } = await processFile(buffer, file.type, file.name);
-      const key = generateStorageKey("booking-documents", ext);
-      await uploadToStorage(data, key, type);
-
-      await db.bookingDocument.create({
-        data: {
-          bookingId,
-          name: docName,
-          description,
-          filePath: key,
-          fileName: name,
-          fileSize: data.length,
-          fileType: type,
-          uploadedBy: session!.user.profileId,
-        },
-      });
-
-      uploadCount++;
-    }
+    await db.$transaction(
+      documents.map((doc) =>
+        db.bookingDocument.create({
+          data: {
+            bookingId,
+            name: docName,
+            description,
+            filePath: doc.key,
+            fileName: doc.name,
+            fileSize: doc.size,
+            fileType: doc.mimeType,
+            uploadedBy: session!.user.profileId,
+          },
+        })
+      )
+    );
 
     await logAudit({
       userId: session!.user.id,
       action: "uploaded",
       entityType: "booking",
       entityId: bookingId,
-      description: `Uploaded ${uploadCount} file(s) — ${docName}`,
-      changes: { documentName: docName, fileCount: uploadCount },
+      description: `Uploaded ${documents.length} file(s) — ${docName}`,
+      changes: { documentName: docName, fileCount: documents.length },
     });
 
     revalidateTag("bookings", "max");
-    return { success: true, count: uploadCount };
+    return { success: true, count: documents.length };
   } catch (e) {
     console.error("[uploadBookingDocument]", e);
     return { success: false, error: "Terjadi kesalahan." };

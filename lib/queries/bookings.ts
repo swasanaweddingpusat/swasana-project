@@ -518,7 +518,15 @@ export async function getBookingById(id: string) {
       include: {
         steps: {
           where: { approverType: { in: ["client", "user"] } },
-          select: { signature: true, status: true, decidedAt: true, approverType: true, revisionId: true, stepOrder: true },
+          select: {
+            signature: true,
+            clientAgreementUploaded: true,
+            status: true,
+            decidedAt: true,
+            approverType: true,
+            revisionId: true,
+            stepOrder: true,
+          },
         },
       },
     }),
@@ -528,6 +536,12 @@ export async function getBookingById(id: string) {
 
   const steps = approvalRecord?.steps ?? [];
   const clientSignature = steps.find((s) => s.approverType === "client")?.signature ?? null;
+  // Alternate way to complete the client step: a scan of a physically-signed
+  // PO, uploaded by staff instead of the client signing digitally in-browser
+  // (see actions/client-agreement.ts uploadManualAgreement). Null when the
+  // step was completed via digital signature (or not completed at all).
+  const clientAgreementUploaded = (steps.find((s) => s.approverType === "client")?.clientAgreementUploaded ??
+    null) as unknown as { path: string; fileName: string; fileType: string } | null;
   // The sales rep signs the front "user" step (approverType "user", stepOrder 0) —
   // render-po labels that step "Sales". Expose its signature for the current
   // revision so the edit-booking TTD step can pre-fill the already-saved value.
@@ -537,7 +551,7 @@ export async function getBookingById(id: string) {
   const salesSignature =
     (userSteps.find((s) => s.revisionId === booking.currentRevisionId) ?? userSteps[0])?.signature ?? null;
 
-  return { ...booking, clientSignature, salesSignature };
+  return { ...booking, clientSignature, clientAgreementUploaded, salesSignature };
 }
 
 export type BookingsResult = PaginatedBookings;

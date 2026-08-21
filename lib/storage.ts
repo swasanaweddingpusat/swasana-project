@@ -1,4 +1,4 @@
-import { S3Client, PutObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
+import { S3Client, PutObjectCommand, DeleteObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
 import type { S3ClientConfig } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
@@ -84,6 +84,22 @@ export async function uploadToStorage(
   return `${PUBLIC_URL}/${key}`;
 }
 
+/**
+ * Fetch an object from storage as raw bytes. Used to stream an uploaded PDF
+ * (e.g. a manually-signed PO) back through a route handler in place of a
+ * system-generated document.
+ */
+export async function getFromStorage(key: string): Promise<Uint8Array> {
+  const res = await storageClient.send(
+    new GetObjectCommand({
+      Bucket: BUCKET_NAME,
+      Key: key,
+    })
+  );
+  if (!res.Body) throw new Error(`Empty body for storage object: ${key}`);
+  return res.Body.transformToByteArray();
+}
+
 export async function deleteFromStorage(key: string): Promise<void> {
   await storageClient.send(
     new DeleteObjectCommand({
@@ -96,12 +112,14 @@ export async function deleteFromStorage(key: string): Promise<void> {
 export async function getSignedUploadUrl(
   key: string,
   contentType: string,
-  expiresIn = 3600
+  contentLength: number,
+  expiresIn = 300
 ): Promise<string> {
   const command = new PutObjectCommand({
     Bucket: BUCKET_NAME,
     Key: key,
     ContentType: contentType,
+    ContentLength: contentLength,
   });
   return getSignedUrl(storageClient, command, { expiresIn });
 }
