@@ -9,8 +9,7 @@ import { logAudit } from "@/lib/audit";
 import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
 import { isSlotConflictError, SLOT_TAKEN_MESSAGE } from "@/lib/booking-slot-error";
 import { bookingSchema, updateBookingSchema, cancelBookingSchema, editBookingSchema, updateBookingClientInfoSchema, updateBookingSignatureSchema } from "@/lib/validations/booking";
-import { uploadToStorage, generateStorageKey } from "@/lib/storage";
-import { compressToWebp } from "@/lib/image";
+import { MAX_UPLOAD_SIZE_BYTES, isAllowedUploadMimeType } from "@/lib/validations/upload";
 import { buildBookingApprovalSteps } from "@/lib/approval-flows";
 import { getNextSequence } from "@/lib/counter";
 import { generateAccessCode } from "@/lib/access-code";
@@ -20,6 +19,7 @@ import { canAccessBooking, getProfileDataScope } from "@/lib/access-control";
 import { generateEmaterai } from "@/lib/peruri";
 import { computeFullPrice, calcFinalFromFullPrice } from "@/lib/package-prices";
 import { getTermAllocatedMap } from "@/lib/queries/ledger";
+import { z } from "zod";
 
 /**
  * Financial delta (IDR) at or below which a change to an ALREADY-SIGNED booking is a
@@ -751,6 +751,11 @@ export async function updateBooking(data: unknown) {
     return { success: false, error: "Anda tidak memiliki akses ke booking ini." };
   }
 
+  // Restore = flip status back to Pending. Unlike a plain field update this must
+  // ALSO reset the approval flow and invalidate the client agreement so the
+  // booking goes through re-approval + re-sign from scratch.
+  const isRestore = requiredAction === "restore";
+
   try {
     const updateData: Record<string, unknown> = {};
     if (rest.eventDate) updateData.eventDate = new Date(`${rest.eventDate}T00:00:00.000Z`);
@@ -762,6 +767,96 @@ export async function updateBooking(data: unknown) {
     if (rest.lostReason !== undefined) updateData.lostReason = rest.lostReason;
     if (rest.paymentMethodId !== undefined) updateData.paymentMethodId = rest.paymentMethodId;
     if (rest.sourceOfInformationId !== undefined) updateData.sourceOfInformationId = rest.sourceOfInformationId;
+
+    if (isRestore) {
+      // PO CONTENT is unchanged on restore → reuse the SAME currentRevisionId (no
+      // new revision). Approval is reset to pending with fresh steps, the client
+      // agreement is invalidated (new token/code, cleared signature). Old steps are
+      // kept untouched (append-only snapshot history).
+      const booking = await db.booking.findUnique({
+        where: { id },
+        select: { salesId: true, currentRevisionId: true },
+      });
+      const approvalRecord = await db.approvalRecord.findUnique({
+        where: { module_entityId: { module: "booking", entityId: id } },
+        select: {
+          id: true,
+          steps: {
+            where: { approverType: "client" },
+            select: { clientAgreementUploaded: true, revisionId: true },
+          },
+        },
+      });
+
+      // Capture the manual PO file (if the client step was completed via upload)
+      // BEFORE the reset, so it can be deleted from storage after the commit.
+      const currentRev = booking?.currentRevisionId ?? null;
+      const oldClientStep =
+        approvalRecord?.steps.find((s) => (currentRev ? s.revisionId === currentRev : true) && s.clientAgreementUploaded) ??
+        approvalRecord?.steps.find((s) => s.clientAgreementUploaded);
+      const oldUploaded = (oldClientStep?.clientAgreementUploaded ?? null) as { path?: string } | null;
+
+      const ops: Prisma.PrismaPromise<unknown>[] = [db.booking.update({ where: { id }, data: updateData })];
+
+      if (approvalRecord) {
+        const restoreSteps = await buildBookingApprovalSteps({
+          salesId: booking!.salesId,
+          creatorProfileId: session!.user.profileId!,
+          signatureSales: null,
+          decidedAt: new Date(),
+          includeClientStep: true,
+        });
+        if (restoreSteps && restoreSteps.length > 0) {
+          const newToken = crypto.randomUUID();
+          const newAccessCode = generateAccessCode();
+          ops.push(
+            db.approvalRecord.update({ where: { id: approvalRecord.id }, data: { status: "pending" } }),
+            ...restoreSteps.map((step) =>
+              db.approvalRecordStep.create({
+                data: {
+                  recordId: approvalRecord.id,
+                  stepOrder: step.stepOrder,
+                  approverType: step.approverType,
+                  approverRoleId: step.approverRoleId,
+                  approverUserId: step.approverUserId,
+                  status: step.status,
+                  decidedById: step.decidedById,
+                  decidedAt: step.decidedAt,
+                  signature: step.signature,
+                  revisionId: currentRev,
+                },
+              })
+            ),
+            db.clientAgreement.updateMany({
+              where: { bookingId: id },
+              data: { status: "Pending", signedAt: null, viewedAt: null, token: newToken, accessCode: newAccessCode },
+            }),
+          );
+        }
+      }
+
+      await db.$transaction(ops);
+
+      // Best-effort file cleanup — old steps are kept (append-only), so the file's
+      // path becomes a dead reference; remove the object from storage. Never fail
+      // the restore if the delete errors.
+      if (oldUploaded?.path) {
+        const { deleteFromStorage } = await import("@/lib/storage");
+        await deleteFromStorage(oldUploaded.path).catch((e) => console.error("[updateBooking restore] storage:", e));
+      }
+
+      await logAudit({
+        userId: session!.user.id,
+        action: "restored",
+        entityType: "booking",
+        entityId: id,
+        changes: rest,
+        description: `Booking dipulihkan: approval direset & agreement diinvalidasi${oldUploaded?.path ? "; file PO manual lama dihapus" : ""}`,
+      });
+
+      revalidateTag("bookings", "max");
+      return { success: true };
+    }
 
     await db.$transaction([db.booking.update({ where: { id }, data: updateData })]);
 
@@ -2043,8 +2138,12 @@ export async function updateBookingSignature(data: unknown): Promise<{ success: 
   }
 }
 
-const CANCEL_DOC_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"] as const;
-const CANCEL_DOC_MAX_SIZE = 10 * 1024 * 1024; // 10MB
+const cancelDocSchema = z.object({
+  key: z.string().min(1),
+  name: z.string().min(1),
+  mimeType: z.string().min(1),
+  fileSize: z.number().int().positive().max(MAX_UPLOAD_SIZE_BYTES),
+});
 
 /**
  * Cancel a wedding booking → status Canceled. Reason is mandatory; an optional
@@ -2085,28 +2184,28 @@ export async function cancelBooking(
     return { success: false, error: "Booking sudah di-cancel." };
   }
 
-  // Optional cancellation-request document (mirror uploadBookingDocument).
-  const file = formData.get("document");
+  // Optional cancellation-request document — already uploaded direct-to-storage
+  // by the client; only metadata arrives here (mirror uploadBookingDocument).
+  const docRaw = formData.get("document");
   let docKey: string | null = null;
   let docMeta: { name: string; type: string; size: number } | null = null;
-  if (file instanceof File && file.size > 0) {
-    if (file.size > CANCEL_DOC_MAX_SIZE) {
-      return { success: false, error: `${file.name} terlalu besar (max 10MB).` };
+  if (typeof docRaw === "string" && docRaw.length > 0) {
+    let docParsed: z.infer<typeof cancelDocSchema>;
+    try {
+      const result = cancelDocSchema.safeParse(JSON.parse(docRaw));
+      if (!result.success) return { success: false, error: "Dokumen tidak valid." };
+      docParsed = result.data;
+    } catch {
+      return { success: false, error: "Dokumen tidak valid." };
     }
-    const buffer = Buffer.from(await file.arrayBuffer());
-    let data: Buffer = buffer;
-    let type = file.type;
-    let name = file.name;
-    let ext = file.name.split(".").pop() ?? "bin";
-    if ((CANCEL_DOC_IMAGE_TYPES as readonly string[]).includes(file.type)) {
-      data = await compressToWebp(buffer);
-      type = "image/webp";
-      name = file.name.replace(/\.[^.]+$/, ".webp");
-      ext = "webp";
+    if (!docParsed.key.startsWith("booking-documents/")) {
+      return { success: false, error: "Key file dokumen tidak valid." };
     }
-    docKey = generateStorageKey("booking-documents", ext);
-    await uploadToStorage(data, docKey, type);
-    docMeta = { name, type, size: data.length };
+    if (!isAllowedUploadMimeType(docParsed.mimeType)) {
+      return { success: false, error: "Tipe file dokumen tidak diizinkan." };
+    }
+    docKey = docParsed.key;
+    docMeta = { name: docParsed.name, type: docParsed.mimeType, size: docParsed.fileSize };
   }
 
   try {

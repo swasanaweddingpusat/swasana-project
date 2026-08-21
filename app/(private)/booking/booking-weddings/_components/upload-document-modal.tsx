@@ -8,6 +8,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { UploadMinimalistic, CloseCircle, FileText, Refresh } from "@solar-icons/react";
 import { uploadBookingDocument } from "@/actions/booking-document";
+import { compressImageToWebp, uploadFileDirect } from "@/lib/upload-client";
+import { ALLOWED_UPLOAD_MIME_TYPES, MAX_UPLOAD_SIZE_BYTES } from "@/lib/validations/upload";
 
 interface UploadDocumentModalProps {
   open: boolean;
@@ -16,14 +18,7 @@ interface UploadDocumentModalProps {
   bookingName: string;
 }
 
-const ALLOWED_TYPES = [
-  "image/jpeg", "image/png", "image/webp",
-  "application/pdf",
-  "application/msword",
-  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-  "application/vnd.ms-excel",
-  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-];
+const ALLOWED_TYPES: readonly string[] = ALLOWED_UPLOAD_MIME_TYPES;
 
 function formatSize(bytes: number) {
   if (bytes < 1024) return `${bytes} B`;
@@ -55,7 +50,7 @@ export function UploadDocumentModal({ open, onClose, bookingId, bookingName }: U
     const valid: File[] = [];
     for (const f of files) {
       if (!ALLOWED_TYPES.includes(f.type)) { toast.error(`${f.name}: Tipe file tidak didukung`); continue; }
-      if (f.size > 10 * 1024 * 1024) { toast.error(`${f.name}: File terlalu besar (max 10 MB)`); continue; }
+      if (f.size > MAX_UPLOAD_SIZE_BYTES) { toast.error(`${f.name}: File terlalu besar (max 10 MB)`); continue; }
       valid.push(f);
     }
     setSelectedFiles((prev) => [...prev, ...valid]);
@@ -68,11 +63,19 @@ export function UploadDocumentModal({ open, onClose, bookingId, bookingName }: U
 
     setUploading(true);
     try {
+      const documents = await Promise.all(
+        selectedFiles.map(async (f) => {
+          const compressed = await compressImageToWebp(f);
+          const { key } = await uploadFileDirect(compressed, "booking-documents");
+          return { key, name: compressed.name, mimeType: compressed.type, size: compressed.size };
+        })
+      );
+
       const fd = new FormData();
       fd.set("bookingId", bookingId);
       fd.set("name", docName.trim());
       fd.set("description", docDescription.trim());
-      for (const f of selectedFiles) fd.append("files", f);
+      fd.set("documents", JSON.stringify(documents));
 
       const result = await uploadBookingDocument(fd);
       if (!result.success) { toast.error(result.error); return; }

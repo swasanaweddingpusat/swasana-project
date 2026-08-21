@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import {
@@ -18,6 +19,7 @@ import {
 } from "@/components/ui/table";
 import { BookingActions } from "./BookingActions";
 import { ActivityLogTimeline } from "@/app/(private)/booking/booking-weddings/_components/activity-log-timeline";
+import { AgreementPanel } from "@/components/shared/booking/agreement-panel";
 import type { BookingDetail } from "@/lib/queries/bookings";
 
 /* ─── Resolved shape (server adds termStatuses/cashIns; docs carry fileUrl) ──── */
@@ -194,7 +196,11 @@ interface Props {
 }
 
 export function BookingDetailClient({ booking, payment }: Props) {
+  const router = useRouter();
   const isAgreementSigned = booking.clientAgreement?.status === "Signed";
+  // Tab muncul begitu agreement ada (status apa pun): sebelum Signed → uploader/link,
+  // sesudah Signed → receipt.
+  const hasAgreement = !!booking.clientAgreement;
   const bitrixId = booking.customer?.bitrixId?.trim() || null;
 
   const sourceLabel = booking.sourceOfInformation?.name
@@ -214,7 +220,7 @@ export function BookingDetailClient({ booking, payment }: Props) {
     { key: "vendor", label: "Vendor" },
     { key: "payment", label: "Pembayaran" },
     { key: "documents", label: "Dokumen" },
-    ...(isAgreementSigned ? [{ key: "agreement", label: "Client Agreement" }] : []),
+    ...(hasAgreement ? [{ key: "agreement", label: "Client Agreement" }] : []),
     ...(bitrixId ? [{ key: "bitrix", label: "Bitrix" }] : []),
     { key: "activity-log", label: "Activity Log" },
   ];
@@ -416,9 +422,19 @@ export function BookingDetailClient({ booking, payment }: Props) {
         </TabsContent>
 
         {/* ═══ Client Agreement ═══ */}
-        {isAgreementSigned && (
+        {hasAgreement && (
           <TabsContent value="agreement" className="mt-5 animate-in fade-in duration-300">
-            <AgreementSection booking={booking} />
+            {isAgreementSigned ? (
+              <AgreementSection booking={booking} />
+            ) : (
+              <div className="mx-auto max-w-2xl rounded-2xl border bg-card p-6 shadow-sm">
+                <div className="mb-4 flex items-center gap-2">
+                  <FileText weight="BoldDuotone" className="h-5 w-5 text-primary" />
+                  <p className="text-sm font-semibold text-foreground">Client Agreement</p>
+                </div>
+                <AgreementPanel bookingId={booking.id} onCompleted={() => router.refresh()} />
+              </div>
+            )}
           </TabsContent>
         )}
 
@@ -789,6 +805,9 @@ function DocumentsSection({ booking }: { booking: BookingDetailResolved }) {
 function AgreementSection({ booking }: { booking: BookingDetailResolved }) {
   const agreement = booking.clientAgreement;
   const clientSignature = booking.clientSignature ?? null;
+  const uploaded = booking.clientAgreementUploaded as
+    | { path: string; fileName: string; fileType: string; fileUrl?: string }
+    | null;
   const baseUrl = typeof window !== "undefined" ? window.location.origin : "";
   const agreementUrl = agreement ? `${baseUrl}/client-agreement?token=${agreement.token}` : null;
 
@@ -854,6 +873,22 @@ function AgreementSection({ booking }: { booking: BookingDetailResolved }) {
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={clientSignature} alt="Tanda tangan client" className="max-h-24 max-w-48 object-contain" />
           </div>
+        </div>
+      )}
+
+      {!clientSignature && uploaded && (
+        <div className="space-y-1.5">
+          <p className={lbl}>PO Manual (Upload)</p>
+          <a
+            href={uploaded.fileUrl ?? "#"}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex w-fit items-center gap-2 rounded-xl border bg-card px-3 py-2 text-sm text-foreground transition-colors hover:bg-muted"
+          >
+            <FileText weight="BoldDuotone" className="h-4 w-4 text-primary" />
+            <span className="max-w-60 truncate">{uploaded.fileName}</span>
+            <DownloadMinimalistic weight="BoldDuotone" className="h-3.5 w-3.5 text-muted-foreground" />
+          </a>
         </div>
       )}
     </div>
