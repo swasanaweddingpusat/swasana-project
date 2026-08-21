@@ -40,6 +40,9 @@ export const moduleActions: Record<string, string[]> = {
   "settings-role-permission": ["view", "create", "edit", "delete"],
   "settings-source-of-information": ["view", "create", "edit", "delete"],
   "settings-tutorial": ["view", "create", "edit", "delete"],
+  // Read-only monitoring hub (Settings > Booking Log) — gabungan activity log
+  // booking Wedding + MICE. View-only: tidak ada mutasi dari halaman ini.
+  "settings-booking-log": ["view"],
   complimentary: ["view", "create", "edit", "delete"],
   // CRM modules
   "daily-activity": ["view", "create", "edit", "delete"],
@@ -120,15 +123,17 @@ export const rolePermissionMap: Record<string, Record<string, string[]>> = {
     bitrix: ["view"],
     "internal-faq": ["view"],
     announcement: ["view"],
+    "settings-booking-log": ["view"],
   },
   // Manager: CRUD only on dashboard, calendar-event, groups, booking-weddings,
   // package, complimentary, vendors, and customers.
   // (dashboard has no permission module; calendar-event is gated by booking:view.)
   manager: {
-    booking: ["view", "create", "edit", "delete", "print", "approve", "mark-lost", "restore", "cancel", "transfer", "reject", "comment", "client-agreement", "edit-package", "edit-set-harga"],
+    // restore/mark-lost/reject/delete sengaja DICABUT — manager gak boleh lakuin ini di booking.
+    booking: ["view", "create", "edit", "print", "approve", "cancel", "transfer", "comment", "client-agreement", "edit-package", "edit-set-harga"],
     customers: ["view", "create", "edit", "delete"],
     groups: ["view", "create", "edit", "delete"],
-    "daily-activity": ["view", "create", "edit", "delete"],
+    // daily-activity sengaja DICABUT — cuma manager-mice yang butuh.
     package: ["view", "create", "edit", "delete", "set-harga", "term-&-condition", "set-status"],
     vendor: ["view", "create", "edit", "delete"],
     complimentary: ["view", "create", "edit", "delete"],
@@ -138,10 +143,11 @@ export const rolePermissionMap: Record<string, Record<string, string[]>> = {
     "procurement-summary": ["view"],
     "procurement-announcement": ["view", "create", "edit", "delete"],
     "procurement-budget": ["view", "create", "edit", "delete"],
-    hr: ["view", "create", "edit", "delete", "approve"],
+    // hr/hr-recruitment sengaja DICABUT — manager gak perlu akses module HRD sama sekali.
     bitrix: ["view"],
     "internal-faq": ["view", "create", "edit", "delete"],
     announcement: ["view", "create", "edit", "delete"],
+    "settings-booking-log": ["view"],
   },
   "direktur-operational": {
     booking: ["view", "create", "edit", "approve", "comment", "print"],
@@ -158,12 +164,15 @@ export const rolePermissionMap: Record<string, Record<string, string[]>> = {
     bitrix: ["view"],
     "internal-faq": ["view", "create", "edit", "delete"],
     announcement: ["view", "create", "edit", "delete"],
+    "settings-booking-log": ["view"],
   },
-  // Operational — persis daftar menu yang disepakati:
-  //   Procurement (4 tab, CRUD) · Vendor (view) · Purchase Order (view) ·
-  //   Guestbook · Slip Gaji Personal + Pengajuan Cuti (General, tanpa gate).
+  // Operational — persis daftar menu yang disepakati (11 item) + Internal FAQ
+  // & Announcement (dipertahankan sesuai kebutuhan, walau tidak tercantum di spec):
+  //   Pengadaan/Ringkasan/Pengumuman/Anggaran Venue → 4 tab Procurement (CRUD).
+  //   Vendor (view) · Purchase Order → vendor-specialist:view.
+  //   Absensi → attendance:view (force-granted semua role, step 9).
+  //   Guestbook · Slip Gaji (Personal) + Pengajuan Cuti (General, tanpa gate).
   // Akses lama booking/customers/package/maintenance/promo sengaja DICABUT.
-  // Absensi (lintas-role) butuh perubahan nav/permission — di luar scope seeder.
   operational: {
     procurement: ["view", "create", "edit", "delete"],
     "procurement-summary": ["view"],
@@ -174,6 +183,7 @@ export const rolePermissionMap: Record<string, Record<string, string[]>> = {
     guestbook: ["view", "create", "edit"],
     "internal-faq": ["view"],
     announcement: ["view"],
+    bitrix: ["view"],
   },
   finance: {
     // Lean scope per spec — sidebar Finance hanya: Overview, Report & Analytics,
@@ -184,11 +194,17 @@ export const rolePermissionMap: Record<string, Record<string, string[]>> = {
     // NOTE: getPaymentMethodsForPicker() (dipakai ack cash-in di Income) adalah
     // cached read TANPA gate, jadi ack tetap jalan tanpa settings-payment-methods.
     // booking::term-&-condition auto-granted via step 7; booking::edit-package via step 8.
-    // TODO(blocker code): Absensi (item 6) butuh route General /absensi + gate
-    // clock-in/out dilonggarkan; Procurement "Only tab Pengadaan" (item 8) butuh
-    // split permission per-tab. Belum di-grant di sini sampai kode-nya siap.
+    // Absensi via attendance:view (force-granted semua role, step 9).
     "finance-ar": ["view", "create", "edit", "delete"],
     "finance-ap": ["view", "create", "edit", "delete"],
+    // Only tab Pengadaan — Ringkasan/Pengumuman/Anggaran Venue reserved for management roles.
+    procurement: ["view"],
+    // Booking (wedding): banyak action buat keperluan finance, KECUALI mark-lost/reject/delete/restore/reset-approval.
+    // restore cuma super-admin. reset-approval sengaja dilarang buat sales/manager/finance.
+    booking: ["view", "create", "edit", "print", "approve", "cancel", "transfer", "transfer-manager", "comment", "client-agreement", "edit-set-harga"],
+    "booking-mice": ["view"],
+    complimentary: ["view", "create"],
+    bitrix: ["view"],
   },
   // Finance AR only — Accounts Receivable + Cashflow (+ Overview). Can record/ack
   // cash-in and edit termin (updateTermOfPayments accepts finance-ar:edit). No AP access.
@@ -207,23 +223,29 @@ export const rolePermissionMap: Record<string, Record<string, string[]>> = {
     customers: ["view"],
     bitrix: ["view"],
   },
+  // Sales (Wedding) — persis daftar menu yang disepakati (11 item), MINUS Daily
+  // Activity (sengaja ditahan dulu per instruksi user):
+  //   Groups · Booking Weddings · Wedding Package ·
+  //   Voucher/Program · Complimentary · Guestbook · Procurement (Only Pengadaan).
+  //   Absensi → attendance:view (force-granted semua role, step 9).
+  //   Slip Gaji (Personal) + Pengajuan Cuti → General nav, tanpa gate.
+  // settings-source-of-information/vendor/internal-faq/announcement
+  // sengaja DICABUT — tidak ada di spec menu Sales Wedding.
+  // bitrix: view + customers: full CRUD diminta belakangan.
   sales: {
     booking: ["view", "create", "edit", "comment", "client-agreement", "print"],
-    customers: ["view", "create", "edit"],
     groups: ["view"],
+    // daily-activity sengaja BELUM di-grant — per instruksi user, ditahan dulu.
     package: ["view", "create", "edit", "term-&-condition"],
-    vendor: ["view"],
-    "settings-source-of-information": ["view", "create", "edit", "delete"],
     guestbook: ["view", "create", "edit"],
-    // daily-activity intentionally removed — sales (wedding) no longer sees it.
-    // quotations intentionally removed — sales role no longer has quotation access.
-    // view+create only: sales can select & create complimentary on-the-fly from booking drawer,
-    // but master data management (edit/delete) is reserved for direktur-sales and above.
-    complimentary: ["view", "create"],
+    // Full CRUD — sales kelola master complimentary sendiri.
+    complimentary: ["view", "create", "edit", "delete"],
     promo: ["view", "create", "edit", "delete"],
+    // Only tab Pengadaan — Ringkasan/Pengumuman/Anggaran Venue reserved for management roles.
+    procurement: ["view"],
     bitrix: ["view"],
-    "internal-faq": ["view"],
-    announcement: ["view"],
+    // Full CRUD — sales kelola customer sendiri.
+    customers: ["view", "create", "edit", "delete"],
   },
   "vendor-specialist": {
     "vendor-specialist": ["view", "create", "edit", "delete"],
@@ -231,35 +253,44 @@ export const rolePermissionMap: Record<string, Record<string, string[]>> = {
     booking: ["view"],
     package: ["view"],
   },
+  // human-resource — persis daftar menu yang disepakati (14 item):
+  //   Database Karyawan · Manajemen Kehadiran · Penggajian & Perpajakan ·
+  //   Slip Gaji (Summary All) · Sistem Cuti · Pengembangan SDM ·
+  //   Manajemen Kinerja · Manajemen Kesehatan · Reimbursement & Loan ·
+  //   Hubungan Industrial · Analitik & Laporan → semua via `hr:view`.
+  //   Rekrutmen & Onboarding → `hr-recruitment:view`.
+  //   Procurement (Only tab Pengadaan) → `procurement:view` saja.
+  //   Absensi → `attendance:view` (force-granted semua role, step 9).
+  // Guestbook/Internal FAQ/Announcement/Settings (Users, Education Level)
+  // sengaja DICABUT — tidak ada di spec menu HR.
   "human-resource": {
     hr: ["view", "create", "edit", "delete", "approve"],
-    // Rekrutmen & Onboarding — full lifecycle incl. hiring (creates employee account).
     "hr-recruitment": ["view", "create", "edit", "delete", "hire"],
-    // Procurement — ONLY the "Pengadaan" tab. Now that the sidebar submenu is
-    // split per-tab (procurement / -summary / -announcement / -budget), granting
-    // `procurement:view` alone shows Pengadaan without Ringkasan/Pengumuman/
-    // Anggaran Venue. view-only: HRD sees the list but doesn't manage requests.
     procurement: ["view"],
-    "settings-users": ["view", "create", "edit", "delete"],
-    "settings-education-level": ["view", "create", "edit", "delete"],
-    guestbook: ["view", "create", "edit"],
-    "internal-faq": ["view"],
-    announcement: ["view"],
   },
+  // Sales MICE — persis daftar menu yang disepakati (11 item):
+  //   Groups · Daily Activity · Bookings MICE · Quotations · Mice Package ·
+  //   Complimentary · Guestbook · Procurement (Only Pengadaan).
+  //   Absensi → attendance:view (force-granted semua role, step 9).
+  //   Slip Gaji (Personal) + Pengajuan Cuti → General nav, tanpa gate.
+  // vendor/settings-daily-activity-segment/internal-faq/announcement
+  // sengaja DICABUT — tidak ada di spec menu Sales MICE.
+  // bitrix: view + customers: view/create diminta belakangan.
   "sales-mice": {
     "booking-mice": ["view", "create", "edit", "comment", "client-agreement"],
-    customers: ["view", "create", "edit"],
-    vendor: ["view"],
+    groups: ["view"],
     quotations: ["view", "create", "edit"],
     "daily-activity": ["view", "create", "edit", "delete"],
-    complimentary: ["view", "create"],
-    "settings-daily-activity-segment": ["view"],
+    // Full CRUD — sales-mice kelola master complimentary sendiri.
+    complimentary: ["view", "create", "edit", "delete"],
     guestbook: ["view", "create", "edit"],
     // sales-mice can view/create/edit packages but NOT set-harga and NOT delete
     "package-mice": ["view", "create", "edit"],
+    // Only tab Pengadaan — Ringkasan/Pengumuman/Anggaran Venue reserved for management roles.
+    procurement: ["view"],
     bitrix: ["view"],
-    "internal-faq": ["view"],
-    announcement: ["view"],
+    // sales-mice bisa nambah customer baru.
+    customers: ["view", "create"],
   },
   "manager-mice": {
     "booking-mice": ["view", "create", "edit", "delete", "print", "approve", "mark-lost", "restore", "transfer", "reject", "comment", "client-agreement"],
@@ -275,6 +306,7 @@ export const rolePermissionMap: Record<string, Record<string, string[]>> = {
     bitrix: ["view"],
     "internal-faq": ["view"],
     announcement: ["view"],
+    "settings-booking-log": ["view"],
   },
   "procurement-manager": {
     procurement: ["view", "create", "edit", "delete", "approve"],
@@ -293,7 +325,7 @@ function buildPermissionData(): { module: string; action: string }[] {
 
 // Modules that were removed — clean up stale permissions from DB
 const REMOVED_MODULES = [
-  "attendance", "brand_management", "calendar_event", "catering",
+  "brand_management", "calendar_event", "catering",
   "dashboard", "decoration", "finance", "finance_ap", "finance_ar", "notification",
   "user_management", "venue_management", "client_agreement", "settlement",
   "settings", "payment_methods", "role_permission", "source_of_information",

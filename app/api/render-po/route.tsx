@@ -7,6 +7,7 @@ import { POPdfDocument } from "@/components/pdf/POPdfDocument";
 import type { POPdfBooking } from "@/components/pdf/POPdfDocument";
 import { humanizeRoleName } from "@/lib/approval-flows";
 import { getPoPayments } from "@/lib/queries/getPoPayments";
+import { getFromStorage } from "@/lib/storage";
 import path from "path";
 import fs from "fs/promises";
 
@@ -178,6 +179,25 @@ export async function POST(req: Request) {
       const revisionSteps = (sigRevisionId && hasRevisionedSteps)
         ? allSteps.filter((s) => s.revisionId === sigRevisionId)
         : allSteps;
+
+      // Manual PO: if staff uploaded a signed PO PDF for this revision, serve that
+      // file verbatim instead of generating the system document. Falls through to
+      // generation when no uploaded PDF exists (e.g. digital-signature flow).
+      const manualStep = revisionSteps.find(
+        (s) => s.approverType === "client" && s.clientAgreementUploaded !== null,
+      );
+      if (manualStep) {
+        const uploaded = manualStep.clientAgreementUploaded as { path?: string; fileName?: string; fileType?: string } | null;
+        if (uploaded?.path && uploaded.fileType === "application/pdf") {
+          const bytes = await getFromStorage(uploaded.path);
+          return new NextResponse(Buffer.from(bytes) as unknown as ReadableStream, {
+            headers: {
+              "Content-Type": "application/pdf",
+              "Content-Disposition": `inline; filename="${uploaded.fileName ?? fileName}"`,
+            },
+          });
+        }
+      }
 
       // PO signers = Sales (approverType "user") + Manager (role "manager") only.
       // Finance approves in-system but is intentionally excluded from the PO.

@@ -6,7 +6,7 @@ const nextConfig: NextConfig = {
   output: "standalone",
   cacheComponents: true,
   serverExternalPackages: ["sharp"],
-  allowedDevOrigins: ["192.168.1.4"],
+  allowedDevOrigins: ["192.168.1.4", "100.108.85.60"],
   async headers() {
     // Client agreement is a public, status-sensitive flow (validate / sign /
     // render-po). Without no-store, an intermediate HTTP/CDN cache can serve a

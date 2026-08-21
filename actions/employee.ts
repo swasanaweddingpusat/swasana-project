@@ -9,7 +9,7 @@ import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/permissions";
 import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
 import { logAudit } from "@/lib/audit";
-import { uploadToStorage, deleteFromStorage, extractKeyFromUrl } from "@/lib/storage";
+import { deleteFromStorage, extractKeyFromUrl, getPublicUrl } from "@/lib/storage";
 import { getBaseUrl } from "@/lib/url";
 import {
   createEmployeeSchema,
@@ -17,6 +17,8 @@ import {
   uploadDocumentSchema,
   addHistorySchema,
 } from "@/lib/validations/employee";
+import { isAllowedUploadMimeType, MAX_UPLOAD_SIZE_BYTES } from "@/lib/validations/upload";
+import { z } from "zod";
 import type { Prisma } from "@prisma/client";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
@@ -356,39 +358,37 @@ export async function deleteEmployee(id: string): Promise<{ success: boolean; er
 
 export async function uploadEmployeeDocument(
   profileId: string,
-  formData: FormData
+  input: unknown
 ): Promise<{ success: boolean; error?: string }> {
   const { session, error } = await requirePermission({ module: "hr", action: "edit" });
   if (error) return { success: false, error };
   if (!mutationLimiter.check(`emp-doc-upload:${session!.user.id}`)) return { success: false, ...rateLimitError() };
 
-  const file = formData.get("file") as File | null;
-  if (!file || file.size === 0) return { success: false, error: "File wajib diunggah." };
-
-  const metaParsed = uploadDocumentSchema.safeParse({
-    type: formData.get("type"),
-    name: formData.get("name") || file.name,
-    expiresAt: formData.get("expiresAt") || undefined,
-  });
+  const metaParsed = uploadDocumentSchema
+    .extend({
+      key: z.string().min(1),
+      mimeType: z.string().min(1),
+      fileSize: z.number().int().positive().max(MAX_UPLOAD_SIZE_BYTES),
+    })
+    .safeParse(input);
   if (!metaParsed.success) return { success: false, error: metaParsed.error.issues[0].message };
 
-  const maxSize = 10 * 1024 * 1024; // 10 MB
-  if (file.size > maxSize) return { success: false, error: "Ukuran file maks 10MB." };
+  const { key, mimeType, fileSize, ...docMeta } = metaParsed.data;
+
+  if (!key.startsWith("employees-documents/")) return { success: false, error: "Key file tidak valid." };
+  if (!isAllowedUploadMimeType(mimeType)) return { success: false, error: "Tipe file tidak diizinkan." };
 
   try {
-    const ext = file.name.split(".").pop() ?? "bin";
-    const key = `employees/${profileId}/documents/${metaParsed.data.type}-${Date.now()}.${ext}`;
-    const buffer = Buffer.from(await file.arrayBuffer());
-    const fileUrl = await uploadToStorage(buffer, key, file.type);
+    const fileUrl = getPublicUrl(key);
 
     const doc = await db.employeeDocument.create({
       data: {
         profileId,
-        type: metaParsed.data.type,
-        name: metaParsed.data.name,
+        type: docMeta.type,
+        name: docMeta.name,
         fileUrl,
-        fileSize: file.size,
-        expiresAt: metaParsed.data.expiresAt ?? null,
+        fileSize,
+        expiresAt: docMeta.expiresAt ?? null,
         uploadedBy: session!.user.profileId,
       },
     });
@@ -398,7 +398,7 @@ export async function uploadEmployeeDocument(
       action: "employee.document_upload",
       entityType: "employee_document",
       entityId: doc.id,
-      description: `Dokumen "${metaParsed.data.name}" diunggah untuk karyawan ${profileId}`,
+      description: `Dokumen "${docMeta.name}" diunggah untuk karyawan ${profileId}`,
     });
 
     revalidateTag("employees", "max");

@@ -54,6 +54,9 @@ export default async function BookingWeddingDetailPage({ params }: Props) {
       ...doc,
       fileUrl: getPublicUrl(doc.filePath),
     })),
+    clientAgreementUploaded: data.clientAgreementUploaded
+      ? { ...data.clientAgreementUploaded, fileUrl: getPublicUrl(data.clientAgreementUploaded.path) }
+      : null,
     termOfPayments: data.termOfPayments,
     termStatuses: Object.fromEntries(
       data.termOfPayments.map((t) => [

@@ -9,16 +9,22 @@ import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/permissions";
 import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
 import { logAudit } from "@/lib/audit";
-import { uploadToStorage } from "@/lib/storage";
+import { getPublicUrl } from "@/lib/storage";
 import { getBaseUrl } from "@/lib/url";
 import { onboardingFormSchema } from "@/lib/validations/employeeOnboarding";
 import { createOnboardingFormLinkSchema } from "@/lib/validations/onboardingForm";
 import { generateAccessCode } from "@/lib/access-code";
+import { isAllowedUploadMimeType, MAX_UPLOAD_SIZE_BYTES } from "@/lib/validations/upload";
+import { z } from "zod";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 const FROM_EMAIL = process.env.RESEND_FROM_EMAIL ?? "noreply@swasana.com";
 
-const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
+const uploadedFileSchema = z.object({
+  key: z.string().min(1),
+  mimeType: z.string().min(1),
+  fileSize: z.number().int().positive().max(MAX_UPLOAD_SIZE_BYTES),
+});
 
 // ─── Submit Onboarding Form ───────────────────────────────────────────────────
 
@@ -87,18 +93,29 @@ export async function submitOnboardingForm(
     bankAccountNumber,
   } = parsed.data;
 
-  // 4. Validate file uploads
-  const ktpFile = formData.get("ktpFile");
-  const kkFile = formData.get("kkFile");
+  // 4. Validate file uploads (already uploaded direct-to-storage; only metadata arrives here)
+  const ktpRaw = formData.get("ktpFile");
+  const kkRaw = formData.get("kkFile");
 
-  if (!(ktpFile instanceof File) || ktpFile.size === 0)
-    return { success: false, error: "File KTP wajib diunggah." };
-  if (!(kkFile instanceof File) || kkFile.size === 0)
-    return { success: false, error: "File KK wajib diunggah." };
-  if (ktpFile.size > MAX_FILE_SIZE)
-    return { success: false, error: "Ukuran file KTP maks 10MB." };
-  if (kkFile.size > MAX_FILE_SIZE)
-    return { success: false, error: "Ukuran file KK maks 10MB." };
+  let ktpFile: z.infer<typeof uploadedFileSchema>;
+  let kkFile: z.infer<typeof uploadedFileSchema>;
+  try {
+    if (typeof ktpRaw !== "string") throw new Error("missing ktp");
+    if (typeof kkRaw !== "string") throw new Error("missing kk");
+    const ktpParsed = uploadedFileSchema.safeParse(JSON.parse(ktpRaw));
+    const kkParsed = uploadedFileSchema.safeParse(JSON.parse(kkRaw));
+    if (!ktpParsed.success) return { success: false, error: "File KTP wajib diunggah." };
+    if (!kkParsed.success) return { success: false, error: "File KK wajib diunggah." };
+    ktpFile = ktpParsed.data;
+    kkFile = kkParsed.data;
+  } catch {
+    return { success: false, error: "File KTP/KK wajib diunggah." };
+  }
+
+  if (!ktpFile.key.startsWith("employees-documents/")) return { success: false, error: "Key file KTP tidak valid." };
+  if (!kkFile.key.startsWith("employees-documents/")) return { success: false, error: "Key file KK tidak valid." };
+  if (!isAllowedUploadMimeType(ktpFile.mimeType)) return { success: false, error: "Tipe file KTP tidak diizinkan." };
+  if (!isAllowedUploadMimeType(kkFile.mimeType)) return { success: false, error: "Tipe file KK tidak diizinkan." };
 
   try {
     // 5. Resolve department — find by name or create if missing
@@ -175,21 +192,9 @@ export async function submitOnboardingForm(
 
     const profileId = user.profile!.id;
 
-    // 8 & 9. Upload KTP and KK files, then create EmployeeDocument records atomically
-    const ktpExt = ktpFile.name.split(".").pop() ?? "bin";
-    const kkExt = kkFile.name.split(".").pop() ?? "bin";
-    const ktpKey = `employees/${profileId}/documents/ktp-${Date.now()}.${ktpExt}`;
-    const kkKey = `employees/${profileId}/documents/kk-${Date.now() + 1}.${kkExt}`;
-
-    const [ktpBuffer, kkBuffer] = await Promise.all([
-      ktpFile.arrayBuffer().then((ab) => Buffer.from(ab)),
-      kkFile.arrayBuffer().then((ab) => Buffer.from(ab)),
-    ]);
-
-    const [ktpUrl, kkUrl] = await Promise.all([
-      uploadToStorage(ktpBuffer, ktpKey, ktpFile.type),
-      uploadToStorage(kkBuffer, kkKey, kkFile.type),
-    ]);
+    // 8 & 9. Files already uploaded direct-to-storage by the client — resolve public URLs
+    const ktpUrl = getPublicUrl(ktpFile.key);
+    const kkUrl = getPublicUrl(kkFile.key);
 
     // 10. Create EmployeeDocument records + EmploymentHistory in one transaction
     await db.$transaction([
@@ -199,7 +204,7 @@ export async function submitOnboardingForm(
           type: "ktp",
           name: `KTP - ${fullName}`,
           fileUrl: ktpUrl,
-          fileSize: ktpFile.size,
+          fileSize: ktpFile.fileSize,
           uploadedBy: session!.user.profileId,
         },
       }),
@@ -209,7 +214,7 @@ export async function submitOnboardingForm(
           type: "kk",
           name: `KK - ${fullName}`,
           fileUrl: kkUrl,
-          fileSize: kkFile.size,
+          fileSize: kkFile.fileSize,
           uploadedBy: session!.user.profileId,
         },
       }),

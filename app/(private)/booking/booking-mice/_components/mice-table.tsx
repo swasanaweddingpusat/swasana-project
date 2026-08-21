@@ -390,168 +390,282 @@ export function MiceTable() {
             </p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <Table className="min-w-250 text-sm">
-              <TableHeader>
-                <TableRow className="bg-muted/50">
-                  <TableHead className="px-4 whitespace-nowrap w-[3%] text-center">
-                    No
-                  </TableHead>
-                  <TableHead className="px-4 whitespace-nowrap">
-                    Client
-                  </TableHead>
-                  <TableHead className="px-4 whitespace-nowrap">
-                    Booking Date
-                  </TableHead>
-                  <TableHead className="px-4 whitespace-nowrap">
-                    No. Purchase Order
-                  </TableHead>
-                  <TableHead className="px-4 whitespace-nowrap">
-                    Quotation
-                  </TableHead>
-                  <TableHead className="px-4 whitespace-nowrap">
-                    Kediaman Venue
-                  </TableHead>
-                  <TableHead className="px-4 whitespace-nowrap">
-                    Status
-                  </TableHead>
-                  <TableHead className="px-4 whitespace-nowrap">
-                    Event Date
-                  </TableHead>
-                  <TableHead className="px-4 whitespace-nowrap text-right">
-                    Full Payment
-                  </TableHead>
-                  <TableHead className="px-4 whitespace-nowrap text-right">
-                    Booking Fee
-                  </TableHead>
-                  <TableHead className="px-4 whitespace-nowrap">
-                    Sales
-                  </TableHead>
-                  <TableHead className="px-4 whitespace-nowrap w-12">
-                    <span className="sr-only">Aksi</span>
-                  </TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {rows.map((item, idx) => {
-                  const bookingFee =
-                    item.terms.find((t) => t.name === "Booking Fee")?.amount ?? 0;
-                  const finalPayment =
-                    item.terms.find((t) => t.name === "Final Payment")?.amount ?? 0;
+          <>
+            {/* Table — desktop (sm+) */}
+            <div className={cn("hidden", "sm:block", "overflow-x-auto")}>
+              <Table className="min-w-250 text-sm">
+                <TableHeader>
+                  <TableRow className="bg-muted/50">
+                    <TableHead className="px-4 whitespace-nowrap w-[3%] text-center">
+                      No
+                    </TableHead>
+                    <TableHead className="px-4 whitespace-nowrap">
+                      Client
+                    </TableHead>
+                    <TableHead className="px-4 whitespace-nowrap">
+                      Booking Date
+                    </TableHead>
+                    <TableHead className="px-4 whitespace-nowrap">
+                      No. Purchase Order
+                    </TableHead>
+                    <TableHead className="px-4 whitespace-nowrap">
+                      Quotation
+                    </TableHead>
+                    <TableHead className="px-4 whitespace-nowrap">
+                      Kediaman Venue
+                    </TableHead>
+                    <TableHead className="px-4 whitespace-nowrap">
+                      Status
+                    </TableHead>
+                    <TableHead className="px-4 whitespace-nowrap">
+                      Event Date
+                    </TableHead>
+                    <TableHead className="px-4 whitespace-nowrap text-right">
+                      Full Payment
+                    </TableHead>
+                    <TableHead className="px-4 whitespace-nowrap text-right">
+                      Booking Fee
+                    </TableHead>
+                    <TableHead className="px-4 whitespace-nowrap">
+                      Sales
+                    </TableHead>
+                    <TableHead className="px-4 whitespace-nowrap w-12">
+                      <span className="sr-only">Aksi</span>
+                    </TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {rows.map((item, idx) => {
+                    const bookingFee =
+                      item.terms.find((t) => t.name === "Booking Fee")?.amount ?? 0;
+                    const finalPayment =
+                      item.terms.find((t) => t.name === "Final Payment")?.amount ?? 0;
 
-                  return (
-                    <TableRow
-                      key={item.id}
-                      onClick={() => handleRowClick(item)}
-                      className={cn('cursor-pointer', 'transition-colors', item.status === "Canceled" ? 'bg-destructive/10 hover:bg-destructive/15' : 'hover:bg-muted/40')}
-                    >
-                      <TableCell className="px-4 text-center text-muted-foreground">
-                        {(currentPage - 1) * ROWS_PER_PAGE + idx + 1}
-                      </TableCell>
+                    return (
+                      <TableRow
+                        key={item.id}
+                        onClick={() => handleRowClick(item)}
+                        className={cn('cursor-pointer', 'transition-colors', item.status === "Canceled" ? 'bg-destructive/10 hover:bg-destructive/15' : 'hover:bg-muted/40')}
+                      >
+                        <TableCell className="px-4 text-center text-muted-foreground">
+                          {(currentPage - 1) * ROWS_PER_PAGE + idx + 1}
+                        </TableCell>
 
-                      <TableCell className="px-4">
-                        <div className="min-w-0">
-                          <p
-                            className="font-medium truncate text-foreground"
-                            title={item.customer.name}
-                          >
-                            {item.customer.name}
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            {item.customer.phone}
-                          </p>
-                        </div>
-                      </TableCell>
+                        <TableCell className="px-4">
+                          <div className="min-w-0">
+                            <p
+                              className="font-medium truncate text-foreground"
+                              title={item.customer.name}
+                            >
+                              {item.customer.name}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              {item.customer.phone}
+                            </p>
+                          </div>
+                        </TableCell>
 
-                      <TableCell className="px-4 whitespace-nowrap text-foreground/80">
-                        {format(new Date(item.createdAt), "dd MMM yyyy")}
-                      </TableCell>
+                        <TableCell className="px-4 whitespace-nowrap text-foreground/80">
+                          {format(new Date(item.createdAt), "dd MMM yyyy")}
+                        </TableCell>
 
-                      <TableCell className="px-4">
-                        {item.poNumber ? (
-                          <span className="font-mono text-xs">
-                            {item.poNumber}
-                          </span>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">
+                        <TableCell className="px-4">
+                          {item.poNumber ? (
+                            <span className="font-mono text-xs">
+                              {item.poNumber}
+                            </span>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">
+                              —
+                            </span>
+                          )}
+                        </TableCell>
+
+                        {/* Quotation — always deferred */}
+                        <TableCell className="px-4 whitespace-nowrap">
+                          <span className="text-xs text-muted-foreground flex items-center gap-1">
+                            <FileText
+                              weight="BoldDuotone"
+                              aria-hidden="true"
+                              className="w-3 h-3 opacity-40"
+                            />
                             —
                           </span>
-                        )}
-                      </TableCell>
+                        </TableCell>
 
-                      {/* Quotation — always deferred */}
-                      <TableCell className="px-4 whitespace-nowrap">
-                        <span className="text-xs text-muted-foreground flex items-center gap-1">
-                          <FileText
-                            weight="BoldDuotone"
-                            aria-hidden="true"
-                            className="w-3 h-3 opacity-40"
-                          />
-                          —
-                        </span>
-                      </TableCell>
+                        <TableCell className="px-4 whitespace-nowrap text-foreground/80">
+                          {item.venue.name}
+                        </TableCell>
 
-                      <TableCell className="px-4 whitespace-nowrap text-foreground/80">
-                        {item.venue.name}
-                      </TableCell>
+                        <TableCell className="px-4">
+                          <MiceStatusBadge status={item.status} />
+                        </TableCell>
 
-                      <TableCell className="px-4">
+                        <TableCell className="px-4 whitespace-nowrap text-foreground/80">
+                          {item.eventDate
+                            ? format(new Date(item.eventDate), "dd MMM yyyy")
+                            : "—"}
+                        </TableCell>
+
+                        <TableCell className="px-4 text-right whitespace-nowrap font-medium text-foreground">
+                          {fmtRp(finalPayment)}
+                        </TableCell>
+
+                        <TableCell className="px-4 text-right whitespace-nowrap font-medium text-foreground">
+                          {fmtRp(bookingFee)}
+                        </TableCell>
+
+                        <TableCell className="px-4 whitespace-nowrap text-muted-foreground">
+                          {item.sales?.fullName ?? "—"}
+                        </TableCell>
+
+                        <TableCell
+                          className="px-4"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                aria-label={`Aksi untuk booking ${item.customer.name}`}
+                              >
+                                <MenuDots
+                                  weight="BoldDuotone"
+                                  aria-hidden="true"
+                                  className="w-4 h-4 text-muted-foreground"
+                                />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem
+                                className="gap-2"
+                                onClick={() => {
+                                  setSelectedBooking(item);
+                                  setDetailOpen(true);
+                                }}
+                              >
+                                <Eye weight="BoldDuotone" aria-hidden="true" className="w-4 h-4 text-primary" />
+                                View Detail
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                className="gap-2"
+                                onClick={() => {
+                                  setSelectedBooking(item);
+                                  setDrawerOpen(true);
+                                }}
+                              >
+                                <Pen weight="BoldDuotone" aria-hidden="true" className="w-4 h-4 text-primary" />
+                                Edit
+                              </DropdownMenuItem>
+                              {item.status !== "Lost" && item.status !== "Canceled" && item.status !== "Rejected" && (
+                                <DropdownMenuItem
+                                  className="gap-2"
+                                  onClick={() => { void handleMarkLost(item); }}
+                                >
+                                  <DangerTriangle weight="BoldDuotone" aria-hidden="true" className="w-4 h-4 text-muted-foreground" />
+                                  Mark Lost
+                                </DropdownMenuItem>
+                              )}
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                className="gap-2 text-destructive focus:text-destructive"
+                                onClick={() => { void handleDelete(item); }}
+                              >
+                                <TrashBinTrash weight="BoldDuotone" aria-hidden="true" className="w-4 h-4" />
+                                Hapus
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+
+            {/* Mobile (<sm): card list */}
+            <div className={cn("block", "sm:hidden", "p-4", "space-y-3")}>
+              {rows.map((item, idx) => {
+                const bookingFee =
+                  item.terms.find((t) => t.name === "Booking Fee")?.amount ?? 0;
+                const finalPayment =
+                  item.terms.find((t) => t.name === "Final Payment")?.amount ?? 0;
+
+                return (
+                  <div
+                    key={item.id}
+                    onClick={() => handleRowClick(item)}
+                    className={cn(
+                      "rounded-lg border bg-card p-3 space-y-2 cursor-pointer transition-colors",
+                      item.status === "Canceled" ? "bg-destructive/10" : "active:bg-muted/40"
+                    )}
+                  >
+                    {/* Row 1: no + nama + status */}
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="font-medium text-sm text-foreground truncate">
+                          {(currentPage - 1) * ROWS_PER_PAGE + idx + 1}. {item.customer.name}
+                        </p>
+                        <p className="text-xs text-muted-foreground">{item.customer.phone}</p>
+                      </div>
+                      <div className="shrink-0">
                         <MiceStatusBadge status={item.status} />
-                      </TableCell>
+                      </div>
+                    </div>
 
-                      <TableCell className="px-4 whitespace-nowrap text-foreground/80">
-                        {item.eventDate
-                          ? format(new Date(item.eventDate), "dd MMM yyyy")
-                          : "—"}
-                      </TableCell>
+                    {/* Row 2: venue + PO number */}
+                    <div className="flex items-center gap-1.5 flex-wrap text-xs text-muted-foreground">
+                      <span>{item.venue.name}</span>
+                      {item.poNumber && (
+                        <>
+                          <span aria-hidden="true">·</span>
+                          <span className="font-mono">{item.poNumber}</span>
+                        </>
+                      )}
+                    </div>
 
-                      <TableCell className="px-4 text-right whitespace-nowrap font-medium text-foreground">
-                        {fmtRp(finalPayment)}
-                      </TableCell>
+                    {/* Row 3: booking date + event date */}
+                    <div className="flex items-center gap-1.5 flex-wrap text-xs text-muted-foreground">
+                      <span>Booking: {format(new Date(item.createdAt), "dd MMM yyyy")}</span>
+                      <span aria-hidden="true">·</span>
+                      <span>
+                        Event: {item.eventDate ? format(new Date(item.eventDate), "dd MMM yyyy") : "—"}
+                      </span>
+                    </div>
 
-                      <TableCell className="px-4 text-right whitespace-nowrap font-medium text-foreground">
-                        {fmtRp(bookingFee)}
-                      </TableCell>
-
-                      <TableCell className="px-4 whitespace-nowrap text-muted-foreground">
-                        {item.sales?.fullName ?? "—"}
-                      </TableCell>
-
-                      <TableCell
-                        className="px-4"
-                        onClick={(e) => e.stopPropagation()}
-                      >
+                    {/* Row 4: payment + sales */}
+                    <div className="flex items-center justify-between gap-2 pt-1 border-t border-border">
+                      <div className="text-xs">
+                        <span className="text-muted-foreground">Full Payment </span>
+                        <span className="font-medium text-foreground">{fmtRp(finalPayment)}</span>
+                        <span className="text-muted-foreground"> · Fee </span>
+                        <span className="font-medium text-foreground">{fmtRp(bookingFee)}</span>
+                      </div>
+                      <div onClick={(e) => e.stopPropagation()} className="shrink-0">
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <Button
                               variant="ghost"
                               size="icon"
+                              className="h-8 w-8"
                               aria-label={`Aksi untuk booking ${item.customer.name}`}
                             >
-                              <MenuDots
-                                weight="BoldDuotone"
-                                aria-hidden="true"
-                                className="w-4 h-4 text-muted-foreground"
-                              />
+                              <MenuDots weight="BoldDuotone" aria-hidden="true" className="w-4 h-4 text-muted-foreground" />
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
                             <DropdownMenuItem
                               className="gap-2"
-                              onClick={() => {
-                                setSelectedBooking(item);
-                                setDetailOpen(true);
-                              }}
+                              onClick={() => { setSelectedBooking(item); setDetailOpen(true); }}
                             >
                               <Eye weight="BoldDuotone" aria-hidden="true" className="w-4 h-4 text-primary" />
                               View Detail
                             </DropdownMenuItem>
                             <DropdownMenuItem
                               className="gap-2"
-                              onClick={() => {
-                                setSelectedBooking(item);
-                                setDrawerOpen(true);
-                              }}
+                              onClick={() => { setSelectedBooking(item); setDrawerOpen(true); }}
                             >
                               <Pen weight="BoldDuotone" aria-hidden="true" className="w-4 h-4 text-primary" />
                               Edit
@@ -575,13 +689,13 @@ export function MiceTable() {
                             </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </>
         )}
 
         {/* Pagination */}

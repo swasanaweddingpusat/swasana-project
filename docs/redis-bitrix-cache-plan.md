@@ -166,13 +166,48 @@ refresh live saat itu juga; kalau tidak pernah dibaca lagi, dibiarkan basi sampa
    (komunikasi lewat private network Railway — tidak lewat internet publik).
 4. Docker image project **tidak berubah** — cuma nambah env var.
 
+### 8.1. Cron Job service (config-as-code, `docker/cron-bitrix-refresh/`)
+
+App + Redis sama-sama di Railway (satu project), jadi cron job bisa hit endpoint
+lewat **private network** (`http://<app-service>.railway.internal:3000/...`), gak
+lewat internet publik. Cron job-nya sengaja **image terpisah** dari image app utama
+(`Dockerfile` di root) — cuma `alpine` + `curl`, bukan reuse Next.js standalone image
+(yang gak punya `scripts/`/full `node_modules` buat command lain, dan `ENTRYPOINT`-nya
+udah fixed ke `docker-entrypoint.sh`).
+
+File yang udah dibuat:
+- `docker/cron-bitrix-refresh/run.sh` — script yang di-curl, baca `BITRIX_CRON_SECRET`
+  + `CRON_TARGET_URL` dari env, exit non-zero kalau salah satunya kosong atau curl gagal.
+- `docker/cron-bitrix-refresh/Dockerfile` — `alpine:3.20` + `curl`, `ENTRYPOINT ["/run.sh"]`.
+- `docker/cron-bitrix-refresh/railway.json` — config-as-code: `build.dockerfilePath`
+  arah ke Dockerfile di atas, `deploy.cronSchedule = "0 20 * * *"` (UTC = jam 3 pagi WIB),
+  `deploy.restartPolicyType = "NEVER"` (one-shot task, bukan service yang di-retry terus).
+
+**Setup manual di Railway (sekali aja, gak bisa full lewat file):**
+1. Project Railway yang sama → **+ New → Empty Service** (atau "GitHub Repo" → pilih repo
+   yang sama, root tetap repo root).
+2. Di service Settings → **Config-as-code Path**, isi `docker/cron-bitrix-refresh/railway.json`
+   (bukan `railway.json` default di root — itu punya app utama kalau ada).
+3. Service Variables buat cron service ini:
+   ```
+   BITRIX_CRON_SECRET=<sama persis dengan punya app>
+   CRON_TARGET_URL=http://<nama-service-app>.railway.internal:3000/api/cron/bitrix-refresh
+   ```
+   (`<nama-service-app>` = nama service Next.js di project itu, cek di dashboard.)
+4. Redeploy service ini sekali biar Railway baca `railway.json`.
+5. **Cek `Cron Schedule` di Settings service ini juga ke-isi `0 20 * * *`.** Config-as-code
+   buat `cronSchedule` sempat ada known bug di Railway (kadang gak ke-apply dari file) — kalau
+   kosong/gak match, isi manual di dashboard sebagai fallback, file tetap jadi dokumentasi.
+6. Test: klik "Trigger" manual sekali di dashboard → cek log service, harus keluar
+   `[cron] GET http://...` lalu body JSON `{"refreshed":5,"failed":0,...}` dari route handler.
+
 ---
 
 ## 9. Rencana file (per layer)
 
 | # | File / langkah | Isi |
 |---|---|---|
-| 1 | **Railway** (manual, lo yang klik) | Service Redis (`allkeys-lru`) + `REDIS_URL=${{Redis.REDIS_URL}}` + Cron Job (`0 3 * * *`) hit `/api/cron/bitrix-refresh` |
+| 1 | **Railway** (setup sekali via dashboard, config di git) | Service Redis (`allkeys-lru`) + `REDIS_URL=${{Redis.REDIS_URL}}` + Cron Job service (config-as-code `docker/cron-bitrix-refresh/railway.json`, §8.1) hit `/api/cron/bitrix-refresh` tiap `0 20 * * *` UTC (jam 3 pagi WIB) |
 | 2 | `package.json` | `+ ioredis` |
 | 3 | `lib/redis.ts` | Singleton `ioredis` (pola `lib/db.ts`). Konek gagal = **non-fatal** (log + return null path). Helper `redisGetJSON` / `redisSetJSON(key, val)` — **tanpa parameter TTL**, key persist selamanya |
 | 4 | `lib/bitrix-cache.ts` | `withBitrixCache(key, {freshMs}, fetcher)` (§3, no hard TTL) + `bitrixCacheKey(method, params)` (§5) + `WARM_TARGETS` registry (§7). No dedicated `forceRefresh` — the warmer calls the same read-through `withBitrixCache` path; running once/day (≫ `FRESH_WINDOW_MS`) always finds it stale, so it overwrites the cache without needing a separate force function. |

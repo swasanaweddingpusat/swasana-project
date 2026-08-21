@@ -16,6 +16,7 @@ import { toast } from "sonner";
 import { generateAgreementToken, markAgreementSent } from "@/actions/client-agreement";
 import { deleteBookingDocument, deleteBookingDocuments } from "@/actions/booking-document";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
+import { AgreementPanel } from "@/components/shared/booking/agreement-panel";
 import type { BookingDetail } from "@/lib/queries/bookings";
 
 /* ─── Helpers ──────────────────────────────────────────────────────────────── */
@@ -148,9 +149,10 @@ export function BookingDetailModal({ open, onClose, bookingId }: Props) {
 
   if (!open) return null;
 
-  // The Client Agreement tab is only relevant once the client has actually
-  // signed — before that there's nothing for the viewer to see here.
+  // The Client Agreement tab muncul begitu agreement ada (status apa pun): sebelum
+  // Signed → uploader/link, sesudah Signed → receipt.
   const isAgreementSigned = booking?.clientAgreement?.status === "Signed";
+  const hasAgreement = !!booking?.clientAgreement;
   // The BITRIX tab is only relevant when this booking's customer carries a Bitrix
   // deal id (captured at create/edit when the source of information is Bitrix).
   const bitrixId = booking?.customer?.bitrixId?.trim() || null;
@@ -164,7 +166,7 @@ export function BookingDetailModal({ open, onClose, bookingId }: Props) {
     { key: "vendor" as const, label: "Vendor Details" },
     { key: "payment" as const, label: "Pembayaran" },
     { key: "documents" as const, label: "Dokumen" },
-    ...(isAgreementSigned ? [{ key: "agreement" as const, label: "Client Agreement" }] : []),
+    ...(hasAgreement ? [{ key: "agreement" as const, label: "Client Agreement" }] : []),
     ...(bitrixId ? [{ key: "bitrix" as const, label: "BITRIX" }] : []),
   ];
 
@@ -865,7 +867,14 @@ export function BookingDetailModal({ open, onClose, bookingId }: Props) {
 
               {/* ═══ TAB: Client Agreement ═══ */}
               {activeTab === "agreement" && (
-                <ClientAgreementSection booking={booking} />
+                isAgreementSigned ? (
+                  <ClientAgreementSection booking={booking} />
+                ) : (
+                  <div className="border rounded-lg p-4">
+                    <p className="mb-3 text-sm font-semibold">Client Agreement</p>
+                    <AgreementPanel bookingId={booking.id} onCompleted={() => { void refetch(); }} />
+                  </div>
+                )
               )}
 
               {/* ═══ TAB: BITRIX ═══ */}
