@@ -20,6 +20,7 @@ import {
   Book,
   Buildings2,
   Widget,
+  ClipboardList,
   type IconProps,
 } from "@solar-icons/react";
 import type { ComponentType } from "react";
@@ -79,6 +80,13 @@ const GROUPS: SettingGroup[] = [
         icon: UserRounded,
         href: "/settings/customer",
         module: "customers",
+      },
+      {
+        title: "Booking Activity Log",
+        description: "Monitoring gabungan activity log booking Wedding & MICE.",
+        icon: ClipboardList,
+        href: "/settings/booking-log",
+        module: "settings-booking-log",
       },
     ],
   },
@@ -199,6 +207,7 @@ export default async function SettingsHubPage() {
     "settings-maintenance-category",
     "settings-maintenance-priority",
     "settings-maintenance-status",
+    "settings-booking-log",
   ]);
 
   const session = await auth();

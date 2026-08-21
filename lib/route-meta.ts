@@ -75,6 +75,7 @@ const DYNAMIC_ROUTE_META: Record<string, RouteMeta> = {
   "/settings/maintenance-priority": { title: "Maintenance Priority", subtitle: "Kelola prioritas maintenance", parent: "/settings" },
   "/settings/maintenance-status": { title: "Maintenance Status", subtitle: "Kelola status maintenance", parent: "/settings" },
   "/settings/tutorial": { title: "Tutorial CMS", subtitle: "Kelola konten tutorial aplikasi", parent: "/settings" },
+  "/settings/booking-log": { title: "Booking Activity Log", subtitle: "Monitoring activity log booking Wedding & MICE", parent: "/settings" },
   "/settings/quotation-templates": { title: "Quotation Templates", subtitle: "Kelola template quotation", parent: "/settings" },
   "/profile": { title: "Profile", subtitle: "Kelola informasi pribadi dan keamanan akun Anda.", parent: "/settings" },
   "/notifications": { title: "Notifikasi", subtitle: "Semua notifikasi" },

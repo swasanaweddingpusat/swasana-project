@@ -40,6 +40,9 @@ export const moduleActions: Record<string, string[]> = {
   "settings-role-permission": ["view", "create", "edit", "delete"],
   "settings-source-of-information": ["view", "create", "edit", "delete"],
   "settings-tutorial": ["view", "create", "edit", "delete"],
+  // Read-only monitoring hub (Settings > Booking Log) — gabungan activity log
+  // booking Wedding + MICE. View-only: tidak ada mutasi dari halaman ini.
+  "settings-booking-log": ["view"],
   complimentary: ["view", "create", "edit", "delete"],
   // CRM modules
   "daily-activity": ["view", "create", "edit", "delete"],
@@ -120,6 +123,7 @@ export const rolePermissionMap: Record<string, Record<string, string[]>> = {
     bitrix: ["view"],
     "internal-faq": ["view"],
     announcement: ["view"],
+    "settings-booking-log": ["view"],
   },
   // Manager: CRUD only on dashboard, calendar-event, groups, booking-weddings,
   // package, complimentary, vendors, and customers.
@@ -142,6 +146,7 @@ export const rolePermissionMap: Record<string, Record<string, string[]>> = {
     bitrix: ["view"],
     "internal-faq": ["view", "create", "edit", "delete"],
     announcement: ["view", "create", "edit", "delete"],
+    "settings-booking-log": ["view"],
   },
   "direktur-operational": {
     booking: ["view", "create", "edit", "approve", "comment", "print"],
@@ -158,6 +163,7 @@ export const rolePermissionMap: Record<string, Record<string, string[]>> = {
     bitrix: ["view"],
     "internal-faq": ["view", "create", "edit", "delete"],
     announcement: ["view", "create", "edit", "delete"],
+    "settings-booking-log": ["view"],
   },
   // Operational — persis daftar menu yang disepakati:
   //   Procurement (4 tab, CRUD) · Vendor (view) · Purchase Order (view) ·
@@ -275,6 +281,7 @@ export const rolePermissionMap: Record<string, Record<string, string[]>> = {
     bitrix: ["view"],
     "internal-faq": ["view"],
     announcement: ["view"],
+    "settings-booking-log": ["view"],
   },
   "procurement-manager": {
     procurement: ["view", "create", "edit", "delete", "approve"],

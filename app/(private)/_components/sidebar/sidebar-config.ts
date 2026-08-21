@@ -96,6 +96,7 @@ export const SETTINGS_MODULES = [
   "settings-maintenance-priority",
   "settings-maintenance-status",
   "settings-tutorial",
+  "settings-booking-log",
   "customers",
 ] as const;
 
