@@ -132,7 +132,7 @@ export function AgreementPanel({ bookingId, onCompleted }: AgreementPanelProps):
   }
 
   return (
-    <div className={cn('space-y-3', 'py-1')}>
+    <div className={cn('min-w-0', 'space-y-3', 'py-1')}>
       {agreement.status !== "Signed" && (
         <div className="flex items-center justify-between gap-3 rounded-xl border border-border bg-muted/30 px-3.5 py-2.5">
           <div className="flex min-w-0 items-center gap-2.5">
@@ -161,12 +161,12 @@ export function AgreementPanel({ bookingId, onCompleted }: AgreementPanelProps):
       {showManualUpload && agreement.status !== "Signed" ? (
         <div className="space-y-2.5">
           {manualFile ? (
-            <div className="flex items-center gap-2.5 rounded-xl border border-border bg-background px-3 py-2.5">
+            <div className="flex min-w-0 items-center gap-2.5 rounded-xl border border-border bg-background px-3 py-2.5">
               <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
                 <FileText weight="BoldDuotone" className="h-4 w-4" />
               </div>
               <div className="min-w-0 flex-1">
-                <p className="truncate text-xs font-medium text-foreground">{manualFile.name}</p>
+                <p className="truncate text-xs font-medium text-foreground" title={manualFile.name}>{manualFile.name}</p>
                 <p className="text-[10px] text-muted-foreground">{formatSize(manualFile.size)}</p>
               </div>
               <button
