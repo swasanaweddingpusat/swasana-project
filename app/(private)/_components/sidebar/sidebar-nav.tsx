@@ -69,24 +69,28 @@ export function SidebarNav() {
   const generalItems = isLoading ? [] : filterNavItems(GENERAL_NAV, can, isGroupMember);
   const settingsVisible = !isLoading && SETTINGS_MODULES.some((mod) => can(mod, "view"));
 
-  // BITRIX24 is a General item but must always sit directly below the active
-  // module's Overview entry. Pull it out of General and re-insert it there;
-  // when the module has no Overview entry, leave it in its General position.
-  const bitrixItem = generalItems.find((item) => item.href === "/bitrix24");
-  const overviewIndex = bitrixItem
+  // BITRIX24 and Customers are General items but must always sit directly
+  // below the active module's Overview entry (in that order). Pull them out
+  // of General and re-insert them there; when the module has no Overview
+  // entry, leave them in their General position.
+  const PINNED_AFTER_OVERVIEW = ["/bitrix24", "/customers"];
+  const pinnedItems = PINNED_AFTER_OVERVIEW
+    .map((href) => generalItems.find((item) => item.href === href))
+    .filter((item): item is NavItem => item !== undefined);
+  const overviewIndex = pinnedItems.length > 0
     ? moduleItems.findIndex((item) => item.href === `/${activeModule}/overview`)
     : -1;
   const orderedModuleItems =
-    bitrixItem && overviewIndex >= 0
+    overviewIndex >= 0
       ? [
           ...moduleItems.slice(0, overviewIndex + 1),
-          bitrixItem,
+          ...pinnedItems,
           ...moduleItems.slice(overviewIndex + 1),
         ]
       : moduleItems;
   const remainingGeneralItems =
-    bitrixItem && overviewIndex >= 0
-      ? generalItems.filter((item) => item.href !== "/bitrix24")
+    overviewIndex >= 0
+      ? generalItems.filter((item) => !PINNED_AFTER_OVERVIEW.includes(item.href))
       : generalItems;
 
   return (

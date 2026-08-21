@@ -41,6 +41,7 @@ import {
   Chart2,
   Bolt,
   ChatRound,
+  UserRounded,
 } from "@solar-icons/react";
 
 type SolarIcon = ForwardRefExoticComponent<Omit<IconProps, "ref"> & RefAttributes<SVGSVGElement>>;
@@ -97,7 +98,6 @@ export const SETTINGS_MODULES = [
   "settings-maintenance-status",
   "settings-tutorial",
   "settings-booking-log",
-  "customers",
 ] as const;
 
 export type ModuleKey = "finance" | "hrd" | "booking" | "purchase";
@@ -169,6 +169,7 @@ export const GENERAL_NAV: NavItem[] = [
       { name: "Percakapan", href: "/bitrix24/percakapan", icon: ChatRound, title: "Percakapan Bitrix24", subtitle: "Data percakapan Contact Center (Open Lines) dari Bitrix24", permission: { module: "bitrix", action: "view" } },
       { name: "Response Sales", href: "/bitrix24/response-sales", icon: GraphUp, title: "Response Sales Bitrix24", subtitle: "Rata-rata waktu respons sales per percakapan", permission: { module: "bitrix", action: "view" } },
     ] },
+  { name: "Customers", href: "/customers", icon: UserRounded, subtitle: "Kelola data customer, member status, dan riwayat booking", permission: { module: "customers", action: "view" } },
   { name: "Indikator Pernikahan", href: "/wedding-indicators", icon: Heart, subtitle: "Kelola kuesioner penilaian kepuasan pasangan pernikahan", permission: { module: "vendor-specialist", action: "view" } },
   { name: "Absensi", href: "/absensi", icon: CheckSquare, subtitle: "Catat kehadiran dengan foto dan lokasi", permission: { module: "attendance", action: "view" } },
   { name: "Maintenance", href: "/maintenance", icon: Sledgehammer, subtitle: "Kelola ticket dan jadwal pemeliharaan", permission: { module: "maintenance", action: "view" } },

@@ -5,7 +5,11 @@ export const mobileNumberEntrySchema = z.object({
   number: z.string().min(1, "Nomor HP wajib diisi"),
 });
 
-export const customerSchema = z.object({
+/**
+ * Object dasar TANPA refinement. Refinement dipisah supaya `.partial()` (update)
+ * bisa dipakai — Zod v4 melarang `.partial()` pada schema yang sudah `.superRefine()`.
+ */
+const customerBaseSchema = z.object({
   name: z.string().min(1, "Nama wajib diisi"),
   mobileNumber: z.array(mobileNumberEntrySchema).min(1, "Minimal 1 nomor HP"),
   emailCpp: z.string().email("Email CPP tidak valid").optional().or(z.literal("")).transform((v) => v || undefined),
@@ -20,28 +24,42 @@ export const customerSchema = z.object({
   memberStatus: z.string().min(1, "Member status wajib diisi").default("Non-Member"),
   notes: z.string().optional(),
   bitrixId: z.string().optional(),
-}).superRefine((data, ctx) => {
+});
+
+/**
+ * Cross-field checks. Semua field di-guard undefined supaya aman dipakai baik pada
+ * create (full) maupun update (partial).
+ */
+function refineCustomer(
+  data: Partial<z.infer<typeof customerBaseSchema>>,
+  ctx: z.RefinementCtx,
+): void {
   const cppNik = data.cppNik ?? "";
   if (cppNik !== "") {
     if (data.cppIdType === "KTP" && !/^\d{16}$/.test(cppNik)) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "NIK CPP harus 16 digit angka", path: ["cppNik"] });
+      ctx.addIssue({ code: "custom", message: "NIK CPP harus 16 digit angka", path: ["cppNik"] });
     } else if (data.cppIdType === "Paspor" && !/^[A-Za-z0-9]{6,9}$/.test(cppNik)) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Paspor CPP harus 6–9 karakter alfanumerik", path: ["cppNik"] });
+      ctx.addIssue({ code: "custom", message: "Paspor CPP harus 6–9 karakter alfanumerik", path: ["cppNik"] });
     }
   }
   const cpwNik = data.cpwNik ?? "";
   if (cpwNik !== "") {
     if (data.cpwIdType === "KTP" && !/^\d{16}$/.test(cpwNik)) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "NIK CPW harus 16 digit angka", path: ["cpwNik"] });
+      ctx.addIssue({ code: "custom", message: "NIK CPW harus 16 digit angka", path: ["cpwNik"] });
     } else if (data.cpwIdType === "Paspor" && !/^[A-Za-z0-9]{6,9}$/.test(cpwNik)) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Paspor CPW harus 6–9 karakter alfanumerik", path: ["cpwNik"] });
+      ctx.addIssue({ code: "custom", message: "Paspor CPW harus 6–9 karakter alfanumerik", path: ["cpwNik"] });
     }
   }
-});
+}
 
-export const updateCustomerSchema = customerSchema.partial().extend({
-  id: z.string().min(1),
-});
+export const customerSchema = customerBaseSchema.superRefine(refineCustomer);
+
+export const updateCustomerSchema = customerBaseSchema
+  .partial()
+  .extend({
+    id: z.string().min(1),
+  })
+  .superRefine(refineCustomer);
 
 export type MobileNumberEntry = z.infer<typeof mobileNumberEntrySchema>;
 export type CustomerInput = z.infer<typeof customerSchema>;
