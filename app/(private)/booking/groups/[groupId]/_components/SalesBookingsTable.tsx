@@ -1024,7 +1024,7 @@ export function SalesBookingsTable({ salesId }: SalesBookingsTableProps): React.
         <AgreementModal
           bookingId={agreementModal.bookingId}
           customerName={agreementModal.customerName}
-          onClose={() => setAgreementModal(null)}
+          onClose={() => { void refetch(); setAgreementModal(null); }}
         />
       )}
 
