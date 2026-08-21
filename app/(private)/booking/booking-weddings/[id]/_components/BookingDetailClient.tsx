@@ -17,6 +17,7 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { BookingActions } from "./BookingActions";
+import { ActivityLogTimeline } from "@/app/(private)/booking/booking-weddings/_components/activity-log-timeline";
 import type { BookingDetail } from "@/lib/queries/bookings";
 
 /* ─── Resolved shape (server adds termStatuses/cashIns; docs carry fileUrl) ──── */
@@ -215,6 +216,7 @@ export function BookingDetailClient({ booking, payment }: Props) {
     { key: "documents", label: "Dokumen" },
     ...(isAgreementSigned ? [{ key: "agreement", label: "Client Agreement" }] : []),
     ...(bitrixId ? [{ key: "bitrix", label: "Bitrix" }] : []),
+    { key: "activity-log", label: "Activity Log" },
   ];
 
   return (
@@ -426,6 +428,11 @@ export function BookingDetailClient({ booking, payment }: Props) {
             <BitrixSection dealId={bitrixId} />
           </TabsContent>
         )}
+
+        {/* ═══ Activity Log ═══ */}
+        <TabsContent value="activity-log" className="mt-5 animate-in fade-in duration-300">
+          <ActivityLogTimeline bookingId={booking.id} />
+        </TabsContent>
       </Tabs>
     </div>
   );
