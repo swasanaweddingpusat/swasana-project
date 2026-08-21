@@ -1635,7 +1635,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
         <AgreementModal
           bookingId={agreementModal.bookingId}
           customerName={agreementModal.customerName}
-          onClose={() => { invalidateDetail(agreementModal.bookingId); setAgreementModal(null); }}
+          onClose={() => { invalidateDetail(agreementModal.bookingId); refetch(); setAgreementModal(null); }}
         />
       )}
 
