@@ -24,6 +24,11 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       ...doc,
       fileUrl: getPublicUrl(doc.filePath),
     })),
+    // PO manual (scan PO fisik ttd) — key → URL biar modal Client Agreement
+    // tinggal pakai href tanpa baca env di client.
+    clientAgreementUploaded: data.clientAgreementUploaded
+      ? { ...data.clientAgreementUploaded, fileUrl: getPublicUrl(data.clientAgreementUploaded.path) }
+      : null,
     // TOP kini jadwal murni — status diturunkan (§5), bukti bayar/riwayat dari Ledger.
     termOfPayments: data.termOfPayments,
     termStatuses: Object.fromEntries(

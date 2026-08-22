@@ -37,8 +37,10 @@ export function ApprovalWarningDialog({
 }: ApprovalWarningDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md rounded-2xl">
-        <DialogHeader className="items-center gap-3 pb-1 text-center">
+      {/* flex! override base grid → header + footer tetap, badan peringatan yang
+          scroll. max-h dvh biar muat di layar HP (viewport dinamis). */}
+      <DialogContent className="flex! max-h-[90dvh] max-w-md flex-col overflow-hidden rounded-2xl">
+        <DialogHeader className="shrink-0 items-center gap-3 pb-1 text-center">
           <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-destructive/10">
             <DangerTriangle weight="BoldDuotone" className="h-9 w-9 text-destructive" />
           </div>
@@ -50,7 +52,7 @@ export function ApprovalWarningDialog({
           ) : null}
         </DialogHeader>
 
-        <div className="space-y-3 pt-1">
+        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto pt-1">
           <div className="rounded-xl border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive-foreground">
             <p className="font-semibold text-destructive">Peringatan:</p>
             <ol className="mt-2 space-y-2">
@@ -69,7 +71,7 @@ export function ApprovalWarningDialog({
           </p>
         </div>
 
-        <div className="flex justify-end gap-2 pt-2">
+        <div className="flex shrink-0 justify-end gap-2 pt-2">
           <Button variant="outline" size="sm" onClick={() => onOpenChange(false)} disabled={submitting}>
             {cancelLabel}
           </Button>
