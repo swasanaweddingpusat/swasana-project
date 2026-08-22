@@ -63,6 +63,8 @@ const uploadManualAgreementSchema = z.object({
   path: z.string().min(1).refine((v) => v.startsWith("client-agreements/"), { message: "Key file tidak valid." }),
   fileName: z.string().min(1),
   fileType: z.string().refine(isAllowedAgreementUploadMimeType, { message: "Tipe file tidak diizinkan." }),
+  // No PO yang diketik staff dari PO fisik — harus sama persis dgn poNumber sistem.
+  noPO: z.string().trim().min(1, { message: "Nomor PO wajib diisi." }),
 });
 
 /**
@@ -78,6 +80,7 @@ export async function uploadManualAgreement(input: {
   path: string;
   fileName: string;
   fileType: string;
+  noPO: string;
 }) {
   const { session, error } = await requirePermission({ module: "booking", action: "client-agreement" });
   if (error) return { success: false as const, error };
@@ -87,7 +90,7 @@ export async function uploadManualAgreement(input: {
 
   const parsed = uploadManualAgreementSchema.safeParse(input);
   if (!parsed.success) return { success: false as const, error: parsed.error.issues[0].message };
-  const { bookingId, path, fileName, fileType } = parsed.data;
+  const { bookingId, path, fileName, fileType, noPO } = parsed.data;
 
   const scope = await getProfileDataScope(session!.user.profileId);
   if (!(await canAccessBooking(session!.user.profileId, scope, bookingId))) {
@@ -95,6 +98,19 @@ export async function uploadManualAgreement(input: {
   }
 
   try {
+    // Guard: No PO yang diketik staff wajib sama persis dgn poNumber booking di
+    // sistem. Dicek SEBELUM atomic claim, jadi mismatch tidak pernah bikin
+    // agreement keburu flip ke Signed.
+    const booking = await db.booking.findUnique({
+      where: { id: bookingId },
+      select: { currentRevisionId: true, poNumber: true },
+    });
+    if (!booking) return { success: false as const, error: "Booking tidak ditemukan." };
+    const systemPo = (booking.poNumber ?? "").trim();
+    if (!systemPo || noPO !== systemPo) {
+      return { success: false as const, error: "No PO tidak sama dengan sistem saat ini." };
+    }
+
     // Atomic claim: flip Pending/Sent/Viewed → Signed in ONE guarded write —
     // same rationale as api/client-agreement/sign/route.ts. This both prevents
     // a double-submit race AND is the mechanism that invalidates the digital
@@ -109,11 +125,6 @@ export async function uploadManualAgreement(input: {
 
     // Read everything needed BEFORE writing, so the effect can commit as a
     // single atomic transaction (same shape as sign/route.ts).
-    const booking = await db.booking.findUnique({
-      where: { id: bookingId },
-      select: { currentRevisionId: true },
-    });
-
     const approvalRecord = await db.approvalRecord.findUnique({
       where: { module_entityId: { module: "booking", entityId: bookingId } },
       include: { steps: { orderBy: { stepOrder: "asc" } } },
@@ -155,7 +166,7 @@ export async function uploadManualAgreement(input: {
             where: { id: clientStep.id },
             data: {
               status: "approved",
-              clientAgreementUploaded: { path, fileName, fileType } as Prisma.InputJsonValue,
+              clientAgreementUploaded: { path, fileName, fileType, noPO } as Prisma.InputJsonValue,
               decidedById: session!.user.profileId,
               decidedAt: new Date(),
             },
@@ -186,7 +197,7 @@ export async function uploadManualAgreement(input: {
       action: "client_agreement.manual_uploaded",
       entityType: "booking",
       entityId: bookingId,
-      description: `PO manual diupload (${fileName})`,
+      description: `PO manual diupload (${fileName}, No PO ${noPO})`,
     });
 
     revalidateTag("bookings", "max");

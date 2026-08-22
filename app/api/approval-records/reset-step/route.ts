@@ -1,9 +1,11 @@
 import { z } from "zod";
+import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { auth } from "@/lib/auth";
 import { isSuperAdmin, hasPermission } from "@/lib/permissions";
 import { mutationLimiter, rateLimitResponse } from "@/lib/rate-limit";
 import { logAudit } from "@/lib/audit";
+import { deleteFromStorage } from "@/lib/storage";
 import { revalidateTag } from "next/cache";
 
 const bodySchema = z.object({ stepId: z.string().min(1) });
@@ -51,12 +53,30 @@ export async function POST(req: Request): Promise<Response> {
     return rateLimitResponse();
   }
 
+  // Referensi file PO manual (scan PO fisik) yg tersimpan di kolom JSON
+  // clientAgreementUploaded. Cuma jalur upload manual yg punya file di S3 —
+  // TTD digital disimpan inline di kolom `signature` (tidak ada file). Dibaca
+  // SEBELUM transaksi; file-nya dihapus best-effort SETELAH transaksi sukses.
+  const uploadedPath = (() => {
+    const v = step.clientAgreementUploaded as { path?: unknown } | null;
+    return v && typeof v.path === "string" ? v.path : null;
+  })();
+
   // 6. Transaction — granular per-step reset only
   try {
     const transactionOps = [
       db.approvalRecordStep.update({
         where: { id: stepId },
-        data: { status: "pending", decidedById: null, decidedAt: null, signature: null },
+        // clientAgreementUploaded di-null-in juga: reset step wajib menghapus
+        // SEMUA artefak persetujuan (TTD digital via `signature`, PO manual via
+        // JSON ini). Tanpa ini, referensi PO lama nyangkut di step.
+        data: {
+          status: "pending",
+          decidedById: null,
+          decidedAt: null,
+          signature: null,
+          clientAgreementUploaded: Prisma.DbNull,
+        },
       }),
       db.approvalRecord.update({
         where: { id: step.recordId },
@@ -83,6 +103,17 @@ export async function POST(req: Request): Promise<Response> {
     ];
 
     await db.$transaction(transactionOps);
+
+    // Hapus file PO manual dari S3 SETELAH DB commit. Best-effort: kegagalan
+    // storage tidak boleh menggagalkan reset (DB sudah jadi sumber kebenaran &
+    // referensi JSON-nya sudah dibersihkan di transaksi di atas).
+    if (step.approverType === "client" && uploadedPath) {
+      try {
+        await deleteFromStorage(uploadedPath);
+      } catch (e) {
+        console.error("[reset-step] gagal hapus file PO manual dari storage", e);
+      }
+    }
 
     const ip = req.headers.get("x-forwarded-for") ?? "unknown";
     const userAgent = req.headers.get("user-agent") ?? "unknown";

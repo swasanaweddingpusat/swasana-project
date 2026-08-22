@@ -1302,6 +1302,12 @@ function ClientAgreementSection({ booking }: { booking: BookingDetail }) {
   const [agreement, setAgreement] = useState(booking.clientAgreement);
   const [isPending, startTransition] = useTransition();
   const clientSignature = booking.clientSignature ?? null;
+  // PO manual (scan PO fisik yg diupload staff sbg ganti ttd digital). fileUrl
+  // di-resolve server-side di GET /api/bookings/[id] — cast inline (pola sama
+  // dengan termStatuses/cashIns di PaymentSection).
+  const uploaded = (booking as typeof booking & {
+    clientAgreementUploaded?: { path: string; fileName: string; fileType: string; fileUrl?: string } | null;
+  }).clientAgreementUploaded ?? null;
 
   const baseUrl = typeof window !== "undefined" ? window.location.origin : "";
   const agreementUrl = agreement ? `${baseUrl}/client-agreement?token=${agreement.token}` : null;
@@ -1365,6 +1371,21 @@ function ClientAgreementSection({ booking }: { booking: BookingDetail }) {
                   className="max-h-24 max-w-48 object-contain"
                 />
               </div>
+            </div>
+          )}
+          {agreement.status === "Signed" && !clientSignature && uploaded && (
+            <div className="space-y-1.5">
+              <p className="text-xs text-muted-foreground">PO Manual (Upload)</p>
+              <a
+                href={uploaded.fileUrl ?? "#"}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex w-fit items-center gap-2 rounded-xl border bg-card px-3 py-2 text-sm text-foreground transition-colors hover:bg-muted"
+              >
+                <FileText weight="BoldDuotone" className="h-4 w-4 text-primary" />
+                <span className="max-w-60 truncate">{uploaded.fileName}</span>
+                <DownloadMinimalistic weight="BoldDuotone" className="h-3.5 w-3.5 text-muted-foreground" />
+              </a>
             </div>
           )}
           <div className="flex gap-2 pt-1">
