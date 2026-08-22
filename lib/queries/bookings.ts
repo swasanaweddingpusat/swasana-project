@@ -541,7 +541,7 @@ export async function getBookingById(id: string) {
   // (see actions/client-agreement.ts uploadManualAgreement). Null when the
   // step was completed via digital signature (or not completed at all).
   const clientAgreementUploaded = (steps.find((s) => s.approverType === "client")?.clientAgreementUploaded ??
-    null) as unknown as { path: string; fileName: string; fileType: string } | null;
+    null) as unknown as { path: string; fileName: string; fileType: string; noPO?: string } | null;
   // The sales rep signs the front "user" step (approverType "user", stepOrder 0) —
   // render-po labels that step "Sales". Expose its signature for the current
   // revision so the edit-booking TTD step can pre-fill the already-saved value.

@@ -3,14 +3,20 @@
 import React from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
-import { Refresh, Copy, UploadMinimalistic, FileText, CloseCircle, CheckCircle } from "@solar-icons/react";
+import { Refresh, Copy, UploadMinimalistic, FileText, CloseCircle, CheckCircle, DangerTriangle } from "@solar-icons/react";
 import { cn } from "@/lib/utils";
 import { generateAgreementToken, uploadManualAgreement } from "@/actions/client-agreement";
 import { uploadFileDirect } from "@/lib/upload-client";
 import { MAX_UPLOAD_SIZE_BYTES, isAllowedAgreementUploadMimeType } from "@/lib/validations/upload";
+import { ApprovalWarningDialog } from "@/components/shared/approval-warning-dialog";
 
 const RefreshCw = Refresh;
+
+// Baca nomor PO otomatis via Claude (9router) — dimatikan sementara. Set true
+// buat aktifin lagi; sisanya (input No PO, guard mismatch, upload) tetep jalan.
+const AI_PO_EXTRACT_ENABLED: boolean = false;
 
 function formatSize(bytes: number) {
   if (bytes < 1024) return `${bytes} B`;
@@ -51,9 +57,66 @@ export function AgreementPanel({ bookingId, onCompleted }: AgreementPanelProps):
   const [manualFile, setManualFile] = React.useState<File | null>(null);
   const [uploadingManual, setUploadingManual] = React.useState(false);
   const [showManualUpload, setShowManualUpload] = React.useState(false);
+  const [showUploadConfirm, setShowUploadConfirm] = React.useState(false);
+  const [noPO, setNoPO] = React.useState("");
+  const [systemPoNumber, setSystemPoNumber] = React.useState("");
+  // Hasil baca nomor PO otomatis dari dokumen (Claude via 9router). Asisten
+  // auto-fill + indikator — bukan gerbang; server tetap sumber kebenaran.
+  const [extracting, setExtracting] = React.useState(false);
+  const [extraction, setExtraction] = React.useState<{ found: boolean; poNumber: string | null; confidence: number } | null>(null);
   const manualFileInputRef = React.useRef<HTMLInputElement>(null);
 
   const agreementUrl = agreement ? `${window.location.origin}/client-agreement?token=${agreement.token}` : null;
+  // Live compare No PO ketikan staff vs poNumber sistem. Kosong (belum loaded /
+  // belum ngetik) = belum dianggap mismatch.
+  const poMismatch = systemPoNumber.length > 0 && noPO.trim().length > 0 && noPO.trim() !== systemPoNumber;
+
+  const normalizePo = (v: string) => v.trim().toUpperCase().replace(/\s+/g, "");
+
+  // Kirim PDF ke Claude buat baca nomor PO. Auto-isi field HANYA kalau masih
+  // kosong & AI cukup yakin (jangan nimpa ketikan staff). Gagal baca = diam,
+  // staff isi manual seperti biasa.
+  const runExtraction = React.useCallback(async (file: File) => {
+    setExtracting(true);
+    setExtraction(null);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await fetch("/api/client-agreement/extract-po", { method: "POST", body: fd });
+      const data = (await res.json()) as { success: boolean; found?: boolean; poNumber?: string | null; confidence?: number };
+      if (!data.success) return;
+      const found = data.found ?? false;
+      const poNumber = data.poNumber ?? null;
+      const confidence = data.confidence ?? 0;
+      setExtraction({ found, poNumber, confidence });
+      if (found && poNumber && confidence >= 0.6) {
+        setNoPO((prev) => (prev.trim().length === 0 ? poNumber : prev));
+      }
+    } catch {
+      // biarin — indikator gak muncul, staff isi manual
+    } finally {
+      setExtracting(false);
+    }
+  }, []);
+
+  // Status baca AI buat ditampilin di bawah input No PO. Dihitung ulang tiap
+  // render; if/else (bukan ternary statement) sesuai aturan ESLint project.
+  let aiStatus: { tone: "loading" | "ok" | "bad" | "warn" | "info"; text: string } | null = null;
+  if (extracting) {
+    aiStatus = { tone: "loading", text: "Membaca nomor PO dari dokumen…" };
+  } else if (extraction) {
+    if (!extraction.found || !extraction.poNumber) {
+      aiStatus = { tone: "warn", text: "Nomor PO tidak terbaca otomatis. Silakan isi manual." };
+    } else if (extraction.confidence < 0.6) {
+      aiStatus = { tone: "warn", text: `AI kurang yakin (terbaca: ${extraction.poNumber}). Periksa manual.` };
+    } else if (!systemPoNumber) {
+      aiStatus = { tone: "info", text: `Nomor PO terbaca dari dokumen: ${extraction.poNumber}.` };
+    } else if (normalizePo(extraction.poNumber) === normalizePo(systemPoNumber)) {
+      aiStatus = { tone: "ok", text: "Nomor PO dokumen cocok dengan sistem." };
+    } else {
+      aiStatus = { tone: "bad", text: `Nomor PO dokumen (${extraction.poNumber}) beda dengan sistem.` };
+    }
+  }
 
   const handleManualFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0] ?? null;
@@ -68,10 +131,17 @@ export function AgreementPanel({ bookingId, onCompleted }: AgreementPanelProps):
       return;
     }
     setManualFile(file);
+    if (AI_PO_EXTRACT_ENABLED) void runExtraction(file);
   };
 
   const uploadManual = async () => {
     if (!manualFile) return;
+    if (!noPO.trim()) { toast.error("Nomor PO wajib diisi."); return; }
+    // Guard cepat client-side (server tetap jadi sumber kebenaran).
+    if (systemPoNumber && noPO.trim() !== systemPoNumber) {
+      toast.error("No PO tidak sama dengan sistem saat ini.");
+      return;
+    }
     setUploadingManual(true);
     try {
       const { key } = await uploadFileDirect(manualFile, "client-agreements");
@@ -80,6 +150,7 @@ export function AgreementPanel({ bookingId, onCompleted }: AgreementPanelProps):
         path: key,
         fileName: manualFile.name,
         fileType: manualFile.type,
+        noPO: noPO.trim(),
       });
       if (!result.success) { toast.error(result.error); return; }
       toast.success("PO manual berhasil diupload");
@@ -105,8 +176,9 @@ export function AgreementPanel({ bookingId, onCompleted }: AgreementPanelProps):
     startTransition(async () => {
       const res = await fetch(`/api/bookings/${bookingId}`);
       if (!res.ok) return;
-      const data = await res.json() as { bookingStatus?: string; clientAgreement?: { token: string; accessCode: string; status: string } | null };
+      const data = await res.json() as { bookingStatus?: string; poNumber?: string | null; clientAgreement?: { token: string; accessCode: string; status: string } | null };
       if (data.bookingStatus) setBookingStatus(data.bookingStatus);
+      if (data.poNumber) setSystemPoNumber(data.poNumber.trim());
       // Only show existing agreement if booking is Confirmed or agreement is genuinely pending/sent
       if (data.clientAgreement && (data.bookingStatus === "Confirmed" || data.clientAgreement.status !== "Signed")) {
         setAgreement({ token: data.clientAgreement.token, accessCode: data.clientAgreement.accessCode, status: data.clientAgreement.status });
@@ -160,6 +232,49 @@ export function AgreementPanel({ bookingId, onCompleted }: AgreementPanelProps):
 
       {showManualUpload && agreement.status !== "Signed" ? (
         <div className="space-y-2.5">
+          <div className="space-y-1.5">
+            <label htmlFor="manual-po-number" className="text-xs font-medium text-foreground">
+              Nomor PO <span className="text-destructive">*</span>
+            </label>
+            <Input
+              id="manual-po-number"
+              value={noPO}
+              onChange={(e) => setNoPO(e.target.value)}
+              placeholder="Ketik Nomor PO sesuai dokumen"
+              disabled={uploadingManual}
+              aria-invalid={poMismatch}
+              className={cn("rounded-xl text-sm", poMismatch && "border-destructive")}
+            />
+            <p className={cn("text-[10px]", poMismatch ? "font-medium text-destructive" : "text-muted-foreground")}>
+              {poMismatch
+                ? "Nomor PO tidak sama dengan sistem saat ini."
+                : "Wajib sama persis dengan Nomor PO booking di sistem."}
+            </p>
+
+            {aiStatus && (
+              <div
+                className={cn(
+                  "flex items-center gap-2 rounded-lg border px-2.5 py-2 text-[11px]",
+                  aiStatus.tone === "bad" && "border-destructive/30 bg-destructive/10 text-destructive",
+                  aiStatus.tone === "ok" && "border-primary/30 bg-primary/5 text-foreground",
+                  (aiStatus.tone === "loading" || aiStatus.tone === "warn" || aiStatus.tone === "info") &&
+                    "border-border bg-muted/40 text-muted-foreground",
+                )}
+              >
+                {aiStatus.tone === "loading" ? (
+                  <Refresh weight="BoldDuotone" className="h-3.5 w-3.5 shrink-0 animate-spin" />
+                ) : aiStatus.tone === "ok" ? (
+                  <CheckCircle weight="BoldDuotone" className="h-3.5 w-3.5 shrink-0 text-primary" />
+                ) : aiStatus.tone === "bad" ? (
+                  <CloseCircle weight="BoldDuotone" className="h-3.5 w-3.5 shrink-0" />
+                ) : (
+                  <DangerTriangle weight="BoldDuotone" className="h-3.5 w-3.5 shrink-0" />
+                )}
+                <span>{aiStatus.text}</span>
+              </div>
+            )}
+          </div>
+
           {manualFile ? (
             <div className="flex min-w-0 items-center gap-2.5 rounded-xl border border-border bg-background px-3 py-2.5">
               <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
@@ -173,7 +288,7 @@ export function AgreementPanel({ bookingId, onCompleted }: AgreementPanelProps):
                 type="button"
                 aria-label="Hapus file"
                 className="shrink-0 rounded-full p-1 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
-                onClick={() => setManualFile(null)}
+                onClick={() => { setManualFile(null); setExtraction(null); }}
                 disabled={uploadingManual}
               >
                 <CloseCircle weight="BoldDuotone" className="h-4 w-4" />
@@ -201,8 +316,8 @@ export function AgreementPanel({ bookingId, onCompleted }: AgreementPanelProps):
           <Button
             variant="default"
             className="h-auto w-full rounded-lg py-3"
-            onClick={uploadManual}
-            disabled={!manualFile || uploadingManual}
+            onClick={() => setShowUploadConfirm(true)}
+            disabled={!manualFile || !noPO.trim() || uploadingManual}
           >
             {uploadingManual ? "Mengupload..." : "Upload PO Manual"}
           </Button>
@@ -255,6 +370,29 @@ export function AgreementPanel({ bookingId, onCompleted }: AgreementPanelProps):
           <CheckCircle weight="BoldDuotone" className="h-3.5 w-3.5 text-primary" /> Sudah ditandatangani
         </div>
       )}
+
+      <ApprovalWarningDialog
+        open={showUploadConfirm}
+        onOpenChange={setShowUploadConfirm}
+        title="Konfirmasi Upload PO Manual"
+        description="Anda akan menyelesaikan tahap Client Agreement dengan mengunggah PO yang sudah ditandatangani client secara fisik."
+        warnings={[
+          "Dokumen PO yang diunggah akan tercatat sebagai bukti persetujuan resmi client pada booking ini.",
+          "Nomor PO yang Anda masukkan wajib sama persis dengan Nomor PO booking di sistem saat ini.",
+          "Setelah diunggah, tahap Client Agreement langsung berstatus disetujui dan tidak bisa diubah tanpa proses reset approval oleh pihak yang berwenang.",
+          "Jika terjadi perubahan pada booking — seperti paket, tanggal event, venue, harga, atau ketentuan pembayaran — setelah PO diunggah, tanda tangan Manager harus di-approve ulang untuk mengecek kembali setiap perubahan.",
+          "Pastikan PO yang diunggah sudah benar dan sudah ditandatangani client, karena persetujuan ini bersifat mengikat.",
+          ...(poMismatch
+            ? ["PERHATIAN: Nomor PO yang Anda masukkan TIDAK sama dengan Nomor PO di sistem. Upload akan DITOLAK — periksa kembali dokumen PO sebelum melanjutkan."]
+            : []),
+        ]}
+        confirmLabel="Ya, Upload PO"
+        onConfirm={() => {
+          setShowUploadConfirm(false);
+          void uploadManual();
+        }}
+        submitting={uploadingManual}
+      />
     </div>
   );
 }
