@@ -535,12 +535,21 @@ export async function getBookingById(id: string) {
   if (!booking) return null;
 
   const steps = approvalRecord?.steps ?? [];
-  const clientSignature = steps.find((s) => s.approverType === "client")?.signature ?? null;
+  // Multi-revision bookings keep the client step for every past revision. Always
+  // read from the CURRENT revision's client step (fallback to first) — a bare
+  // .find can otherwise pick a stale revision whose client step is still pending
+  // (no signature, no upload), hiding a genuinely-completed agreement.
+  const clientSteps = steps
+    .filter((s) => s.approverType === "client")
+    .sort((a, b) => a.stepOrder - b.stepOrder);
+  const currentClientStep =
+    clientSteps.find((s) => s.revisionId === booking.currentRevisionId) ?? clientSteps[0];
+  const clientSignature = currentClientStep?.signature ?? null;
   // Alternate way to complete the client step: a scan of a physically-signed
   // PO, uploaded by staff instead of the client signing digitally in-browser
   // (see actions/client-agreement.ts uploadManualAgreement). Null when the
   // step was completed via digital signature (or not completed at all).
-  const clientAgreementUploaded = (steps.find((s) => s.approverType === "client")?.clientAgreementUploaded ??
+  const clientAgreementUploaded = (currentClientStep?.clientAgreementUploaded ??
     null) as unknown as { path: string; fileName: string; fileType: string; noPO?: string } | null;
   // The sales rep signs the front "user" step (approverType "user", stepOrder 0) —
   // render-po labels that step "Sales". Expose its signature for the current

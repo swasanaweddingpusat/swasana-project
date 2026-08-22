@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
-import { Refresh, Copy, UploadMinimalistic, FileText, CloseCircle, CheckCircle, DangerTriangle } from "@solar-icons/react";
+import { Refresh, Copy, UploadMinimalistic, FileText, CloseCircle, CheckCircle, DangerTriangle, DownloadMinimalistic } from "@solar-icons/react";
 import { cn } from "@/lib/utils";
 import { generateAgreementToken, uploadManualAgreement } from "@/actions/client-agreement";
 import { uploadFileDirect } from "@/lib/upload-client";
@@ -60,6 +60,10 @@ export function AgreementPanel({ bookingId, onCompleted }: AgreementPanelProps):
   const [showUploadConfirm, setShowUploadConfirm] = React.useState(false);
   const [noPO, setNoPO] = React.useState("");
   const [systemPoNumber, setSystemPoNumber] = React.useState("");
+  // PO manual (scan PO fisik yg diupload staff sbg ganti ttd digital). fileUrl
+  // di-resolve server-side di GET /api/bookings/[id]. Null kalau step diselesaikan
+  // via ttd digital atau belum ada upload.
+  const [uploaded, setUploaded] = React.useState<{ fileName: string; fileUrl?: string } | null>(null);
   // Hasil baca nomor PO otomatis dari dokumen (Claude via 9router). Asisten
   // auto-fill + indikator — bukan gerbang; server tetap sumber kebenaran.
   const [extracting, setExtracting] = React.useState(false);
@@ -176,12 +180,23 @@ export function AgreementPanel({ bookingId, onCompleted }: AgreementPanelProps):
     startTransition(async () => {
       const res = await fetch(`/api/bookings/${bookingId}`);
       if (!res.ok) return;
-      const data = await res.json() as { bookingStatus?: string; poNumber?: string | null; clientAgreement?: { token: string; accessCode: string; status: string } | null };
+      const data = await res.json() as {
+        bookingStatus?: string;
+        poNumber?: string | null;
+        clientAgreement?: { token: string; accessCode: string; status: string } | null;
+        clientSignature?: string | null;
+        clientAgreementUploaded?: { fileName: string; fileUrl?: string } | null;
+      };
       if (data.bookingStatus) setBookingStatus(data.bookingStatus);
       if (data.poNumber) setSystemPoNumber(data.poNumber.trim());
       // Only show existing agreement if booking is Confirmed or agreement is genuinely pending/sent
       if (data.clientAgreement && (data.bookingStatus === "Confirmed" || data.clientAgreement.status !== "Signed")) {
         setAgreement({ token: data.clientAgreement.token, accessCode: data.clientAgreement.accessCode, status: data.clientAgreement.status });
+      }
+      // PO manual (scan fisik) hanya tampil kalau step BUKAN diselesaikan lewat
+      // ttd digital — ttd digital jadi bukti utama & lebih diprioritaskan.
+      if (data.clientAgreementUploaded && !data.clientSignature) {
+        setUploaded({ fileName: data.clientAgreementUploaded.fileName, fileUrl: data.clientAgreementUploaded.fileUrl });
       }
     });
   }, [bookingId]);
@@ -363,6 +378,22 @@ export function AgreementPanel({ bookingId, onCompleted }: AgreementPanelProps):
             </Button>
           )}
         </>
+      )}
+
+      {uploaded && (
+        <div className="space-y-1.5">
+          <p className="text-xs font-medium text-muted-foreground">PO Manual (Upload)</p>
+          <a
+            href={uploaded.fileUrl ?? "#"}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex w-fit items-center gap-2 rounded-xl border border-border bg-card px-3 py-2 text-sm text-foreground transition-colors hover:bg-muted"
+          >
+            <FileText weight="BoldDuotone" className="h-4 w-4 text-primary" />
+            <span className="max-w-60 truncate">{uploaded.fileName}</span>
+            <DownloadMinimalistic weight="BoldDuotone" className="h-3.5 w-3.5 text-muted-foreground" />
+          </a>
+        </div>
       )}
 
       {agreement.status === "Signed" && bookingStatus === "Confirmed" && (
