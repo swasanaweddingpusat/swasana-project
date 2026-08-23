@@ -32,6 +32,10 @@ const PUBLIC_PREFIXES = [
   "/api/recruitment-form/",
   "/api/onboarding-form/",
   "/api/health", // container/Dokploy liveness probe — must bypass auth redirect
+  "/apply/",     // public job application form pages
+  "/api/apply/", // public job application API (no auth required)
+  "/apply-invite/",     // personal candidate invite form pages (access-code auth, not session auth)
+  "/api/apply-invite/", // personal candidate invite API (access-code auth, not session auth)
 ];
 
 function isPublicPath(pathname: string): boolean {

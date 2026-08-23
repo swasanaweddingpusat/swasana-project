@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import { TrashBinTrash } from "@solar-icons/react";
 import { Button } from "@/components/ui/button";
@@ -27,6 +27,18 @@ export function RejectCandidateDrawer({ isOpen, onClose, candidates }: RejectCan
     candidateId: candidates[0]?.id ?? "",
     reason: "",
   });
+
+  useEffect(() => {
+    if (candidates.length > 0 && !form.candidateId) {
+      setForm((current) => ({ ...current, candidateId: candidates[0].id }));
+    }
+  }, [candidates]);
+
+  useEffect(() => {
+    if (isOpen && candidates.length > 0) {
+      setForm({ candidateId: candidates[0].id, reason: "" });
+    }
+  }, [isOpen]);
 
   async function handleSubmit() {
     if (!form.candidateId || !form.reason.trim()) {

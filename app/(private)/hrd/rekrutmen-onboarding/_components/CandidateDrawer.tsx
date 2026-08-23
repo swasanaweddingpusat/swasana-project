@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import { UserPlus } from "@solar-icons/react";
 import { Button } from "@/components/ui/button";
@@ -14,6 +14,7 @@ type CandidateForm = {
   fullName: string;
   email: string;
   phoneNumber: string;
+  expectedSalary: string;
 };
 
 interface CandidateDrawerProps {
@@ -30,7 +31,20 @@ export function CandidateDrawer({ isOpen, onClose, jobPostings }: CandidateDrawe
     fullName: "",
     email: "",
     phoneNumber: "",
+    expectedSalary: "",
   });
+
+  useEffect(() => {
+    if (jobPostings.length > 0 && !form.jobPostingId) {
+      setForm((current) => ({ ...current, jobPostingId: jobPostings[0].id }));
+    }
+  }, [jobPostings]);
+
+  useEffect(() => {
+    if (isOpen && jobPostings.length > 0) {
+      setForm({ jobPostingId: jobPostings[0].id, fullName: "", email: "", phoneNumber: "", expectedSalary: "" });
+    }
+  }, [isOpen]);
 
   async function handleSubmit() {
     if (!form.jobPostingId) {
@@ -43,11 +57,12 @@ export function CandidateDrawer({ isOpen, onClose, jobPostings }: CandidateDrawe
       fullName: form.fullName.trim(),
       email: form.email.trim(),
       phoneNumber: form.phoneNumber.trim() || undefined,
+      expectedSalary: form.expectedSalary ? Number(form.expectedSalary) : undefined,
     });
 
     if (result.success) {
       toast.success("Kandidat ditambahkan");
-      setForm((current) => ({ ...current, fullName: "", email: "", phoneNumber: "" }));
+      setForm((current) => ({ ...current, fullName: "", email: "", phoneNumber: "", expectedSalary: "" }));
       onClose();
       return;
     }
@@ -103,6 +118,24 @@ export function CandidateDrawer({ isOpen, onClose, jobPostings }: CandidateDrawe
             onChange={(event) => setForm((current) => ({ ...current, phoneNumber: event.target.value }))}
             placeholder="0812xxxx"
           />
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="drawer-candidate-salary">Gaji Diharapkan</Label>
+          <div className="relative">
+            <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
+              Rp
+            </span>
+            <Input
+              id="drawer-candidate-salary"
+              type="number"
+              min={0}
+              value={form.expectedSalary}
+              onChange={(event) => setForm((current) => ({ ...current, expectedSalary: event.target.value }))}
+              placeholder="5000000"
+              className="pl-9"
+            />
+          </div>
         </div>
 
         <Button

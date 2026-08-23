@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { AddCircle, TrashBinTrash } from "@solar-icons/react";
@@ -11,11 +11,12 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Drawer } from "@/components/shared/drawer";
-import { useCreateJobPosting } from "@/hooks/use-job-postings";
-import { useHrBrands } from "@/hooks/use-hr-brands";
+import { useCreateJobPosting, useUpdateJobPosting, useJobPostingDetail } from "@/hooks/use-job-postings";
+import { useVenues } from "@/hooks/use-venues";
 import { useDepartments } from "@/hooks/use-departments";
 import { usePositions } from "@/hooks/use-positions";
 import { useMyProfile } from "@/hooks/use-my-profile";
+import type { JobPostingDetail } from "@/lib/queries/jobPostings";
 
 type ApproverOption = {
   id: string;
@@ -26,7 +27,7 @@ type JobPostingForm = {
   title: string;
   employmentType: string;
   isWalkInInterview: boolean;
-  brandId: string;
+  companyName: string;
   submissionDate: string;
   interviewDate: string;
   // Section A
@@ -35,6 +36,8 @@ type JobPostingForm = {
   level: string;
   quota: string;
   interviewLocation: string;
+  interviewLink: string;
+  interviewVenueId: string;
   startDate: string;
   // Section B
   minEducation: string;
@@ -43,6 +46,7 @@ type JobPostingForm = {
   jobDescriptions: string[];
   additionalNotes: string;
   approverId: string;
+  approver2Id: string;
   // Legacy fields (kept for compatibility)
   location: string;
   salaryRangeMin: string;
@@ -55,7 +59,7 @@ const EMPTY_FORM: JobPostingForm = {
   title: "",
   employmentType: "",
   isWalkInInterview: false,
-  brandId: "",
+  companyName: "",
   submissionDate: "",
   interviewDate: "",
   departmentId: "",
@@ -63,6 +67,8 @@ const EMPTY_FORM: JobPostingForm = {
   level: "",
   quota: "",
   interviewLocation: "",
+  interviewLink: "",
+  interviewVenueId: "",
   startDate: "",
   minEducation: "",
   minExperience: "",
@@ -70,6 +76,7 @@ const EMPTY_FORM: JobPostingForm = {
   jobDescriptions: [""],
   additionalNotes: "",
   approverId: "",
+  approver2Id: "",
   location: "",
   salaryRangeMin: "",
   salaryRangeMax: "",
@@ -96,17 +103,64 @@ async function uploadSignature(canvas: SignatureCanvas): Promise<string | null> 
   return url;
 }
 
+function detailToForm(detail: NonNullable<JobPostingDetail>): JobPostingForm {
+  const toDateString = (v: Date | string | null | undefined) =>
+    v ? new Date(v).toISOString().split("T")[0] : "";
+  const descs = Array.isArray(detail.jobDescriptions)
+    ? (detail.jobDescriptions as string[])
+    : [];
+  return {
+    title: detail.title ?? "",
+    employmentType: detail.employmentType ?? "",
+    isWalkInInterview: detail.isWalkInInterview ?? false,
+    companyName: detail.companyName ?? "",
+    submissionDate: toDateString(detail.submissionDate),
+    interviewDate: toDateString(detail.interviewDate),
+    departmentId: detail.departmentId ?? "",
+    positionId: detail.positionId ?? "",
+    level: detail.level ?? "",
+    quota: detail.quota != null ? String(detail.quota) : "",
+    interviewLocation: detail.interviewLocation ?? "",
+    interviewLink: detail.interviewLink ?? "",
+    interviewVenueId: detail.interviewVenueId ?? "",
+    startDate: toDateString(detail.startDate),
+    minEducation: detail.minEducation ?? "",
+    minExperience: detail.minExperience ?? "",
+    otherQualifications: detail.otherQualifications ?? "",
+    jobDescriptions: descs.length > 0 ? descs : [""],
+    additionalNotes: detail.additionalNotes ?? "",
+    approverId: detail.approverId ?? "",
+    approver2Id: detail.approver2Id ?? "",
+    location: detail.location ?? "",
+    salaryRangeMin: detail.salaryRangeMin != null ? String(detail.salaryRangeMin) : "",
+    salaryRangeMax: detail.salaryRangeMax != null ? String(detail.salaryRangeMax) : "",
+    description: detail.description ?? "",
+    requirements: detail.requirements ?? "",
+  };
+}
+
 interface JobPostingDrawerProps {
   isOpen: boolean;
   onClose: () => void;
+  editId?: string;
 }
 
-export function JobPostingDrawer({ isOpen, onClose }: JobPostingDrawerProps) {
+export function JobPostingDrawer({ isOpen, onClose, editId }: JobPostingDrawerProps) {
+  const isEditMode = !!editId;
   const [form, setForm] = useState<JobPostingForm>(EMPTY_FORM);
   const sigCanvasRef = useRef<SignatureCanvas>(null);
   const createJobPostingMutation = useCreateJobPosting();
+  const updateJobPostingMutation = useUpdateJobPosting();
 
-  const { data: brands = [] } = useHrBrands();
+  const { data: editDetail } = useJobPostingDetail(editId ?? "");
+
+  useEffect(() => {
+    if (isEditMode && editDetail) {
+      setForm(detailToForm(editDetail));
+    }
+  }, [isEditMode, editDetail]);
+
+  const { data: venues = [] } = useVenues();
   const { data: departments = [] } = useDepartments();
   const { data: positions = [] } = usePositions(form.departmentId || undefined);
   const { data: approvers = [] } = useQuery<ApproverOption[]>({
@@ -139,7 +193,7 @@ export function JobPostingDrawer({ isOpen, onClose }: JobPostingDrawerProps) {
   }
 
   function handleClose(): void {
-    setForm(EMPTY_FORM);
+    if (!isEditMode) setForm(EMPTY_FORM);
     sigCanvasRef.current?.clear();
     onClose();
   }
@@ -147,6 +201,29 @@ export function JobPostingDrawer({ isOpen, onClose }: JobPostingDrawerProps) {
   async function handleSubmit(): Promise<void> {
     if (!form.title.trim()) {
       toast.error("Judul lowongan wajib diisi");
+      return;
+    }
+
+    if (!form.approverId) {
+      toast.error("Penyetuju 1 wajib dipilih");
+      return;
+    }
+    if (!form.approver2Id) {
+      toast.error("Penyetuju 2 wajib dipilih");
+      return;
+    }
+    if (form.approverId === form.approver2Id) {
+      toast.error("Penyetuju 1 dan 2 harus berbeda");
+      return;
+    }
+
+    const loc = form.interviewLocation;
+    if ((loc === "online" || loc === "hybrid") && !form.interviewLink.trim()) {
+      toast.error("Link interview wajib diisi untuk lokasi online/hybrid");
+      return;
+    }
+    if ((loc === "offline" || loc === "hybrid") && !form.interviewVenueId) {
+      toast.error("Venue wajib dipilih untuk lokasi offline/hybrid");
       return;
     }
 
@@ -161,12 +238,12 @@ export function JobPostingDrawer({ isOpen, onClose }: JobPostingDrawerProps) {
 
     const filteredDescriptions = form.jobDescriptions.filter((d) => d.trim().length > 0);
 
-    const result = await createJobPostingMutation.mutateAsync({
+    const payload = {
       title: form.title.trim(),
       employmentType:
         (form.employmentType as "permanent" | "contract" | "probation" | "intern") || undefined,
       isWalkInInterview: form.isWalkInInterview,
-      brandId: form.brandId || undefined,
+      companyName: form.companyName.trim() || undefined,
       submissionDate: form.submissionDate ? new Date(form.submissionDate) : undefined,
       interviewDate: form.interviewDate ? new Date(form.interviewDate) : undefined,
       departmentId: form.departmentId || undefined,
@@ -177,6 +254,8 @@ export function JobPostingDrawer({ isOpen, onClose }: JobPostingDrawerProps) {
       quota: toOptionalNumber(form.quota),
       interviewLocation:
         (form.interviewLocation as "online" | "offline" | "hybrid") || undefined,
+      interviewLink: form.interviewLink.trim() || undefined,
+      interviewVenueId: form.interviewVenueId || undefined,
       startDate: form.startDate ? new Date(form.startDate) : undefined,
       minEducation: form.minEducation.trim() || undefined,
       minExperience: form.minExperience.trim() || undefined,
@@ -184,13 +263,27 @@ export function JobPostingDrawer({ isOpen, onClose }: JobPostingDrawerProps) {
       jobDescriptions: filteredDescriptions.length > 0 ? filteredDescriptions : undefined,
       additionalNotes: form.additionalNotes.trim() || undefined,
       approverId: form.approverId || undefined,
+      approver2Id: form.approver2Id || undefined,
       submittedBySignature: signatureUrl ?? undefined,
       location: form.location.trim() || undefined,
       salaryRangeMin: toOptionalNumber(form.salaryRangeMin),
       salaryRangeMax: toOptionalNumber(form.salaryRangeMax),
       description: form.description.trim() || undefined,
       requirements: form.requirements.trim() || undefined,
-    });
+    };
+
+    if (isEditMode && editId) {
+      const result = await updateJobPostingMutation.mutateAsync({ id: editId, data: payload });
+      if (result.success) {
+        toast.success("Lowongan diperbarui");
+        handleClose();
+        return;
+      }
+      toast.error(result.error ?? "Gagal memperbarui lowongan");
+      return;
+    }
+
+    const result = await createJobPostingMutation.mutateAsync(payload);
 
     if (result.success) {
       toast.success("Lowongan dibuat");
@@ -201,8 +294,10 @@ export function JobPostingDrawer({ isOpen, onClose }: JobPostingDrawerProps) {
     toast.error(result.error ?? "Gagal membuat lowongan");
   }
 
+  const isPending = isEditMode ? updateJobPostingMutation.isPending : createJobPostingMutation.isPending;
+
   return (
-    <Drawer isOpen={isOpen} onClose={handleClose} title="Buat Lowongan" maxWidth="sm:max-w-2xl">
+    <Drawer isOpen={isOpen} onClose={handleClose} title={isEditMode ? "Edit Lowongan" : "Buat Lowongan"} maxWidth="sm:max-w-2xl">
       <div className="space-y-6 pb-6">
         {/* Header fields */}
         <div className="space-y-4">
@@ -248,20 +343,13 @@ export function JobPostingDrawer({ isOpen, onClose }: JobPostingDrawerProps) {
 
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="jp-brand">Perusahaan</Label>
-              <select
-                id="jp-brand"
-                value={form.brandId}
-                onChange={(e) => setField("brandId", e.target.value)}
-                className="h-10 w-full rounded-xl border border-input bg-background px-3 text-sm outline-none"
-              >
-                <option value="">Pilih perusahaan</option>
-                {brands.map((b) => (
-                  <option key={b.id} value={b.id}>
-                    {b.name}
-                  </option>
-                ))}
-              </select>
+              <Label htmlFor="jp-company">Perusahaan</Label>
+              <Input
+                id="jp-company"
+                value={form.companyName}
+                onChange={(e) => setField("companyName", e.target.value)}
+                placeholder="Nama perusahaan"
+              />
             </div>
             <div className="space-y-2">
               <Label htmlFor="jp-submission-date">Tanggal Pengajuan</Label>
@@ -363,11 +451,52 @@ export function JobPostingDrawer({ isOpen, onClose }: JobPostingDrawerProps) {
 
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
+              <Label htmlFor="jp-salary-min">Ekspektasi Gaji Min</Label>
+              <div className="relative">
+                <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">Rp</span>
+                <Input
+                  id="jp-salary-min"
+                  type="number"
+                  min={0}
+                  value={form.salaryRangeMin}
+                  onChange={(e) => setField("salaryRangeMin", e.target.value)}
+                  placeholder="0"
+                  className="pl-9"
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="jp-salary-max">Ekspektasi Gaji Maks</Label>
+              <div className="relative">
+                <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">Rp</span>
+                <Input
+                  id="jp-salary-max"
+                  type="number"
+                  min={0}
+                  value={form.salaryRangeMax}
+                  onChange={(e) => setField("salaryRangeMax", e.target.value)}
+                  placeholder="0"
+                  className="pl-9"
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
               <Label htmlFor="jp-interview-loc">Lokasi Interview</Label>
               <select
                 id="jp-interview-loc"
                 value={form.interviewLocation}
-                onChange={(e) => setField("interviewLocation", e.target.value)}
+                onChange={(e) => {
+                  const next = e.target.value;
+                  setForm((c) => ({
+                    ...c,
+                    interviewLocation: next,
+                    interviewLink: next === "online" || next === "hybrid" ? c.interviewLink : "",
+                    interviewVenueId: next === "offline" || next === "hybrid" ? c.interviewVenueId : "",
+                  }));
+                }}
                 className="h-10 w-full rounded-xl border border-input bg-background px-3 text-sm outline-none"
               >
                 <option value="">Pilih lokasi</option>
@@ -386,6 +515,37 @@ export function JobPostingDrawer({ isOpen, onClose }: JobPostingDrawerProps) {
               />
             </div>
           </div>
+
+          {(form.interviewLocation === "online" || form.interviewLocation === "hybrid") && (
+            <div className="space-y-2">
+              <Label htmlFor="jp-interview-link">Link Interview (Meet/Zoom)</Label>
+              <Input
+                id="jp-interview-link"
+                value={form.interviewLink}
+                onChange={(e) => setField("interviewLink", e.target.value)}
+                placeholder="https://meet.google.com/..."
+              />
+            </div>
+          )}
+
+          {(form.interviewLocation === "offline" || form.interviewLocation === "hybrid") && (
+            <div className="space-y-2">
+              <Label htmlFor="jp-interview-venue">Venue Interview</Label>
+              <select
+                id="jp-interview-venue"
+                value={form.interviewVenueId}
+                onChange={(e) => setField("interviewVenueId", e.target.value)}
+                className="h-10 w-full rounded-xl border border-input bg-background px-3 text-sm outline-none"
+              >
+                <option value="">Pilih venue</option>
+                {venues.map((v) => (
+                  <option key={v.id} value={v.id}>
+                    {v.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
 
         {/* Section B */}
@@ -469,21 +629,39 @@ export function JobPostingDrawer({ isOpen, onClose }: JobPostingDrawerProps) {
             />
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="jp-approver">Yang Menyetujui</Label>
-            <select
-              id="jp-approver"
-              value={form.approverId}
-              onChange={(e) => setField("approverId", e.target.value)}
-              className="h-10 w-full rounded-xl border border-input bg-background px-3 text-sm outline-none"
-            >
-              <option value="">Pilih penyetuju</option>
-              {approvers.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.fullName}
-                </option>
-              ))}
-            </select>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="jp-approver1">Yang Menyetujui 1</Label>
+              <select
+                id="jp-approver1"
+                value={form.approverId}
+                onChange={(e) => setField("approverId", e.target.value)}
+                className="h-10 w-full rounded-xl border border-input bg-background px-3 text-sm outline-none"
+              >
+                <option value="">Pilih penyetuju 1</option>
+                {approvers.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.fullName}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="jp-approver2">Yang Menyetujui 2</Label>
+              <select
+                id="jp-approver2"
+                value={form.approver2Id}
+                onChange={(e) => setField("approver2Id", e.target.value)}
+                className="h-10 w-full rounded-xl border border-input bg-background px-3 text-sm outline-none"
+              >
+                <option value="">Pilih penyetuju 2</option>
+                {approvers.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.fullName}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
         </div>
 
@@ -542,10 +720,10 @@ export function JobPostingDrawer({ isOpen, onClose }: JobPostingDrawerProps) {
         <Button
           className="w-full rounded-full gap-2"
           onClick={handleSubmit}
-          disabled={createJobPostingMutation.isPending}
+          disabled={isPending}
         >
           <AddCircle weight="BoldDuotone" className="h-4 w-4" />
-          {createJobPostingMutation.isPending ? "Menyimpan..." : "Buat Lowongan"}
+          {isPending ? "Menyimpan..." : isEditMode ? "Simpan Perubahan" : "Buat Lowongan"}
         </Button>
       </div>
     </Drawer>

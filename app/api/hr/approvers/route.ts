@@ -12,7 +12,15 @@ export async function GET(): Promise<Response> {
 
   try {
     const approvers = await db.profile.findMany({
-      where: { status: "active" },
+      where: {
+        status: "active",
+        role: {
+          OR: [
+            { name: { contains: "manager", mode: "insensitive" } },
+            { name: { contains: "direktur", mode: "insensitive" } },
+          ],
+        },
+      },
       select: { id: true, fullName: true },
       orderBy: { fullName: "asc" },
       take: 500,

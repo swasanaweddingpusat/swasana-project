@@ -9,6 +9,8 @@ import {
   rejectCandidate,
   addCandidateNote,
   rateCandidate,
+  markCandidateViewed,
+  generateCandidateInvite,
 } from "@/actions/candidate";
 
 export function useCandidates(params?: { jobPostingId?: string; stage?: string }) {
@@ -81,6 +83,27 @@ export function useRateCandidate() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["candidates"] });
       qc.invalidateQueries({ queryKey: ["job-postings"] });
+    },
+  });
+}
+
+export function useMarkCandidateViewed() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => markCandidateViewed(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["candidates"] });
+      qc.invalidateQueries({ queryKey: ["job-postings"] });
+    },
+  });
+}
+
+export function useGenerateCandidateInvite() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (candidateId: string) => generateCandidateInvite(candidateId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["candidates"] });
     },
   });
 }
