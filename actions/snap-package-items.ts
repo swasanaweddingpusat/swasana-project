@@ -8,7 +8,7 @@ import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
 import { logAudit } from "@/lib/audit";
 import { canAccessBooking, getProfileDataScope } from "@/lib/access-control";
 import { isBookingSnapshotFrozen, frozenSnapshotError } from "@/lib/booking-freeze";
-import { refreshCurrentRevisionSnapshot } from "@/lib/booking-revision";
+import { refreshCurrentRevisionSnapshot, patchSnapshotPackageItems } from "@/lib/booking-revision";
 import {
   saveSnapInternalItemsSchema,
   saveSnapVendorItemsSchema,
@@ -39,8 +39,9 @@ export async function saveSnapInternalItems(
     return { success: false, error: "Anda tidak memiliki akses ke booking ini." };
   }
 
-  // Internal items are part of the frozen snapshot — locked after client signature.
-  if (await isBookingSnapshotFrozen(bookingId)) return frozenSnapshotError();
+  // Internal items stay editable post-freeze (ops correcting item text/qty does not
+  // require re-approval or re-signing) — captured only for audit below.
+  const frozen = await isBookingSnapshotFrozen(bookingId);
 
   try {
     const ops: Prisma.PrismaPromise<unknown>[] = [
@@ -59,10 +60,12 @@ export async function saveSnapInternalItems(
 
     await db.$transaction(ops);
 
-    // Re-freeze the in-flight revision snapshot so the PO PDF reflects the edited
-    // internal items. No-ops when frozen (client signed) — best-effort.
+    // Keep the PO PDF in sync with the edited internal items: refresh the in-flight
+    // revision when still unfrozen, or — post-signature — patch just the item fields
+    // into the signed snapshot so the PDF reflects the correction. Best-effort.
     try {
-      await refreshCurrentRevisionSnapshot(bookingId);
+      const refreshed = await refreshCurrentRevisionSnapshot(bookingId);
+      if (!refreshed) await patchSnapshotPackageItems(bookingId);
     } catch (e) {
       console.error("[saveSnapInternalItems] revision snapshot refresh failed:", e);
     }
@@ -73,8 +76,10 @@ export async function saveSnapInternalItems(
       result: "success",
       entityType: "booking",
       entityId: bookingId,
-      changes: { count: items.length },
-      description: `Updated ${items.length} internal package items`,
+      changes: { count: items.length, postFreeze: frozen },
+      description: frozen
+        ? `Updated ${items.length} internal package items (post-signature edit)`
+        : `Updated ${items.length} internal package items`,
     });
 
     revalidateTag("bookings", "max");
@@ -169,11 +174,12 @@ export async function saveSnapVendorItems(
       };
     }
 
-    // Re-freeze the in-flight revision snapshot so the PO PDF reflects the edited
-    // vendor items. No-ops when frozen (post-signature swap) — the signed PO stays
-    // as the client agreed; only live tables carry the ops swap. Best-effort.
+    // Keep the PO PDF in sync with the edited vendor items: refresh the in-flight
+    // revision when still unfrozen, or — post-signature swap — patch just the item
+    // fields into the signed snapshot so the PDF reflects the swap. Best-effort.
     try {
-      await refreshCurrentRevisionSnapshot(bookingId);
+      const refreshed = await refreshCurrentRevisionSnapshot(bookingId);
+      if (!refreshed) await patchSnapshotPackageItems(bookingId);
     } catch (e) {
       console.error("[saveSnapVendorItems] revision snapshot refresh failed:", e);
     }

@@ -5,9 +5,11 @@ import { db } from "@/lib/db";
  *
  * A booking's snapshot layer freezes when the client signs the agreement
  * (`snapshotFrozenAt` is stamped in the sign route). After that point:
- *  - Vendor items stay editable (ops swap a vendor without re-approval).
- *  - Internal items, complimentaries, and SnapCustomer are locked;
- *    changing them requires a new revision + re-approval.
+ *  - Internal items and vendor items stay editable (ops correcting item text/qty
+ *    without re-approval) — the signed PO PDF is patched in place to match
+ *    (see `patchSnapshotPackageItems` in lib/booking-revision.ts).
+ *  - Complimentaries and SnapCustomer are locked; changing them requires a new
+ *    revision + re-approval.
  *
  * These readers centralise the check so every snapshot-write action agrees on when
  * a booking is frozen.
