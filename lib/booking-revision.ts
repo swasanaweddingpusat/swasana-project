@@ -213,3 +213,54 @@ export async function patchSnapshotAdminFields(bookingId: string): Promise<boole
 
   return true;
 }
+
+/**
+ * Targeted patch of package item snapshot fields (internal + vendor items) so a
+ * post-signature ops edit to item text/qty/price still propagates into the signed
+ * PO PDF. Called after saveSnapInternalItems / saveSnapVendorItems when the booking
+ * is frozen — the item edit is by design allowed even after the client signed
+ * (ops correcting item text does not require re-approval or re-signing).
+ *
+ * Unlike refreshCurrentRevisionSnapshot, this helper intentionally writes EVEN when
+ * snapshotFrozenAt is set — the whole point is to keep the signed snapshot in sync
+ * with corrected item text/pricing instead of leaving the PDF stale.
+ *
+ * Only snapPackageInternalItems / snapPackageVendorItems are overwritten; all other
+ * snapshot fields (customer, venue, pricing totals, TOP, complimentaries) are left
+ * untouched — this is a narrow patch, not a full re-freeze.
+ *
+ * No-ops silently when there is no current revision. Best-effort: callers treat
+ * failure as non-fatal.
+ */
+export async function patchSnapshotPackageItems(bookingId: string): Promise<boolean> {
+  const booking = await db.booking.findUnique({
+    where: { id: bookingId },
+    select: { currentRevisionId: true },
+  });
+  if (!booking?.currentRevisionId) return false;
+
+  const revision = await db.bookingRevision.findUnique({
+    where: { id: booking.currentRevisionId },
+    select: { snapshotData: true },
+  });
+  if (!revision) return false;
+
+  const [internalItems, vendorItems] = await Promise.all([
+    db.snapPackageInternalItem.findMany({ where: { bookingId }, orderBy: { sortOrder: "asc" } }),
+    db.snapPackageVendorItem.findMany({ where: { bookingId }, orderBy: { sortOrder: "asc" } }),
+  ]);
+
+  const existingSnap = (revision.snapshotData ?? {}) as Record<string, unknown>;
+  const patched: Record<string, unknown> = {
+    ...existingSnap,
+    snapPackageInternalItems: internalItems,
+    snapPackageVendorItems: vendorItems,
+  };
+
+  await db.bookingRevision.update({
+    where: { id: booking.currentRevisionId },
+    data: { snapshotData: patched as Prisma.InputJsonValue },
+  });
+
+  return true;
+}

@@ -66,9 +66,9 @@ function PackageItemsBody({
     }
 
     setSaving(true);
-    // Internal items are frozen post client-signature; vendor items stay editable.
-    // Save internal first — if the server rejects it (frozen), surface that and stop
-    // before touching vendor items.
+    // Both internal and vendor items stay editable post client-signature (the signed
+    // PO PDF is patched in place to match — see patchSnapshotPackageItems). Save
+    // internal first — if it fails for any other reason, stop before vendor items.
     const internalRes = await saveSnapInternalItems({
       bookingId,
       items: internalItems.map((i, idx) => ({
