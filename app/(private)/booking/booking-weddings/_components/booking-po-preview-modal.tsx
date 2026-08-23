@@ -31,6 +31,11 @@ export interface BookingPOPreviewTarget {
   label: string;
   /** Render endpoint. Defaults to the V1 PO route. */
   endpoint?: string;
+  /**
+   * PO source for the V1 route: "manual" forces the uploaded PDF (clean 404 if none),
+   * "digital" forces the generated system doc, "auto"/omit picks manual-if-present.
+   */
+  mode?: "auto" | "manual" | "digital";
 }
 
 interface BookingPOPreviewModalProps {
@@ -74,6 +79,7 @@ export function BookingPOPreviewModal({
           body: JSON.stringify({
             bookingId: target!.bookingId,
             ...(target!.revisionId ? { revisionId: target!.revisionId } : {}),
+            ...(target!.mode ? { mode: target!.mode } : {}),
           }),
         });
         if (!res.ok) {

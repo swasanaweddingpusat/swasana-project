@@ -29,8 +29,13 @@ export async function POST(req: Request) {
   if (!apiLimiter.check(`render-po:${session.user.id}`)) return rateLimitResponse();
 
   try {
-    const { bookingId, revisionId } = await req.json();
+    const { bookingId, revisionId, mode } = await req.json();
     if (!bookingId) return NextResponse.json({ error: "bookingId required" }, { status: 400 });
+    // mode: "auto" (default) serves an uploaded manual PO when present, else generates
+    // the system doc. "manual" forces the uploaded PDF (clean 404 if none/lost).
+    // "digital" skips the manual short-circuit and always generates the system doc.
+    const poMode: "auto" | "manual" | "digital" =
+      mode === "manual" || mode === "digital" ? mode : "auto";
 
     let pdfBooking: POPdfBooking;
     let customerName: string;
@@ -181,14 +186,20 @@ export async function POST(req: Request) {
         : allSteps;
 
       // Manual PO: if staff uploaded a signed PO PDF for this revision, serve that
-      // file verbatim instead of generating the system document. Falls through to
-      // generation when no uploaded PDF exists (e.g. digital-signature flow).
-      const manualStep = revisionSteps.find(
-        (s) => s.approverType === "client" && s.clientAgreementUploaded !== null,
-      );
-      if (manualStep) {
-        const uploaded = manualStep.clientAgreementUploaded as { path?: string; fileName?: string; fileType?: string } | null;
-        if (uploaded?.path && uploaded.fileType === "application/pdf") {
+      // file verbatim instead of generating the system document. In "digital" mode we
+      // skip this entirely so the caller always gets the freshly-generated system doc.
+      const manualStep = poMode === "digital"
+        ? undefined
+        : revisionSteps.find(
+            (s) => s.approverType === "client" && s.clientAgreementUploaded !== null,
+          );
+      const uploaded = (manualStep?.clientAgreementUploaded ?? null) as {
+        path?: string;
+        fileName?: string;
+        fileType?: string;
+      } | null;
+      if (uploaded?.path && uploaded.fileType === "application/pdf") {
+        try {
           const bytes = await getFromStorage(uploaded.path);
           return new NextResponse(Buffer.from(bytes) as unknown as ReadableStream, {
             headers: {
@@ -196,7 +207,29 @@ export async function POST(req: Request) {
               "Content-Disposition": `inline; filename="${uploaded.fileName ?? fileName}"`,
             },
           });
+        } catch (storageError) {
+          // File reference exists in DB but the object is gone from storage (deleted or
+          // never fully uploaded). Return a clear, actionable error instead of a raw 500.
+          console.error("[render-po] manual PO object missing", storageError);
+          return NextResponse.json(
+            {
+              error:
+                "File PO manual tidak ditemukan di penyimpanan. Silakan upload ulang PO dari detail booking.",
+            },
+            { status: 404 },
+          );
         }
+      }
+      // "manual" mode was explicitly requested but there is no usable uploaded PDF for
+      // this revision — don't silently fall back to the system doc; say so plainly.
+      if (poMode === "manual") {
+        return NextResponse.json(
+          {
+            error:
+              "Belum ada PO manual yang diupload untuk revisi ini. Silakan upload PO dari detail booking.",
+          },
+          { status: 404 },
+        );
       }
 
       // PO signers = Sales (approverType "user") + Manager (role "manager") only.
