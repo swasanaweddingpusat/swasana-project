@@ -133,6 +133,9 @@ const bookingApprovalSelect = {
       status: true,
       // signature omitted — list UI never reads it; ApprovalDialog and the client
       // agreement flow fetch their own records via /api/approval-records.
+      // clientAgreementUploaded IS read: the row shows a "PO Manual" marker + enables
+      // the manual-PO preview when staff uploaded a signed PO for the current revision.
+      clientAgreementUploaded: true,
       decidedAt: true,
       notes: true,
       revisionId: true,
