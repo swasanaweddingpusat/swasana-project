@@ -51,7 +51,7 @@ function toIsoDay(d: Date): string {
 }
 
 const PAGE_SIZE = 50;
-const COLSPAN = 10;
+const COLSPAN = 13;
 
 const DIRECTION_ALL = "__all__";
 const STATUS_ALL = "__all__";
@@ -117,12 +117,35 @@ function formatDateTime(iso: string | null): string {
 
 function formatDuration(sec: number | null): string {
   if (sec === null || sec < 0) return "-";
-  if (sec < 60) return `${sec} dtk`;
-  const min = Math.floor(sec / 60);
-  if (min < 60) return `${min} mnt`;
-  const h = Math.floor(min / 60);
-  const rem = min % 60;
-  return rem ? `${h} jam ${rem} mnt` : `${h} jam`;
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  const s = sec % 60;
+  const parts: string[] = [];
+  if (h > 0) parts.push(`${h} jam`);
+  if (m > 0) parts.push(`${m} mnt`);
+  if (s > 0 || parts.length === 0) parts.push(`${s} dtk`);
+  return parts.join(" ");
+}
+
+// Detik/Menit/Jam columns ahead of "Response" — same source (avgResponseSec),
+// same shape as the Detik/Menit/Jam columns in the Response Sales table, just
+// per-conversation instead of per-sales-aggregate.
+function formatDetik(sec: number | null): string {
+  if (sec === null || sec < 0) return "-";
+  return Math.round(sec).toLocaleString("id-ID");
+}
+
+function formatMenit(sec: number | null): string {
+  if (sec === null || sec < 0) return "-";
+  return Math.round(sec / 60).toLocaleString("id-ID");
+}
+
+function formatJam(sec: number | null): string {
+  if (sec === null || sec < 0) return "-";
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  const s = Math.floor(sec % 60);
+  return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 }
 
 export function BitrixPercakapanManager() {
@@ -369,6 +392,9 @@ export function BitrixPercakapanManager() {
                   <TableHead className="px-3 py-2 text-muted-foreground min-w-36">Karyawan</TableHead>
                   <TableHead className="px-3 py-2 text-muted-foreground min-w-32">Dibuat</TableHead>
                   <TableHead className="px-3 py-2 text-muted-foreground min-w-32">Ditutup</TableHead>
+                  <TableHead className="px-3 py-2 text-muted-foreground text-right min-w-20">Detik</TableHead>
+                  <TableHead className="px-3 py-2 text-muted-foreground text-right min-w-20">Menit</TableHead>
+                  <TableHead className="px-3 py-2 text-muted-foreground text-right min-w-24">Jam</TableHead>
                   <TableHead className="px-3 py-2 text-muted-foreground text-right min-w-24">Response</TableHead>
                   <TableHead className="px-3 py-2 text-muted-foreground text-right min-w-24">Durasi</TableHead>
                 </TableRow>
@@ -486,9 +512,26 @@ export function BitrixPercakapanManager() {
                         {formatDateTime(c.closedAt)}
                       </TableCell>
 
+                      {/* Detik / Menit / Jam — avgResponseSec broken down like Response Sales */}
+                      <TableCell className="px-3 py-2 text-right text-sm whitespace-nowrap tabular-nums">
+                        {formatDetik(c.avgResponseSec)}
+                      </TableCell>
+                      <TableCell className="px-3 py-2 text-right text-sm whitespace-nowrap tabular-nums">
+                        {formatMenit(c.avgResponseSec)}
+                      </TableCell>
+                      <TableCell className="px-3 py-2 text-right text-sm whitespace-nowrap font-medium tabular-nums">
+                        {formatJam(c.avgResponseSec)}
+                      </TableCell>
+
                       {/* Response rata-rata */}
                       <TableCell className="px-3 py-2 text-right text-sm whitespace-nowrap">
-                        {formatDuration(c.avgResponseSec)}
+                        {c.avgResponseSec !== null ? (
+                          formatDuration(c.avgResponseSec)
+                        ) : c.transferred ? (
+                          <span className="text-destructive">Belum dibalas</span>
+                        ) : (
+                          <span className="text-[var(--brand-gold)]">Belum transfer</span>
+                        )}
                       </TableCell>
 
                       {/* Durasi */}

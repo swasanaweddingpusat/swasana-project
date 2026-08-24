@@ -35,14 +35,23 @@ export function extractTransferTarget(text: string): string | null {
 
 /**
  * Walk a session's message history and compute one response sample per
- * assign/transfer AFTER the initial default assignment.
+ * customer message that an agent actually replied to.
  *
- * The FIRST assign/transfer event is the default queue assignment (e.g.
- * "Permintaan ditugaskan kepada Kediaman Corp") — it is NOT a response-timing
- * event. Timing starts from the 2nd event onwards: the time from when an agent
- * received the conversation (assign/transfer system message) to that agent's
- * first subsequent message. This matches how response time is measured in the
- * Response Sales report.
+ * A sample is timed from the EARLIEST unanswered customer message to the
+ * next agent message. Once an agent message consumes it, that pending
+ * customer message is cleared — so a follow-up/nudge from an agent with no
+ * new customer message since (e.g. "belum dibales, follow up lagi besok")
+ * has nothing pending to answer and produces NO sample. It neither starts
+ * nor resets the timer. If the customer sends several messages before the
+ * agent replies, the FIRST of that burst is the anchor (measures how long
+ * the customer waited from when they first reached out).
+ *
+ * Assign/transfer system messages no longer gate timing (previous behavior
+ * only measured the first reply after a handoff) — they are still walked
+ * here purely to build the `events` transfer-history log, unrelated to
+ * `samples`. The FIRST assign/transfer event is the default queue
+ * assignment (e.g. "Permintaan ditugaskan kepada Kediaman Corp") and is
+ * excluded from that log.
  *
  * Customer messages are identified via `users.*.connector === true`; system
  * messages use `senderid === "0"`. Everything else is treated as an agent.
@@ -65,13 +74,12 @@ export function parseResponseSamples(history: SessionHistory): {
 
   const sorted = [...messages].sort((a, b) => Date.parse(a.date) - Date.parse(b.date));
 
-  // userId → assign/transfer timestamp. Only the latest open assignment per
-  // agent is tracked; a new assignment overwrites any pending one.
-  const pending = new Map<string, string>();
-
   // The first assign/transfer event is the DEFAULT queue assignment — skip it
-  // entirely (no sample, no history entry). Timing starts from the 2nd event.
+  // entirely from the transfer-history log. Logged from the 2nd event on.
   let isFirstEvent = true;
+
+  // Timestamp of the earliest customer message not yet answered by an agent.
+  let pendingClientAt: string | null = null;
 
   for (const msg of sorted) {
     const sender = msg.senderid;
@@ -84,22 +92,25 @@ export function parseResponseSamples(history: SessionHistory): {
           continue;
         }
         const from = extractTransferFrom(msg);
-        pending.set(target, msg.date);
         events.push({ at: msg.date, fromUserId: from, toUserId: target });
       }
       continue;
     }
 
-    if (customerIds.has(sender)) continue;
-
-    const assignedAt = pending.get(sender);
-    if (!assignedAt) continue;
-
-    const seconds = diffSeconds(assignedAt, msg.date);
-    if (seconds !== null && seconds >= 0) {
-      samples.push({ userId: sender, seconds });
+    if (customerIds.has(sender)) {
+      if (!pendingClientAt) pendingClientAt = msg.date;
+      continue;
     }
-    pending.delete(sender);
+
+    // Agent message — only a response if a customer message is still
+    // waiting. A follow-up with nothing pending is ignored entirely.
+    if (pendingClientAt) {
+      const seconds = diffSeconds(pendingClientAt, msg.date);
+      if (seconds !== null && seconds >= 0) {
+        samples.push({ userId: sender, seconds });
+      }
+      pendingClientAt = null;
+    }
   }
 
   return { samples, events };

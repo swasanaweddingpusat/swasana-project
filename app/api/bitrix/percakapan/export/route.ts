@@ -62,6 +62,8 @@ interface ConversationRow {
   lastMessageAt: string | null;
   durationSec: number | null;
   avgResponseSec: number | null;
+  transferCount?: number;
+  transferred?: boolean;
 }
 
 const MAX_PAGES = 100; // up to 5000 rows.
@@ -191,12 +193,39 @@ function durationSeconds(start: string | null, end: string | null): number | nul
 
 function fmtDuration(sec: number | null): string {
   if (sec === null || sec < 0) return "-";
-  if (sec < 60) return `${sec} dtk`;
-  const min = Math.floor(sec / 60);
-  if (min < 60) return `${min} mnt`;
-  const h = Math.floor(min / 60);
-  const rem = min % 60;
-  return rem ? `${h} jam ${rem} mnt` : `${h} jam`;
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  const s = sec % 60;
+  const parts: string[] = [];
+  if (h > 0) parts.push(`${h} jam`);
+  if (m > 0) parts.push(`${m} mnt`);
+  if (s > 0 || parts.length === 0) parts.push(`${s} dtk`);
+  return parts.join(" ");
+}
+
+function fmtResponse(sec: number | null, transferred?: boolean): string {
+  if (sec !== null) return fmtDuration(sec);
+  return transferred ? "Belum dibalas" : "Belum transfer";
+}
+
+// Detik/Menit/Jam columns — mirror the Detik/Menit/Jam columns shown ahead of
+// "Response" in the web table (same shape as the Response Sales export).
+function fmtDetik(sec: number | null): string {
+  if (sec === null || sec < 0) return "-";
+  return String(Math.round(sec));
+}
+
+function fmtMenit(sec: number | null): string {
+  if (sec === null || sec < 0) return "-";
+  return String(Math.round(sec / 60));
+}
+
+function fmtJam(sec: number | null): string {
+  if (sec === null || sec < 0) return "-";
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  const s = Math.floor(sec % 60);
+  return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 }
 
 function fmtDateTime(iso: string | null): string {
@@ -235,6 +264,9 @@ async function xlsxResponse(rows: ConversationRow[]): Promise<Response> {
     "Deal ID",
     "Dibuat",
     "Ditutup",
+    "Detik",
+    "Menit",
+    "Jam",
     "Response",
     "Durasi",
   ];
@@ -258,7 +290,10 @@ async function xlsxResponse(rows: ConversationRow[]): Promise<Response> {
       r.dealId ?? "",
       fmtDateTime(r.createdAt),
       fmtDateTime(r.closedAt),
-      fmtDuration(r.avgResponseSec),
+      fmtDetik(r.avgResponseSec),
+      fmtMenit(r.avgResponseSec),
+      fmtJam(r.avgResponseSec),
+      fmtResponse(r.avgResponseSec, r.transferred),
       fmtDuration(r.durationSec),
     ]);
   }
@@ -292,8 +327,8 @@ async function pdfResponse(rows: ConversationRow[]): Promise<Response> {
   const margin = 24;
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
-  const colWidths = [45, 40, 60, 70, 90, 80, 55, 70, 55, 85, 85, 60, 60];
-  const headers = ["Sesi", "Tipe", "Status", "Saluran", "Klien", "Telepon", "Venue", "Karyawan", "Deal ID", "Dibuat", "Ditutup", "Response", "Durasi"];
+  const colWidths = [45, 40, 60, 70, 90, 80, 55, 70, 55, 85, 85, 40, 40, 50, 60, 60];
+  const headers = ["Sesi", "Tipe", "Status", "Saluran", "Klien", "Telepon", "Venue", "Karyawan", "Deal ID", "Dibuat", "Ditutup", "Detik", "Menit", "Jam", "Response", "Durasi"];
   const tableLeft = margin;
   const tableWidth = pageWidth - margin * 2;
   const headerHeight = 20;
@@ -341,7 +376,10 @@ async function pdfResponse(rows: ConversationRow[]): Promise<Response> {
       r.dealId ?? "",
       fmtDateTime(r.createdAt),
       fmtDateTime(r.closedAt),
-      fmtDuration(r.avgResponseSec),
+      fmtDetik(r.avgResponseSec),
+      fmtMenit(r.avgResponseSec),
+      fmtJam(r.avgResponseSec),
+      fmtResponse(r.avgResponseSec, r.transferred),
       fmtDuration(r.durationSec),
     ];
     const cellLines = cells.map((c, i) => doc.splitTextToSize(c, colWidths[i] - 6) as string[]);
