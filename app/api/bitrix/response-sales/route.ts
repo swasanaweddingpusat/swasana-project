@@ -64,9 +64,10 @@ interface ResponseSalesRow {
  * GET /api/bitrix/response-sales?from=2026-08-13&to=2026-08-13&sales=tiara
  *
  * Aggregates the average sales response time across Open Lines conversations
- * created within [from, to]. Response time is measured per assignment/transfer:
- * from the system event that assigns a session to a specific agent until that
- * agent's first message afterwards.
+ * created within [from, to]. Response time is measured per customer message:
+ * from the earliest unanswered customer message to the next agent reply. An
+ * agent follow-up with no new customer message pending produces no sample
+ * (see `parseResponseSamples` in lib/bitrix-response.ts).
  *
  * Bitrix exposes no bulk response-time statistic, so this walks each session's
  * `imopenlines.session.history.get` (batched 50 at a time) and computes the
