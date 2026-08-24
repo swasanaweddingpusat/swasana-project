@@ -32,6 +32,7 @@ const PUBLIC_PREFIXES = [
   "/api/recruitment-form/",
   "/api/onboarding-form/",
   "/api/health", // container/Dokploy liveness probe — must bypass auth redirect
+  "/api/client-log", // client-side error sink — public pages report crashes here without a session
 ];
 
 function isPublicPath(pathname: string): boolean {

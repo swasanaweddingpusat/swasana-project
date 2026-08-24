@@ -189,7 +189,7 @@ export function LoginForm({
           <div className={cn('bg-muted', 'relative', 'hidden', 'md:block', 'overflow-hidden', 'min-h-105')}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src="/thumbnail.png"
+              src="/thumbnail.webp"
               alt="Login background"
               className={cn('absolute', 'inset-0', 'h-full', 'w-full', 'object-cover', 'dark:brightness-[0.2]', 'dark:grayscale')}
               loading="eager"
