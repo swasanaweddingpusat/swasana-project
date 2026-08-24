@@ -1042,7 +1042,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                       <TableHead className={cn('px-2', 'py-2', 'text-muted-foreground', 'hidden', 'sm:table-cell', 'w-[15%]')}>Venue & PO</TableHead>
                       <TableHead className={cn('px-2', 'py-2', 'text-muted-foreground', 'hidden', 'lg:table-cell', 'w-[14%]')}>Package</TableHead>
                       <TableHead className={cn('px-2', 'py-2', 'text-muted-foreground', 'hidden', 'sm:table-cell', 'w-[10%]')}>Event Date</TableHead>
-                      <TableHead className={cn('px-2', 'py-2', 'text-muted-foreground', 'hidden', 'lg:table-cell', 'w-[8%]')}>Activity</TableHead>
+                      <TableHead className={cn('px-2', 'py-2', 'text-muted-foreground', 'text-center', 'hidden', 'lg:table-cell', 'w-[5%]')}>Activity</TableHead>
                       <TableHead className={cn('px-2', 'py-2', 'text-muted-foreground', 'hidden', 'lg:table-cell', 'w-[8%]')}>Approval</TableHead>
                       <TableHead className={cn('px-1', 'py-2', 'text-muted-foreground', 'text-right', 'pr-5', 'w-[15%]')}>Action</TableHead>
                     </TableRow>
@@ -1067,8 +1067,8 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                         <TableCell className={cn('px-2', 'py-2', 'hidden', 'sm:table-cell')}>
                           <Skeleton className="h-4 w-20" />
                         </TableCell>
-                        <TableCell className={cn('px-2', 'py-2', 'hidden', 'lg:table-cell')}>
-                          <Skeleton className="h-4 w-12" />
+                        <TableCell className={cn('px-2', 'py-2', 'hidden', 'lg:table-cell', 'text-center')}>
+                          <Skeleton className="h-8 w-8 rounded-full mx-auto" />
                         </TableCell>
                         <TableCell className={cn('px-2', 'py-2', 'hidden', 'lg:table-cell')}>
                           <Skeleton className="h-5 w-16 rounded-full" />
@@ -1119,7 +1119,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                     <TableHead className={cn('px-2', 'py-2', 'text-muted-foreground', 'hidden', 'sm:table-cell', 'w-[15%]')}>Venue & PO</TableHead>
                     <TableHead className={cn('px-2', 'py-2', 'text-muted-foreground', 'hidden', 'lg:table-cell', 'w-[14%]')}>Package</TableHead>
                     <TableHead className={cn('px-2', 'py-2', 'text-muted-foreground', 'hidden', 'sm:table-cell', 'w-[10%]')}>Event Date</TableHead>
-                    <TableHead className={cn('px-2', 'py-2', 'text-muted-foreground', 'hidden', 'lg:table-cell', 'w-[8%]')}>Activity</TableHead>
+                    <TableHead className={cn('px-2', 'py-2', 'text-muted-foreground', 'text-center', 'hidden', 'lg:table-cell', 'w-[5%]')}>Activity</TableHead>
                     <TableHead className={cn('px-2', 'py-2', 'text-muted-foreground', 'hidden', 'lg:table-cell', 'w-[8%]')}>Approval</TableHead>
                     <TableHead className={cn('px-1', 'py-2', 'text-muted-foreground', 'text-right', 'pr-5', 'w-[15%]')}>Action</TableHead>
                   </TableRow>
@@ -1257,14 +1257,18 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                         {booking.eventDate ? format(new Date(booking.eventDate), "MMM dd, yyyy") : "—"}
                       </TableCell>
 
-                      {/* Activity */}
-                      <TableCell className={cn('px-2', 'py-2', 'hidden', 'lg:table-cell')}>
-                        <button
-                          onClick={(e) => { e.stopPropagation(); setActivityLogTarget(booking); }}
-                          className={cn('cursor-pointer', 'text-xs', 'text-muted-foreground', 'hover:text-foreground', 'underline', 'underline-offset-2')}
-                        >
-                          Lihat Activity
-                        </button>
+                      {/* Activity — icon-only to reclaim width for the Customer chips row */}
+                      <TableCell className={cn('px-2', 'py-2', 'hidden', 'lg:table-cell', 'text-center')}>
+                        <Tooltip>
+                          <TooltipTrigger
+                            onClick={(e) => { e.stopPropagation(); setActivityLogTarget(booking); }}
+                            aria-label="Lihat Activity"
+                            className={cn('inline-flex', 'items-center', 'justify-center', 'h-8', 'w-8', 'rounded-full', 'text-muted-foreground', 'hover:bg-muted', 'hover:text-foreground', 'transition-colors', 'cursor-pointer')}
+                          >
+                            <ClockCircle weight="BoldDuotone" className="h-4 w-4" />
+                          </TooltipTrigger>
+                          <TooltipContent side="bottom">Lihat Activity</TooltipContent>
+                        </Tooltip>
                       </TableCell>
 
                       {/* Approval */}
