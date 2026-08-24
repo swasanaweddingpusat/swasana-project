@@ -277,10 +277,10 @@ export function DailyActivityDrawer({ open, onOpenChange, editLead, onSuccess }:
       <div className="flex flex-col h-full">
         {/* ── Scrollable body ── */}
         <div className="flex-1 overflow-y-auto">
-          <div className="flex flex-col gap-6 pb-4">
+          <div className="flex flex-col gap-4 pb-4">
 
             {/* ── SECTION: Informasi Client ─────────────────────── */}
-            <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-4 rounded-2xl border bg-card p-5">
               <SectionHeader icon={User} title="Informasi Client" />
 
               <div className="flex flex-col gap-1.5">
@@ -336,7 +336,7 @@ export function DailyActivityDrawer({ open, onOpenChange, editLead, onSuccess }:
             </div>
 
             {/* ── SECTION: Kontak ───────────────────────────────── */}
-            <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-4 rounded-2xl border bg-card p-5">
               <SectionHeader icon={Phone} title="Kontak (HP / WA)" />
 
               <div className="flex flex-col gap-1.5">
@@ -371,7 +371,7 @@ export function DailyActivityDrawer({ open, onOpenChange, editLead, onSuccess }:
             </div>
 
             {/* ── SECTION: Prospek & Penawaran ──────────────────── */}
-            <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-4 rounded-2xl border bg-card p-5">
               <SectionHeader icon={Case} title="Prospek & Penawaran" />
 
               {/* Lokasi / Alamat kantor prospek */}
@@ -492,7 +492,7 @@ export function DailyActivityDrawer({ open, onOpenChange, editLead, onSuccess }:
             </div>
 
             {/* ── SECTION: Sales & Pipeline ─────────────────────── */}
-            <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-4 rounded-2xl border bg-card p-5">
               <SectionHeader icon={UsersGroupRounded} title="Sales & Pipeline" />
 
               <div className="flex flex-col gap-1.5">
@@ -562,7 +562,7 @@ export function DailyActivityDrawer({ open, onOpenChange, editLead, onSuccess }:
             </div>
 
             {/* ── SECTION: Catatan ──────────────────────────────── */}
-            <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-4 rounded-2xl border bg-card p-5">
               <SectionHeader icon={Notes} title="Catatan" />
               <Textarea
                 value={form.notes}
