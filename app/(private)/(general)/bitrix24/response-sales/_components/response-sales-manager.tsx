@@ -151,11 +151,6 @@ export function ResponseSalesManager() {
     };
   }, [from, to, query, reloadKey]);
 
-  function applyRange(next: DateRange | undefined) {
-    setRange(next);
-    setFilterOpen(false);
-  }
-
   function resetRange() {
     const y = yesterday();
     setRange({ from: y, to: y });
@@ -237,7 +232,7 @@ export function ResponseSalesManager() {
                 <div className="space-y-1.5 px-4 py-4">
                   <Label className="text-xs text-muted-foreground">Rentang Tanggal</Label>
                   <div className="flex justify-center rounded-xl border">
-                    <Calendar mode="range" numberOfMonths={2} selected={range} onSelect={applyRange} autoFocus />
+                    <Calendar mode="range" numberOfMonths={2} selected={range} onSelect={setRange} autoFocus />
                   </div>
                 </div>
                 <div className="flex items-center justify-between gap-2 border-t px-4 py-3">
@@ -312,7 +307,9 @@ export function ResponseSalesManager() {
                       <TableCell className="px-3 py-2">
                         <div className="flex flex-col">
                           <span className="font-medium text-foreground">{r.name}</span>
-                          <span className="text-xs text-muted-foreground">{r.samples} percakapan</span>
+                          <span className="text-xs text-muted-foreground">
+                            {r.conversations.length} percakapan · {r.samples} respons
+                          </span>
                         </div>
                       </TableCell>
                       <TableCell className="px-3 py-2 text-right tabular-nums">{r.seconds.toLocaleString("id-ID")}</TableCell>
