@@ -29,10 +29,10 @@ export interface ApprovalFlowDef {
 
 /** Hardcoded fallback — kept exactly in sync with original behavior */
 export const APPROVAL_FLOWS: Record<string, ApprovalFlowDef> = {
+  // Single-step: Package Wedding approval is Finance only (manager step removed).
   package: {
     steps: [
-      { sortOrder: 1, approverType: "role", roleName: "manager" },
-      { sortOrder: 2, approverType: "role", roleName: "finance" },
+      { sortOrder: 1, approverType: "role", roleName: "finance" },
     ],
   },
   // Single-step: only manager-mice/super-admin can approve MICE packages;
