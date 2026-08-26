@@ -506,8 +506,8 @@ export function DrawerPackage({ isOpen, onClose, editingPackage, packageType = "
                 <h3 className={cn("text-lg font-medium")}>Tanda Tangan</h3>
                 <p className={cn("text-sm text-gray-600")}>
                   {isEdit
-                    ? "Konfirmasi perubahan paket. Data yang diubah akan dikirim ulang ke Manager dan Finance untuk disetujui."
-                    : "Konfirmasi pembuatan paket. Setelah dibuat, data akan dikirim ke Manager dan Finance untuk disetujui."}
+                    ? "Konfirmasi perubahan paket. Data yang diubah akan dikirim ulang ke Finance untuk disetujui."
+                    : "Konfirmasi pembuatan paket. Setelah dibuat, data akan dikirim ke Finance untuk disetujui."}
                 </p>
               </div>
               <div className={cn("border border-gray-200 rounded-lg p-4 bg-gray-50 space-y-1")}>
