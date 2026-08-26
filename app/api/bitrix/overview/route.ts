@@ -15,6 +15,7 @@ const UF_ADS_URL = "UF_CRM_1770698079121"; // ad source URL (fb.me / instagram p
 const UF_VENUE = "UF_CRM_1767957579717"; // enum: venue name
 const UF_REASON = "UF_CRM_1774952346733"; // enum: includes "Getback"
 const UF_ISSUE = "UF_CRM_1768930533046"; // enum: Leads / No Response / Spam / Komplain …
+const UF_DB_DATE = "UF_CRM_1786680629702"; // date: "Tanggal Database" — when the lead entered the database
 
 // Exported so the daily cron warmer (lib/bitrix-warm-targets.ts) can request
 // the exact same default-view params — any drift here would warm a different
@@ -32,6 +33,7 @@ export const OVERVIEW_DEAL_SELECT = [
   UF_VENUE,
   UF_REASON,
   UF_ISSUE,
+  UF_DB_DATE,
 ];
 
 // Venue enum values that aren't real venues — excluded from the venue breakdown
@@ -103,6 +105,8 @@ export async function GET(request: Request) {
   const clientQuery = searchParams.get("client")?.trim().toLowerCase() ?? "";
   const salesQuery = searchParams.get("sales")?.trim().toLowerCase() ?? "";
   const issueName = searchParams.get("issue")?.trim() ?? "";
+  const dbFrom = searchParams.get("dbFrom")?.trim() ?? "";
+  const dbTo = searchParams.get("dbTo")?.trim() ?? "";
 
   try {
     // Meta up front so the stage name → STATUS_ID set is ready before the list
@@ -129,6 +133,10 @@ export async function GET(request: Request) {
       const issueId = Object.entries(issueEnumForFilter).find(([, label]) => label === issueName)?.[0];
       filter[UF_ISSUE] = issueId ?? "__none__";
     }
+    // Tanggal Database range → UF_DB_DATE. Date-only field, so bound on the bare
+    // ISO day; "to" is inclusive via <= on the same day.
+    if (isIsoDay(dbFrom)) filter[`>=${UF_DB_DATE}`] = dbFrom;
+    if (isIsoDay(dbTo)) filter[`<=${UF_DB_DATE}`] = dbTo;
 
     const { items: allItems } = await bitrixListAll<RawDeal>("crm.deal.list", {
       select: OVERVIEW_DEAL_SELECT,
