@@ -13,8 +13,15 @@ import { BITRIX_USER_NAME_OVERRIDES } from "@/lib/bitrix-accounts";
 
 const PROVIDER_ID = "IMOPENLINES_SESSION";
 
+// "Tanggal Database" — a date-only custom field on the DEAL (when the lead
+// entered the database). Response Sales works on Open Lines activities, so this
+// filter is resolved via each activity's linked deal (OWNER_ID / OWNER_TYPE_ID).
+const UF_DB_DATE = "UF_CRM_1786680629702";
+
 const ACTIVITY_SELECT = [
   "ID",
+  "OWNER_ID",
+  "OWNER_TYPE_ID",
   "ASSOCIATED_ENTITY_ID",
   "ORIGIN_ID",
   "RESPONSIBLE_ID",
@@ -30,6 +37,8 @@ const ACTIVITY_SELECT = [
 
 interface RawActivity {
   ID: string;
+  OWNER_ID: string | null;
+  OWNER_TYPE_ID: string | null;
   ASSOCIATED_ENTITY_ID: string | null;
   ORIGIN_ID: string | null;
   RESPONSIBLE_ID: string | null;
@@ -63,9 +72,12 @@ interface ResponseSalesRow {
 
 /**
  * GET /api/bitrix/response-sales?from=2026-08-13&to=2026-08-13&sales=tiara
+ *   &dbFrom=2026-08-01&dbTo=2026-08-13
  *
  * Aggregates the average sales response time across Open Lines conversations
- * created within [from, to]. Response time is measured per customer message:
+ * created within [from, to]. The optional dbFrom/dbTo range narrows to sessions
+ * whose linked deal has a "Tanggal Database" (UF_DB_DATE) in that window — see
+ * `filterByDbDate`. Response time is measured per customer message:
  * from the earliest unanswered customer message to the next agent reply. An
  * agent follow-up with no new customer message pending produces no sample
  * (see `parseResponseSamples` in lib/bitrix-response.ts).
@@ -84,6 +96,8 @@ export async function GET(request: Request) {
   const from = isIsoDay(searchParams.get("from")) ? (searchParams.get("from") as string) : yesterday();
   const to = isIsoDay(searchParams.get("to")) ? (searchParams.get("to") as string) : from;
   const salesQuery = searchParams.get("sales")?.trim().toLowerCase() ?? "";
+  const dbFrom = searchParams.get("dbFrom")?.trim() ?? "";
+  const dbTo = searchParams.get("dbTo")?.trim() ?? "";
 
   try {
     const filter: Record<string, string> = {
@@ -98,11 +112,16 @@ export async function GET(request: Request) {
       order: { CREATED: "ASC" },
     });
 
-    const userMap = await resolveBitrixUsers(items.map((a) => a.RESPONSIBLE_ID ?? "").filter(Boolean));
+    // Optional "Tanggal Database" filter — the field lives on the linked DEAL,
+    // not the activity. Keep only activities whose deal's UF_DB_DATE is in range
+    // (activities not linked to a deal are dropped while the filter is active).
+    const activities = await filterByDbDate(items, dbFrom, dbTo);
+
+    const userMap = await resolveBitrixUsers(activities.map((a) => a.RESPONSIBLE_ID ?? "").filter(Boolean));
 
     // sessionId → display metadata for the conversation list.
     const activityBySession = new Map<string, RawActivity>();
-    for (const a of items) {
+    for (const a of activities) {
       const sessionId = a.ASSOCIATED_ENTITY_ID ?? stripImol(a.ORIGIN_ID) ?? a.ID;
       if (sessionId) activityBySession.set(sessionId, a);
     }
@@ -184,7 +203,7 @@ export async function GET(request: Request) {
     return Response.json({
       from,
       to,
-      totalSessions: items.length,
+      totalSessions: activities.length,
       rows,
       grandTotal: grand,
     });
@@ -196,6 +215,40 @@ export async function GET(request: Request) {
     console.error("[api/bitrix/response-sales]", e);
     return Response.json({ error: "Gagal menghitung response sales." }, { status: 500 });
   }
+}
+
+/**
+ * Narrow a set of Open Lines activities to those whose linked deal has a
+ * "Tanggal Database" (UF_DB_DATE) inside [dbFrom, dbTo]. Returns the input
+ * unchanged when neither bound is a valid ISO day. An activity is linked to a
+ * deal only when OWNER_TYPE_ID is "2"; the deal id is then OWNER_ID.
+ */
+async function filterByDbDate(
+  items: RawActivity[],
+  dbFrom: string,
+  dbTo: string,
+): Promise<RawActivity[]> {
+  if (!isIsoDay(dbFrom) && !isIsoDay(dbTo)) return items;
+
+  const dealIds = [
+    ...new Set(
+      items.filter((a) => a.OWNER_TYPE_ID === "2" && a.OWNER_ID).map((a) => a.OWNER_ID as string),
+    ),
+  ];
+  if (dealIds.length === 0) return [];
+
+  const dealFilter: Record<string, unknown> = { ID: dealIds };
+  if (isIsoDay(dbFrom)) dealFilter[`>=${UF_DB_DATE}`] = dbFrom;
+  if (isIsoDay(dbTo)) dealFilter[`<=${UF_DB_DATE}`] = dbTo;
+
+  const { items: deals } = await bitrixListAll<{ ID: string }>("crm.deal.list", {
+    select: ["ID"],
+    filter: dealFilter,
+    order: { ID: "ASC" },
+  });
+  const matched = new Set(deals.map((d) => String(d.ID)));
+
+  return items.filter((a) => a.OWNER_TYPE_ID === "2" && a.OWNER_ID !== null && matched.has(a.OWNER_ID));
 }
 
 function isIsoDay(v: string | null): v is string {
