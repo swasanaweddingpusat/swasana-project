@@ -75,9 +75,12 @@ interface ResponseSalesRow {
  *   &dbFrom=2026-08-01&dbTo=2026-08-13
  *
  * Aggregates the average sales response time across Open Lines conversations
- * created within [from, to]. The optional dbFrom/dbTo range narrows to sessions
- * whose linked deal has a "Tanggal Database" (UF_DB_DATE) in that window — see
- * `filterByDbDate`. Response time is measured per customer message:
+ * created within [from, to]. When dbFrom/dbTo is set, the fetch instead drives
+ * from DEALS whose "Tanggal Database" (UF_DB_DATE) is in that window and loads
+ * the Open Lines sessions those deals own (the CREATED range is ignored) — see
+ * `dealIdsByDbDate` / `sessionsOwnedByDeals`. The database date is typically a
+ * few days AFTER the chat was created, so a CREATED-range fetch would miss those
+ * sessions entirely. Response time is measured per customer message:
  * from the earliest unanswered customer message to the next agent reply. An
  * agent follow-up with no new customer message pending produces no sample
  * (see `parseResponseSamples` in lib/bitrix-response.ts).
@@ -100,22 +103,32 @@ export async function GET(request: Request) {
   const dbTo = searchParams.get("dbTo")?.trim() ?? "";
 
   try {
-    const filter: Record<string, string> = {
-      PROVIDER_ID,
-      ">=CREATED": `${from}T00:00:00`,
-      "<CREATED": `${nextDay(to)}T00:00:00`,
-    };
+    // Two fetch modes:
+    //  • Tanggal Database active → drive from DEALS. The "database date" is
+    //    typically a few days AFTER the chat was created, so a CREATED-range fetch
+    //    would miss those sessions entirely. Resolve deals whose UF_DB_DATE is in
+    //    [dbFrom, dbTo], then load the Open Lines sessions those deals own. The
+    //    CREATED range is intentionally ignored in this mode — the database date
+    //    is the intended filter.
+    //  • Otherwise → the default CREATED-range fetch.
+    const dbActive = isIsoDay(dbFrom) || isIsoDay(dbTo);
 
-    const { items } = await bitrixListAll<RawActivity>("crm.activity.list", {
-      select: ACTIVITY_SELECT,
-      filter,
-      order: { CREATED: "ASC" },
-    });
-
-    // Optional "Tanggal Database" filter — the field lives on the linked DEAL,
-    // not the activity. Keep only activities whose deal's UF_DB_DATE is in range
-    // (activities not linked to a deal are dropped while the filter is active).
-    const activities = await filterByDbDate(items, dbFrom, dbTo);
+    let activities: RawActivity[];
+    if (dbActive) {
+      const dealIds = await dealIdsByDbDate(dbFrom, dbTo);
+      activities = dealIds.length > 0 ? await sessionsOwnedByDeals(dealIds) : [];
+    } else {
+      const { items } = await bitrixListAll<RawActivity>("crm.activity.list", {
+        select: ACTIVITY_SELECT,
+        filter: {
+          PROVIDER_ID,
+          ">=CREATED": `${from}T00:00:00`,
+          "<CREATED": `${nextDay(to)}T00:00:00`,
+        },
+        order: { CREATED: "ASC" },
+      });
+      activities = items;
+    }
 
     const userMap = await resolveBitrixUsers(activities.map((a) => a.RESPONSIBLE_ID ?? "").filter(Boolean));
 
@@ -218,37 +231,49 @@ export async function GET(request: Request) {
 }
 
 /**
- * Narrow a set of Open Lines activities to those whose linked deal has a
- * "Tanggal Database" (UF_DB_DATE) inside [dbFrom, dbTo]. Returns the input
- * unchanged when neither bound is a valid ISO day. An activity is linked to a
- * deal only when OWNER_TYPE_ID is "2"; the deal id is then OWNER_ID.
+ * Resolve the deal ids whose "Tanggal Database" (UF_DB_DATE) falls inside
+ * [dbFrom, dbTo]. The "to" bound is inclusive (bare ISO day, matching the
+ * Overview/deals filter). At least one bound must be a valid ISO day — callers
+ * only invoke this when `dbActive` is true.
  */
-async function filterByDbDate(
-  items: RawActivity[],
-  dbFrom: string,
-  dbTo: string,
-): Promise<RawActivity[]> {
-  if (!isIsoDay(dbFrom) && !isIsoDay(dbTo)) return items;
+async function dealIdsByDbDate(dbFrom: string, dbTo: string): Promise<string[]> {
+  const filter: Record<string, unknown> = {};
+  if (isIsoDay(dbFrom)) filter[`>=${UF_DB_DATE}`] = dbFrom;
+  if (isIsoDay(dbTo)) filter[`<=${UF_DB_DATE}`] = dbTo;
 
-  const dealIds = [
-    ...new Set(
-      items.filter((a) => a.OWNER_TYPE_ID === "2" && a.OWNER_ID).map((a) => a.OWNER_ID as string),
-    ),
-  ];
-  if (dealIds.length === 0) return [];
-
-  const dealFilter: Record<string, unknown> = { ID: dealIds };
-  if (isIsoDay(dbFrom)) dealFilter[`>=${UF_DB_DATE}`] = dbFrom;
-  if (isIsoDay(dbTo)) dealFilter[`<=${UF_DB_DATE}`] = dbTo;
-
-  const { items: deals } = await bitrixListAll<{ ID: string }>("crm.deal.list", {
+  const { items } = await bitrixListAll<{ ID: string }>("crm.deal.list", {
     select: ["ID"],
-    filter: dealFilter,
+    filter,
     order: { ID: "ASC" },
   });
-  const matched = new Set(deals.map((d) => String(d.ID)));
+  return [...new Set(items.map((d) => String(d.ID)))];
+}
 
-  return items.filter((a) => a.OWNER_TYPE_ID === "2" && a.OWNER_ID !== null && matched.has(a.OWNER_ID));
+/**
+ * Load the Open Lines sessions (activities) owned by the given deals. An
+ * activity belongs to a deal when OWNER_TYPE_ID is "2" and OWNER_ID is the deal
+ * id. Deal ids are chunked (100 per request) to keep the filter payload sane.
+ */
+async function sessionsOwnedByDeals(dealIds: string[]): Promise<RawActivity[]> {
+  const out: RawActivity[] = [];
+  const seen = new Set<string>();
+
+  for (let i = 0; i < dealIds.length; i += 100) {
+    const slice = dealIds.slice(i, i + 100);
+    const { items } = await bitrixListAll<RawActivity>("crm.activity.list", {
+      select: ACTIVITY_SELECT,
+      filter: { PROVIDER_ID, OWNER_TYPE_ID: "2", OWNER_ID: slice },
+      order: { CREATED: "ASC" },
+    });
+    for (const a of items) {
+      if (!seen.has(a.ID)) {
+        seen.add(a.ID);
+        out.push(a);
+      }
+    }
+  }
+
+  return out;
 }
 
 function isIsoDay(v: string | null): v is string {

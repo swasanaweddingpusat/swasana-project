@@ -123,13 +123,17 @@ export function ResponseSalesManager() {
   }, [search]);
 
   useEffect(() => {
-    if (!from) return;
+    // Either a primary range OR a Tanggal Database range is enough to fetch —
+    // clearing the primary date but setting a DB date still drives a query.
+    if (!from && !dbFrom) return;
     let cancelled = false;
     void (async () => {
       setLoading(true);
       setError(null);
       try {
-        const params = new URLSearchParams({ from, to });
+        const params = new URLSearchParams();
+        if (from) params.set("from", from);
+        if (to) params.set("to", to);
         if (query) params.set("sales", query);
         if (dbFrom) params.set("dbFrom", dbFrom);
         if (dbTo) params.set("dbTo", dbTo);
@@ -238,9 +242,19 @@ export function ResponseSalesManager() {
                 <div className="space-y-4 px-4 py-4">
                   <div className="space-y-1.5">
                     <Label className="text-xs text-muted-foreground">Rentang Tanggal</Label>
-                    <div className="flex justify-center rounded-xl border">
+                    <div
+                      className={cn(
+                        "flex justify-center rounded-xl border",
+                        dbRange?.from && "opacity-50",
+                      )}
+                    >
                       <Calendar mode="range" numberOfMonths={2} selected={range} onSelect={setRange} autoFocus />
                     </div>
+                    {dbRange?.from && (
+                      <p className="text-xs text-muted-foreground">
+                        Diabaikan saat filter Tanggal Database aktif.
+                      </p>
+                    )}
                   </div>
 
                   {/* By tanggal database — optional, independent from the mandatory range above */}
