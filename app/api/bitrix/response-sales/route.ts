@@ -9,6 +9,7 @@ import {
 import { avgSeconds, type ResponseSample } from "@/lib/bitrix-response";
 import { resolveSessionMetrics } from "@/lib/bitrix-session-metrics";
 import { parseSubject, channelFromSourceId } from "@/lib/bitrix-conversation";
+import { BITRIX_USER_NAME_OVERRIDES } from "@/lib/bitrix-accounts";
 
 const PROVIDER_ID = "IMOPENLINES_SESSION";
 
@@ -159,7 +160,7 @@ export async function GET(request: Request) {
 
         return {
           userId,
-          name: userMap[userId] ?? `#${userId}`,
+          name: BITRIX_USER_NAME_OVERRIDES[userId] ?? userMap[userId] ?? `#${userId}`,
           samples: samples.length,
           avgSeconds: avg,
           seconds: avg,

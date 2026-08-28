@@ -6,5 +6,5 @@ export const BITRIX_QUEUE_USER_IDS: ReadonlySet<string> = new Set(["56663"]);
 
 /** Display-name overrides applied when resolving Bitrix user ids to names. */
 export const BITRIX_USER_NAME_OVERRIDES: Readonly<Record<string, string>> = {
-  "56663": "Kediaman Corp A",
+  "56663": "Kediaman Corp AI",
 };
