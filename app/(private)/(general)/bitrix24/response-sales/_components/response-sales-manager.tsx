@@ -383,9 +383,10 @@ export function ResponseSalesManager() {
       </Card>
 
       <p className="px-1 text-xs text-muted-foreground">
-        Waktu respons dihitung dari saat percakapan ditugaskan/ditransfer ke sales hingga sales mengirim pesan
-        pertama. Dihitung langsung dari riwayat Open Lines Bitrix24 — Bitrix tidak menyediakan statistik respons
-        lewat REST API.
+        Waktu respons dihitung dari saat sales menerima percakapan (via transfer/antrean) atau dari pesan pelanggan
+        yang belum dibalas, hingga sales mengirim balasan pertama. Chat yang dioper ke beberapa sales dihitung
+        terpisah per sales. Dihitung langsung dari riwayat Open Lines Bitrix24 — Bitrix tidak menyediakan statistik
+        respons lewat REST API.
       </p>
 
       <SalesConversationsDrawer

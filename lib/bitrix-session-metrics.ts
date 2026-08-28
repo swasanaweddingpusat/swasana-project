@@ -6,16 +6,17 @@
 // now it was recomputed on every page view. This helper caches the PARSED
 // result per session in Redis (see lib/redis.ts — non-fatal, no TTL).
 //
-// Cache key: `bitrix:session-metrics:v3:<sessionId>:<lastUpdated>`. The
+// Cache key: `bitrix:session-metrics:v4:<sessionId>:<lastUpdated>`. The
 // activity's LAST_UPDATED advances every time the session progresses, so a
 // CLOSED session's key is stable forever → permanent cache hit, while an
 // OPEN session's key keeps advancing → the next read naturally misses and
 // recomputes. Correctness falls out of the key shape; no TTL needed.
 //
-// The `v3` segment is an algorithm version for parseResponseSamples — bumped
-// from v2 for queue-account-aware sampling (queue/bot accounts like Kediaman
-// Corp #56663 no longer consume the pending customer message on chats later
-// transferred to a real sales). Without a bump, closed sessions would keep
+// The `v4` segment is an algorithm version for parseResponseSamples — bumped
+// from v3 for transfer-anchored sampling (a transfer/assign to a real sales now
+// starts a response clock, so the sales the chat is handed to is measured from
+// the handoff moment, not only from an unanswered customer message; v3 was
+// queue-account-aware sampling). Without a bump, closed sessions would keep
 // serving samples computed under the old algorithm forever, since their key
 // never changes. Bump this again if parseResponseSamples' sample logic changes.
 import { bitrixCall } from "@/lib/bitrix";
@@ -31,7 +32,7 @@ export interface SessionMetrics {
 const EMPTY_METRICS: SessionMetrics = { samples: [], events: [] };
 
 function cacheKey(sessionId: string, lastUpdated: string): string {
-  return `bitrix:session-metrics:v3:${sessionId}:${lastUpdated}`;
+  return `bitrix:session-metrics:v4:${sessionId}:${lastUpdated}`;
 }
 
 function chunkArray<T>(arr: T[], size: number): T[][] {
