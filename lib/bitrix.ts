@@ -6,6 +6,7 @@
 // expects for list methods with filter/select/order params.
 
 import { withBitrixCache } from "@/lib/bitrix-cache";
+import { BITRIX_USER_NAME_OVERRIDES } from "@/lib/bitrix-accounts";
 
 const BASE = process.env.BITRIX_WEBHOOK_BASE;
 
@@ -514,7 +515,9 @@ export async function resolveBitrixUsers(ids: string[]): Promise<Record<string, 
         if (!u?.ID) continue;
         // key is "u<id>" — strip the prefix to map back reliably.
         const id = key.startsWith("u") ? key.slice(1) : u.ID;
-        out[id] = [u.NAME, u.LAST_NAME].filter(Boolean).join(" ").trim() || `#${id}`;
+        out[id] =
+          BITRIX_USER_NAME_OVERRIDES[id] ??
+          ([u.NAME, u.LAST_NAME].filter(Boolean).join(" ").trim() || `#${id}`);
       }
     } catch {
       // Non-fatal — webhook may lack the `user` scope; client falls back to id.
