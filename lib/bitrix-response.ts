@@ -87,7 +87,6 @@ export function parseResponseSamples(history: SessionHistory): {
 
   const sorted = [...messages].sort((a, b) => Date.parse(a.date) - Date.parse(b.date));
 
-<<<<<<< HEAD
   // Pass 1 — build the transfer-history log. The first assign/transfer event is
   // the DEFAULT queue assignment, excluded entirely; logged from the 2nd on.
   let isFirstEvent = true;
