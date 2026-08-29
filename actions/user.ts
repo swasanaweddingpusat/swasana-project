@@ -10,11 +10,10 @@ import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
 import { isForeignKeyViolation } from "@/lib/prisma-errors";
 import { headers } from "next/headers";
 import bcrypt from "bcryptjs";
-import { Resend } from "resend";
 import crypto from "crypto";
 import { invitationEmailHtml } from "@/emails/invitation-email";
+import { getResendClient } from "@/lib/resend";
 
-const resend = new Resend(process.env.RESEND_API_KEY);
 const FROM_EMAIL = process.env.RESEND_FROM_EMAIL ?? "noreply@swasana.com";
 
 // ─── Invite User ──────────────────────────────────────────────────────────────
@@ -94,7 +93,7 @@ export async function inviteUser(formData: FormData) {
     const baseUrl = await getBaseUrl();
     const verificationLink = `${baseUrl}/auth/verify?token=${token}`;
 
-    await resend.emails.send({
+    await getResendClient().emails.send({
       from: FROM_EMAIL,
       to: email,
       subject: "Undangan Bergabung — Swasana",
@@ -428,7 +427,7 @@ export async function resendInvitation(userId: string) {
     const baseUrl = await getBaseUrl();
     const verificationLink = `${baseUrl}/auth/verify?token=${token}`;
 
-    await resend.emails.send({
+    await getResendClient().emails.send({
       from: FROM_EMAIL,
       to: profile.email,
       subject: "Undangan Bergabung (Kirim Ulang) — Swasana",
