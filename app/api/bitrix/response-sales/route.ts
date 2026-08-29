@@ -168,6 +168,15 @@ export async function GET(request: Request) {
       if (byUser.size > 0) sessionSamples.set(sessionId, byUser);
     }
 
+    // Resolve names for sample user IDs not already covered by activity
+    // RESPONSIBLE_IDs (agents who appear only via transfer, not as the final
+    // responsible party, would otherwise show as "#XX").
+    const missingSampleIds = [...samplesByUser.keys()].filter((id) => !userMap[id]);
+    if (missingSampleIds.length > 0) {
+      const extra = await resolveBitrixUsers(missingSampleIds);
+      Object.assign(userMap, extra);
+    }
+
     const rows: ResponseSalesRow[] = [...samplesByUser.entries()]
       .map(([userId, samples]) => {
         const avg = avgSeconds(samples);

@@ -757,6 +757,54 @@ export async function updateBooking(data: unknown) {
   const isRestore = requiredAction === "restore";
 
   try {
+    // Guard: restore is only allowed from specific statuses
+    if (rest.bookingStatus === "Pending") {
+      const current = await db.booking.findUnique({ where: { id }, select: { bookingStatus: true } });
+      if (!current) return { success: false, error: "Booking tidak ditemukan." };
+      const restorableStatuses = ["Canceled", "Lost", "Rejected"] as const;
+      if (!restorableStatuses.includes(current.bookingStatus as (typeof restorableStatuses)[number])) {
+        return { success: false, error: `Booking tidak bisa di-restore dari status ${current.bookingStatus}.` };
+      }
+
+      const oldStatus = current.bookingStatus;
+
+      await db.$transaction([
+        db.booking.update({
+          where: { id },
+          data: {
+            bookingStatus: "Pending",
+            cancelReason: null,
+            lostReason: null,
+            rejectionNotes: null,
+          },
+        }),
+        db.approvalRecord.updateMany({
+          where: { module: "booking", entityId: id },
+          data: { status: "pending" },
+        }),
+        db.approvalRecordStep.updateMany({
+          where: { record: { module: "booking", entityId: id } },
+          data: { status: "pending", decidedById: null, decidedAt: null, signature: null, notes: null },
+        }),
+        db.clientAgreement.updateMany({
+          where: { bookingId: id },
+          data: { status: "Pending", signedAt: null, viewedAt: null },
+        }),
+      ]);
+
+      await logAudit({
+        userId: session!.user.id,
+        action: "restored",
+        entityType: "booking",
+        entityId: id,
+        description: `Restored booking from ${oldStatus}`,
+      });
+
+      revalidateTag("bookings", "max");
+
+      return { success: true };
+    }
+
     const updateData: Record<string, unknown> = {};
     if (rest.eventDate) updateData.eventDate = new Date(`${rest.eventDate}T00:00:00.000Z`);
     if (rest.bookingStatus !== undefined) updateData.bookingStatus = rest.bookingStatus;
