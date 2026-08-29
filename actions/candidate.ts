@@ -3,13 +3,13 @@
 import { revalidateTag } from "next/cache";
 import crypto, { randomUUID } from "crypto";
 import bcrypt from "bcryptjs";
-import { Resend } from "resend";
 import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/permissions";
 import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
 import { logAudit } from "@/lib/audit";
 import { getBaseUrl } from "@/lib/url";
 import { generateAccessCode } from "@/lib/access-code";
+import { getResendClient } from "@/lib/resend";
 import {
   addCandidateSchema,
   moveCandidateStageSchema,
@@ -18,7 +18,6 @@ import {
   addCandidateNoteSchema,
 } from "@/lib/validations/candidate";
 
-const resend = new Resend(process.env.RESEND_API_KEY);
 const FROM_EMAIL = process.env.RESEND_FROM_EMAIL ?? "noreply@swasana.com";
 
 // ─── Add Candidate ────────────────────────────────────────────────────────────
@@ -256,7 +255,7 @@ export async function hireCandidate(
     try {
       const baseUrl = await getBaseUrl();
       const verificationLink = `${baseUrl}/auth/verify?token=${token}`;
-      await resend.emails.send({
+      await getResendClient().emails.send({
         from: FROM_EMAIL,
         to: candidate.email,
         subject: "Selamat! Anda Diterima — Swasana",

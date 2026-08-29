@@ -1,12 +1,10 @@
-import { Resend } from "resend";
 import { db } from "@/lib/db";
 import { publicApplyLimiter, rateLimitResponse } from "@/lib/rate-limit";
 import { uploadToStorage, generateStorageKey } from "@/lib/storage";
 import { processCandidateImage } from "@/lib/candidate-files";
 import { publicApplySchema, publicApplyFilesSchema } from "@/lib/validations/candidate";
 import { applicationConfirmationEmailHtml } from "@/emails/applicationConfirmationEmail";
-
-const resend = new Resend(process.env.RESEND_API_KEY);
+import { getResendClient } from "@/lib/resend";
 
 const ACCEPTED_CV_TYPES = new Set([
   "application/pdf",
@@ -220,7 +218,7 @@ export async function POST(
 
   // Send confirmation email — non-fatal, failure does not affect the response
   try {
-    await resend.emails.send({
+    await getResendClient().emails.send({
       from: process.env.RESEND_FROM_EMAIL!,
       to: parsed.data.email,
       subject: `Lamaran diterima — ${posting.title}`,

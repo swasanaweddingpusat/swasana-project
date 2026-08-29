@@ -4,7 +4,6 @@ import { revalidateTag } from "next/cache";
 import { headers } from "next/headers";
 import crypto from "crypto";
 import bcrypt from "bcryptjs";
-import { Resend } from "resend";
 import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/permissions";
 import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
@@ -18,10 +17,10 @@ import {
   addHistorySchema,
 } from "@/lib/validations/employee";
 import { isAllowedUploadMimeType, MAX_UPLOAD_SIZE_BYTES } from "@/lib/validations/upload";
+import { getResendClient } from "@/lib/resend";
 import { z } from "zod";
 import type { Prisma } from "@prisma/client";
 
-const resend = new Resend(process.env.RESEND_API_KEY);
 const FROM_EMAIL = process.env.RESEND_FROM_EMAIL ?? "noreply@swasana.com";
 
 // ─── Create Employee ──────────────────────────────────────────────────────────
@@ -161,7 +160,7 @@ export async function createEmployee(
     try {
       const baseUrl = await getBaseUrl();
       const verificationLink = `${baseUrl}/auth/verify?token=${token}`;
-      await resend.emails.send({
+      await getResendClient().emails.send({
         from: FROM_EMAIL,
         to: email,
         subject: "Undangan Bergabung — Swasana",
