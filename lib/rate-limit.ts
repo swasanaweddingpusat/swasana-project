@@ -34,6 +34,11 @@ export const apiLimiter = {
   check: (key: string) => check(key, 60, 60 * 1000),
 };
 
+// 10 submissions per hour — public application form (no auth required)
+export const publicApplyLimiter = {
+  check: (key: string) => check(key, 10, 60 * 60 * 1000),
+};
+
 export function rateLimitResponse() {
   return Response.json(
     { error: "Terlalu banyak percobaan. Coba lagi nanti." },

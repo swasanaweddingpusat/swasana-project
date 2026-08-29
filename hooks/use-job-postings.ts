@@ -8,6 +8,10 @@ import {
   deleteJobPosting,
   publishJobPosting,
   closeJobPosting,
+  approveJobPosting,
+  rejectJobPosting,
+  resubmitJobPosting,
+  generateJobPostingAccessCode,
 } from "@/actions/jobPosting";
 
 export function useJobPostings() {
@@ -64,6 +68,38 @@ export function useCloseJobPosting() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => closeJobPosting(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["job-postings"] }),
+  });
+}
+
+export function useApproveJobPosting() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, note }: { id: string; note?: string | null }) => approveJobPosting(id, note),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["job-postings"] }),
+  });
+}
+
+export function useRejectJobPosting() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, note }: { id: string; note: string }) => rejectJobPosting(id, note),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["job-postings"] }),
+  });
+}
+
+export function useResubmitJobPosting() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => resubmitJobPosting(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["job-postings"] }),
+  });
+}
+
+export function useGenerateJobPostingAccessCode() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => generateJobPostingAccessCode(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["job-postings"] }),
   });
 }

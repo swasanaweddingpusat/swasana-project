@@ -80,7 +80,7 @@ export const moduleActions: Record<string, string[]> = {
   // HR Recruitment & Onboarding — seeded originally via migration 20260622180000.
   // Listed here so the seeder treats it as a valid module (else step 3b would
   // delete these permissions) and can assign them per the role matrix.
-  "hr-recruitment": ["view", "create", "edit", "delete", "hire"],
+  "hr-recruitment": ["view", "create", "edit", "delete", "hire", "approve"],
   // Finance AP — customer payout (cashback program + overpay refund)
   "finance-ap": ["view", "create", "edit", "delete"],
   // Internal FAQ / Memo — general knowledge-base module
@@ -265,7 +265,7 @@ export const rolePermissionMap: Record<string, Record<string, string[]>> = {
   // sengaja DICABUT — tidak ada di spec menu HR.
   "human-resource": {
     hr: ["view", "create", "edit", "delete", "approve"],
-    "hr-recruitment": ["view", "create", "edit", "delete", "hire"],
+    "hr-recruitment": ["view", "create", "edit", "delete", "hire", "approve"],
     procurement: ["view"],
   },
   // Sales MICE — persis daftar menu yang disepakati (11 item):

@@ -199,6 +199,10 @@ model Profile {
   payrollsGenerated          PayrollPeriod[]            @relation("PayrollGenerator")
   payrollsFinalized          PayrollPeriod[]            @relation("PayrollFinalizer")
   jobPostingsCreated         JobPosting[]               @relation("JobPostingCreator")
+  jobPostingApprovals        JobPosting[]               @relation("JobPostingApprover")
+  jobPostingsApproved        JobPosting[]               @relation("JobPostingApprovedBy")
+  jobPostingApprovals2       JobPosting[]               @relation("JobPostingApprover2")
+  jobPostingsApproved2       JobPosting[]               @relation("JobPostingApprovedBy2")
   hiredFromCandidate         Candidate[]                @relation("HiredCandidate")
   candidateNotesCreated      CandidateNote[]            @relation("CandidateNoteCreator")
   onboardingAssignments      OnboardingAssignment[]
@@ -344,6 +348,7 @@ model Brand {
   code      String   @unique
   createdAt DateTime @default(now())
   venues    Venue[]
+  jobPostings JobPosting[]
 
   @@map("brands")
 }
@@ -374,6 +379,7 @@ model Venue {
   procurementBudgets ProcurementVenueBudget[]
   eventEvaluations   EventEvaluation[]
   weddingIndicators  WeddingIndicator[]
+  jobPostingInterviews JobPosting[]     @relation("JobPostingInterviewVenue")
 
   @@index([brandId])
   guestbookEntries       GuestbookEntry[]
@@ -773,6 +779,28 @@ enum JobPostingStatus {
   draft
   open
   closed
+}
+
+enum JobPostingApprovalStatus {
+  pending
+  approved
+  rejected
+}
+
+enum PositionLevel {
+  entry
+  junior
+  mid
+  senior
+  lead
+  manager
+  director
+}
+
+enum InterviewLocationType {
+  online
+  offline
+  hybrid
 }
 
 enum CandidateStage {
@@ -2669,31 +2697,89 @@ model PayslipItem {
 // ─── Recruitment & Onboarding ────────────────────────────────────────────────
 
 model JobPosting {
-  id             String           @id @default(uuid())
-  title          String
-  departmentId   String?
-  positionId     String?
-  description    String?
-  requirements   String?
-  employmentType EmploymentType?
-  location       String?
-  salaryRangeMin Decimal?         @db.Decimal(15, 2)
-  salaryRangeMax Decimal?         @db.Decimal(15, 2)
-  status         JobPostingStatus @default(draft)
-  openDate       DateTime?
-  closeDate      DateTime?
-  createdBy      String?
-  createdAt      DateTime         @default(now())
-  updatedAt      DateTime         @updatedAt
+  id                   String                  @id @default(uuid())
+  title                String
+  departmentId         String?
+  positionId           String?
+  description          String?
+  requirements         String?
+  employmentType       EmploymentType?
+  location             String?
+  salaryRangeMin       Decimal?                @db.Decimal(15, 2)
+  salaryRangeMax       Decimal?                @db.Decimal(15, 2)
+  status               JobPostingStatus        @default(draft)
+  openDate             DateTime?
+  closeDate            DateTime?
+  isWalkInInterview    Boolean                 @default(false)
+  brandId              String?
+  submissionDate       DateTime?
+  interviewDate        DateTime?
+  level                PositionLevel?
+  quota                Int?
+  interviewLocation    InterviewLocationType?
+  startDate            DateTime?
+  minEducation         String?
+  minExperience        String?
+  otherQualifications  String?
+  jobDescriptions      Json?
+  additionalNotes      String?
+  approverId           String?
+  submittedBySignature String?
+  companyName          String?
+  interviewLink        String?
+  interviewVenueId     String?
+  approvalStatus       JobPostingApprovalStatus @default(pending)
+  approvedById         String?
+  approvedAt           DateTime?
+  approvalNote         String?
+  approver2Id          String?
+  approvalStatus2      JobPostingApprovalStatus @default(pending)
+  approvedBy2Id        String?
+  approvedAt2          DateTime?
+  approvalNote2        String?
+  createdBy            String?
+  publicToken          String?                 @unique
+  publicAccessCode     String?
+  deletedAt            DateTime?
+  createdAt            DateTime                @default(now())
+  updatedAt            DateTime                @updatedAt
 
-  department Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
-  position   Position?   @relation(fields: [positionId], references: [id], onDelete: SetNull)
-  creator    Profile?    @relation("JobPostingCreator", fields: [createdBy], references: [id], onDelete: SetNull)
-  candidates Candidate[]
+  department        Department?           @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  position          Position?             @relation(fields: [positionId], references: [id], onDelete: SetNull)
+  creator           Profile?              @relation("JobPostingCreator", fields: [createdBy], references: [id], onDelete: SetNull)
+  brand             Brand?                @relation(fields: [brandId], references: [id], onDelete: SetNull)
+  approver          Profile?              @relation("JobPostingApprover", fields: [approverId], references: [id], onDelete: SetNull)
+  approvedBy        Profile?              @relation("JobPostingApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+  approver2         Profile?              @relation("JobPostingApprover2", fields: [approver2Id], references: [id], onDelete: SetNull)
+  approvedBy2       Profile?              @relation("JobPostingApprovedBy2", fields: [approvedBy2Id], references: [id], onDelete: SetNull)
+  interviewVenue    Venue?                @relation("JobPostingInterviewVenue", fields: [interviewVenueId], references: [id], onDelete: SetNull)
+  candidates        Candidate[]
+  applicationTokens JobApplicationToken[]
 
   @@index([departmentId])
   @@index([status])
+  @@index([brandId])
+  @@index([approverId])
+  @@index([approvalStatus])
+  @@index([approver2Id])
+  @@index([approvalStatus2])
+  @@index([interviewVenueId])
   @@map("job_postings")
+}
+
+model JobApplicationToken {
+  id           String     @id @default(uuid())
+  jobPostingId String
+  token        String     @unique
+  usedAt       DateTime?
+  expiresAt    DateTime
+  createdAt    DateTime   @default(now())
+
+  jobPosting JobPosting @relation(fields: [jobPostingId], references: [id], onDelete: Cascade)
+
+  @@index([jobPostingId])
+  @@index([token])
+  @@map("job_application_tokens")
 }
 
 model Candidate {
@@ -2704,10 +2790,21 @@ model Candidate {
   phoneNumber     String?
   resumeUrl       String?
   coverLetterUrl  String?
+  religion        String?
+  photoUrl        String?
+  photoOriginalName    String?
+  photoStorageKey      String?
+  photoMimeType        String?
+  ktpPhotoUrl     String?
+  ktpPhotoOriginalName String?
+  ktpPhotoStorageKey   String?
+  ktpPhotoMimeType     String?
   stage           CandidateStage @default(applied)
   rating          Int?
   notes           String?
   rejectionReason String?
+  expectedSalary  Decimal?       @db.Decimal(15, 2)
+  viewed          Boolean        @default(false)
   hiredAt         DateTime?
   hiredProfileId  String?
   createdAt       DateTime       @default(now())
@@ -2716,11 +2813,37 @@ model Candidate {
   jobPosting     JobPosting      @relation(fields: [jobPostingId], references: [id], onDelete: Cascade)
   hiredProfile   Profile?        @relation("HiredCandidate", fields: [hiredProfileId], references: [id], onDelete: SetNull)
   candidateNotes CandidateNote[]
+  invite         CandidateInvite?
 
+  @@unique([jobPostingId, email])
   @@index([jobPostingId])
   @@index([stage])
   @@index([hiredProfileId])
   @@map("candidates")
+}
+
+enum CandidateInviteStatus {
+  Pending
+  Viewed
+  Completed
+}
+
+model CandidateInvite {
+  id          String                @id @default(uuid())
+  candidateId String                @unique
+  token       String                @unique
+  accessCode  String
+  status      CandidateInviteStatus @default(Pending)
+  sentAt      DateTime?
+  viewedAt    DateTime?
+  completedAt DateTime?
+  createdAt   DateTime              @default(now())
+  updatedAt   DateTime              @updatedAt
+
+  candidate Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+
+  @@index([token])
+  @@map("candidate_invites")
 }
 
 model CandidateNote {
