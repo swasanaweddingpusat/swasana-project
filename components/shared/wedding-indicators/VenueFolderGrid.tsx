@@ -10,15 +10,24 @@ interface VenueFolder {
 
 interface VenueFolderGridProps {
   folders: VenueFolder[];
+  activeFilters?: { search?: string; month?: string; year?: string };
 }
 
-export function VenueFolderGrid({ folders }: VenueFolderGridProps) {
+export function VenueFolderGrid({ folders, activeFilters }: VenueFolderGridProps) {
+  function buildHref(venueId: string): string {
+    const params = new URLSearchParams({ view: "table", venueId });
+    if (activeFilters?.search) params.set("search", activeFilters.search);
+    if (activeFilters?.month) params.set("month", activeFilters.month);
+    if (activeFilters?.year) params.set("year", activeFilters.year);
+    return `/wedding-indicators?${params.toString()}`;
+  }
+
   return (
     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
       {folders.map((folder) => (
         <Link
           key={folder.venueId}
-          href={`/wedding-indicators?view=table&venueId=${folder.venueId}`}
+          href={buildHref(folder.venueId)}
         >
           <Card className="group cursor-pointer p-6 rounded-2xl hover:shadow-md transition-shadow">
             <div className="space-y-4">
