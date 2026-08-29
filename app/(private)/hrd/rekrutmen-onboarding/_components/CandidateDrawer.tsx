@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
 import { UserPlus } from "@solar-icons/react";
 import { Button } from "@/components/ui/button";
@@ -27,33 +27,31 @@ export function CandidateDrawer({ isOpen, onClose, jobPostings }: CandidateDrawe
   const addCandidateMutation = useAddCandidate();
 
   const [form, setForm] = useState<CandidateForm>({
-    jobPostingId: jobPostings[0]?.id ?? "",
+    jobPostingId: "",
     fullName: "",
     email: "",
     phoneNumber: "",
     expectedSalary: "",
   });
 
-  useEffect(() => {
-    if (jobPostings.length > 0 && !form.jobPostingId) {
-      setForm((current) => ({ ...current, jobPostingId: jobPostings[0].id }));
+  const [prevIsOpen, setPrevIsOpen] = useState(isOpen);
+  if (isOpen !== prevIsOpen) {
+    setPrevIsOpen(isOpen);
+    if (isOpen) {
+      setForm({ jobPostingId: "", fullName: "", email: "", phoneNumber: "", expectedSalary: "" });
     }
-  }, [jobPostings]);
+  }
 
-  useEffect(() => {
-    if (isOpen && jobPostings.length > 0) {
-      setForm({ jobPostingId: jobPostings[0].id, fullName: "", email: "", phoneNumber: "", expectedSalary: "" });
-    }
-  }, [isOpen]);
+  const selectedJobPostingId = form.jobPostingId || jobPostings[0]?.id || "";
 
   async function handleSubmit() {
-    if (!form.jobPostingId) {
+    if (!selectedJobPostingId) {
       toast.error("Lowongan wajib dipilih");
       return;
     }
 
     const result = await addCandidateMutation.mutateAsync({
-      jobPostingId: form.jobPostingId,
+      jobPostingId: selectedJobPostingId,
       fullName: form.fullName.trim(),
       email: form.email.trim(),
       phoneNumber: form.phoneNumber.trim() || undefined,
@@ -77,7 +75,7 @@ export function CandidateDrawer({ isOpen, onClose, jobPostings }: CandidateDrawe
           <Label htmlFor="drawer-candidate-job-posting">Lowongan</Label>
           <select
             id="drawer-candidate-job-posting"
-            value={form.jobPostingId}
+            value={selectedJobPostingId}
             onChange={(event) => setForm((current) => ({ ...current, jobPostingId: event.target.value }))}
             className="h-10 w-full rounded-xl border border-input bg-background px-3 text-sm outline-none"
           >

@@ -164,6 +164,155 @@ function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
 
 type CandidateRow = CandidateSheetRow;
 
+function ApprovalSlotActions({
+  slot,
+  canAct,
+  rejectMode,
+  rejectNote,
+  isBusy,
+  onSetRejectMode,
+  onSetRejectNote,
+  onApprove,
+  onReject,
+}: {
+  slot: 1 | 2;
+  canAct: boolean;
+  rejectMode: boolean;
+  rejectNote: string;
+  isBusy: boolean;
+  onSetRejectMode: (v: boolean) => void;
+  onSetRejectNote: (v: string) => void;
+  onApprove: () => void;
+  onReject: () => void;
+}) {
+  if (!canAct) return null;
+  return (
+    <>
+      <Separator />
+      {rejectMode ? (
+        <div className="flex flex-col gap-3">
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor={`reject-note-${slot}`}>Alasan Penolakan</Label>
+            <Textarea
+              id={`reject-note-${slot}`}
+              value={rejectNote}
+              onChange={(event) => onSetRejectNote(event.target.value)}
+              placeholder="Jelaskan alasan penolakan lowongan ini..."
+              className="rounded-xl"
+            />
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="destructive"
+              className="rounded-full gap-1.5"
+              onClick={onReject}
+              disabled={isBusy}
+            >
+              <CloseCircle weight="BoldDuotone" className="h-4 w-4" />
+              Konfirmasi Tolak
+            </Button>
+            <Button
+              variant="outline"
+              className="rounded-full"
+              onClick={() => { onSetRejectMode(false); onSetRejectNote(""); }}
+              disabled={isBusy}
+            >
+              Batal
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <div className="flex flex-wrap gap-2">
+          <Button
+            className="rounded-full gap-1.5"
+            onClick={onApprove}
+            disabled={isBusy}
+          >
+            <CheckCircle weight="BoldDuotone" className="h-4 w-4" />
+            Setujui
+          </Button>
+          <Button
+            variant="destructive"
+            className="rounded-full gap-1.5"
+            onClick={() => onSetRejectMode(true)}
+            disabled={isBusy}
+          >
+            <CloseCircle weight="BoldDuotone" className="h-4 w-4" />
+            Tolak
+          </Button>
+        </div>
+      )}
+    </>
+  );
+}
+
+function CandidateTable({
+  candidates,
+  onSelect,
+}: {
+  candidates: CandidateRow[];
+  onSelect: (c: CandidateRow) => void;
+}) {
+  if (!candidates || candidates.length === 0) {
+    return (
+      <p className="py-6 text-center text-sm text-muted-foreground">
+        Belum ada kandidat.
+      </p>
+    );
+  }
+  return (
+    <div className="overflow-x-auto">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead className="w-10">No</TableHead>
+            <TableHead>Nama</TableHead>
+            <TableHead>Bergabung Tgl</TableHead>
+            <TableHead>Gaji Diharapkan</TableHead>
+            <TableHead>View Status</TableHead>
+            <TableHead>Tahap Proses</TableHead>
+            <TableHead>Status</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {candidates.map((c, idx) => (
+            <TableRow
+              key={c.id}
+              className="cursor-pointer hover:bg-accent"
+              onClick={() => onSelect(c)}
+            >
+              <TableCell className="text-muted-foreground">{idx + 1}</TableCell>
+              <TableCell>
+                <div className="flex flex-col gap-0.5">
+                  <span className="font-medium text-foreground">{c.fullName}</span>
+                  <span className="text-xs text-muted-foreground">{c.email}</span>
+                </div>
+              </TableCell>
+              <TableCell>{formatDate(c.createdAt)}</TableCell>
+              <TableCell>{formatCurrency(c.expectedSalary)}</TableCell>
+              <TableCell>
+                <Badge variant={c.viewed ? "default" : "secondary"} className="rounded-full">
+                  {c.viewed ? "Sudah dilihat" : "Belum dilihat"}
+                </Badge>
+              </TableCell>
+              <TableCell>
+                <Badge variant="secondary" className="rounded-full">
+                  {STAGE_LABELS[c.stage] ?? c.stage}
+                </Badge>
+              </TableCell>
+              <TableCell>
+                <Badge variant={candidateStatusVariant(c.stage)} className="rounded-full">
+                  {candidateStatusLabel(c.stage)}
+                </Badge>
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
+  );
+}
+
 export function JobPostingDetailClient({ id }: { id: string }) {
   const { data: posting, isLoading, isError } = useJobPostingDetail(id);
   const { user } = useCurrentUser();
@@ -266,149 +415,6 @@ export function JobPostingDetailClient({ id }: { id: string }) {
     (c) => c.stage === "interview"
   );
 
-  function ApprovalSlotActions({
-    slot,
-    canAct,
-    rejectMode,
-    rejectNote,
-    onSetRejectMode,
-    onSetRejectNote,
-  }: {
-    slot: 1 | 2;
-    canAct: boolean;
-    rejectMode: boolean;
-    rejectNote: string;
-    onSetRejectMode: (v: boolean) => void;
-    onSetRejectNote: (v: string) => void;
-  }) {
-    if (!canAct) return null;
-    return (
-      <>
-        <Separator />
-        {rejectMode ? (
-          <div className="flex flex-col gap-3">
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor={`reject-note-${slot}`}>Alasan Penolakan</Label>
-              <Textarea
-                id={`reject-note-${slot}`}
-                value={rejectNote}
-                onChange={(event) => onSetRejectNote(event.target.value)}
-                placeholder="Jelaskan alasan penolakan lowongan ini..."
-                className="rounded-xl"
-              />
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <Button
-                variant="destructive"
-                className="rounded-full gap-1.5"
-                onClick={() => handleRejectSlot(slot)}
-                disabled={isBusy}
-              >
-                <CloseCircle weight="BoldDuotone" className="h-4 w-4" />
-                Konfirmasi Tolak
-              </Button>
-              <Button
-                variant="outline"
-                className="rounded-full"
-                onClick={() => { onSetRejectMode(false); onSetRejectNote(""); }}
-                disabled={isBusy}
-              >
-                Batal
-              </Button>
-            </div>
-          </div>
-        ) : (
-          <div className="flex flex-wrap gap-2">
-            <Button
-              className="rounded-full gap-1.5"
-              onClick={() => handleApproveSlot(slot)}
-              disabled={isBusy}
-            >
-              <CheckCircle weight="BoldDuotone" className="h-4 w-4" />
-              Setujui
-            </Button>
-            <Button
-              variant="destructive"
-              className="rounded-full gap-1.5"
-              onClick={() => onSetRejectMode(true)}
-              disabled={isBusy}
-            >
-              <CloseCircle weight="BoldDuotone" className="h-4 w-4" />
-              Tolak
-            </Button>
-          </div>
-        )}
-      </>
-    );
-  }
-
-  function CandidateTable({
-    candidates,
-    onSelect,
-  }: {
-    candidates: CandidateRow[];
-    onSelect: (c: CandidateRow) => void;
-  }) {
-    if (!candidates || candidates.length === 0) {
-      return (
-        <p className="py-6 text-center text-sm text-muted-foreground">
-          Belum ada kandidat.
-        </p>
-      );
-    }
-    return (
-      <div className="overflow-x-auto">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="w-10">No</TableHead>
-              <TableHead>Nama</TableHead>
-              <TableHead>Bergabung Tgl</TableHead>
-              <TableHead>Gaji Diharapkan</TableHead>
-              <TableHead>View Status</TableHead>
-              <TableHead>Tahap Proses</TableHead>
-              <TableHead>Status</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {candidates.map((c, idx) => (
-              <TableRow
-                key={c.id}
-                className="cursor-pointer hover:bg-accent"
-                onClick={() => onSelect(c)}
-              >
-                <TableCell className="text-muted-foreground">{idx + 1}</TableCell>
-                <TableCell>
-                  <div className="flex flex-col gap-0.5">
-                    <span className="font-medium text-foreground">{c.fullName}</span>
-                    <span className="text-xs text-muted-foreground">{c.email}</span>
-                  </div>
-                </TableCell>
-                <TableCell>{formatDate(c.createdAt)}</TableCell>
-                <TableCell>{formatCurrency(c.expectedSalary)}</TableCell>
-                <TableCell>
-                  <Badge variant={c.viewed ? "default" : "secondary"} className="rounded-full">
-                    {c.viewed ? "Sudah dilihat" : "Belum dilihat"}
-                  </Badge>
-                </TableCell>
-                <TableCell>
-                  <Badge variant="secondary" className="rounded-full">
-                    {STAGE_LABELS[c.stage] ?? c.stage}
-                  </Badge>
-                </TableCell>
-                <TableCell>
-                  <Badge variant={candidateStatusVariant(c.stage)} className="rounded-full">
-                    {candidateStatusLabel(c.stage)}
-                  </Badge>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </div>
-    );
-  }
-
   return (
     <div className="flex flex-col gap-6">
       {/* Back + Header */}
@@ -499,8 +505,11 @@ export function JobPostingDetailClient({ id }: { id: string }) {
                           canAct={canActSlot1}
                           rejectMode={rejectMode1}
                           rejectNote={rejectNote1}
+                          isBusy={isBusy}
                           onSetRejectMode={setRejectMode1}
                           onSetRejectNote={setRejectNote1}
+                          onApprove={() => handleApproveSlot(1)}
+                          onReject={() => handleRejectSlot(1)}
                         />
                       </div>
 
@@ -537,8 +546,11 @@ export function JobPostingDetailClient({ id }: { id: string }) {
                           canAct={canActSlot2}
                           rejectMode={rejectMode2}
                           rejectNote={rejectNote2}
+                          isBusy={isBusy}
                           onSetRejectMode={setRejectMode2}
                           onSetRejectNote={setRejectNote2}
+                          onApprove={() => handleApproveSlot(2)}
+                          onReject={() => handleRejectSlot(2)}
                         />
                       </div>
 

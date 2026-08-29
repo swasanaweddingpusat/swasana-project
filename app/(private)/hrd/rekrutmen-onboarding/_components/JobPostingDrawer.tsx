@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { AddCircle, TrashBinTrash } from "@solar-icons/react";
@@ -154,11 +154,11 @@ export function JobPostingDrawer({ isOpen, onClose, editId }: JobPostingDrawerPr
 
   const { data: editDetail } = useJobPostingDetail(editId ?? "");
 
-  useEffect(() => {
-    if (isEditMode && editDetail) {
-      setForm(detailToForm(editDetail));
-    }
-  }, [isEditMode, editDetail]);
+  const [loadedDetailId, setLoadedDetailId] = useState<string | undefined>(undefined);
+  if (isEditMode && editDetail && loadedDetailId !== editDetail.id) {
+    setLoadedDetailId(editDetail.id);
+    setForm(detailToForm(editDetail));
+  }
 
   const { data: venues = [] } = useVenues();
   const { data: departments = [] } = useDepartments();
