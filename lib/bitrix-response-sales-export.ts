@@ -8,6 +8,7 @@ interface ResponseSalesRow {
   seconds: number;
   minutes: number;
   hours: string;
+  conversations: { sessionId: string }[];
 }
 
 interface GrandTotal {
@@ -100,8 +101,8 @@ export async function exportResponseSalesPdf(data: ResponseSalesExportData): Pro
   }
 
   y += 12;
-  const colWidths = [160, 70, 70, 70, 70];
-  const headers = ["Nama", "Detik", "Menit", "Jam", "Percakapan"];
+  const colWidths = [150, 60, 60, 60, 80, 80];
+  const headers = ["Nama", "Detik", "Menit", "Jam", "Percakapan", "Response"];
   const tableLeft = margin;
   const headerHeight = 18;
 
@@ -130,7 +131,7 @@ export async function exportResponseSalesPdf(data: ResponseSalesExportData): Pro
       doc.addPage();
       y = margin;
     }
-    const cells = [r.name, String(r.seconds), String(r.minutes), r.hours, String(r.samples)];
+    const cells = [r.name, String(r.seconds), String(r.minutes), r.hours, String(r.conversations.length), String(r.samples)];
     x = tableLeft;
     cells.forEach((c, i) => {
       const lines = doc.splitTextToSize(c, colWidths[i] - 8) as string[];
@@ -171,9 +172,9 @@ function buildRowsSheet(ws: Worksheet, rows: ResponseSalesRow[]): void {
   const title = ws.addRow(["Response Sales"]);
   title.font = { bold: true, size: 13 };
   ws.addRow([]);
-  ws.addRow(["Nama", "Detik", "Menit", "Jam", "Percakapan"]);
+  ws.addRow(["Nama", "Detik", "Menit", "Jam", "Percakapan", "Response"]);
   for (const r of rows) {
-    ws.addRow([r.name, r.seconds, r.minutes, r.hours, r.samples]);
+    ws.addRow([r.name, r.seconds, r.minutes, r.hours, r.conversations.length, r.samples]);
   }
   fitColumns(ws);
 }

@@ -34,9 +34,18 @@ COPY . .
 ARG NEXT_PUBLIC_APP_URL=""
 ARG NEXT_PUBLIC_S3_PUBLIC_URL=""
 ARG NEXT_PUBLIC_SHOW_DEVTOOLS="false"
+# Server Actions encryption key. Next.js encrypts Server Action closures with a
+# key that, by DEFAULT, is regenerated on EVERY build — so every redeploy rotates
+# all Server Action IDs and any client still on an older shell fails with
+# "Failed to find Server Action". Providing a STABLE key here keeps action IDs
+# constant across deploys, so a stale client only breaks when that action's own
+# code actually changed. Must be present at BUILD time (it's embedded in output).
+# Empty default = keep Next's per-build behavior (no change) until Railway sets it.
+ARG NEXT_SERVER_ACTIONS_ENCRYPTION_KEY=""
 ENV NEXT_PUBLIC_APP_URL=$NEXT_PUBLIC_APP_URL \
     NEXT_PUBLIC_S3_PUBLIC_URL=$NEXT_PUBLIC_S3_PUBLIC_URL \
     NEXT_PUBLIC_SHOW_DEVTOOLS=$NEXT_PUBLIC_SHOW_DEVTOOLS \
+    NEXT_SERVER_ACTIONS_ENCRYPTION_KEY=$NEXT_SERVER_ACTIONS_ENCRYPTION_KEY \
     NEXT_TELEMETRY_DISABLED=1
 # Dummy URL so any build-time prisma access resolves; real URL injected at runtime.
 ENV DATABASE_URL="postgresql://user:pass@localhost:5432/db"

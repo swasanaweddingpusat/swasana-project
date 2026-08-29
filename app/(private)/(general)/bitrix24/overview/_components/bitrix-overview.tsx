@@ -125,11 +125,20 @@ interface Filters {
   issue: string; // "" = all (issue label)
   client: string;
   sales: string;
+  dbRange: DateRange | undefined; // optional — "Tanggal Database" (UF_CRM_1786680629702)
 }
 
 function initialFilters(): Filters {
   const y = yesterday();
-  return { range: { from: y, to: y }, pipeline: "", stage: "", issue: "", client: "", sales: "" };
+  return {
+    range: { from: y, to: y },
+    pipeline: "",
+    stage: "",
+    issue: "",
+    client: "",
+    sales: "",
+    dbRange: undefined,
+  };
 }
 
 export function BitrixOverview() {
@@ -158,6 +167,8 @@ export function BitrixOverview() {
 
   const from = filters.range?.from ? toIsoDay(filters.range.from) : "";
   const to = filters.range?.to ? toIsoDay(filters.range.to) : from;
+  const dbFrom = filters.dbRange?.from ? toIsoDay(filters.dbRange.from) : "";
+  const dbTo = filters.dbRange?.from ? toIsoDay(filters.dbRange.to ?? filters.dbRange.from) : "";
 
   useEffect(() => {
     if (!from) return;
@@ -172,6 +183,8 @@ export function BitrixOverview() {
         if (filters.issue) params.set("issue", filters.issue);
         if (filters.client) params.set("client", filters.client);
         if (filters.sales) params.set("sales", filters.sales);
+        if (dbFrom) params.set("dbFrom", dbFrom);
+        if (dbTo) params.set("dbTo", dbTo);
         const res = await fetch(`/api/bitrix/overview?${params.toString()}`);
         const json = (await res.json()) as OverviewData;
         if (cancelled) return;
@@ -192,7 +205,7 @@ export function BitrixOverview() {
     return () => {
       cancelled = true;
     };
-  }, [from, to, filters.pipeline, filters.stage, filters.issue, filters.client, filters.sales, reloadKey]);
+  }, [from, to, filters.pipeline, filters.stage, filters.issue, filters.client, filters.sales, dbFrom, dbTo, reloadKey]);
 
   const adsPct = data && data.total > 0 ? Math.round((data.fromAds / data.total) * 100) : 0;
 
@@ -202,7 +215,8 @@ export function BitrixOverview() {
     (filters.stage ? 1 : 0) +
     (filters.issue ? 1 : 0) +
     (filters.client ? 1 : 0) +
-    (filters.sales ? 1 : 0);
+    (filters.sales ? 1 : 0) +
+    (filters.dbRange?.from ? 1 : 0);
 
   function applyFilters(next: Filters) {
     setFilters(next);
@@ -370,6 +384,7 @@ function FilterPanel({
   const [issue, setIssue] = useState(initial.issue);
   const [client, setClient] = useState(initial.client);
   const [sales, setSales] = useState(initial.sales);
+  const [dbRange, setDbRange] = useState<DateRange | undefined>(initial.dbRange);
 
   return (
     <div className="flex flex-col">
@@ -467,6 +482,25 @@ function FilterPanel({
             />
           </div>
         </div>
+
+        {/* By tanggal database — optional, independent from the mandatory range above */}
+        <div className="space-y-1.5">
+          <div className="flex items-center justify-between">
+            <Label className="text-xs text-muted-foreground">Tanggal Database</Label>
+            {dbRange?.from && (
+              <button
+                type="button"
+                onClick={() => setDbRange(undefined)}
+                className="text-xs font-medium text-primary hover:underline"
+              >
+                Bersihkan
+              </button>
+            )}
+          </div>
+          <div className="flex justify-center rounded-xl border">
+            <Calendar mode="range" numberOfMonths={1} selected={dbRange} onSelect={setDbRange} />
+          </div>
+        </div>
       </div>
 
       <div className="flex items-center justify-between gap-2 border-t px-4 py-3">
@@ -485,6 +519,7 @@ function FilterPanel({
               issue,
               client: client.trim(),
               sales: sales.trim(),
+              dbRange,
             })
           }
         >
