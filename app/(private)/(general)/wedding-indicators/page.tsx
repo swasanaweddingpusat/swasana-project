@@ -115,7 +115,14 @@ export default async function WeddingIndicatorsPage({
 
       <div className="space-y-6">
         {view === "folder" && venueFolders.length > 0 ? (
-          <VenueFolderGrid folders={venueFolders} />
+          <VenueFolderGrid
+            folders={venueFolders}
+            activeFilters={{
+              search: params.search,
+              month: params.month,
+              year: params.year,
+            }}
+          />
         ) : (
           <Suspense
             fallback={
