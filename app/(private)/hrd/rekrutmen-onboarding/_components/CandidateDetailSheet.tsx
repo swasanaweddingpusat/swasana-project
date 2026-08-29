@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { Badge } from "@/components/ui/badge";
 import {
   Sheet,
@@ -68,9 +69,12 @@ function FilePreview({ label, url }: { label: string; url: string | null }) {
       <span className="text-xs font-medium text-muted-foreground">{label}</span>
       {isImage ? (
         <a href={url} target="_blank" rel="noopener noreferrer" className="block">
-          <img
+          <Image
             src={url}
             alt={label}
+            width={800}
+            height={600}
+            unoptimized
             className="max-h-56 w-full rounded-xl border border-border bg-muted/20 object-contain"
           />
           <p className="mt-1 text-xs text-muted-foreground">

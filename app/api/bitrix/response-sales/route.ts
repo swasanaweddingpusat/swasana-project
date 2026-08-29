@@ -68,6 +68,8 @@ interface ResponseSalesRow {
   seconds: number;
   minutes: number;
   hours: string;
+  // count of this sales' conversations still marked "Belum Dibalas".
+  belumDibalasCount: number;
   conversations: ConversationItem[];
 }
 
@@ -259,6 +261,7 @@ export async function GET(request: Request) {
           seconds: avg,
           minutes: Math.round(avg / 60),
           hours: formatHours(avg),
+          belumDibalasCount: conversations.filter((c) => c.status === "Belum Dibalas").length,
           conversations,
         };
       })

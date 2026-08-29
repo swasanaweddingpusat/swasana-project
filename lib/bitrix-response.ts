@@ -38,16 +38,21 @@ export function extractTransferTarget(text: string): string | null {
  * Walk a session's message history and compute one response sample per
  * customer message that an agent actually replied to.
  *
- * A sample is timed from an ANCHOR to the next agent message. The anchor is
- * either the earliest unanswered customer message, OR — for a chat handed to a
- * real sales — the transfer/assign moment (see pass 2). A sales is measured
- * from when the chat reached them, so a transfer RESETS the anchor: the incoming
- * sales isn't charged for the customer's wait before the handoff. Once an agent
- * message consumes the anchor it clears — so a follow-up/nudge from an agent
- * with nothing pending (e.g. "belum dibales, follow up lagi besok") produces NO
- * sample. If the customer sends several messages before any agent replies, the
- * FIRST of that burst is the anchor. A chat transferred to several sales in turn
- * yields one sample per sales, each timed from its own handoff.
+ * A sample is timed from an ANCHOR to the next agent message, and is ONLY
+ * counted when the anchor is a TRANSFER/ASSIGN to a real sales — the handoff
+ * moment (see pass 2). A sales is measured from when the chat reached them, so a
+ * transfer RESETS the anchor: the incoming sales isn't charged for the
+ * customer's wait before the handoff. A chat transferred to several sales in
+ * turn yields one sample per sales, each timed from its own handoff.
+ *
+ * An agent who SELF-SELECTS a conversation — replies to a plain unanswered
+ * customer message with no handoff to them (e.g. front-desk Fauzan picking a
+ * chat off the queue) — produces NO sample: picking a chat yourself isn't a
+ * measured response time. That reply still clears the pending anchor (so the
+ * `hasPending` / "Belum Dibalas" status stays correct), it just isn't averaged.
+ * Likewise a follow-up/nudge with nothing pending (e.g. "belum dibales, follow
+ * up lagi besok") produces no sample. If the customer sends several messages
+ * before any agent replies, the FIRST of that burst is the anchor.
  *
  * Queue/bot accounts (`BITRIX_QUEUE_USER_IDS`, e.g. "Kediaman Corp" #56663)
  * auto-greet a customer before the chat is transferred to a real sales. If a
@@ -108,16 +113,20 @@ export function parseResponseSamples(history: SessionHistory): {
 
   // Pass 2 — compute response samples.
   // Timestamp of the anchor an agent still owes a reply to. Two things set it:
-  //   • an unanswered CUSTOMER message (front-desk/queue pickup case), or
+  //   • an unanswered CUSTOMER message (self-select / front-desk pickup case), or
   //   • a TRANSFER/ASSIGN to a real sales — the handoff moment. A sales is
   //     measured from when the chat reached them, not from the customer's
   //     earlier wait, so a transfer RESETS the anchor to the handoff time.
-  // The first agent reply after the anchor produces one sample credited to that
-  // agent, then the anchor clears. This is why a chat handed to several sales in
-  // turn yields one sample per sales (each timed from their own handoff), and a
-  // sales who greets after a transfer with no customer message pending still
-  // gets measured.
+  // ONLY transfer/assign-anchored replies are counted toward `samples`: a sales
+  // who was HANDED the chat is measured from the handoff. An agent who SELF-
+  // SELECTS a conversation (replies to a plain customer message with no handoff
+  // to them — e.g. front-desk Fauzan picking a chat off the queue) produces NO
+  // sample; picking a chat yourself isn't a measured "response time". `pendingIsTransfer`
+  // tracks which kind of anchor is currently open. `hasPending` still reflects
+  // EITHER kind, so the "Belum/Sudah Dibalas" status stays accurate even for
+  // self-selected chats (a self-select reply still clears the pending anchor).
   let pendingAt: string | null = null;
+  let pendingIsTransfer = false;
 
   for (const msg of sorted) {
     const sender = msg.senderid;
@@ -127,12 +136,18 @@ export function parseResponseSamples(history: SessionHistory): {
       // assignment ("semua agen dalam antrean" — no [USER]) and handoffs whose
       // target is a queue/bot account don't start a clock.
       const target = extractTransferTarget(msg.text);
-      if (target && !BITRIX_QUEUE_USER_IDS.has(target)) pendingAt = msg.date;
+      if (target && !BITRIX_QUEUE_USER_IDS.has(target)) {
+        pendingAt = msg.date;
+        pendingIsTransfer = true;
+      }
       continue;
     }
 
     if (customerIds.has(sender)) {
-      if (!pendingAt) pendingAt = msg.date;
+      if (!pendingAt) {
+        pendingAt = msg.date;
+        pendingIsTransfer = false;
+      }
       continue;
     }
 
@@ -141,14 +156,18 @@ export function parseResponseSamples(history: SessionHistory): {
     // reply is what gets measured.
     if (transferredToRealSales && BITRIX_QUEUE_USER_IDS.has(sender)) continue;
 
-    // Agent message — only a response if an anchor is still waiting. A follow-up
-    // with nothing pending is ignored entirely.
+    // Agent message — consume the anchor. Credit a sample ONLY when the anchor
+    // was a transfer/assign handoff to this side; a self-selected pickup (customer-
+    // message anchor, no handoff) clears the anchor without producing a sample.
     if (pendingAt) {
-      const seconds = diffSeconds(pendingAt, msg.date);
-      if (seconds !== null && seconds >= 0) {
-        samples.push({ userId: sender, seconds });
+      if (pendingIsTransfer) {
+        const seconds = diffSeconds(pendingAt, msg.date);
+        if (seconds !== null && seconds >= 0) {
+          samples.push({ userId: sender, seconds });
+        }
       }
       pendingAt = null;
+      pendingIsTransfer = false;
     }
   }
 

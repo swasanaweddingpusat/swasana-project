@@ -38,11 +38,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { SearchableSelect } from "@/components/ui/searchable-select";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+import { Drawer } from "@/components/shared/drawer";
 import { PercakapanDetailDrawer } from "./percakapan-detail-drawer";
 
 // Local calendar day (not UTC) — avoids the off-by-one from toISOString().
@@ -51,11 +50,10 @@ function toIsoDay(d: Date): string {
 }
 
 const PAGE_SIZE = 50;
-const COLSPAN = 13;
+const COLSPAN = 14;
 
 const DIRECTION_ALL = "__all__";
 const STATUS_ALL = "__all__";
-const RESPONSIBLE_ALL = "__all__";
 const TRANSFERRED_ALL = "__all__";
 
 const TRANSFERRED_OPTIONS: { id: string; name: string }[] = [
@@ -68,10 +66,39 @@ const DIRECTION_OPTIONS: { id: string; name: string }[] = [
   { id: "2", name: "Outbound" },
 ];
 
-const STATUS_OPTIONS: { id: string; name: string }[] = [
-  { id: "open", name: "Agen merespons" },
-  { id: "closed", name: "Percakapan ditutup" },
+// Combined "Status" select — merges the old separate Status (open/closed) and
+// Status Respons (yes/no) selects into one mutually-exclusive control. See
+// deriveCombinedStatus() / translateCombinedStatus() below for the mapping
+// back to the parent's separate `status` / `responded` query params.
+const STATUS_COMBINED_OPTIONS: { id: string; name: string }[] = [
+  { id: "open", name: "Terbuka" },
+  { id: "closed", name: "Ditutup" },
+  { id: "resp-yes", name: "Sudah dibalas" },
+  { id: "resp-no", name: "Belum dibalas" },
 ];
+
+function deriveCombinedStatus(status: string, responded: string): string {
+  if (responded === "yes") return "resp-yes";
+  if (responded === "no") return "resp-no";
+  if (status === "open") return "open";
+  if (status === "closed") return "closed";
+  return "";
+}
+
+function translateCombinedStatus(combined: string): { status: string; responded: string } {
+  switch (combined) {
+    case "open":
+      return { status: "open", responded: "" };
+    case "closed":
+      return { status: "closed", responded: "" };
+    case "resp-yes":
+      return { status: "", responded: "yes" };
+    case "resp-no":
+      return { status: "", responded: "no" };
+    default:
+      return { status: "", responded: "" };
+  }
+}
 
 interface Conversation {
   id: string;
@@ -92,6 +119,7 @@ interface Conversation {
   avgResponseSec: number | null;
   transferCount?: number;
   transferred?: boolean;
+  responded?: boolean;
 }
 
 interface ApiResponse {
@@ -154,14 +182,13 @@ export function BitrixPercakapanManager() {
   const [start, setStart] = useState(0);
   const [direction, setDirection] = useState<string>("");
   const [status, setStatus] = useState<string>("");
-  const [responsible, setResponsible] = useState<string>("");
   const [createdRange, setCreatedRange] = useState<DateRange | undefined>(() => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     return { from: today, to: today };
   });
   const [transferredFilter, setTransferredFilter] = useState<string>("");
-  const [salesOptions, setSalesOptions] = useState<{ id: string; name: string }[]>([]);
+  const [respondedFilter, setRespondedFilter] = useState<string>("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
@@ -180,10 +207,10 @@ export function BitrixPercakapanManager() {
       const params = new URLSearchParams({ format: "xlsx" });
       if (direction) params.set("direction", direction);
       if (status) params.set("status", status);
-      if (responsible) params.set("responsible", responsible);
       if (createdFrom) params.set("createdFrom", createdFrom);
       if (createdTo) params.set("createdTo", createdTo);
       if (transferredFilter) params.set("transferred", transferredFilter);
+      if (respondedFilter) params.set("responded", respondedFilter);
       if (query) params.set("q", query);
 
       const res = await fetch(`/api/bitrix/percakapan/export?${params.toString()}`);
@@ -204,23 +231,6 @@ export function BitrixPercakapanManager() {
     }
   }
 
-  // Load sales options once for the filter dropdown.
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      try {
-        const res = await fetch("/api/bitrix/sales");
-        const json = (await res.json()) as { id: string; name: string }[] | { error?: string };
-        if (!cancelled && Array.isArray(json)) setSalesOptions(json);
-      } catch {
-        // Non-fatal — filter falls back to showing only the selected id.
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
   // Debounce the search box → server query. Resets paging to the first page.
   useEffect(() => {
     const t = setTimeout(() => {
@@ -239,10 +249,10 @@ export function BitrixPercakapanManager() {
         const params = new URLSearchParams({ start: String(start) });
         if (direction) params.set("direction", direction);
         if (status) params.set("status", status);
-        if (responsible) params.set("responsible", responsible);
         if (createdFrom) params.set("createdFrom", createdFrom);
         if (createdTo) params.set("createdTo", createdTo);
         if (transferredFilter) params.set("transferred", transferredFilter);
+        if (respondedFilter) params.set("responded", respondedFilter);
         if (query) params.set("q", query);
         const res = await fetch(`/api/bitrix/percakapan?${params.toString()}`);
         const json = (await res.json()) as ApiResponse;
@@ -263,21 +273,32 @@ export function BitrixPercakapanManager() {
     return () => {
       cancelled = true;
     };
-  }, [start, direction, status, responsible, createdFrom, createdTo, transferredFilter, query, reloadKey]);
+  }, [start, direction, status, createdFrom, createdTo, transferredFilter, respondedFilter, query, reloadKey]);
 
   const pageFrom = total === 0 ? 0 : start + 1;
   const pageTo = Math.min(start + PAGE_SIZE, total);
   const canPrev = start > 0;
   const canNext = start + PAGE_SIZE < total;
 
-  const activeFilterCount = (direction ? 1 : 0) + (status ? 1 : 0) + (responsible ? 1 : 0) + (createdRange?.from ? 1 : 0) + (transferredFilter ? 1 : 0);
+  const activeFilterCount =
+    (direction ? 1 : 0) +
+    (status ? 1 : 0) +
+    (createdRange?.from ? 1 : 0) +
+    (transferredFilter ? 1 : 0) +
+    (respondedFilter ? 1 : 0);
 
-  function applyFilters(next: { direction: string; status: string; responsible: string; createdRange: DateRange | undefined; transferred: string }) {
+  function applyFilters(next: {
+    direction: string;
+    status: string;
+    createdRange: DateRange | undefined;
+    transferred: string;
+    responded: string;
+  }) {
     setDirection(next.direction);
     setStatus(next.status);
-    setResponsible(next.responsible);
     setCreatedRange(next.createdRange);
     setTransferredFilter(next.transferred);
+    setRespondedFilter(next.responded);
     setStart(0);
     setFilterOpen(false);
   }
@@ -285,11 +306,11 @@ export function BitrixPercakapanManager() {
   function resetFilters() {
     setDirection("");
     setStatus("");
-    setResponsible("");
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     setCreatedRange({ from: today, to: today });
     setTransferredFilter("");
+    setRespondedFilter("");
     setStart(0);
     setFilterOpen(false);
   }
@@ -319,7 +340,7 @@ export function BitrixPercakapanManager() {
             <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Cari klien / no. HP…"
+              placeholder="Cari klien / sales…"
               className="rounded-full pl-9"
             />
           </div>
@@ -335,34 +356,16 @@ export function BitrixPercakapanManager() {
             Export Excel
           </Button>
 
-          {/* Filter — grouped popover: tipe + status */}
-          <Popover open={filterOpen} onOpenChange={setFilterOpen}>
-            <PopoverTrigger
-              render={
-                <Button variant="outline" className="shrink-0 rounded-full">
-                  <Tuning weight="BoldDuotone" className="h-4 w-4" />
-                  Filter
-                  {activeFilterCount > 0 && (
-                    <Badge className="ml-1 h-5 min-w-5 justify-center rounded-full px-1.5 text-[10px]">
-                      {activeFilterCount}
-                    </Badge>
-                  )}
-                </Button>
-              }
-            />
-            <PopoverContent className="w-[min(92vw,22rem)] p-0" align="end">
-              <FilterPanel
-                direction={direction}
-                status={status}
-                responsible={responsible}
-                createdRange={createdRange}
-                transferred={transferredFilter}
-                salesOptions={salesOptions}
-                onApply={applyFilters}
-                onReset={resetFilters}
-              />
-            </PopoverContent>
-          </Popover>
+          {/* Filter — grouped drawer: tipe + status */}
+          <Button variant="outline" className="shrink-0 rounded-full" onClick={() => setFilterOpen(true)}>
+            <Tuning weight="BoldDuotone" className="h-4 w-4" />
+            Filter
+            {activeFilterCount > 0 && (
+              <Badge className="ml-1 h-5 min-w-5 justify-center rounded-full px-1.5 text-[10px]">
+                {activeFilterCount}
+              </Badge>
+            )}
+          </Button>
 
           <Button
             variant="outline"
@@ -396,6 +399,7 @@ export function BitrixPercakapanManager() {
                   <TableHead className="px-3 py-2 text-muted-foreground text-right min-w-20">Menit</TableHead>
                   <TableHead className="px-3 py-2 text-muted-foreground text-right min-w-24">Jam</TableHead>
                   <TableHead className="px-3 py-2 text-muted-foreground text-right min-w-24">Response</TableHead>
+                  <TableHead className="px-3 py-2 text-muted-foreground min-w-32">Status Respons</TableHead>
                   <TableHead className="px-3 py-2 text-muted-foreground text-right min-w-24">Durasi</TableHead>
                 </TableRow>
               </TableHeader>
@@ -534,6 +538,16 @@ export function BitrixPercakapanManager() {
                         )}
                       </TableCell>
 
+                      {/* Status Respons */}
+                      <TableCell className="px-3 py-2">
+                        <Badge
+                          variant={c.responded ? "secondary" : "destructive"}
+                          className="rounded-full font-normal"
+                        >
+                          {c.responded ? "Sudah Dibalas" : "Belum Dibalas"}
+                        </Badge>
+                      </TableCell>
+
                       {/* Durasi */}
                       <TableCell className="px-3 py-2 text-right text-sm whitespace-nowrap">
                         {formatDuration(c.durationSec)}
@@ -582,147 +596,164 @@ export function BitrixPercakapanManager() {
         sessionId={selectedSession}
         onClose={() => setSelectedSession(null)}
       />
+
+      <Drawer
+        isOpen={filterOpen}
+        onClose={() => setFilterOpen(false)}
+        title="Filter Percakapan"
+        maxWidth="sm:max-w-md"
+      >
+        <FilterPanel
+          direction={direction}
+          status={status}
+          createdRange={createdRange}
+          transferred={transferredFilter}
+          responded={respondedFilter}
+          onApply={applyFilters}
+          onReset={resetFilters}
+        />
+      </Drawer>
     </div>
   );
 }
 
-// Grouped filter panel rendered inside the Filter popover. Holds its own draft
-// state so the parent only re-fetches when the user hits "Terapkan".
+// Grouped filter panel rendered inside the Filter drawer. Holds its own draft
+// state so the parent only re-fetches when the user hits "Terapkan". The
+// "Status" select is a merged UI control (see deriveCombinedStatus /
+// translateCombinedStatus) — the parent's separate status/responded state is
+// unchanged, only the presentation is combined into one control here.
 function FilterPanel({
   direction: initialDirection,
   status: initialStatus,
-  responsible: initialResponsible,
   createdRange: initialCreatedRange,
   transferred: initialTransferred,
-  salesOptions,
+  responded: initialResponded,
   onApply,
   onReset,
 }: {
   direction: string;
   status: string;
-  responsible: string;
   createdRange: DateRange | undefined;
   transferred: string;
-  salesOptions: { id: string; name: string }[];
-  onApply: (next: { direction: string; status: string; responsible: string; createdRange: DateRange | undefined; transferred: string }) => void;
+  responded: string;
+  onApply: (next: {
+    direction: string;
+    status: string;
+    createdRange: DateRange | undefined;
+    transferred: string;
+    responded: string;
+  }) => void;
   onReset: () => void;
 }) {
   const [direction, setDirection] = useState(initialDirection);
-  const [status, setStatus] = useState(initialStatus);
-  const [responsible, setResponsible] = useState(initialResponsible);
+  const [combinedStatus, setCombinedStatus] = useState(() =>
+    deriveCombinedStatus(initialStatus, initialResponded),
+  );
   const [createdRange, setCreatedRange] = useState<DateRange | undefined>(initialCreatedRange);
   const [transferred, setTransferred] = useState(initialTransferred);
 
   return (
-    <div className="flex flex-col">
-      <div className="flex items-center gap-2 border-b px-4 py-3">
-        <Tuning weight="BoldDuotone" className="h-4 w-4 text-muted-foreground" />
-        <h4 className="font-heading text-sm font-semibold">Filter Percakapan</h4>
-      </div>
-
-      <div className="space-y-4 px-4 py-4">
-        {/* By tanggal dibuat */}
-        <div className="space-y-1.5">
-          <div className="flex items-center justify-between">
-            <Label className="text-xs text-muted-foreground">Tanggal Dibuat</Label>
-            {createdRange?.from && (
-              <button
-                type="button"
-                onClick={() => setCreatedRange(undefined)}
-                className="text-xs font-medium text-primary hover:underline"
-              >
-                Bersihkan
-              </button>
-            )}
+    <div className="flex h-full flex-col">
+      <div className="flex-1 overflow-y-auto pr-1">
+        <div className="flex flex-col gap-6">
+          {/* By tanggal dibuat */}
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <Label className="text-xs text-muted-foreground">Tanggal Dibuat</Label>
+              {createdRange?.from && (
+                <button
+                  type="button"
+                  onClick={() => setCreatedRange(undefined)}
+                  className="text-xs font-medium text-primary hover:underline"
+                >
+                  Bersihkan
+                </button>
+              )}
+            </div>
+            <div className="flex justify-center rounded-xl border">
+              <Calendar mode="range" numberOfMonths={1} selected={createdRange} onSelect={setCreatedRange} />
+            </div>
           </div>
-          <div className="flex justify-center rounded-xl border">
-            <Calendar mode="range" numberOfMonths={1} selected={createdRange} onSelect={setCreatedRange} />
+
+          {/* By tipe */}
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">Tipe</Label>
+            <Select
+              value={direction === "" ? DIRECTION_ALL : direction}
+              onValueChange={(v) => setDirection(v === DIRECTION_ALL ? "" : v)}
+            >
+              <SelectTrigger className="w-full rounded-full">
+                <SelectValue placeholder="Semua tipe" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={DIRECTION_ALL}>Semua tipe</SelectItem>
+                {DIRECTION_OPTIONS.map((d) => (
+                  <SelectItem key={d.id} value={d.id}>
+                    {d.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* By status — merged Status + Status Respons into one control */}
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">Status</Label>
+            <Select
+              value={combinedStatus === "" ? STATUS_ALL : combinedStatus}
+              onValueChange={(v) => setCombinedStatus(v === STATUS_ALL ? "" : v)}
+            >
+              <SelectTrigger className="w-full rounded-full">
+                <SelectValue placeholder="Semua status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={STATUS_ALL}>Semua status</SelectItem>
+                {STATUS_COMBINED_OPTIONS.map((s) => (
+                  <SelectItem key={s.id} value={s.id}>
+                    {s.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* By transfer */}
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">Transfer</Label>
+            <Select value={transferred === "" ? TRANSFERRED_ALL : transferred} onValueChange={(v) => setTransferred(v === TRANSFERRED_ALL ? "" : v)}>
+              <SelectTrigger className="w-full rounded-full">
+                <SelectValue placeholder="Semua transfer" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={TRANSFERRED_ALL}>Semua transfer</SelectItem>
+                {TRANSFERRED_OPTIONS.map((t) => (
+                  <SelectItem key={t.id} value={t.id}>
+                    {t.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
         </div>
+      </div>
 
-        {/* By tipe */}
-        <div className="space-y-1.5">
-          <Label className="text-xs text-muted-foreground">Tipe</Label>
-          <Select
-            value={direction === "" ? DIRECTION_ALL : direction}
-            onValueChange={(v) => setDirection(v === DIRECTION_ALL ? "" : v)}
+      <div className="shrink-0 border-t bg-background px-0 pt-4">
+        <div className="flex items-center justify-between gap-2">
+          <Button variant="ghost" size="sm" className="rounded-full" onClick={onReset}>
+            <CloseCircle weight="BoldDuotone" className="h-4 w-4" />
+            Reset
+          </Button>
+          <Button
+            size="sm"
+            className="rounded-full"
+            onClick={() => {
+              const { status, responded } = translateCombinedStatus(combinedStatus);
+              onApply({ direction, status, createdRange, transferred, responded });
+            }}
           >
-            <SelectTrigger className="w-full rounded-full">
-              <SelectValue placeholder="Semua tipe" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={DIRECTION_ALL}>Semua tipe</SelectItem>
-              {DIRECTION_OPTIONS.map((d) => (
-                <SelectItem key={d.id} value={d.id}>
-                  {d.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            Terapkan
+          </Button>
         </div>
-
-        {/* By status */}
-        <div className="space-y-1.5">
-          <Label className="text-xs text-muted-foreground">Status</Label>
-          <Select value={status === "" ? STATUS_ALL : status} onValueChange={(v) => setStatus(v === STATUS_ALL ? "" : v)}>
-            <SelectTrigger className="w-full rounded-full">
-              <SelectValue placeholder="Semua status" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={STATUS_ALL}>Semua status</SelectItem>
-              {STATUS_OPTIONS.map((s) => (
-                <SelectItem key={s.id} value={s.id}>
-                  {s.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
-        {/* By transfer */}
-        <div className="space-y-1.5">
-          <Label className="text-xs text-muted-foreground">Transfer</Label>
-          <Select value={transferred === "" ? TRANSFERRED_ALL : transferred} onValueChange={(v) => setTransferred(v === TRANSFERRED_ALL ? "" : v)}>
-            <SelectTrigger className="w-full rounded-full">
-              <SelectValue placeholder="Semua transfer" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={TRANSFERRED_ALL}>Semua transfer</SelectItem>
-              {TRANSFERRED_OPTIONS.map((t) => (
-                <SelectItem key={t.id} value={t.id}>
-                  {t.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
-        {/* By sales */}
-        <div className="space-y-1.5">
-          <Label className="text-xs text-muted-foreground">Sales</Label>
-          <SearchableSelect
-            options={[
-              { id: RESPONSIBLE_ALL, name: "Semua sales" },
-              ...salesOptions.map((s) => ({ id: s.id, name: s.name })),
-            ]}
-            value={responsible === "" ? RESPONSIBLE_ALL : responsible}
-            onChange={(v) => setResponsible(v === RESPONSIBLE_ALL ? "" : v)}
-            placeholder="Semua sales"
-            searchPlaceholder="Cari sales..."
-            emptyText="Sales tidak ditemukan"
-            className="w-full"
-          />
-        </div>
-      </div>
-
-      <div className="flex items-center justify-between gap-2 border-t px-4 py-3">
-        <Button variant="ghost" size="sm" className="rounded-full" onClick={onReset}>
-          <CloseCircle weight="BoldDuotone" className="h-4 w-4" />
-          Reset
-        </Button>
-        <Button size="sm" className="rounded-full" onClick={() => onApply({ direction, status, responsible, createdRange, transferred })}>
-          Terapkan
-        </Button>
       </div>
     </div>
   );
