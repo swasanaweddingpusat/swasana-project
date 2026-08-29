@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { format } from "date-fns";
 import type { DateRange } from "react-day-picker";
 import {
@@ -17,11 +17,13 @@ import {
   CloseCircle,
   Download,
   FileText,
+  CalendarDate,
+  CheckCircle,
+  DangerCircle,
 } from "@solar-icons/react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -39,7 +41,9 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { Skeleton } from "@/components/ui/skeleton";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { cn } from "@/lib/utils";
+import { Drawer } from "@/components/shared/drawer";
 import {
   exportBitrixOverviewExcel,
   exportBitrixOverviewPdf,
@@ -50,12 +54,20 @@ import {
 const PIPELINE_ALL = "__all__";
 const STAGE_ALL = "__all__";
 const ISSUE_ALL = "__all__";
+const SALES_ALL = "__all__";
+const CLIENT_ALL = "__all__";
 const PIPELINE_OPTIONS: { id: string; name: string }[] = [
   { id: "5", name: "Kediaman" },
   { id: "0", name: "Swasana" },
   { id: "1", name: "Gunawarman" },
   { id: "3", name: "Pakubuwono" },
 ];
+
+// A resolved sales/client picked from an async SearchableSelect.
+interface PersonOption {
+  id: string;
+  name: string;
+}
 
 interface StageCatalogItem {
   name: string;
@@ -94,6 +106,7 @@ interface OverviewData {
   ads: AdBucket[];
   sales: SalesBucket[];
   venues: Bucket[];
+  responseStatus: { responded: number; notResponded: number };
   stageCatalog: StageCatalogItem[];
   issueCatalog: string[];
   error?: string;
@@ -117,14 +130,24 @@ function shortUrl(url: string): string {
   return url.replace(/^https?:\/\//i, "").replace(/\/$/, "");
 }
 
+// Format a date range for a Popover trigger label, e.g. "12 Agu – 15 Agu 2026"
+// (or a single date when from === to). Falls back to `placeholder` when empty.
+function formatDateRangeLabel(range: DateRange | undefined, placeholder: string): string {
+  if (!range?.from) return placeholder;
+  const from = format(range.from, "d MMM yyyy");
+  const to = range.to ? format(range.to, "d MMM yyyy") : from;
+  if (from === to) return from;
+  return `${from} – ${to}`;
+}
+
 // The full set of applied filters that drive a fetch.
 interface Filters {
   range: DateRange | undefined;
   pipeline: string; // "" = all
   stage: string; // "" = all (stage name)
   issue: string; // "" = all (issue label)
-  client: string;
-  sales: string;
+  client: PersonOption | null;
+  sales: PersonOption | null;
   dbRange: DateRange | undefined; // optional — "Tanggal Database" (UF_CRM_1786680629702)
 }
 
@@ -135,8 +158,8 @@ function initialFilters(): Filters {
     pipeline: "",
     stage: "",
     issue: "",
-    client: "",
-    sales: "",
+    client: null,
+    sales: null,
     dbRange: undefined,
   };
 }
@@ -181,8 +204,8 @@ export function BitrixOverview() {
         if (filters.pipeline) params.set("pipeline", filters.pipeline);
         if (filters.stage) params.set("stage", filters.stage);
         if (filters.issue) params.set("issue", filters.issue);
-        if (filters.client) params.set("client", filters.client);
-        if (filters.sales) params.set("sales", filters.sales);
+        if (filters.client) params.set("clientId", filters.client.id);
+        if (filters.sales) params.set("salesId", filters.sales.id);
         if (dbFrom) params.set("dbFrom", dbFrom);
         if (dbTo) params.set("dbTo", dbTo);
         const res = await fetch(`/api/bitrix/overview?${params.toString()}`);
@@ -263,31 +286,16 @@ export function BitrixOverview() {
             </DropdownMenuContent>
           </DropdownMenu>
 
-          {/* Filter — grouped popover: date, pipeline, tahap, client, sales */}
-          <Popover open={filterOpen} onOpenChange={setFilterOpen}>
-            <PopoverTrigger
-              render={
-                <Button variant="outline" className="shrink-0 rounded-full">
-                  <Tuning weight="BoldDuotone" className="h-4 w-4" />
-                  Filter
-                  {activeCount > 0 && (
-                    <Badge className="ml-1 h-5 min-w-5 justify-center rounded-full px-1.5 text-[10px]">
-                      {activeCount}
-                    </Badge>
-                  )}
-                </Button>
-              }
-            />
-            <PopoverContent className="w-auto max-w-[92vw] p-0" align="end">
-              <FilterPanel
-                initial={filters}
-                stageCatalog={stageCatalog}
-                issueCatalog={issueCatalog}
-                onApply={applyFilters}
-                onReset={resetFilters}
-              />
-            </PopoverContent>
-          </Popover>
+          {/* Filter — grouped drawer: date, pipeline, tahap, client, sales */}
+          <Button variant="outline" className="shrink-0 rounded-full" onClick={() => setFilterOpen(true)}>
+            <Tuning weight="BoldDuotone" className="h-4 w-4" />
+            Filter
+            {activeCount > 0 && (
+              <Badge className="ml-1 h-5 min-w-5 justify-center rounded-full px-1.5 text-[10px]">
+                {activeCount}
+              </Badge>
+            )}
+          </Button>
 
           <Button
             variant="outline"
@@ -338,6 +346,9 @@ export function BitrixOverview() {
             />
           </div>
 
+          {/* Response Status — sudah dibalas vs belum dibalas, filter-aware */}
+          <ResponseStatusCard data={data} loading={loading} />
+
           {/* Breakdown lists */}
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             <BreakdownCard
@@ -354,11 +365,25 @@ export function BitrixOverview() {
 
           <p className="px-1 text-xs text-muted-foreground">
             Data ditarik langsung dari CRM Bitrix24 (transaksi/deals dibuat pada rentang tanggal terpilih). Angka
-            dapat berbeda dari report harian manual yang memakai konvensi filter/zona waktu tersendiri. Metrik
-            respon/no-respon berasal dari tool chat dan tidak dihitung di sini.
+            dapat berbeda dari report harian manual yang memakai konvensi filter/zona waktu tersendiri.
           </p>
         </>
       )}
+
+      <Drawer
+        isOpen={filterOpen}
+        onClose={() => setFilterOpen(false)}
+        title="Filter Transaksi"
+        maxWidth="sm:max-w-md"
+      >
+        <FilterPanel
+          initial={filters}
+          stageCatalog={stageCatalog}
+          issueCatalog={issueCatalog}
+          onApply={applyFilters}
+          onReset={resetFilters}
+        />
+      </Drawer>
     </div>
   );
 }
@@ -382,149 +407,274 @@ function FilterPanel({
   const [pipeline, setPipeline] = useState(initial.pipeline);
   const [stage, setStage] = useState(initial.stage);
   const [issue, setIssue] = useState(initial.issue);
-  const [client, setClient] = useState(initial.client);
-  const [sales, setSales] = useState(initial.sales);
+  const [client, setClient] = useState<PersonOption | null>(initial.client);
+  const [sales, setSales] = useState<PersonOption | null>(initial.sales);
   const [dbRange, setDbRange] = useState<DateRange | undefined>(initial.dbRange);
 
+  // Nama Client — async search hits the server (Bitrix crm.contact.list typeahead)
+  // once the user types. There's no preloaded roster (unlike Sales), so the
+  // options list is just the last search results plus the currently-selected
+  // option (kept present so its label still shows once search is cleared).
+  const [clientQuery, setClientQuery] = useState("");
+  const [clientResults, setClientResults] = useState<PersonOption[]>([]);
+  const [clientSearching, setClientSearching] = useState(false);
+
+  useEffect(() => {
+    const q = clientQuery.trim();
+    if (!q) {
+      setClientResults([]);
+      setClientSearching(false);
+      return;
+    }
+    let cancelled = false;
+    setClientSearching(true);
+    void (async () => {
+      try {
+        const res = await fetch(`/api/bitrix/contacts?q=${encodeURIComponent(q)}`);
+        const json = (await res.json()) as PersonOption[] | { error?: string };
+        if (!cancelled && Array.isArray(json)) setClientResults(json);
+      } catch {
+        // Non-fatal — keep the previous results on the screen.
+      } finally {
+        if (!cancelled) setClientSearching(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [clientQuery]);
+
+  const clientOptions = useMemo(() => {
+    const opts = [...clientResults];
+    if (client && !opts.some((o) => o.id === client.id)) opts.unshift(client);
+    return opts;
+  }, [clientResults, client]);
+
+  // Sales — same async pattern (Bitrix user.search via /api/bitrix/sales?q=),
+  // replicated from the Transaksi filter panel.
+  const [salesQuery, setSalesQuery] = useState("");
+  const [salesResults, setSalesResults] = useState<PersonOption[]>([]);
+  const [salesSearching, setSalesSearching] = useState(false);
+
+  useEffect(() => {
+    const q = salesQuery.trim();
+    if (!q) {
+      setSalesResults([]);
+      setSalesSearching(false);
+      return;
+    }
+    let cancelled = false;
+    setSalesSearching(true);
+    void (async () => {
+      try {
+        const res = await fetch(`/api/bitrix/sales?q=${encodeURIComponent(q)}`);
+        const json = (await res.json()) as PersonOption[] | { error?: string };
+        if (!cancelled && Array.isArray(json)) setSalesResults(json);
+      } catch {
+        // Non-fatal — keep the previous results on the screen.
+      } finally {
+        if (!cancelled) setSalesSearching(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [salesQuery]);
+
+  const salesOptions = useMemo(() => {
+    const opts = [...salesResults];
+    if (sales && !opts.some((o) => o.id === sales.id)) opts.unshift(sales);
+    return opts;
+  }, [salesResults, sales]);
+
   return (
-    <div className="flex flex-col">
-      <div className="flex items-center gap-2 border-b px-4 py-3">
-        <Tuning weight="BoldDuotone" className="h-4 w-4 text-muted-foreground" />
-        <h4 className="font-heading text-sm font-semibold">Filter Transaksi</h4>
+    <div className="flex h-full flex-col">
+      <div className="flex-1 overflow-y-auto pr-1">
+        <div className="flex flex-col gap-6">
+          <div className="space-y-4">
+            {/* By date */}
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">Rentang Tanggal</Label>
+              <Popover>
+                <PopoverTrigger
+                  className={cn(
+                    "flex h-10 w-full items-center justify-between rounded-full border border-input bg-background px-4 text-sm",
+                    "hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                    !range?.from && "text-muted-foreground",
+                  )}
+                >
+                  <span className="truncate">{formatDateRangeLabel(range, "Pilih tanggal")}</span>
+                  <CalendarDate weight="BoldDuotone" className="h-4 w-4 shrink-0 text-muted-foreground" />
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar mode="range" numberOfMonths={2} selected={range} onSelect={setRange} autoFocus />
+                </PopoverContent>
+              </Popover>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              {/* By pipeline */}
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Pipeline</Label>
+                <Select
+                  value={pipeline === "" ? PIPELINE_ALL : pipeline}
+                  onValueChange={(v) => setPipeline(v === PIPELINE_ALL ? "" : v)}
+                >
+                  <SelectTrigger className="w-full rounded-full">
+                    <SelectValue placeholder="Semua pipeline" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={PIPELINE_ALL}>Semua pipeline</SelectItem>
+                    {PIPELINE_OPTIONS.map((p) => (
+                      <SelectItem key={p.id} value={p.id}>
+                        {p.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* By tahap */}
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Tahap</Label>
+                <Select value={stage === "" ? STAGE_ALL : stage} onValueChange={(v) => setStage(v === STAGE_ALL ? "" : v)}>
+                  <SelectTrigger className="w-full rounded-full">
+                    <SelectValue placeholder="Semua tahap" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={STAGE_ALL}>Semua tahap</SelectItem>
+                    {stageCatalog.map((s) => (
+                      <SelectItem key={s.name} value={s.name}>
+                        {s.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* By issue */}
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Issue</Label>
+                <Select value={issue === "" ? ISSUE_ALL : issue} onValueChange={(v) => setIssue(v === ISSUE_ALL ? "" : v)}>
+                  <SelectTrigger className="w-full rounded-full">
+                    <SelectValue placeholder="Semua issue" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={ISSUE_ALL}>Semua issue</SelectItem>
+                    {issueCatalog.map((label) => (
+                      <SelectItem key={label} value={label}>
+                        {label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* By nama client — async search hits Bitrix crm.contact.list */}
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Nama Client</Label>
+                <SearchableSelect
+                  options={[{ id: CLIENT_ALL, name: "Semua client" }, ...clientOptions]}
+                  value={client ? client.id : CLIENT_ALL}
+                  onChange={(v) => {
+                    if (v === CLIENT_ALL) {
+                      setClient(null);
+                      return;
+                    }
+                    const found = clientOptions.find((o) => o.id === v);
+                    if (found) setClient(found);
+                  }}
+                  onSearchChange={setClientQuery}
+                  loading={clientSearching}
+                  placeholder="Semua client"
+                  searchPlaceholder="Cari nama client..."
+                  emptyText="Client tidak ditemukan"
+                  className="w-full"
+                />
+              </div>
+
+              {/* By nama sales — async search hits Bitrix user.search */}
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Nama Sales</Label>
+                <SearchableSelect
+                  options={[{ id: SALES_ALL, name: "Semua sales" }, ...salesOptions]}
+                  value={sales ? sales.id : SALES_ALL}
+                  onChange={(v) => {
+                    if (v === SALES_ALL) {
+                      setSales(null);
+                      return;
+                    }
+                    const found = salesOptions.find((o) => o.id === v);
+                    if (found) setSales(found);
+                  }}
+                  onSearchChange={setSalesQuery}
+                  loading={salesSearching}
+                  placeholder="Semua sales"
+                  searchPlaceholder="Cari nama sales..."
+                  emptyText="Sales tidak ditemukan"
+                  className="w-full"
+                />
+              </div>
+            </div>
+
+            {/* By tanggal database — optional, independent from the mandatory range above */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <Label className="text-xs text-muted-foreground">Tanggal Database</Label>
+                {dbRange?.from && (
+                  <button
+                    type="button"
+                    onClick={() => setDbRange(undefined)}
+                    className="text-xs font-medium text-primary hover:underline"
+                  >
+                    Bersihkan
+                  </button>
+                )}
+              </div>
+              <Popover>
+                <PopoverTrigger
+                  className={cn(
+                    "flex h-10 w-full items-center justify-between rounded-full border border-input bg-background px-4 text-sm",
+                    "hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                    !dbRange?.from && "text-muted-foreground",
+                  )}
+                >
+                  <span className="truncate">{formatDateRangeLabel(dbRange, "Semua tanggal")}</span>
+                  <CalendarDate weight="BoldDuotone" className="h-4 w-4 shrink-0 text-muted-foreground" />
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar mode="range" numberOfMonths={1} selected={dbRange} onSelect={setDbRange} />
+                </PopoverContent>
+              </Popover>
+            </div>
+          </div>
+        </div>
       </div>
 
-      <div className="max-h-[60vh] space-y-4 overflow-y-auto px-4 py-4">
-        {/* By date */}
-        <div className="space-y-1.5">
-          <Label className="text-xs text-muted-foreground">Rentang Tanggal</Label>
-          <div className="flex justify-center rounded-xl border">
-            <Calendar mode="range" numberOfMonths={2} selected={range} onSelect={setRange} autoFocus />
-          </div>
+      <div className="shrink-0 border-t bg-background px-0 pt-4">
+        <div className="flex items-center justify-between gap-2">
+          <Button variant="ghost" size="sm" className="rounded-full" onClick={onReset}>
+            <CloseCircle weight="BoldDuotone" className="h-4 w-4" />
+            Reset
+          </Button>
+          <Button
+            size="sm"
+            className="rounded-full"
+            onClick={() =>
+              onApply({
+                range,
+                pipeline,
+                stage,
+                issue,
+                client,
+                sales,
+                dbRange,
+              })
+            }
+          >
+            Terapkan
+          </Button>
         </div>
-
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          {/* By pipeline */}
-          <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">Pipeline</Label>
-            <Select
-              value={pipeline === "" ? PIPELINE_ALL : pipeline}
-              onValueChange={(v) => setPipeline(v === PIPELINE_ALL ? "" : v)}
-            >
-              <SelectTrigger className="w-full rounded-full">
-                <SelectValue placeholder="Semua pipeline" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={PIPELINE_ALL}>Semua pipeline</SelectItem>
-                {PIPELINE_OPTIONS.map((p) => (
-                  <SelectItem key={p.id} value={p.id}>
-                    {p.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          {/* By tahap */}
-          <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">Tahap</Label>
-            <Select value={stage === "" ? STAGE_ALL : stage} onValueChange={(v) => setStage(v === STAGE_ALL ? "" : v)}>
-              <SelectTrigger className="w-full rounded-full">
-                <SelectValue placeholder="Semua tahap" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={STAGE_ALL}>Semua tahap</SelectItem>
-                {stageCatalog.map((s) => (
-                  <SelectItem key={s.name} value={s.name}>
-                    {s.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          {/* By issue */}
-          <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">Issue</Label>
-            <Select value={issue === "" ? ISSUE_ALL : issue} onValueChange={(v) => setIssue(v === ISSUE_ALL ? "" : v)}>
-              <SelectTrigger className="w-full rounded-full">
-                <SelectValue placeholder="Semua issue" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={ISSUE_ALL}>Semua issue</SelectItem>
-                {issueCatalog.map((label) => (
-                  <SelectItem key={label} value={label}>
-                    {label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          {/* By nama client */}
-          <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">Nama Client</Label>
-            <Input
-              value={client}
-              onChange={(e) => setClient(e.target.value)}
-              placeholder="Cari nama client…"
-              className="rounded-full"
-            />
-          </div>
-
-          {/* By nama sales */}
-          <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">Nama Sales</Label>
-            <Input
-              value={sales}
-              onChange={(e) => setSales(e.target.value)}
-              placeholder="Cari nama sales…"
-              className="rounded-full"
-            />
-          </div>
-        </div>
-
-        {/* By tanggal database — optional, independent from the mandatory range above */}
-        <div className="space-y-1.5">
-          <div className="flex items-center justify-between">
-            <Label className="text-xs text-muted-foreground">Tanggal Database</Label>
-            {dbRange?.from && (
-              <button
-                type="button"
-                onClick={() => setDbRange(undefined)}
-                className="text-xs font-medium text-primary hover:underline"
-              >
-                Bersihkan
-              </button>
-            )}
-          </div>
-          <div className="flex justify-center rounded-xl border">
-            <Calendar mode="range" numberOfMonths={1} selected={dbRange} onSelect={setDbRange} />
-          </div>
-        </div>
-      </div>
-
-      <div className="flex items-center justify-between gap-2 border-t px-4 py-3">
-        <Button variant="ghost" size="sm" className="rounded-full" onClick={onReset}>
-          <CloseCircle weight="BoldDuotone" className="h-4 w-4" />
-          Reset
-        </Button>
-        <Button
-          size="sm"
-          className="rounded-full"
-          onClick={() =>
-            onApply({
-              range,
-              pipeline,
-              stage,
-              issue,
-              client: client.trim(),
-              sales: sales.trim(),
-              dbRange,
-            })
-          }
-        >
-          Terapkan
-        </Button>
       </div>
     </div>
   );
@@ -550,6 +700,48 @@ function MetricCard({
           {value === null ? "…" : value.toLocaleString("id-ID")}
         </p>
         {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
+      </div>
+    </Card>
+  );
+}
+
+function ResponseStatusCard({ data, loading }: { data: OverviewData | null; loading: boolean }) {
+  const notResponded = data?.responseStatus.notResponded ?? 0;
+
+  return (
+    <Card className="rounded-xl p-5">
+      <div className="mb-4 flex items-center gap-2">
+        <ChatRoundLine weight="BoldDuotone" className="h-4 w-4 text-muted-foreground" />
+        <h3 className="font-heading text-sm font-semibold">Response Status</h3>
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        <div className="flex items-start gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-accent">
+            <CheckCircle weight="BoldDuotone" className="h-5 w-5 text-foreground" />
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground">Sudah Dibalas</p>
+            <p className="font-heading text-2xl font-semibold leading-tight">
+              {loading ? "…" : (data?.responseStatus.responded ?? 0).toLocaleString("id-ID")}
+            </p>
+          </div>
+        </div>
+        <div className="flex items-start gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-accent">
+            <DangerCircle weight="BoldDuotone" className="h-5 w-5 text-foreground" />
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground">Belum Dibalas</p>
+            <p
+              className={cn(
+                "font-heading text-2xl font-semibold leading-tight",
+                !loading && notResponded > 0 ? "text-destructive" : "text-foreground",
+              )}
+            >
+              {loading ? "…" : notResponded.toLocaleString("id-ID")}
+            </p>
+          </div>
+        </div>
       </div>
     </Card>
   );

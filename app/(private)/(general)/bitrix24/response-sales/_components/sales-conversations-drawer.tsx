@@ -4,6 +4,7 @@ import { useState } from "react";
 import { UserCircle, CallChatRounded, ChatRound, AltArrowRight } from "@solar-icons/react";
 import { Drawer } from "@/components/shared/drawer";
 import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
 import { PercakapanDetailDrawer } from "@/app/(private)/(general)/bitrix24/percakapan/_components/percakapan-detail-drawer";
 
 export interface SalesConversation {
@@ -78,7 +79,12 @@ export function SalesConversationsDrawer({
                   </div>
                 </div>
                 <div className="flex shrink-0 items-center gap-1.5">
-                  <span className="text-right text-xs font-medium tabular-nums">
+                  <span
+                    className={cn(
+                      "text-right text-xs font-medium tabular-nums",
+                      c.status === "Belum Dibalas" && "text-destructive",
+                    )}
+                  >
                     {c.status === "Belum Dibalas" ? "—" : formatDuration(c.avgResponseSec)}
                   </span>
                   <AltArrowRight weight="BoldDuotone" className="h-4 w-4 text-muted-foreground" />

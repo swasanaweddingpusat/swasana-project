@@ -1,6 +1,6 @@
 import { requirePermissionForRoute } from "@/lib/permissions";
 import { apiLimiter, rateLimitResponse } from "@/lib/rate-limit";
-import { bitrixListAll, resolveBitrixUsers, BitrixApiError } from "@/lib/bitrix";
+import { bitrixListAll, searchBitrixUsers, resolveBitrixUsers, BitrixApiError } from "@/lib/bitrix";
 import { avgSeconds } from "@/lib/bitrix-response";
 import { resolveSessionMetrics } from "@/lib/bitrix-session-metrics";
 import { parseSubject, channelFromSourceId } from "@/lib/bitrix-conversation";
@@ -64,6 +64,7 @@ interface ConversationRow {
   avgResponseSec: number | null;
   transferCount?: number;
   transferred?: boolean;
+  responded?: boolean;
 }
 
 const MAX_PAGES = 100; // up to 5000 rows.
@@ -91,37 +92,66 @@ export async function GET(request: Request) {
 }
 
 async function fetchFilteredConversations(searchParams: URLSearchParams): Promise<ConversationRow[]> {
-  const filter: Record<string, string> = { PROVIDER_ID };
+  // Base filter — everything EXCEPT "%SUBJECT" and RESPONSIBLE_ID, reused for
+  // both legs of the "q" union below (client OR sales), mirroring the on-screen
+  // GET route so the export matches what's shown.
+  const base: Record<string, unknown> = { PROVIDER_ID };
 
   const direction = searchParams.get("direction")?.trim();
-  if (direction === "1" || direction === "2") filter.DIRECTION = direction;
+  if (direction === "1" || direction === "2") base.DIRECTION = direction;
 
   const status = searchParams.get("status")?.trim();
-  if (status === "open") filter.COMPLETED = "N";
-  if (status === "closed") filter.COMPLETED = "Y";
+  if (status === "open") base.COMPLETED = "N";
+  if (status === "closed") base.COMPLETED = "Y";
 
   const q = searchParams.get("q")?.trim();
-  if (q) filter["%SUBJECT"] = q;
 
+  // Legacy sales filter — superseded by the "q" union below, kept tolerant.
   const responsibleId = searchParams.get("responsible")?.trim();
-  if (responsibleId) filter.RESPONSIBLE_ID = responsibleId;
+  if (responsibleId) base.RESPONSIBLE_ID = responsibleId;
 
   const createdFrom = searchParams.get("createdFrom")?.trim();
   const createdTo = searchParams.get("createdTo")?.trim();
-  if (isIsoDay(createdFrom)) filter[">=CREATED"] = `${createdFrom}T00:00:00`;
-  if (isIsoDay(createdTo)) filter["<CREATED"] = `${nextDay(createdTo)}T00:00:00`;
+  if (isIsoDay(createdFrom)) base[">=CREATED"] = `${createdFrom}T00:00:00`;
+  if (isIsoDay(createdTo)) base["<CREATED"] = `${nextDay(createdTo)}T00:00:00`;
 
   const transferred = searchParams.get("transferred")?.trim();
+  const responded = searchParams.get("responded")?.trim();
 
-  const { items } = await bitrixListAll<RawActivity>(
-    "crm.activity.list",
-    {
-      select: ACTIVITY_SELECT,
-      filter,
-      order: { ID: "DESC" },
-    },
-    MAX_PAGES,
-  );
+  let items: RawActivity[];
+
+  if (q) {
+    // Client OR sales: one query on SUBJECT, one on RESPONSIBLE_ID (only when
+    // "q" resolves to at least one Bitrix user), merged + deduped by ID.
+    const salesIds = (await searchBitrixUsers(q)).map((u) => u.id);
+
+    const subjectMatches = await bitrixListAll<RawActivity>(
+      "crm.activity.list",
+      { select: ACTIVITY_SELECT, filter: { ...base, "%SUBJECT": q }, order: { ID: "DESC" } },
+      MAX_PAGES,
+    );
+
+    const responsibleMatches =
+      salesIds.length > 0
+        ? await bitrixListAll<RawActivity>(
+            "crm.activity.list",
+            { select: ACTIVITY_SELECT, filter: { ...base, RESPONSIBLE_ID: salesIds }, order: { ID: "DESC" } },
+            MAX_PAGES,
+          )
+        : { items: [] as RawActivity[] };
+
+    const merged = new Map<string, RawActivity>();
+    for (const a of subjectMatches.items) merged.set(a.ID, a);
+    for (const a of responsibleMatches.items) merged.set(a.ID, a);
+    items = [...merged.values()].sort((a, b) => Number(b.ID) - Number(a.ID));
+  } else {
+    const res = await bitrixListAll<RawActivity>(
+      "crm.activity.list",
+      { select: ACTIVITY_SELECT, filter: base, order: { ID: "DESC" } },
+      MAX_PAGES,
+    );
+    items = res.items;
+  }
 
   const userMap = await resolveBitrixUsers(items.map((a) => a.RESPONSIBLE_ID ?? "").filter(Boolean));
 
@@ -136,7 +166,7 @@ async function fetchFilteredConversations(searchParams: URLSearchParams): Promis
       const parsed = parseSubject(a.SUBJECT);
       const sessionId = a.ASSOCIATED_ENTITY_ID ?? stripImol(a.ORIGIN_ID) ?? a.ID;
       const dealId = a.OWNER_TYPE_ID === "2" ? a.OWNER_ID : null;
-      const m = sessionMetrics[sessionId] ?? { samples: [], events: [] };
+      const m = sessionMetrics[sessionId] ?? { samples: [], events: [], hasPending: false };
 
       return {
         id: a.ID,
@@ -157,11 +187,14 @@ async function fetchFilteredConversations(searchParams: URLSearchParams): Promis
         avgResponseSec: m.samples.length > 0 ? avgSeconds(m.samples) : null,
         transferCount: m.events.length,
         transferred: m.events.length > 0,
+        responded: !m.hasPending,
       };
     })
     .filter((r) => {
-      if (transferred === "yes") return r.transferred;
-      if (transferred === "no") return !r.transferred;
+      if (transferred === "yes" && !r.transferred) return false;
+      if (transferred === "no" && r.transferred) return false;
+      if (responded === "yes" && !r.responded) return false;
+      if (responded === "no" && r.responded) return false;
       return true;
     });
 }
@@ -206,6 +239,10 @@ function fmtDuration(sec: number | null): string {
 function fmtResponse(sec: number | null, transferred?: boolean): string {
   if (sec !== null) return fmtDuration(sec);
   return transferred ? "Belum dibalas" : "Belum transfer";
+}
+
+function fmtStatusRespons(responded?: boolean): string {
+  return responded ? "Sudah Dibalas" : "Belum Dibalas";
 }
 
 // Detik/Menit/Jam columns — mirror the Detik/Menit/Jam columns shown ahead of
@@ -268,6 +305,7 @@ async function xlsxResponse(rows: ConversationRow[]): Promise<Response> {
     "Menit",
     "Jam",
     "Response",
+    "Status Respons",
     "Durasi",
   ];
   const headerRow = ws.addRow(headers);
@@ -294,6 +332,7 @@ async function xlsxResponse(rows: ConversationRow[]): Promise<Response> {
       fmtMenit(r.avgResponseSec),
       fmtJam(r.avgResponseSec),
       fmtResponse(r.avgResponseSec, r.transferred),
+      fmtStatusRespons(r.responded),
       fmtDuration(r.durationSec),
     ]);
   }
@@ -327,8 +366,8 @@ async function pdfResponse(rows: ConversationRow[]): Promise<Response> {
   const margin = 24;
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
-  const colWidths = [45, 40, 60, 70, 90, 80, 55, 70, 55, 85, 85, 40, 40, 50, 60, 60];
-  const headers = ["Sesi", "Tipe", "Status", "Saluran", "Klien", "Telepon", "Venue", "Karyawan", "Deal ID", "Dibuat", "Ditutup", "Detik", "Menit", "Jam", "Response", "Durasi"];
+  const colWidths = [45, 40, 60, 70, 90, 80, 55, 70, 55, 85, 85, 40, 40, 50, 60, 60, 60];
+  const headers = ["Sesi", "Tipe", "Status", "Saluran", "Klien", "Telepon", "Venue", "Karyawan", "Deal ID", "Dibuat", "Ditutup", "Detik", "Menit", "Jam", "Response", "Status Respons", "Durasi"];
   const tableLeft = margin;
   const tableWidth = pageWidth - margin * 2;
   const headerHeight = 20;
@@ -380,6 +419,7 @@ async function pdfResponse(rows: ConversationRow[]): Promise<Response> {
       fmtMenit(r.avgResponseSec),
       fmtJam(r.avgResponseSec),
       fmtResponse(r.avgResponseSec, r.transferred),
+      fmtStatusRespons(r.responded),
       fmtDuration(r.durationSec),
     ];
     const cellLines = cells.map((c, i) => doc.splitTextToSize(c, colWidths[i] - 6) as string[]);
