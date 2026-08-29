@@ -238,6 +238,27 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
       .map((r) => [r.entityId, r]),
   );
 
+  // A manually-uploaded PO lives on the CURRENT revision's client step. Mirror the
+  // revision-aware read in getBookingById: pick the client step for currentRevisionId
+  // (fallback to the first) so a stale past-revision step never hides — or fakes — one.
+  function getManualPO(
+    booking: BookingListItem,
+  ): { path: string; fileName?: string; fileType?: string } | null {
+    const record = approvalMap.get(booking.id);
+    if (!record) return null;
+    const clientSteps = record.steps
+      .filter((s) => s.approverType === "client")
+      .sort((a, b) => a.stepOrder - b.stepOrder);
+    const current =
+      clientSteps.find((s) => s.revisionId === booking.currentRevisionId) ?? clientSteps[0];
+    const uploaded = (current?.clientAgreementUploaded ?? null) as {
+      path?: string;
+      fileName?: string;
+      fileType?: string;
+    } | null;
+    return uploaded?.path ? { ...uploaded, path: uploaded.path } : null;
+  }
+
   const APPROVAL_STATUS_OPTIONS: { id: ApprovalStatusFilter | ""; name: string }[] = [
     { id: "", name: "Semua" },
     { id: "pending", name: "Pending (semua step)" },
@@ -254,12 +275,20 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
 
   // Open the PO preview in a modal (no new tab). The modal fetches + renders
   // the PDF itself; here we just point it at the booking / revision.
-  function previewPO(booking: BookingListItem, revisionId?: string, revLabel?: string) {
+  function previewPO(
+    booking: BookingListItem,
+    revisionId?: string,
+    revLabel?: string,
+    mode?: "auto" | "manual" | "digital",
+  ) {
     const base = booking.snapCustomer?.name ?? "Booking";
+    const modeLabel = mode === "manual" ? "PO Manual" : mode === "digital" ? "PO Digital" : null;
+    const suffix = revLabel ?? modeLabel;
     setPoPreviewTarget({
       bookingId: booking.id,
       revisionId,
-      label: revLabel ? `${base} · ${revLabel}` : base,
+      label: suffix ? `${base} · ${suffix}` : base,
+      mode,
     });
   }
 
@@ -377,18 +406,37 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
 
   /** Renders the DropdownMenuItems for the PO preview dropdown (shared between desktop & mobile). */
   function renderPoItems(booking: BookingListItem): React.ReactNode {
+    const manualPO = getManualPO(booking);
+    const revisions = revisionCache[booking.id] ?? [];
     return (
       <>
-        <DropdownMenuItem className="cursor-pointer" onClick={() => previewPO(booking)}>
-          Lihat Terbaru (Live)
+        {/* 1. PO Manual — only when staff uploaded a signed PO for the current revision */}
+        {manualPO && (
+          <>
+            <DropdownMenuItem className="cursor-pointer" onClick={() => previewPO(booking, undefined, undefined, "manual")}>
+              <FileSignature weight="BoldDuotone" className="mr-2 h-4 w-4 text-primary" />
+              <span className="flex-1">PO Manual</span>
+              <span className={cn('ml-2', 'rounded-full', 'bg-primary/10', 'px-2', 'py-0.5', 'text-[10px]', 'font-semibold', 'text-primary')}>
+                Upload
+              </span>
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+          </>
+        )}
+
+        {/* 2. PO Digital — the system-generated document (always generates, ignores upload) */}
+        <DropdownMenuItem className="cursor-pointer" onClick={() => previewPO(booking, undefined, undefined, "digital")}>
+          <Printer weight="BoldDuotone" className="mr-2 h-4 w-4 text-primary" />
+          PO Digital
         </DropdownMenuItem>
-        {(revisionCache[booking.id] ?? []).length > 0 && <DropdownMenuSeparator />}
-        {(revisionCache[booking.id] ?? []).map((rev) => (
-          <DropdownMenuItem key={rev.id} className="cursor-pointer" onClick={() => previewPO(booking, rev.id, `Rev ${rev.revisionNumber}`)}>
+        {revisions.map((rev) => (
+          <DropdownMenuItem key={rev.id} className="cursor-pointer" onClick={() => previewPO(booking, rev.id, `Rev ${rev.revisionNumber}`, "digital")}>
             <span className="truncate">Rev {rev.revisionNumber} — {rev.packageName}{rev.pax ? ` · ${rev.pax} PAX` : ""}</span>
           </DropdownMenuItem>
         ))}
+
         <DropdownMenuSeparator />
+        {/* 3. New PDF — theme V2 (Kediaman) */}
         <DropdownMenuItem className="cursor-pointer" onClick={() => previewNewPdf(booking)}>
           <DocumentText weight="BoldDuotone" className="mr-2 h-4 w-4 text-primary" />
           New PDF
@@ -994,7 +1042,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                       <TableHead className={cn('px-2', 'py-2', 'text-muted-foreground', 'hidden', 'sm:table-cell', 'w-[15%]')}>Venue & PO</TableHead>
                       <TableHead className={cn('px-2', 'py-2', 'text-muted-foreground', 'hidden', 'lg:table-cell', 'w-[14%]')}>Package</TableHead>
                       <TableHead className={cn('px-2', 'py-2', 'text-muted-foreground', 'hidden', 'sm:table-cell', 'w-[10%]')}>Event Date</TableHead>
-                      <TableHead className={cn('px-2', 'py-2', 'text-muted-foreground', 'hidden', 'lg:table-cell', 'w-[8%]')}>Activity</TableHead>
+                      <TableHead className={cn('px-2', 'py-2', 'text-muted-foreground', 'text-center', 'hidden', 'lg:table-cell', 'w-[5%]')}>Activity</TableHead>
                       <TableHead className={cn('px-2', 'py-2', 'text-muted-foreground', 'hidden', 'lg:table-cell', 'w-[8%]')}>Approval</TableHead>
                       <TableHead className={cn('px-1', 'py-2', 'text-muted-foreground', 'text-right', 'pr-5', 'w-[15%]')}>Action</TableHead>
                     </TableRow>
@@ -1019,8 +1067,8 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                         <TableCell className={cn('px-2', 'py-2', 'hidden', 'sm:table-cell')}>
                           <Skeleton className="h-4 w-20" />
                         </TableCell>
-                        <TableCell className={cn('px-2', 'py-2', 'hidden', 'lg:table-cell')}>
-                          <Skeleton className="h-4 w-12" />
+                        <TableCell className={cn('px-2', 'py-2', 'hidden', 'lg:table-cell', 'text-center')}>
+                          <Skeleton className="h-8 w-8 rounded-full mx-auto" />
                         </TableCell>
                         <TableCell className={cn('px-2', 'py-2', 'hidden', 'lg:table-cell')}>
                           <Skeleton className="h-5 w-16 rounded-full" />
@@ -1071,7 +1119,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                     <TableHead className={cn('px-2', 'py-2', 'text-muted-foreground', 'hidden', 'sm:table-cell', 'w-[15%]')}>Venue & PO</TableHead>
                     <TableHead className={cn('px-2', 'py-2', 'text-muted-foreground', 'hidden', 'lg:table-cell', 'w-[14%]')}>Package</TableHead>
                     <TableHead className={cn('px-2', 'py-2', 'text-muted-foreground', 'hidden', 'sm:table-cell', 'w-[10%]')}>Event Date</TableHead>
-                    <TableHead className={cn('px-2', 'py-2', 'text-muted-foreground', 'hidden', 'lg:table-cell', 'w-[8%]')}>Activity</TableHead>
+                    <TableHead className={cn('px-2', 'py-2', 'text-muted-foreground', 'text-center', 'hidden', 'lg:table-cell', 'w-[5%]')}>Activity</TableHead>
                     <TableHead className={cn('px-2', 'py-2', 'text-muted-foreground', 'hidden', 'lg:table-cell', 'w-[8%]')}>Approval</TableHead>
                     <TableHead className={cn('px-1', 'py-2', 'text-muted-foreground', 'text-right', 'pr-5', 'w-[15%]')}>Action</TableHead>
                   </TableRow>
@@ -1135,6 +1183,13 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                               <span className={cn("w-1 h-1 rounded-full mr-1", STATUS_DOT[booking.bookingStatus] ?? "bg-muted-foreground")} />
                               {booking.bookingStatus}
                             </span>
+                            {/* PO Manual marker — a signed PO was uploaded to the system for this revision */}
+                            {getManualPO(booking) && (
+                              <span className={cn('inline-flex', 'items-center', 'gap-1', 'px-1.5', 'py-0.5', 'rounded-full', 'bg-primary/10', 'text-[10px]', 'font-semibold', 'text-primary')}>
+                                <FileSignature weight="BoldDuotone" className="h-3 w-3 shrink-0" />
+                                PO Manual
+                              </span>
+                            )}
                             {/* Session badge */}
                             {booking.weddingSession && (
                               <span className={cn("inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium", SESSION_STYLE[booking.weddingSession] ?? "bg-muted text-muted-foreground")}>
@@ -1202,14 +1257,18 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                         {booking.eventDate ? format(new Date(booking.eventDate), "MMM dd, yyyy") : "—"}
                       </TableCell>
 
-                      {/* Activity */}
-                      <TableCell className={cn('px-2', 'py-2', 'hidden', 'lg:table-cell')}>
-                        <button
-                          onClick={(e) => { e.stopPropagation(); setActivityLogTarget(booking); }}
-                          className={cn('cursor-pointer', 'text-xs', 'text-muted-foreground', 'hover:text-foreground', 'underline', 'underline-offset-2')}
-                        >
-                          Lihat Activity
-                        </button>
+                      {/* Activity — icon-only to reclaim width for the Customer chips row */}
+                      <TableCell className={cn('px-2', 'py-2', 'hidden', 'lg:table-cell', 'text-center')}>
+                        <Tooltip>
+                          <TooltipTrigger
+                            onClick={(e) => { e.stopPropagation(); setActivityLogTarget(booking); }}
+                            aria-label="Lihat Activity"
+                            className={cn('inline-flex', 'items-center', 'justify-center', 'h-8', 'w-8', 'rounded-full', 'text-muted-foreground', 'hover:bg-muted', 'hover:text-foreground', 'transition-colors', 'cursor-pointer')}
+                          >
+                            <ClockCircle weight="BoldDuotone" className="h-4 w-4" />
+                          </TooltipTrigger>
+                          <TooltipContent side="bottom">Lihat Activity</TooltipContent>
+                        </Tooltip>
                       </TableCell>
 
                       {/* Approval */}

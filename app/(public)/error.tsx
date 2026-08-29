@@ -43,6 +43,21 @@ function isChunkLoadError(error: (Error & { digest?: string }) | undefined): boo
   );
 }
 
+/**
+ * Version skew: this cached HTML shell references a Server Action ID from an
+ * older/newer deployment, so its POST fails with "Failed to find Server Action".
+ * Same root cause as a stale chunk — the fix is the same self-heal (fetch the
+ * fresh shell), so it must trigger the auto-reload below too.
+ */
+function isVersionSkewError(error: (Error & { digest?: string }) | undefined): boolean {
+  if (!error) return false;
+  const msg = error.message ?? "";
+  return (
+    /Failed to find Server Action/i.test(msg) ||
+    /older or newer deployment/i.test(msg)
+  );
+}
+
 /** Best-effort detection of embedded webviews (chat apps' in-app browsers). */
 function isInAppBrowser(): boolean {
   if (typeof navigator === "undefined") return false;
@@ -86,6 +101,43 @@ function reloadGuard() {
   };
 }
 
+/**
+ * Report the real error to the server ONCE so it lands in Railway logs. These
+ * clients are external devices we can't inspect; without this, the boundary card
+ * is all we ever see and the actual error (ChunkLoadError vs a genuine crash)
+ * stays invisible. Uses sendBeacon so the report survives the immediate reload
+ * the self-heal triggers; falls back to keepalive fetch.
+ */
+function reportError(
+  error: (Error & { digest?: string }) | undefined,
+  kind: "chunk-load" | "version-skew" | "unknown",
+): void {
+  if (!error) return;
+  try {
+    const payload = JSON.stringify({
+      name: error.name,
+      message: error.message,
+      digest: error.digest,
+      url: window.location.href,
+      userAgent: navigator.userAgent,
+      kind,
+    });
+    const beacon = navigator.sendBeacon?.bind(navigator);
+    if (beacon) {
+      beacon("/api/client-log", new Blob([payload], { type: "application/json" }));
+      return;
+    }
+    void fetch("/api/client-log", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: payload,
+      keepalive: true,
+    });
+  } catch {
+    /* reporting is best-effort — never let it throw over the error UI */
+  }
+}
+
 /** Drop any SW registration + Cache Storage so the next load is fully fresh. */
 async function purgeCaches(): Promise<void> {
   try {
@@ -120,11 +172,25 @@ export default function PublicError({
     setInApp(isInAppBrowser());
   }, []);
 
-  // Auto-reload once on a chunk error — the cached shell is stale, a fresh GET
-  // pulls the current chunks. The guard (sessionStorage OR a URL flag) makes this
-  // fire at most once so a genuinely broken page doesn't reload forever.
+  // Report the real error to Railway logs exactly once, classified so version
+  // skew can be filtered from genuine crashes. Fires BEFORE the auto-reload below
+  // so the report is sent even when we immediately navigate away.
   React.useEffect(() => {
-    if (!isChunkLoadError(error)) return;
+    const kind = isChunkLoadError(error)
+      ? "chunk-load"
+      : isVersionSkewError(error)
+        ? "version-skew"
+        : "unknown";
+    reportError(error, kind);
+  }, [error]);
+
+  // Auto-reload once on a stale-shell error — either a chunk the new deploy
+  // removed, or a Server Action ID the new deploy no longer recognizes (version
+  // skew). A fresh GET pulls the current shell + chunks + action IDs. The guard
+  // (sessionStorage OR a URL flag) makes this fire at most once so a genuinely
+  // broken page doesn't reload forever.
+  React.useEffect(() => {
+    if (!isChunkLoadError(error) && !isVersionSkewError(error)) return;
     const guard = reloadGuard();
     if (guard.alreadyReloaded) return;
     void purgeCaches().then(() => guard.markAndReload());

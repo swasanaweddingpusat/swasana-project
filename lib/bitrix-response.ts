@@ -1,4 +1,5 @@
 import type { SessionHistory, SessionHistoryMessage } from "@/lib/bitrix";
+import { BITRIX_QUEUE_USER_IDS } from "@/lib/bitrix-accounts";
 
 export interface ResponseSample {
   userId: string;
@@ -35,14 +36,35 @@ export function extractTransferTarget(text: string): string | null {
 
 /**
  * Walk a session's message history and compute one response sample per
- * assign/transfer AFTER the initial default assignment.
+ * customer message that an agent actually replied to.
  *
- * The FIRST assign/transfer event is the default queue assignment (e.g.
- * "Permintaan ditugaskan kepada Kediaman Corp") — it is NOT a response-timing
- * event. Timing starts from the 2nd event onwards: the time from when an agent
- * received the conversation (assign/transfer system message) to that agent's
- * first subsequent message. This matches how response time is measured in the
- * Response Sales report.
+ * A sample is timed from an ANCHOR to the next agent message. The anchor is
+ * either the earliest unanswered customer message, OR — for a chat handed to a
+ * real sales — the transfer/assign moment (see pass 2). A sales is measured
+ * from when the chat reached them, so a transfer RESETS the anchor: the incoming
+ * sales isn't charged for the customer's wait before the handoff. Once an agent
+ * message consumes the anchor it clears — so a follow-up/nudge from an agent
+ * with nothing pending (e.g. "belum dibales, follow up lagi besok") produces NO
+ * sample. If the customer sends several messages before any agent replies, the
+ * FIRST of that burst is the anchor. A chat transferred to several sales in turn
+ * yields one sample per sales, each timed from its own handoff.
+ *
+ * Queue/bot accounts (`BITRIX_QUEUE_USER_IDS`, e.g. "Kediaman Corp" #56663)
+ * auto-greet a customer before the chat is transferred to a real sales. If a
+ * session IS later transferred to a non-queue user, the queue account's
+ * messages are IGNORED for timing — they neither create a sample nor clear
+ * the pending customer message, so the real sales' later reply gets measured
+ * from the customer's message and the bot's near-instant greeting stays out
+ * of the response pool. If a session is NOT transferred to a real sales (the
+ * queue account genuinely handled it end to end), the queue account is timed
+ * like any other agent so it still appears in the report.
+ *
+ * Assign/transfer system messages no longer gate timing (previous behavior
+ * only measured the first reply after a handoff) — they are walked in pass 1
+ * purely to build the `events` transfer-history log (and to detect whether a
+ * real-sales transfer happened), unrelated to `samples`. The FIRST
+ * assign/transfer event is the default queue assignment (e.g. "Permintaan
+ * ditugaskan kepada Kediaman Corp") and is excluded from that log.
  *
  * Customer messages are identified via `users.*.connector === true`; system
  * messages use `senderid === "0"`. Everything else is treated as an agent.
@@ -65,41 +87,68 @@ export function parseResponseSamples(history: SessionHistory): {
 
   const sorted = [...messages].sort((a, b) => Date.parse(a.date) - Date.parse(b.date));
 
-  // userId → assign/transfer timestamp. Only the latest open assignment per
-  // agent is tracked; a new assignment overwrites any pending one.
-  const pending = new Map<string, string>();
-
-  // The first assign/transfer event is the DEFAULT queue assignment — skip it
-  // entirely (no sample, no history entry). Timing starts from the 2nd event.
+  // Pass 1 — build the transfer-history log. The first assign/transfer event is
+  // the DEFAULT queue assignment, excluded entirely; logged from the 2nd on.
   let isFirstEvent = true;
+  for (const msg of sorted) {
+    if (msg.senderid !== "0") continue;
+    const target = extractTransferTarget(msg.text);
+    if (!target) continue;
+    if (isFirstEvent) {
+      isFirstEvent = false;
+      continue;
+    }
+    events.push({ at: msg.date, fromUserId: extractTransferFrom(msg), toUserId: target });
+  }
+
+  // The chat was handed off to a real sales if any transfer targets a
+  // non-queue user. When true, queue-account messages are ignored for timing.
+  const transferredToRealSales = events.some((e) => !BITRIX_QUEUE_USER_IDS.has(e.toUserId));
+
+  // Pass 2 — compute response samples.
+  // Timestamp of the anchor an agent still owes a reply to. Two things set it:
+  //   • an unanswered CUSTOMER message (front-desk/queue pickup case), or
+  //   • a TRANSFER/ASSIGN to a real sales — the handoff moment. A sales is
+  //     measured from when the chat reached them, not from the customer's
+  //     earlier wait, so a transfer RESETS the anchor to the handoff time.
+  // The first agent reply after the anchor produces one sample credited to that
+  // agent, then the anchor clears. This is why a chat handed to several sales in
+  // turn yields one sample per sales (each timed from their own handoff), and a
+  // sales who greets after a transfer with no customer message pending still
+  // gets measured.
+  let pendingAt: string | null = null;
 
   for (const msg of sorted) {
     const sender = msg.senderid;
 
     if (sender === "0") {
+      // Handoff to a real sales starts (resets) the clock. Generic queue
+      // assignment ("semua agen dalam antrean" — no [USER]) and handoffs whose
+      // target is a queue/bot account don't start a clock.
       const target = extractTransferTarget(msg.text);
-      if (target) {
-        if (isFirstEvent) {
-          isFirstEvent = false;
-          continue;
-        }
-        const from = extractTransferFrom(msg);
-        pending.set(target, msg.date);
-        events.push({ at: msg.date, fromUserId: from, toUserId: target });
-      }
+      if (target && !BITRIX_QUEUE_USER_IDS.has(target)) pendingAt = msg.date;
       continue;
     }
 
-    if (customerIds.has(sender)) continue;
-
-    const assignedAt = pending.get(sender);
-    if (!assignedAt) continue;
-
-    const seconds = diffSeconds(assignedAt, msg.date);
-    if (seconds !== null && seconds >= 0) {
-      samples.push({ userId: sender, seconds });
+    if (customerIds.has(sender)) {
+      if (!pendingAt) pendingAt = msg.date;
+      continue;
     }
-    pending.delete(sender);
+
+    // Queue/bot account on a chat that a real sales later took over: ignore it
+    // entirely — no sample, and the pending anchor survives so the real sales'
+    // reply is what gets measured.
+    if (transferredToRealSales && BITRIX_QUEUE_USER_IDS.has(sender)) continue;
+
+    // Agent message — only a response if an anchor is still waiting. A follow-up
+    // with nothing pending is ignored entirely.
+    if (pendingAt) {
+      const seconds = diffSeconds(pendingAt, msg.date);
+      if (seconds !== null && seconds >= 0) {
+        samples.push({ userId: sender, seconds });
+      }
+      pendingAt = null;
+    }
   }
 
   return { samples, events };

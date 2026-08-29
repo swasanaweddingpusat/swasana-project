@@ -84,6 +84,7 @@ export function ResponseSalesManager() {
     const y = yesterday();
     return { from: y, to: y };
   });
+  const [dbRange, setDbRange] = useState<DateRange | undefined>(undefined);
   const [filterOpen, setFilterOpen] = useState(false);
   const [rows, setRows] = useState<ResponseSalesRow[]>([]);
   const [grandTotal, setGrandTotal] = useState<GrandTotal | null>(null);
@@ -111,6 +112,8 @@ export function ResponseSalesManager() {
 
   const from = range?.from ? toIsoDay(range.from) : "";
   const to = range?.to ? toIsoDay(range.to) : from;
+  const dbFrom = dbRange?.from ? toIsoDay(dbRange.from) : "";
+  const dbTo = dbRange?.from ? toIsoDay(dbRange.to ?? dbRange.from) : "";
 
   useEffect(() => {
     const t = setTimeout(() => {
@@ -120,14 +123,20 @@ export function ResponseSalesManager() {
   }, [search]);
 
   useEffect(() => {
-    if (!from) return;
+    // Either a primary range OR a Tanggal Database range is enough to fetch —
+    // clearing the primary date but setting a DB date still drives a query.
+    if (!from && !dbFrom) return;
     let cancelled = false;
     void (async () => {
       setLoading(true);
       setError(null);
       try {
-        const params = new URLSearchParams({ from, to });
+        const params = new URLSearchParams();
+        if (from) params.set("from", from);
+        if (to) params.set("to", to);
         if (query) params.set("sales", query);
+        if (dbFrom) params.set("dbFrom", dbFrom);
+        if (dbTo) params.set("dbTo", dbTo);
         const res = await fetch(`/api/bitrix/response-sales?${params.toString()}`);
         const json = (await res.json()) as ApiResponse;
         if (cancelled) return;
@@ -149,20 +158,16 @@ export function ResponseSalesManager() {
     return () => {
       cancelled = true;
     };
-  }, [from, to, query, reloadKey]);
-
-  function applyRange(next: DateRange | undefined) {
-    setRange(next);
-    setFilterOpen(false);
-  }
+  }, [from, to, query, dbFrom, dbTo, reloadKey]);
 
   function resetRange() {
     const y = yesterday();
     setRange({ from: y, to: y });
+    setDbRange(undefined);
     setFilterOpen(false);
   }
 
-  const activeCount = range?.from ? 1 : 0;
+  const activeCount = (range?.from ? 1 : 0) + (dbRange?.from ? 1 : 0);
 
   return (
     <div className="flex flex-col gap-4">
@@ -234,10 +239,41 @@ export function ResponseSalesManager() {
                   <Tuning weight="BoldDuotone" className="h-4 w-4 text-muted-foreground" />
                   <h4 className="font-heading text-sm font-semibold">Filter Tanggal</h4>
                 </div>
-                <div className="space-y-1.5 px-4 py-4">
-                  <Label className="text-xs text-muted-foreground">Rentang Tanggal</Label>
-                  <div className="flex justify-center rounded-xl border">
-                    <Calendar mode="range" numberOfMonths={2} selected={range} onSelect={applyRange} autoFocus />
+                <div className="space-y-4 px-4 py-4">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground">Rentang Tanggal</Label>
+                    <div
+                      className={cn(
+                        "flex justify-center rounded-xl border",
+                        dbRange?.from && "opacity-50",
+                      )}
+                    >
+                      <Calendar mode="range" numberOfMonths={2} selected={range} onSelect={setRange} autoFocus />
+                    </div>
+                    {dbRange?.from && (
+                      <p className="text-xs text-muted-foreground">
+                        Diabaikan saat filter Tanggal Database aktif.
+                      </p>
+                    )}
+                  </div>
+
+                  {/* By tanggal database — optional, independent from the mandatory range above */}
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-xs text-muted-foreground">Tanggal Database</Label>
+                      {dbRange?.from && (
+                        <button
+                          type="button"
+                          onClick={() => setDbRange(undefined)}
+                          className="text-xs font-medium text-primary hover:underline"
+                        >
+                          Bersihkan
+                        </button>
+                      )}
+                    </div>
+                    <div className="flex justify-center rounded-xl border">
+                      <Calendar mode="range" numberOfMonths={1} selected={dbRange} onSelect={setDbRange} />
+                    </div>
                   </div>
                 </div>
                 <div className="flex items-center justify-between gap-2 border-t px-4 py-3">
@@ -312,7 +348,9 @@ export function ResponseSalesManager() {
                       <TableCell className="px-3 py-2">
                         <div className="flex flex-col">
                           <span className="font-medium text-foreground">{r.name}</span>
-                          <span className="text-xs text-muted-foreground">{r.samples} percakapan</span>
+                          <span className="text-xs text-muted-foreground">
+                            {r.conversations.length} percakapan · {r.samples} respons
+                          </span>
                         </div>
                       </TableCell>
                       <TableCell className="px-3 py-2 text-right tabular-nums">{r.seconds.toLocaleString("id-ID")}</TableCell>
@@ -345,9 +383,10 @@ export function ResponseSalesManager() {
       </Card>
 
       <p className="px-1 text-xs text-muted-foreground">
-        Waktu respons dihitung dari saat percakapan ditugaskan/ditransfer ke sales hingga sales mengirim pesan
-        pertama. Dihitung langsung dari riwayat Open Lines Bitrix24 — Bitrix tidak menyediakan statistik respons
-        lewat REST API.
+        Waktu respons dihitung dari saat sales menerima percakapan (via transfer/antrean) atau dari pesan pelanggan
+        yang belum dibalas, hingga sales mengirim balasan pertama. Chat yang dioper ke beberapa sales dihitung
+        terpisah per sales. Dihitung langsung dari riwayat Open Lines Bitrix24 — Bitrix tidak menyediakan statistik
+        respons lewat REST API.
       </p>
 
       <SalesConversationsDrawer

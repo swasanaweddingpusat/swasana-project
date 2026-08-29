@@ -9,11 +9,19 @@ import {
 import { avgSeconds, type ResponseSample } from "@/lib/bitrix-response";
 import { resolveSessionMetrics } from "@/lib/bitrix-session-metrics";
 import { parseSubject, channelFromSourceId } from "@/lib/bitrix-conversation";
+import { BITRIX_USER_NAME_OVERRIDES } from "@/lib/bitrix-accounts";
 
 const PROVIDER_ID = "IMOPENLINES_SESSION";
 
+// "Tanggal Database" — a date-only custom field on the DEAL (when the lead
+// entered the database). Response Sales works on Open Lines activities, so this
+// filter is resolved via each activity's linked deal (OWNER_ID / OWNER_TYPE_ID).
+const UF_DB_DATE = "UF_CRM_1786680629702";
+
 const ACTIVITY_SELECT = [
   "ID",
+  "OWNER_ID",
+  "OWNER_TYPE_ID",
   "ASSOCIATED_ENTITY_ID",
   "ORIGIN_ID",
   "RESPONSIBLE_ID",
@@ -29,6 +37,8 @@ const ACTIVITY_SELECT = [
 
 interface RawActivity {
   ID: string;
+  OWNER_ID: string | null;
+  OWNER_TYPE_ID: string | null;
   ASSOCIATED_ENTITY_ID: string | null;
   ORIGIN_ID: string | null;
   RESPONSIBLE_ID: string | null;
@@ -62,11 +72,18 @@ interface ResponseSalesRow {
 
 /**
  * GET /api/bitrix/response-sales?from=2026-08-13&to=2026-08-13&sales=tiara
+ *   &dbFrom=2026-08-01&dbTo=2026-08-13
  *
  * Aggregates the average sales response time across Open Lines conversations
- * created within [from, to]. Response time is measured per assignment/transfer:
- * from the system event that assigns a session to a specific agent until that
- * agent's first message afterwards.
+ * created within [from, to]. When dbFrom/dbTo is set, the fetch instead drives
+ * from DEALS whose "Tanggal Database" (UF_DB_DATE) is in that window and loads
+ * the Open Lines sessions those deals own (the CREATED range is ignored) — see
+ * `dealIdsByDbDate` / `sessionsOwnedByDeals`. The database date is typically a
+ * few days AFTER the chat was created, so a CREATED-range fetch would miss those
+ * sessions entirely. Response time is measured per customer message:
+ * from the earliest unanswered customer message to the next agent reply. An
+ * agent follow-up with no new customer message pending produces no sample
+ * (see `parseResponseSamples` in lib/bitrix-response.ts).
  *
  * Bitrix exposes no bulk response-time statistic, so this walks each session's
  * `imopenlines.session.history.get` (batched 50 at a time) and computes the
@@ -82,25 +99,42 @@ export async function GET(request: Request) {
   const from = isIsoDay(searchParams.get("from")) ? (searchParams.get("from") as string) : yesterday();
   const to = isIsoDay(searchParams.get("to")) ? (searchParams.get("to") as string) : from;
   const salesQuery = searchParams.get("sales")?.trim().toLowerCase() ?? "";
+  const dbFrom = searchParams.get("dbFrom")?.trim() ?? "";
+  const dbTo = searchParams.get("dbTo")?.trim() ?? "";
 
   try {
-    const filter: Record<string, string> = {
-      PROVIDER_ID,
-      ">=CREATED": `${from}T00:00:00`,
-      "<CREATED": `${nextDay(to)}T00:00:00`,
-    };
+    // Two fetch modes:
+    //  • Tanggal Database active → drive from DEALS. The "database date" is
+    //    typically a few days AFTER the chat was created, so a CREATED-range fetch
+    //    would miss those sessions entirely. Resolve deals whose UF_DB_DATE is in
+    //    [dbFrom, dbTo], then load the Open Lines sessions those deals own. The
+    //    CREATED range is intentionally ignored in this mode — the database date
+    //    is the intended filter.
+    //  • Otherwise → the default CREATED-range fetch.
+    const dbActive = isIsoDay(dbFrom) || isIsoDay(dbTo);
 
-    const { items } = await bitrixListAll<RawActivity>("crm.activity.list", {
-      select: ACTIVITY_SELECT,
-      filter,
-      order: { CREATED: "ASC" },
-    });
+    let activities: RawActivity[];
+    if (dbActive) {
+      const dealIds = await dealIdsByDbDate(dbFrom, dbTo);
+      activities = dealIds.length > 0 ? await sessionsOwnedByDeals(dealIds) : [];
+    } else {
+      const { items } = await bitrixListAll<RawActivity>("crm.activity.list", {
+        select: ACTIVITY_SELECT,
+        filter: {
+          PROVIDER_ID,
+          ">=CREATED": `${from}T00:00:00`,
+          "<CREATED": `${nextDay(to)}T00:00:00`,
+        },
+        order: { CREATED: "ASC" },
+      });
+      activities = items;
+    }
 
-    const userMap = await resolveBitrixUsers(items.map((a) => a.RESPONSIBLE_ID ?? "").filter(Boolean));
+    const userMap = await resolveBitrixUsers(activities.map((a) => a.RESPONSIBLE_ID ?? "").filter(Boolean));
 
     // sessionId → display metadata for the conversation list.
     const activityBySession = new Map<string, RawActivity>();
-    for (const a of items) {
+    for (const a of activities) {
       const sessionId = a.ASSOCIATED_ENTITY_ID ?? stripImol(a.ORIGIN_ID) ?? a.ID;
       if (sessionId) activityBySession.set(sessionId, a);
     }
@@ -158,7 +192,7 @@ export async function GET(request: Request) {
 
         return {
           userId,
-          name: userMap[userId] ?? `#${userId}`,
+          name: BITRIX_USER_NAME_OVERRIDES[userId] ?? userMap[userId] ?? `#${userId}`,
           samples: samples.length,
           avgSeconds: avg,
           seconds: avg,
@@ -182,7 +216,7 @@ export async function GET(request: Request) {
     return Response.json({
       from,
       to,
-      totalSessions: items.length,
+      totalSessions: activities.length,
       rows,
       grandTotal: grand,
     });
@@ -194,6 +228,52 @@ export async function GET(request: Request) {
     console.error("[api/bitrix/response-sales]", e);
     return Response.json({ error: "Gagal menghitung response sales." }, { status: 500 });
   }
+}
+
+/**
+ * Resolve the deal ids whose "Tanggal Database" (UF_DB_DATE) falls inside
+ * [dbFrom, dbTo]. The "to" bound is inclusive (bare ISO day, matching the
+ * Overview/deals filter). At least one bound must be a valid ISO day — callers
+ * only invoke this when `dbActive` is true.
+ */
+async function dealIdsByDbDate(dbFrom: string, dbTo: string): Promise<string[]> {
+  const filter: Record<string, unknown> = {};
+  if (isIsoDay(dbFrom)) filter[`>=${UF_DB_DATE}`] = dbFrom;
+  if (isIsoDay(dbTo)) filter[`<=${UF_DB_DATE}`] = dbTo;
+
+  const { items } = await bitrixListAll<{ ID: string }>("crm.deal.list", {
+    select: ["ID"],
+    filter,
+    order: { ID: "ASC" },
+  });
+  return [...new Set(items.map((d) => String(d.ID)))];
+}
+
+/**
+ * Load the Open Lines sessions (activities) owned by the given deals. An
+ * activity belongs to a deal when OWNER_TYPE_ID is "2" and OWNER_ID is the deal
+ * id. Deal ids are chunked (100 per request) to keep the filter payload sane.
+ */
+async function sessionsOwnedByDeals(dealIds: string[]): Promise<RawActivity[]> {
+  const out: RawActivity[] = [];
+  const seen = new Set<string>();
+
+  for (let i = 0; i < dealIds.length; i += 100) {
+    const slice = dealIds.slice(i, i + 100);
+    const { items } = await bitrixListAll<RawActivity>("crm.activity.list", {
+      select: ACTIVITY_SELECT,
+      filter: { PROVIDER_ID, OWNER_TYPE_ID: "2", OWNER_ID: slice },
+      order: { CREATED: "ASC" },
+    });
+    for (const a of items) {
+      if (!seen.has(a.ID)) {
+        seen.add(a.ID);
+        out.push(a);
+      }
+    }
+  }
+
+  return out;
 }
 
 function isIsoDay(v: string | null): v is string {
