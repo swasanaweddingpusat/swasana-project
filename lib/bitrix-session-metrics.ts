@@ -6,7 +6,7 @@
 // now it was recomputed on every page view. This helper caches the PARSED
 // result per session in Redis (see lib/redis.ts — non-fatal, no TTL).
 //
-// Cache key: `bitrix:session-metrics:v4:<sessionId>:<lastUpdated>`. The
+// Cache key: `bitrix:session-metrics:v5:<sessionId>:<lastUpdated>`. The
 // activity's LAST_UPDATED advances every time the session progresses, so a
 // CLOSED session's key is stable forever → permanent cache hit, while an
 // OPEN session's key keeps advancing → the next read naturally misses and
@@ -27,12 +27,13 @@ import { redisGetJSON, redisSetJSON } from "@/lib/redis";
 export interface SessionMetrics {
   samples: ResponseSample[];
   events: TransferEvent[];
+  hasPending: boolean;
 }
 
-const EMPTY_METRICS: SessionMetrics = { samples: [], events: [] };
+const EMPTY_METRICS: SessionMetrics = { samples: [], events: [], hasPending: false };
 
 function cacheKey(sessionId: string, lastUpdated: string): string {
-  return `bitrix:session-metrics:v4:${sessionId}:${lastUpdated}`;
+  return `bitrix:session-metrics:v5:${sessionId}:${lastUpdated}`;
 }
 
 function chunkArray<T>(arr: T[], size: number): T[][] {

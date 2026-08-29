@@ -57,6 +57,7 @@ interface ConversationItem {
   client: string;
   channel: string;
   avgResponseSec: number | null;
+  status: "Belum Dibalas" | "Sudah Dibalas";
 }
 
 interface ResponseSalesRow {
@@ -149,8 +150,21 @@ export async function GET(request: Request) {
     }));
     const sessionMetrics = await resolveSessionMetrics(sessions);
 
+    // Track which sessions have pending (unreplied) customer messages and
+    // which users were transferred to per session — needed for "Belum Dibalas".
+    const sessionHasPending = new Map<string, boolean>();
+    const sessionTransferTargets = new Map<string, Set<string>>();
+
     for (const [sessionId, metrics] of Object.entries(sessionMetrics)) {
-      const { samples } = metrics;
+      const { samples, events, hasPending } = metrics;
+
+      sessionHasPending.set(sessionId, hasPending);
+
+      // Collect transfer targets for this session.
+      const targets = new Set<string>();
+      for (const e of events) targets.add(e.toUserId);
+      if (targets.size > 0) sessionTransferTargets.set(sessionId, targets);
+
       if (samples.length === 0) continue;
 
       const byUser = sessionSamples.get(sessionId) ?? new Map<string, ResponseSample[]>();
@@ -168,6 +182,22 @@ export async function GET(request: Request) {
       if (byUser.size > 0) sessionSamples.set(sessionId, byUser);
     }
 
+    // Build unreplied conversation entries: agents transferred to but with no
+    // samples in that session. These surface as "Belum Dibalas" rows.
+    const unrepliedConversations = new Map<string, Set<string>>();
+    for (const [sessionId, targets] of sessionTransferTargets) {
+      const replied = sessionSamples.get(sessionId);
+      for (const userId of targets) {
+        if (replied?.has(userId)) continue;
+        const set = unrepliedConversations.get(userId) ?? new Set<string>();
+        set.add(sessionId);
+        unrepliedConversations.set(userId, set);
+        // Ensure the user appears in samplesByUser (with empty array) so they
+        // get a row in the main table even with zero samples.
+        if (!samplesByUser.has(userId)) samplesByUser.set(userId, []);
+      }
+    }
+
     // Resolve names for sample user IDs not already covered by activity
     // RESPONSIBLE_IDs (agents who appear only via transfer, not as the final
     // responsible party, would otherwise show as "#XX").
@@ -182,6 +212,7 @@ export async function GET(request: Request) {
         const avg = avgSeconds(samples);
         const conversations: ConversationItem[] = [];
 
+        // Replied conversations.
         for (const [sessionId, byUser] of sessionSamples) {
           const list = byUser.get(userId);
           if (!list || list.length === 0) continue;
@@ -194,10 +225,31 @@ export async function GET(request: Request) {
             client: parsed.name,
             channel: parsed.channel ?? channelFromSourceId(a.RESULT_SOURCE_ID),
             avgResponseSec: avgSeconds(list),
+            status: "Sudah Dibalas",
           });
         }
 
-        conversations.sort((x, y) => (y.avgResponseSec ?? 0) - (x.avgResponseSec ?? 0));
+        // Unreplied conversations (transferred to this user but no reply yet).
+        const unreplied = unrepliedConversations.get(userId);
+        if (unreplied) {
+          for (const sessionId of unreplied) {
+            const a = activityBySession.get(sessionId);
+            if (!a) continue;
+            const parsed = parseSubject(a.SUBJECT);
+            conversations.push({
+              sessionId,
+              client: parsed.name,
+              channel: parsed.channel ?? channelFromSourceId(a.RESULT_SOURCE_ID),
+              avgResponseSec: null,
+              status: a.COMPLETED === "Y" ? "Sudah Dibalas" : "Belum Dibalas",
+            });
+          }
+        }
+
+        conversations.sort((x, y) => {
+          if (x.status !== y.status) return x.status === "Belum Dibalas" ? -1 : 1;
+          return (y.avgResponseSec ?? 0) - (x.avgResponseSec ?? 0);
+        });
 
         return {
           userId,

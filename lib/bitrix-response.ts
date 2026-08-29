@@ -72,12 +72,13 @@ export function extractTransferTarget(text: string): string | null {
 export function parseResponseSamples(history: SessionHistory): {
   samples: ResponseSample[];
   events: TransferEvent[];
+  hasPending: boolean;
 } {
   const samples: ResponseSample[] = [];
   const events: TransferEvent[] = [];
 
   const messages = Object.values(history.message ?? {});
-  if (messages.length === 0) return { samples, events };
+  if (messages.length === 0) return { samples, events, hasPending: false };
 
   const customerIds = new Set(
     Object.values(history.users ?? {})
@@ -151,7 +152,7 @@ export function parseResponseSamples(history: SessionHistory): {
     }
   }
 
-  return { samples, events };
+  return { samples, events, hasPending: pendingAt !== null };
 }
 
 // The transfer message has a [USER=from] subject before the "mentransfer"
