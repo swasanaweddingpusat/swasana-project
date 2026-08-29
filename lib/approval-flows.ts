@@ -48,6 +48,12 @@ export const APPROVAL_FLOWS: Record<string, ApprovalFlowDef> = {
       { sortOrder: 2, approverType: "role", roleName: "finance" },
     ],
   },
+  "booking-mice": {
+    steps: [
+      { sortOrder: 1, approverType: "role", roleName: "manager" },
+      { sortOrder: 2, approverType: "role", roleName: "finance" },
+    ],
+  },
   quotations: {
     steps: [
       { sortOrder: 1, approverType: "role", roleName: "manager" },
@@ -185,6 +191,8 @@ export interface BuiltApprovalStep {
  * Returns null when no flow is resolvable (same contract as resolveApprovalSteps).
  */
 export async function buildBookingApprovalSteps(opts: {
+  /** Approval flow module key — defaults to "booking". Pass "booking-mice" for MICE bookings. */
+  module?: string;
   salesId: string | null | undefined;
   creatorProfileId: string;
   signatureSales: string | null | undefined;
@@ -192,7 +200,7 @@ export async function buildBookingApprovalSteps(opts: {
   /** Whether to append a client-TTD step at the end. True for Wedding, false for MICE. Default: true. */
   includeClientStep?: boolean;
 }): Promise<BuiltApprovalStep[] | null> {
-  const roleSteps = await resolveApprovalSteps("booking");
+  const roleSteps = await resolveApprovalSteps(opts.module ?? "booking");
   if (!roleSteps || roleSteps.length === 0) return null;
 
   const steps: BuiltApprovalStep[] = [];
