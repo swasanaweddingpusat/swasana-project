@@ -72,9 +72,11 @@ interface Props {
   open: boolean;
   onClose: () => void;
   pkg: PackageQueryItem | null;
+  /** Judul/label yang ditampilkan di FE — default "Term & Condition". MICE pakai "Term & Payment". */
+  label?: string;
 }
 
-export function PackageTCDrawer({ open, onClose, pkg }: Props) {
+export function PackageTCDrawer({ open, onClose, pkg, label = "Term & Condition" }: Props) {
   const qc = useQueryClient();
   const [saving, setSaving] = useState(false);
 
@@ -89,7 +91,7 @@ export function PackageTCDrawer({ open, onClose, pkg }: Props) {
         horizontalRule: false,
       }),
       Underline,
-      Placeholder.configure({ placeholder: "Tulis Term & Condition di sini..." }),
+      Placeholder.configure({ placeholder: `Tulis ${label} di sini...` }),
     ],
     content: pkg?.termAndCondition ?? "",
     editorProps: {
@@ -133,7 +135,7 @@ export function PackageTCDrawer({ open, onClose, pkg }: Props) {
     <Drawer
       isOpen={open}
       onClose={onClose}
-      title={`Term & Condition — ${pkg?.packageName ?? ""}`}
+      title={`${label} — ${pkg?.packageName ?? ""}`}
       maxWidth="sm:max-w-full"
       childrenClassName="overflow-hidden flex flex-col"
       headerActions={
@@ -153,7 +155,7 @@ export function PackageTCDrawer({ open, onClose, pkg }: Props) {
           <div className="shrink-0">
             <Label className="text-sm font-medium mb-1 block">Paket</Label>
             <div className="px-3 py-2 rounded-lg bg-muted/40 border border-border text-sm font-medium truncate">
-              {pkg.packageName} · {pkg.pax} PAX
+              {pkg.category === "WEDDINGS" ? `${pkg.packageName} · ${pkg.pax} PAX` : pkg.packageName}
             </div>
           </div>
         )}

@@ -2022,6 +2022,7 @@ model Quotation {
   // Event
   weddingSession WeddingSession?
   eventDate      DateTime?
+  eventEndDate   DateTime?
   time           String?
   place          String? // Area/ruang venue (mis. Ballroom, Outdoor, Gazebo)
   details        String?

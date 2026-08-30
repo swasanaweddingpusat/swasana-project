@@ -454,7 +454,7 @@ Permission `(module, action)` tuples — kebab-case format. **Sumber kebenaran =
 | `finance-ap` | `view`, `create`, `edit`, `delete` |
 | `groups` | `view`, `view-all`, `create`, `edit`, `delete` |
 | `package` | `view`, `create`, `edit`, `delete`, `set-harga`, `term-&-condition`, `set-status` |
-| `package-mice` | `view`, `create`, `edit`, `delete`, `set-harga`, `set-status` |
+| `package-mice` | `view`, `create`, `edit`, `delete`, `set-harga`, `set-status`, `term-&-condition` |
 | `vendor` | `view`, `create`, `edit`, `delete` |
 | `vendor-specialist` | `view`, `create`, `edit`, `delete` |
 | `settings-brands` | `view`, `create`, `edit`, `delete` |

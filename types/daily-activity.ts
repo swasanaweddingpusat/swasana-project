@@ -20,6 +20,23 @@ export type ContactNumber = {
   number: string;
 };
 
+/** Parse the stored contactNumbers JSON into a typed list (empty when absent). */
+export function parseContactNumbers(raw: unknown): ContactNumber[] {
+  if (!raw) return [];
+  let arr: unknown = raw;
+  if (!Array.isArray(arr)) {
+    try {
+      arr = JSON.parse(String(raw));
+    } catch {
+      return [];
+    }
+  }
+  if (!Array.isArray(arr)) return [];
+  return (arr as ContactNumber[])
+    .filter((e) => e && e.number)
+    .map((e) => ({ label: e.label ?? "", number: e.number }));
+}
+
 // ─── Aggregated / joined types used in UI ────────────────────────────────────
 
 export type DailyActivityWithRelations = Prisma.DailyActivityGetPayload<{

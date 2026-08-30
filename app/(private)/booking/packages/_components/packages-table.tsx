@@ -25,7 +25,7 @@ import { DetailModal } from "./detail-modal";
 import { DrawerFinance } from "./drawer-finance";
 import { ApprovalDialog } from "./approval-dialog";
 import { ApproveModal } from "./approve-modal";
-import { PackageTCDrawer } from "./package-tc-drawer";
+import { PackageTCDrawer } from "@/components/shared/PackageTCDrawer";
 import { POPreviewModal } from "./po-preview-modal";
 import { useCurrentUser } from "@/hooks/use-current-user";
 

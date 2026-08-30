@@ -42,6 +42,14 @@ function formatLongDate(dateStr: string): string {
   }
 }
 
+/** Single date or "start – end" range when eventEndDate is set and differs from eventDate. */
+function formatEventDateRange(eventDate: string, eventEndDate?: string): string {
+  if (eventEndDate && eventEndDate !== eventDate) {
+    return `${formatLongDate(eventDate)} – ${formatLongDate(eventEndDate)}`;
+  }
+  return formatLongDate(eventDate);
+}
+
 /** Fallback line items kalau quotation belum punya detail — pakai 1 baris ringkasan paket. */
 function resolveItems(q: QuotationItem): QuotationLineItem[] {
   if (q.items && q.items.length > 0) return q.items;
@@ -194,7 +202,7 @@ export function QuotationPreview({
                   <InfoRow label="Place" value={q.place} />
                   <InfoRow
                     label="Date"
-                    value={formatLongDate(q.eventDate)}
+                    value={formatEventDateRange(q.eventDate, q.eventEndDate)}
                   />
                   <InfoRow label="Venue" value={q.venue} />
                 </div>
