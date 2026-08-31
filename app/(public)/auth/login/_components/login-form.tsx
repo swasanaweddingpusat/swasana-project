@@ -13,8 +13,6 @@ import { useSearchParams } from "next/navigation"
 import { signIn } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import { resolveLoginDestination } from "@/actions/modules"
-import type { AccessibleModule } from "@/lib/queries/modules"
-import { ModulePickerDialog } from "./module-picker-dialog"
 
 export function LoginForm({
   className,
@@ -26,7 +24,6 @@ export function LoginForm({
   const toastShownRef = useRef<string | null>(null)
   const router = useRouter()
   const callbackUrl = searchParams.get("callbackUrl")
-  const [pickerModules, setPickerModules] = useState<AccessibleModule[] | null>(null)
 
   useEffect(() => {
     const message = searchParams.get("message")
@@ -89,13 +86,8 @@ export function LoginForm({
             return
           }
           const destination = await resolveLoginDestination()
-          if (destination.kind === "choose") {
-            // >=2 modules: show the inline picker on the login page itself.
-            setPickerModules(destination.modules)
-          } else {
-            toast.success("Login berhasil!", { description: "Mengalihkan..." })
-            router.push(destination.dest)
-          }
+          toast.success("Login berhasil!", { description: "Mengalihkan..." })
+          router.push(destination.dest)
         }
       } catch {
         toast.error("Terjadi kesalahan", {
@@ -208,9 +200,6 @@ export function LoginForm({
         </Link>
         .
       </div>
-      {pickerModules && (
-        <ModulePickerDialog modules={pickerModules} open={pickerModules !== null} />
-      )}
     </div>
   )
 }

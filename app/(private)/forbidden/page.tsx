@@ -15,7 +15,7 @@ export default function ForbiddenPage(): React.JSX.Element {
           Anda tidak memiliki izin untuk mengakses halaman tersebut.
         </p>
         <Link
-          href="/select-module"
+          href="/"
           className="mt-6 inline-flex items-center justify-center rounded-full bg-primary px-5 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
         >
           Kembali

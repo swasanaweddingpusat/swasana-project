@@ -36,7 +36,13 @@ function readStoredModule(): ModuleKey | null {
   }
 }
 
-function writeStoredModule(module: ModuleKey): void {
+/**
+ * Persist the active module "world" and notify subscribers so the sidebar
+ * re-renders immediately. Accepts a raw string (e.g. from the DB module
+ * registry) and no-ops on anything that isn't a known ModuleKey.
+ */
+export function setActiveModule(module: string): void {
+  if (!isModuleKey(module)) return;
   try {
     localStorage.setItem(STORAGE_KEY, module);
   } catch {
@@ -75,7 +81,7 @@ export function useActiveModule(): ModuleKey {
 
   // Persisting is a write to an external system — the correct use of an effect.
   useEffect(() => {
-    if (urlModule && urlModule !== stored) writeStoredModule(urlModule);
+    if (urlModule && urlModule !== stored) setActiveModule(urlModule);
   }, [urlModule, stored]);
 
   return active;

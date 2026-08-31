@@ -51,8 +51,8 @@ function hasActiveChild(
 
 /**
  * Di antara sibling yang cocok, yang paling spesifik (href terpanjang) menang.
- * Mencegah leaf ber-href pendek (mis. Overview "/finance/overview") ikut aktif
- * saat sibling yang lebih dalam (Income "/finance/income") yang
+ * Mencegah leaf ber-href pendek (mis. Pengadaan "/procurement") ikut aktif
+ * saat sibling yang lebih dalam (Ringkasan "/procurement/ringkasan") yang
  * sebenarnya cocok.
  */
 function mostSpecificActiveHref(items: { href: string }[], pathname: string): string | null {

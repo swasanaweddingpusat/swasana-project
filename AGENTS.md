@@ -113,9 +113,9 @@ swasana-project/
 │   ├── (private)/
 │   │   ├── layout.tsx        # <AuthGate> — enforces session content (status, verified, mustChangePassword)
 │   │   ├── _components/      # shell: sidebar, header, auth-gate, mobile-bottom-nav
-│   │   ├── select-module/    # world picker after login
+│   │   ├── page.tsx          # general Overview (landing "/") — shared across all worlds
 │   │   ├── (general)/        # cross-world menus (vendor, procurement, bitrix24, maintenance, …)
-│   │   ├── finance/          # world: finance (overview, ar, ap, income, expense, …)
+│   │   ├── finance/          # world: finance (ar, ap, income, expense, report-analytics, …)
 │   │   ├── hrd/              # world: HRD
 │   │   ├── booking/          # world: booking (weddings, mice, groups, quotations, …)
 │   │   ├── purchase/         # world: purchase (vendor-specialist → purchase-order)
@@ -410,7 +410,7 @@ Polling `/api/auth/session` adds zero value with JWT strategy — the cookie alr
 
 Responsibilities (in order):
 1. Skip static assets (handled by matcher).
-2. Allow `PUBLIC_EXACT` + `PUBLIC_PREFIXES`. If logged in and hitting `PUBLIC_EXACT` auth page → redirect `/select-module`.
+2. Allow `PUBLIC_EXACT` + `PUBLIC_PREFIXES`. If logged in and hitting a `BOUNCE_TO_DASHBOARD` auth page (login/forgot-password) → redirect `/` (the general overview).
 3. No session cookie → redirect `/auth/login?callbackUrl=...`.
 4. Hand off to `(private)/_components/auth-gate.tsx` for session-content checks (status, isEmailVerified, mustChangePassword).
 

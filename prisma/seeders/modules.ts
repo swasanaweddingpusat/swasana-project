@@ -25,7 +25,7 @@ import { prisma } from "./_client";
 interface ModuleSeed {
   key: string;
   name: string;
-  icon: string; // Solar icon name resolved in module-switcher/select-module ICONS map
+  icon: string; // Solar icon name resolved in module-switcher's ICONS map
   sortOrder: number;
   /** permission-module strings whose `view` unlocks this world. */
   permissions: string[];

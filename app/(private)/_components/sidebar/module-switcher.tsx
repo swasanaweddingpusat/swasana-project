@@ -16,7 +16,7 @@ import {
   DropdownMenuItem,
 } from "@/components/ui/dropdown-menu";
 import { useModules } from "@/hooks/useModules";
-import { useActiveModule } from "./use-active-module";
+import { useActiveModule, setActiveModule } from "./use-active-module";
 
 const ICONS: Record<string, typeof Widget> = {
   Wallet,
@@ -62,7 +62,12 @@ export function ModuleSwitcher(): React.JSX.Element | null {
           return (
             <DropdownMenuItem
               key={m.key}
-              onClick={() => router.push(`/${m.key}/overview`)}
+              onClick={() => {
+                // Switching world = mark it active in localStorage, then return
+                // to the general overview (there is no per-world landing page).
+                setActiveModule(m.key);
+                router.push("/");
+              }}
               className="gap-2 rounded-lg"
             >
               <Icon weight="BoldDuotone" className="h-4 w-4" />

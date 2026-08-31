@@ -78,7 +78,7 @@ self.addEventListener("push", (event) => {
     body: data.body || "",
     icon: "/icons/icon-192x192.png",
     badge: "/icons/badge-72x72.png",
-    data: { url: data.url || "/select-module" },
+    data: { url: data.url || "/" },
     tag: data.tag || "default",
   };
   event.waitUntil(self.registration.showNotification(title, options));
@@ -87,7 +87,7 @@ self.addEventListener("push", (event) => {
 // Notification click — open the target URL
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  const targetUrl = event.notification.data?.url || "/select-module";
+  const targetUrl = event.notification.data?.url || "/";
   event.waitUntil(
     self.clients
       .matchAll({ type: "window", includeUncontrolled: true })
