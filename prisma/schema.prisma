@@ -1418,6 +1418,9 @@ model Ledger {
   @@index([acknowledgedById])
   @@index([voidedById])
   @@index([createdById])
+  // Composite index buat Finance AR listing: filter direction + ackStatus +
+  // exclude voided, urut occurredAt.
+  @@index([direction, ackStatus, voidedAt, occurredAt])
   @@map("ledgers")
 }
 
@@ -1973,6 +1976,10 @@ model DailyActivity {
   @@index([venueId, eventDate, weddingSession, isDateLocked])
   // Composite index buat alt-date availability check: cari locked leads per venue+altDate+sessionAlt
   @@index([venueId, eventDateAlt, weddingSessionAlt, isDateLocked])
+  @@index([createdAt])
+  @@index([eventTypeId])
+  // Composite index buat listing "assigned to me" urut terbaru
+  @@index([assignedToId, createdAt])
   @@map("leads")
 }
 
@@ -2066,6 +2073,8 @@ model Quotation {
   @@index([paymentMethodId])
   @@index([status])
   @@index([createdAt])
+  // Composite index buat listing quotations: filter category + status, urut createdAt
+  @@index([category, status, createdAt])
   @@map("quotations")
 }
 
