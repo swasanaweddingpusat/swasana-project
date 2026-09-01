@@ -1,11 +1,13 @@
 "use client";
 
+import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   Wallet,
   UsersGroupRounded,
   TicketSale,
   CartLarge,
+  ChartSquare,
   AltArrowDown,
   Widget,
 } from "@solar-icons/react";
@@ -23,12 +25,22 @@ const ICONS: Record<string, typeof Widget> = {
   UsersGroupRounded,
   TicketSale,
   CartLarge,
+  ChartSquare,
 };
 
 export function ModuleSwitcher(): React.JSX.Element | null {
   const router = useRouter();
   const activeKey = useActiveModule();
   const { data: modules } = useModules();
+
+  // Single-world roles (e.g. stakeholder) have no switcher to pick from. Persist
+  // their only world so the sidebar renders its nav even while on a general route
+  // like "/" (otherwise useActiveModule falls back to DEFAULT_MODULE "booking",
+  // whose items are all permission-hidden → the menu appears empty).
+  const soleKey = modules && modules.length === 1 ? modules[0].key : null;
+  useEffect(() => {
+    if (soleKey) setActiveModule(soleKey);
+  }, [soleKey]);
 
   if (!modules || modules.length === 0) return null;
 

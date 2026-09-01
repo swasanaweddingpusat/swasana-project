@@ -240,7 +240,14 @@ export async function getMemberAnnualTargets(profileId: string) {
   return targets.map((t) => ({ year: t.year, amount: Number(t.amount) }));
 }
 
-export async function getGroupPerformance(groupId: string, startDate?: Date, endDate?: Date, year?: number) {
+export async function getGroupPerformance(
+  groupId: string,
+  startDate?: Date,
+  endDate?: Date,
+  year?: number,
+  dealingRange?: { from: Date; to: Date },
+  eventRange?: { from: Date; to: Date },
+) {
   "use cache";
   cacheTag("groups", "bookings");
   cacheLife("minutes");
@@ -265,6 +272,20 @@ export async function getGroupPerformance(groupId: string, startDate?: Date, end
       ? Prisma.sql`AND b."eventDate" >= ${startDate} AND b."eventDate" < ${endDate}`
       : Prisma.empty;
 
+  // Independent from `dateFilter` (which scopes by eventDate for annual sales-
+  // target reporting) — this scopes by createdAt ("tanggal dealing") for the
+  // general dashboard's date filter.
+  const dealingFilter = dealingRange
+    ? Prisma.sql`AND b."createdAt" >= ${dealingRange.from} AND b."createdAt" < ${dealingRange.to}`
+    : Prisma.empty;
+
+  // Independent from `dateFilter` (annual sales-target reporting uses
+  // startDate/endDate + `year` for target lookup) — this is the general
+  // dashboard's "Tanggal Event" filter, composed via AND with `dealingFilter`.
+  const eventDateFilter = eventRange
+    ? Prisma.sql`AND b."eventDate" >= ${eventRange.from} AND b."eventDate" < ${eventRange.to}`
+    : Prisma.empty;
+
   // Derive target year: use explicit year param, else derive from startDate, else current year
   const targetYear = year ?? (startDate ? startDate.getFullYear() : new Date().getFullYear());
 
@@ -275,14 +296,18 @@ export async function getGroupPerformance(groupId: string, startDate?: Date, end
         COUNT(b.id)                                                              AS total_bookings,
         COUNT(b.id) FILTER (WHERE b."bookingStatus" = 'Confirmed')              AS confirmed_count,
         COUNT(b.id) FILTER (WHERE b."bookingStatus" = 'Pending')                AS pending_count,
-        SUM(spp.price)  FILTER (WHERE b."bookingStatus" = 'Confirmed')          AS revenue
+        -- Revenue = semua booking selain Lost/Canceled (di-exclude di WHERE), jadi
+        -- Confirmed + Pending + Uploaded + Rejected semuanya ikut terhitung.
+        SUM(spp.price)                                                          AS revenue
       FROM bookings b
       LEFT JOIN snap_package_pricing spp ON spp."bookingId" = b.id
       WHERE
         b."recordStatus" = 'saved'
         AND b."salesId" = ANY(${profileIds})
-        AND b."bookingStatus" != 'Canceled'
+        AND b."bookingStatus" NOT IN ('Lost', 'Canceled')
         ${dateFilter}
+        ${dealingFilter}
+        ${eventDateFilter}
       GROUP BY b."salesId"
     `,
     db.userTarget.findMany({
@@ -325,6 +350,114 @@ export async function getGroupPerformance(groupId: string, startDate?: Date, end
   });
 
   return results.sort((a, b) => b.actual - a.actual);
+}
+
+/**
+ * Batched equivalent of getGroupPerformance for MANY groups — one group query,
+ * one booking aggregation, one target query, regardless of group count. Returns
+ * a Map keyed by group id, each value matching getGroupPerformance's member row
+ * shape. Replaces the per-group loop in the dashboard composer (was N+1: 3 DB
+ * round-trips per group).
+ */
+export async function getGroupPerformanceForGroups(
+  groupIds: string[],
+  dealingRange?: { from: Date; to: Date },
+  eventRange?: { from: Date; to: Date },
+): Promise<Map<string, GroupPerformanceItem[]>> {
+  "use cache";
+  cacheTag("groups", "bookings");
+  cacheLife("minutes");
+
+  if (groupIds.length === 0) return new Map();
+
+  const groups = await db.userGroup.findMany({
+    where: { id: { in: groupIds } },
+    select: {
+      id: true,
+      members: {
+        select: { userId: true, profile: { select: { fullName: true, avatarUrl: true } } },
+        orderBy: { sortOrder: "asc" },
+      },
+    },
+  });
+
+  const allSalesIds = [
+    ...new Set(groups.flatMap((g) => g.members.map((m) => m.userId))),
+  ];
+  if (allSalesIds.length === 0) return new Map();
+
+  const dealingFilter = dealingRange
+    ? Prisma.sql`AND b."createdAt" >= ${dealingRange.from} AND b."createdAt" < ${dealingRange.to}`
+    : Prisma.empty;
+
+  const eventDateFilter = eventRange
+    ? Prisma.sql`AND b."eventDate" >= ${eventRange.from} AND b."eventDate" < ${eventRange.to}`
+    : Prisma.empty;
+
+  const targetYear = new Date().getFullYear();
+
+  const [bookingAgg, targets] = await Promise.all([
+    db.$queryRaw<BookingAggRow[]>`
+      SELECT
+        b."salesId"                                                              AS sales_id,
+        COUNT(b.id)                                                              AS total_bookings,
+        COUNT(b.id) FILTER (WHERE b."bookingStatus" = 'Confirmed')              AS confirmed_count,
+        COUNT(b.id) FILTER (WHERE b."bookingStatus" = 'Pending')                AS pending_count,
+        SUM(spp.price)                                                          AS revenue
+      FROM bookings b
+      LEFT JOIN snap_package_pricing spp ON spp."bookingId" = b.id
+      WHERE
+        b."recordStatus" = 'saved'
+        AND b."salesId" = ANY(${allSalesIds})
+        AND b."bookingStatus" NOT IN ('Lost', 'Canceled')
+        ${dealingFilter}
+        ${eventDateFilter}
+      GROUP BY b."salesId"
+    `,
+    db.userTarget.findMany({
+      where: { profileId: { in: allSalesIds }, type: "sales", year: targetYear },
+      select: { profileId: true, amount: true },
+    }),
+  ]);
+
+  const targetBySalesId = new Map<string, number>();
+  for (const t of targets) {
+    targetBySalesId.set(t.profileId, Number(t.amount));
+  }
+
+  const aggBySalesId = new Map<string, BookingAggRow>();
+  for (const row of bookingAgg) {
+    aggBySalesId.set(row.sales_id, row);
+  }
+
+  const result = new Map<string, GroupPerformanceItem[]>();
+  for (const g of groups) {
+    const rows = g.members.map(({ userId, profile }) => {
+      const agg = aggBySalesId.get(userId);
+      const actual = agg?.revenue ? Number(agg.revenue) : 0;
+      const totalBookings = agg ? Number(agg.total_bookings) : 0;
+      const confirmed = agg ? Number(agg.confirmed_count) : 0;
+      const pendingApproval = agg ? Number(agg.pending_count) : 0;
+      const targetAmount = targetBySalesId.get(userId) ?? 0;
+      const achievement = targetAmount > 0 ? Math.round((actual / targetAmount) * 100) : 0;
+
+      return {
+        profileId: userId,
+        fullName: profile.fullName,
+        avatarUrl: resolveAvatarUrl(profile.avatarUrl),
+        actual,
+        target: targetAmount,
+        achievement,
+        bookings: totalBookings,
+        confirmed,
+        pendingApproval,
+      };
+    });
+
+    result.set(g.id, rows.sort((a, b) => b.actual - a.actual));
+  }
+
+  return result;
 }
 
 export async function getGroupsWithPerformance(
@@ -375,7 +508,9 @@ export async function getGroupsWithPerformance(
       : Prisma.empty;
 
   // ── Query 2: DB-level booking aggregation per salesId ───────────────────────
-  // Revenue = SUM of snapPackagePricing.price for Confirmed bookings only
+  // Revenue = SUM of snapPackagePricing.price for ALL bookings except Lost/Canceled
+  // (excluded in WHERE below) — Confirmed + Pending + Uploaded + Rejected all count.
+  // Matches getGroupPerformance (single-group).
   // Counts = total active bookings, confirmed, pending (Pending = awaiting approval)
   const [bookingAgg, financialAgg, allTargets] = await Promise.all([
     db.$queryRaw<BookingAggRow[]>`
@@ -384,13 +519,13 @@ export async function getGroupsWithPerformance(
         COUNT(b.id)                                                              AS total_bookings,
         COUNT(b.id) FILTER (WHERE b."bookingStatus" = 'Confirmed')              AS confirmed_count,
         COUNT(b.id) FILTER (WHERE b."bookingStatus" = 'Pending')                AS pending_count,
-        SUM(spp.price)  FILTER (WHERE b."bookingStatus" = 'Confirmed')          AS revenue
+        SUM(spp.price)                                                          AS revenue
       FROM bookings b
       LEFT JOIN snap_package_pricing spp ON spp."bookingId" = b.id
       WHERE
         b."recordStatus" = 'saved'
         AND b."salesId" = ANY(${allSalesIds})
-        AND b."bookingStatus" != 'Canceled'
+        AND b."bookingStatus" NOT IN ('Lost', 'Canceled')
         ${dateFilter}
       GROUP BY b."salesId"
     `,
@@ -421,7 +556,7 @@ export async function getGroupsWithPerformance(
       WHERE
         b."recordStatus" = 'saved'
         AND b."salesId" = ANY(${allSalesIds})
-        AND b."bookingStatus" != 'Canceled'
+        AND b."bookingStatus" NOT IN ('Lost', 'Canceled')
         ${dateFilter}
       GROUP BY b."salesId"
     `,

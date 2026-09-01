@@ -16,6 +16,7 @@ export const roleData = [
   { name: "sales-mice", description: "Sales access for MICE bookings", sortOrder: 10 },
   { name: "manager-mice", description: "Manager access for MICE features (leads, quotations, booking-mice)", sortOrder: 11 },
   { name: "procurement-manager", description: "Manage procurement requests and approvals", sortOrder: 12 },
+  { name: "stakeholder", description: "Monitoring-only access for executives", sortOrder: 15 },
 ];
 
 // ── Modules & Actions ────────────────────────────────────────────────
@@ -87,6 +88,9 @@ export const moduleActions: Record<string, string[]> = {
   "internal-faq": ["view", "create", "edit", "delete"],
   // Announcement — company-wide announcements module
   "announcement": ["view", "create", "edit", "delete"],
+  // Performance Sales — read-only monitoring hub for the STAKEHOLDER world.
+  // View-only: no mutation surface (dashboard reads getGroupsWithPerformance).
+  "performance-sales": ["view"],
 };
 
 // Modules removed (not used in code):
@@ -313,6 +317,11 @@ export const rolePermissionMap: Record<string, Record<string, string[]>> = {
     "procurement-summary": ["view"],
     "procurement-announcement": ["view", "create", "edit", "delete"],
     "procurement-budget": ["view", "create", "edit", "delete"],
+  },
+  // Stakeholder — petinggi, monitoring-only. Satu-satunya akses: Performance Sales
+  // (world "Stakeholder"). Read-only, tidak ada permission mutasi apa pun.
+  stakeholder: {
+    "performance-sales": ["view"],
   },
 };
 

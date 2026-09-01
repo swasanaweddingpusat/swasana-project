@@ -1,6 +1,6 @@
 "use client";
 
-import { UsersGroupRounded } from "@solar-icons/react";
+import { UsersGroupRounded, Crown, Star } from "@solar-icons/react";
 import { cn } from "@/lib/utils";
 import { useDashboardGroups } from "@/hooks/useDashboardGroups";
 import type { GroupAchievementData } from "@/lib/queries/dashboard";
@@ -13,65 +13,105 @@ function formatCurrency(amount: number): string {
   return `Rp ${amount.toLocaleString("id-ID")}`;
 }
 
-function GroupAchievementCard({ group }: { group: GroupAchievementData }) {
+function getInitials(name: string): string {
+  return name
+    .split(" ")
+    .slice(0, 2)
+    .map((n) => n[0])
+    .join("")
+    .toUpperCase();
+}
+
+function GroupListRow({ group, rank }: { group: GroupAchievementData; rank: number }) {
   const pct = group.target > 0 ? Math.min(Math.round((group.revenue / group.target) * 100), 100) : 0;
+  const isTop = rank === 0;
+  const isRunnerUp = rank === 1 || rank === 2;
 
   return (
-    <div className={cn("bg-card", "border", "rounded-xl", "p-5", "flex", "flex-col", "gap-4")}>
-      <div className={cn("flex", "items-start", "justify-between", "gap-2")}>
-        <div>
-          <p className={cn("font-semibold", "text-foreground", "text-sm")}>{group.name}</p>
-          <p className={cn("text-xs", "text-muted-foreground", "mt-0.5")}>{group.leaderName}</p>
-        </div>
-        <div className={cn("flex", "items-center", "gap-1", "text-xs", "text-muted-foreground")}>
-          <UsersGroupRounded weight="BoldDuotone" className={cn("h-3.5", "w-3.5")} />
-          <span>{group.memberCount}</span>
-        </div>
-      </div>
+    <li
+      className={cn(
+        "flex items-center gap-3 px-4 py-3 sm:gap-4 sm:px-5 sm:py-4",
+        isTop && "bg-[var(--brand-gold)]/5",
+      )}
+    >
+      <span
+        className={cn(
+          "w-4 shrink-0 text-center font-mono text-xs",
+          isTop ? "font-semibold text-[var(--brand-gold)]" : "text-muted-foreground",
+        )}
+      >
+        {rank + 1}
+      </span>
 
-      {/* Progress */}
-      <div className={cn("flex", "flex-col", "gap-1.5")}>
-        <div className={cn("flex", "items-center", "justify-between")}>
-          <span className={cn("text-xs", "text-muted-foreground")}>Achievement</span>
-          <span className={cn("text-xs", "font-semibold", "text-foreground")}>{pct}%</span>
+      <div className="relative shrink-0">
+        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary text-sm font-semibold text-primary-foreground">
+          {getInitials(group.name)}
         </div>
-        <div className={cn("h-2", "bg-secondary", "rounded-full", "overflow-hidden")}>
-          <div
-            className={cn("h-full", "bg-primary", "rounded-full", "transition-all")}
-            style={{ width: `${pct}%` }}
+        {isTop && (
+          <Crown
+            weight="BoldDuotone"
+            className="absolute -top-3 -right-1.5 h-6 w-6 text-[var(--brand-gold)]"
           />
-        </div>
-        <div className={cn("flex", "items-center", "justify-between", "text-xs", "text-muted-foreground")}>
-          <span>{formatCurrency(group.revenue)}</span>
-          <span>Target: {formatCurrency(group.target)}</span>
-        </div>
+        )}
+        {isRunnerUp && (
+          <Star
+            weight="BoldDuotone"
+            className="absolute -top-3 -right-1.5 h-5 w-5 text-[var(--brand-gold)]"
+          />
+        )}
       </div>
 
-      <div className={cn("text-xs", "text-muted-foreground", "border-t", "pt-3")}>
-        <span className={cn("font-medium", "text-foreground")}>{group.confirmedBookings}</span> booking confirmed
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center justify-between gap-2">
+          <p className="truncate text-sm font-semibold text-foreground">{group.name}</p>
+          <span className="flex shrink-0 items-center gap-1 text-xs text-muted-foreground">
+            <UsersGroupRounded weight="BoldDuotone" className="h-3.5 w-3.5" />
+            {group.memberCount}
+          </span>
+        </div>
+        <p className="truncate text-xs text-muted-foreground">
+          {group.leaderName} · {group.confirmedBookings} booking confirmed
+        </p>
+        <div className="mt-1.5 flex items-center gap-2">
+          <div className="h-2 min-w-0 flex-1 overflow-hidden rounded-full bg-secondary">
+            <div
+              className="h-full rounded-full bg-primary transition-all"
+              style={{ width: `${pct}%` }}
+            />
+          </div>
+          <span className="shrink-0 text-xs font-semibold text-foreground">{pct}%</span>
+        </div>
+        <p className="mt-0.5 text-xs text-muted-foreground">
+          {formatCurrency(group.revenue)} dari target {formatCurrency(group.target)}
+        </p>
       </div>
-    </div>
+    </li>
   );
 }
 
 interface GroupAchievementSectionProps {
   initialGroups: GroupAchievementData[];
-  year: number;
-  month: number;
+  /** Dealing-date (createdAt) range, calendar-day strings (YYYY-MM-DD). */
+  dealFrom: string;
+  dealTo: string;
+  /** Event-date (eventDate) range, calendar-day strings (YYYY-MM-DD). */
+  eventFrom: string;
+  eventTo: string;
 }
 
-export function GroupAchievementSection({ initialGroups, year, month }: GroupAchievementSectionProps) {
-  const { data } = useDashboardGroups(year, month, initialGroups);
+export function GroupAchievementSection({ initialGroups, dealFrom, dealTo, eventFrom, eventTo }: GroupAchievementSectionProps) {
+  const { data } = useDashboardGroups(dealFrom, dealTo, eventFrom, eventTo, initialGroups);
   const groups = data ?? initialGroups;
+  const sorted = [...groups].sort((a, b) => b.revenue - a.revenue);
 
   return (
     <div className={cn("flex", "flex-col", "gap-4")}>
       <h2 className={cn("text-base", "font-semibold", "text-foreground")}>Achievement per Group</h2>
-      <div className={cn("grid", "grid-cols-1", "gap-4", "sm:grid-cols-2")}>
-        {groups.map((g) => (
-          <GroupAchievementCard key={g.id} group={g} />
+      <ol className="flex flex-col divide-y divide-border overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
+        {sorted.map((g, idx) => (
+          <GroupListRow key={g.id} group={g} rank={idx} />
         ))}
-      </div>
+      </ol>
     </div>
   );
 }

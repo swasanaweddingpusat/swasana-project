@@ -1005,6 +1005,13 @@ model Booking {
   @@index([currentRevisionId])
   @@index([recordStatus, poYear, poSeq])
   @@index([recognizedById])
+  // Dashboard read paths: stat cards / group performance / sales performance
+  // filter `recordStatus = 'saved'` AND a dealing-date (createdAt) or event-date
+  // (eventDate) range, often further scoped by salesId. Single-column indexes
+  // forced a large index scan; these composites let Postgres seek directly.
+  @@index([recordStatus, createdAt])
+  @@index([recordStatus, eventDate])
+  @@index([recordStatus, salesId])
   @@map("bookings")
 }
 

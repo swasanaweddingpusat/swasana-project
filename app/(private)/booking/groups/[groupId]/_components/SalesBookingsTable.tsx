@@ -11,9 +11,6 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-  DropdownMenuSub,
-  DropdownMenuSubTrigger,
-  DropdownMenuSubContent,
 } from "@/components/ui/dropdown-menu";
 import {
   AlertDialog,
@@ -28,6 +25,7 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   Magnifer as Search,
@@ -48,12 +46,18 @@ import {
   ArrowLeft,
   ArrowRight,
   Filter,
+  DocumentText,
+  TagPrice,
+  ClockCircle,
+  Download,
 } from "@solar-icons/react";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import type { DateRange } from "react-day-picker";
 import { cn } from "@/lib/utils";
+import { useRouter } from "next/navigation";
 import { useSalesBookings } from "@/hooks/use-sales-bookings";
 import { useDeleteBooking } from "@/hooks/use-bookings";
+import { useSyncBookingPackage } from "@/hooks/use-booking-revisions";
 import { usePermissions } from "@/hooks/use-permissions";
 import { useBookingDrawer } from "@/components/providers/booking-drawer-provider";
 import { useCurrentUser } from "@/hooks/use-current-user";
@@ -61,8 +65,7 @@ import { useUnreadCommentCounts } from "@/hooks/use-unread-comment-counts";
 import { fetchBookingComments } from "@/services/booking-comment-service";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AgreementModal } from "@/components/shared/booking/agreement-modal";
-import { RejectBookingModal } from "@/components/shared/booking/reject-booking-modal";
-import { MarkLostDialog } from "@/components/shared/booking/mark-lost-dialog";
+import { CancelBookingDialog } from "@/components/shared/booking/cancel-booking-dialog";
 import { RestoreBookingDialog } from "@/components/shared/booking/restore-booking-dialog";
 import { TransferBookingModal } from "@/components/shared/booking/transfer-booking-modal";
 import { TransferManagerModal } from "@/components/shared/booking/transfer-manager-modal";
@@ -72,14 +75,35 @@ import { BookingPOPreviewModal, type BookingPOPreviewTarget } from "@/app/(priva
 import { UploadDocumentModal } from "@/app/(private)/booking/booking-weddings/_components/upload-document-modal";
 import { BookingCommentPanel } from "@/app/(private)/booking/booking-weddings/_components/booking-comment-panel";
 import { ActivityLogModal } from "@/app/(private)/booking/booking-weddings/_components/activity-log-modal";
+import { ExportBookingsModal } from "@/app/(private)/booking/booking-weddings/_components/export-bookings-modal";
+import { BookingTCDrawer } from "@/app/(private)/booking/booking-weddings/_components/booking-tc-drawer";
+import { SetHargaBookingDrawer } from "@/app/(private)/booking/booking-weddings/_components/SetHargaBookingDrawer";
+import { RevisionHistoryDrawer } from "@/app/(private)/booking/booking-weddings/_components/RevisionHistoryDrawer";
 import { ApproveModal } from "@/app/(private)/booking/packages/_components/approve-modal";
 import { ApprovalDialog } from "@/app/(private)/booking/packages/_components/approval-dialog";
-import type { BookingListItem } from "@/lib/queries/bookings";
+import type { BookingListItem, ApprovalStatusFilter } from "@/lib/queries/bookings";
 import type { AssignableSalesUser } from "@/lib/queries/users";
+import type { BookingStatus } from "@prisma/client";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const PAGE_SIZE = 10;
+const PAGE_SIZE_OPTIONS = [10, 25, 50] as const;
+const DEFAULT_PAGE_SIZE = 10;
+
+/** Page range with "..." gaps — always shows first, last, current, and ±1 neighbour. */
+function buildPageRange(current: number, total: number): (number | "...")[] {
+  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
+  const pages = new Set<number>([1, total, current]);
+  if (current - 1 >= 1) pages.add(current - 1);
+  if (current + 1 <= total) pages.add(current + 1);
+  const sorted = Array.from(pages).sort((a, b) => a - b);
+  const result: (number | "...")[] = [];
+  for (let i = 0; i < sorted.length; i++) {
+    result.push(sorted[i]);
+    if (i < sorted.length - 1 && sorted[i + 1] - sorted[i] > 1) result.push("...");
+  }
+  return result;
+}
 
 const STATUS_DOT: Record<string, string> = {
   Confirmed: "bg-primary",
@@ -111,30 +135,29 @@ const RECORD_STATUS_OPTIONS: { id: "saved" | "draft" | "all"; name: string }[] =
   { id: "all", name: "Semua" },
 ];
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+const BOOKING_STATUS_OPTIONS: { id: BookingStatus | ""; name: string }[] = [
+  { id: "", name: "Semua" },
+  { id: "Pending", name: "Pending" },
+  { id: "Uploaded", name: "Uploaded" },
+  { id: "Confirmed", name: "Confirmed" },
+  { id: "Rejected", name: "Rejected" },
+  { id: "Canceled", name: "Canceled" },
+  { id: "Lost", name: "Lost" },
+];
 
-interface ApprovalStep {
-  id: string;
-  stepOrder: number;
-  approverType: string;
-  approverRoleId: string | null;
-  approverUserId: string | null;
-  status: string;
-  // signature not included — list payload omits it; ApprovalDialog fetches its own record.
-  decidedAt: string | null;
-  notes: string | null;
-  revisionId: string | null;
-  approverRole: { id: string; name: string } | null;
-  approverUser: { id: string; fullName: string | null } | null;
-  decidedBy: { id: string; fullName: string | null } | null;
-}
-
-interface ApprovalRecord {
-  id: string;
-  entityId: string;
-  status: string;
-  steps: ApprovalStep[];
-}
+const APPROVAL_STATUS_OPTIONS: { id: ApprovalStatusFilter | ""; name: string }[] = [
+  { id: "", name: "Semua" },
+  { id: "pending", name: "Pending (semua step)" },
+  { id: "approved", name: "Approved (semua step)" },
+  { id: "sales-approved", name: "Sales — Sudah Approve" },
+  { id: "sales-pending", name: "Sales — Belum Approve" },
+  { id: "manager-approved", name: "Manager — Sudah Approve" },
+  { id: "manager-pending", name: "Manager — Belum Approve" },
+  { id: "finance-approved", name: "Finance — Sudah Approve" },
+  { id: "finance-pending", name: "Finance — Belum Approve" },
+  { id: "client-approved", name: "Client — Sudah TTD" },
+  { id: "client-pending", name: "Client — Belum TTD" },
+];
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
@@ -146,13 +169,17 @@ export interface SalesBookingsTableProps {
 
 export function SalesBookingsTable({ salesId }: SalesBookingsTableProps): React.JSX.Element {
   const qc = useQueryClient();
+  const router = useRouter();
   const deleteMut = useDeleteBooking();
+  const syncPackageMut = useSyncBookingPackage();
   const { can, isAdmin } = usePermissions();
   const { openBookingDrawer } = useBookingDrawer();
   const { user } = useCurrentUser();
 
   // ── Filter & pagination state ──────────────────────────────────────────────
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState<number>(DEFAULT_PAGE_SIZE);
+  const [exportOpen, setExportOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [venueId, setVenueId] = useState("");
@@ -160,6 +187,12 @@ export function SalesBookingsTable({ salesId }: SalesBookingsTableProps): React.
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [dateRangeOpen, setDateRangeOpen] = useState(false);
+  const [bookingStatusFilter, setBookingStatusFilter] = useState<BookingStatus | "">("");
+  const [approvalFilter, setApprovalFilter] = useState<ApprovalStatusFilter | "">("");
+  const [yearFilter, setYearFilter] = useState<number | null>(null);
+  const [sourceOfInformationFilter, setSourceOfInformationFilter] = useState("");
+  // Gates the venue/source/year fetches: only load once the Filter popover is opened.
+  const [filterOpened, setFilterOpened] = useState(false);
 
   // Debounce search 400ms
   useEffect(() => {
@@ -177,8 +210,7 @@ export function SalesBookingsTable({ salesId }: SalesBookingsTableProps): React.
   const [uploadDocTarget, setUploadDocTarget] = useState<BookingListItem | null>(null);
   const [transferTarget, setTransferTarget] = useState<BookingListItem | null>(null);
   const [managerTarget, setManagerTarget] = useState<BookingListItem | null>(null);
-  const [rejectTarget, setRejectTarget] = useState<BookingListItem | null>(null);
-  const [lostTarget, setLostTarget] = useState<BookingListItem | null>(null);
+  const [cancelTarget, setCancelTarget] = useState<BookingListItem | null>(null);
   const [restoreTarget, setRestoreTarget] = useState<BookingListItem | null>(null);
   const [agreementModal, setAgreementModal] = useState<{ bookingId: string; customerName: string } | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<BookingListItem | null>(null);
@@ -186,6 +218,10 @@ export function SalesBookingsTable({ salesId }: SalesBookingsTableProps): React.
   const [activityLogTarget, setActivityLogTarget] = useState<BookingListItem | null>(null);
   const [approvalDialogTarget, setApprovalDialogTarget] = useState<BookingListItem | null>(null);
   const [approveModal, setApproveModal] = useState<{ stepId: string; stepLabel: string; bookingName: string } | null>(null);
+  const [tcTarget, setTcTarget] = useState<{ bookingId: string; customerName: string } | null>(null);
+  const [setHargaTarget, setSetHargaTarget] = useState<{ bookingId: string; customerName: string; packageName: string; pax: number; venueName?: string } | null>(null);
+  const [revisionHistoryTarget, setRevisionHistoryTarget] = useState<BookingListItem | null>(null);
+  const [syncPackageTarget, setSyncPackageTarget] = useState<BookingListItem | null>(null);
 
   // Revision cache for PO preview sub-menu
   const [revisionCache, setRevisionCache] = useState<
@@ -196,18 +232,25 @@ export function SalesBookingsTable({ salesId }: SalesBookingsTableProps): React.
   const { data: result, isFetching, refetch } = useSalesBookings({
     salesId,
     page,
-    pageSize: PAGE_SIZE,
+    pageSize,
     search: debouncedSearch || undefined,
     venueId: venueId || undefined,
     recordStatus,
     dateFrom: dateFrom || undefined,
     dateTo: dateTo || undefined,
+    // Year only applies when no explicit event-date range is set (mirrors booking-weddings).
+    year: (!dateFrom && !dateTo && yearFilter) ? yearFilter : undefined,
+    approvalStatus: approvalFilter || undefined,
+    bookingStatus: bookingStatusFilter || undefined,
+    sourceOfInformationId: sourceOfInformationFilter || undefined,
   });
 
   const bookings: BookingListItem[] = result?.data ?? [];
   const totalBookings = result?.total ?? 0;
-  const totalPages = Math.ceil(totalBookings / PAGE_SIZE);
+  const totalPages = Math.ceil(totalBookings / pageSize);
 
+  // Venue list — only needed inside the Filter popover, so defer the fetch until
+  // the user actually opens it (gated by filterOpened).
   const { data: venues = [] } = useQuery<{ id: string; name: string }[]>({
     queryKey: ["venues-list"],
     queryFn: async () => {
@@ -216,10 +259,38 @@ export function SalesBookingsTable({ salesId }: SalesBookingsTableProps): React.
       const json = await res.json() as unknown;
       return Array.isArray(json) ? (json as { id: string; name: string }[]) : [];
     },
+    enabled: filterOpened,
     staleTime: 10 * 60 * 1000,
   });
 
-  // Sales users for TransferBookingModal — fetched from /api/users/sales
+  // Source of information list — filter popover only, deferred until opened.
+  const { data: sourceOfInformations = [] } = useQuery<{ id: string; name: string }[]>({
+    queryKey: ["source-of-informations-list"],
+    queryFn: async () => {
+      const res = await fetch("/api/source-of-informations");
+      if (!res.ok) return [];
+      const json = await res.json() as unknown;
+      return Array.isArray(json) ? (json as { id: string; name: string }[]) : [];
+    },
+    enabled: filterOpened,
+    staleTime: 10 * 60 * 1000,
+  });
+
+  // Available booking years — filter popover only, deferred until opened.
+  const { data: yearsData } = useQuery<{ years: number[] }>({
+    queryKey: ["booking-years"],
+    queryFn: async () => {
+      const res = await fetch("/api/bookings/years");
+      if (!res.ok) return { years: [] };
+      return res.json() as Promise<{ years: number[] }>;
+    },
+    enabled: filterOpened,
+    staleTime: 10 * 60 * 1000,
+  });
+  const availableYears = yearsData?.years ?? [];
+
+  // Sales users for TransferBookingModal — only needed once a transfer is opened,
+  // so defer the fetch until then (gated by transferTarget).
   const { data: salesUsers = [] } = useQuery<AssignableSalesUser[]>({
     queryKey: ["sales-profiles-list"],
     queryFn: async () => {
@@ -228,24 +299,18 @@ export function SalesBookingsTable({ salesId }: SalesBookingsTableProps): React.
       const json = await res.json() as unknown;
       return Array.isArray(json) ? (json as AssignableSalesUser[]) : [];
     },
+    enabled: !!transferTarget,
     staleTime: 5 * 60 * 1000,
   });
 
-  // Booking approvals — fetched alongside bookings. We gate the first list render on
-  // BOTH this and the bookings query so approval badges paint together with the rows
-  // instead of flashing in a beat later.
-  const { data: bookingApprovals = [], isLoading: approvalsLoading } = useQuery<ApprovalRecord[]>({
-    queryKey: ["booking-approvals"],
-    queryFn: async () => {
-      const res = await fetch("/api/approval-records?module=booking");
-      if (!res.ok) return [];
-      const json = await res.json() as { data?: ApprovalRecord[] } | ApprovalRecord[];
-      return Array.isArray(json) ? json : (json as { data?: ApprovalRecord[] }).data ?? [];
-    },
-    staleTime: 5 * 60 * 1000,
-  });
+  // Approval records ride along on each booking row — getBookings attaches
+  // booking.bookingApprovals for the active page only (mirrors bookings-table.tsx),
+  // so there is NO separate approval fetch. Build the entityId → record map from them.
   const approvalMap = new Map(
-    (Array.isArray(bookingApprovals) ? bookingApprovals : []).map((r) => [r.entityId, r])
+    bookings
+      .map((b) => b.bookingApprovals)
+      .filter((r): r is NonNullable<BookingListItem["bookingApprovals"]> => r !== null)
+      .map((r) => [r.entityId, r]),
   );
 
   // Unread comment counts
@@ -253,13 +318,77 @@ export function SalesBookingsTable({ salesId }: SalesBookingsTableProps): React.
   const unreadCounts = countData?.unreadCounts ?? {};
 
   // ── Helpers ────────────────────────────────────────────────────────────────
-  function previewPO(booking: BookingListItem, revisionId?: string, revLabel?: string): void {
+
+  /** Computes approval state for a booking from approvalMap + currentRevisionId.
+   *  Returns both hasPending and internalApproved flags so callers don't recompute twice. */
+  function getBookingApprovalState(booking: BookingListItem): { hasPending: boolean; internalApproved: boolean } {
+    const allSteps = approvalMap.get(booking.id)?.steps ?? [];
+    const hasRevisionedSteps = allSteps.some((s) => s.revisionId !== null);
+    const currentRoundSteps = (booking.currentRevisionId && hasRevisionedSteps)
+      ? allSteps.filter((s) => s.revisionId === booking.currentRevisionId)
+      : allSteps;
+    const nonClientSteps = currentRoundSteps.filter((s) => s.approverType !== "client");
+    const hasPending = approvalMap.has(booking.id) && !nonClientSteps.every((s) => s.status === "approved");
+    // Internal approval = EVERY non-client step (Sales + Manager + Finance) approved.
+    const internalApproved = nonClientSteps.length > 0 && nonClientSteps.every((s) => s.status === "approved");
+    return { hasPending, internalApproved };
+  }
+
+  // A manually-uploaded PO lives on the CURRENT revision's client step. Mirror the
+  // revision-aware read in bookings-table.tsx: pick the client step for currentRevisionId
+  // (fallback to the first) so a stale past-revision step never hides — or fakes — one.
+  function getManualPO(
+    booking: BookingListItem,
+  ): { path: string; fileName?: string; fileType?: string } | null {
+    const record = approvalMap.get(booking.id);
+    if (!record) return null;
+    const clientSteps = record.steps
+      .filter((s) => s.approverType === "client")
+      .sort((a, b) => a.stepOrder - b.stepOrder);
+    const current =
+      clientSteps.find((s) => s.revisionId === booking.currentRevisionId) ?? clientSteps[0];
+    const uploaded = (current?.clientAgreementUploaded ?? null) as {
+      path?: string;
+      fileName?: string;
+      fileType?: string;
+    } | null;
+    return uploaded?.path ? { ...uploaded, path: uploaded.path } : null;
+  }
+
+  function previewPO(
+    booking: BookingListItem,
+    revisionId?: string,
+    revLabel?: string,
+    mode?: "auto" | "manual" | "digital",
+  ): void {
     const base = booking.snapCustomer?.name ?? "Booking";
+    const modeLabel = mode === "manual" ? "PO Manual" : mode === "digital" ? "PO Digital" : null;
+    const suffix = revLabel ?? modeLabel;
     setPoPreviewTarget({
       bookingId: booking.id,
       revisionId,
-      label: revLabel ? `${base} · ${revLabel}` : base,
+      label: suffix ? `${base} · ${suffix}` : base,
+      mode,
     });
+  }
+
+  // New PDF (theme V2 Kediaman) — ungated dropdown action, renders via /api/render-po/v2.
+  function previewNewPdf(booking: BookingListItem): void {
+    const base = booking.snapCustomer?.name ?? "Booking";
+    setPoPreviewTarget({
+      bookingId: booking.id,
+      label: `${base} · New PDF`,
+      endpoint: "/api/render-po/v2",
+    });
+  }
+
+  // "Lihat Detail" now navigates to the full detail page (row/card click still opens
+  // the modal). Prefetch on hover/focus so navigation feels instant.
+  function goToDetailPage(id: string): void {
+    router.push(`/booking/booking-weddings/${id}`);
+  }
+  function prefetchDetailPage(id: string): void {
+    router.prefetch(`/booking/booking-weddings/${id}`);
   }
 
   const fetchRevisions = useCallback((bookingId: string): void => {
@@ -297,7 +426,18 @@ export function SalesBookingsTable({ salesId }: SalesBookingsTableProps): React.
   const hasVenueFilter = venueId !== "" && venueId !== "all";
   const hasRecordStatusFilter = recordStatus !== "saved";
   const hasDateFilter = dateFrom !== "" || dateTo !== "";
-  const activeFilterCount = (hasVenueFilter ? 1 : 0) + (hasRecordStatusFilter ? 1 : 0) + (hasDateFilter ? 1 : 0);
+  const hasYearFilter = yearFilter !== null;
+  const hasApprovalFilter = approvalFilter !== "";
+  const hasBookingStatusFilter = bookingStatusFilter !== "";
+  const hasSourceOfInformationFilter = sourceOfInformationFilter !== "" && sourceOfInformationFilter !== "all";
+  const activeFilterCount =
+    (hasVenueFilter ? 1 : 0) +
+    (hasRecordStatusFilter ? 1 : 0) +
+    (hasDateFilter ? 1 : 0) +
+    (hasYearFilter ? 1 : 0) +
+    (hasApprovalFilter ? 1 : 0) +
+    (hasBookingStatusFilter ? 1 : 0) +
+    (hasSourceOfInformationFilter ? 1 : 0);
   const hasActiveFilter = activeFilterCount > 0;
 
   function resetFilters(): void {
@@ -305,6 +445,10 @@ export function SalesBookingsTable({ salesId }: SalesBookingsTableProps): React.
     setRecordStatus("saved");
     setDateFrom("");
     setDateTo("");
+    setYearFilter(null);
+    setApprovalFilter("");
+    setBookingStatusFilter("");
+    setSourceOfInformationFilter("");
     setPage(1);
   }
 
@@ -331,32 +475,18 @@ export function SalesBookingsTable({ salesId }: SalesBookingsTableProps): React.
       );
     }
 
-    // Agreement gate: needs both manager + finance approved for current revision
-    const allAgreementSteps = approvalMap.get(booking.id)?.steps ?? [];
-    const currentRevisionId = booking.currentRevisionId;
-    const hasRevisionedSteps = allAgreementSteps.some((s) => s.revisionId !== null);
-    const currentRoundSteps =
-      currentRevisionId && hasRevisionedSteps
-        ? allAgreementSteps.filter((s) => s.revisionId === currentRevisionId)
-        : allAgreementSteps;
-    const isManagerApproved = currentRoundSteps.some((s) => s.approverRole?.name === "manager" && s.status === "approved");
-    const isFinanceApproved = currentRoundSteps.some((s) => s.approverRole?.name === "finance" && s.status === "approved");
-    const internalApproved = isManagerApproved && isFinanceApproved;
+    // Approval state — internalApproved = ALL non-client steps (Sales+Manager+Finance)
+    // approved (mirrors bookings-table.tsx getBookingApprovalState). hasPending drives
+    // the quick-approve dropdown visibility.
+    const { hasPending, internalApproved } = getBookingApprovalState(booking);
 
-    // Approval steps (non-client)
     const allSteps = approvalMap.get(booking.id)?.steps ?? [];
-    const bHasRevisionedSteps = allSteps.some((s) => s.revisionId !== null);
+    const hasRevisionedSteps = allSteps.some((s) => s.revisionId !== null);
     const currentSteps =
-      currentRevisionId && bHasRevisionedSteps
-        ? allSteps.filter((s) => s.revisionId === currentRevisionId)
+      booking.currentRevisionId && hasRevisionedSteps
+        ? allSteps.filter((s) => s.revisionId === booking.currentRevisionId)
         : allSteps;
     const nonClientSteps = currentSteps.filter((s) => s.approverType !== "client");
-    const allInternalApproved = nonClientSteps.length > 0 && nonClientSteps.every((s) => s.status === "approved");
-
-    const showSeparatorStatus =
-      (can("booking", "reject") && booking.bookingStatus !== "Confirmed" && booking.bookingStatus !== "Lost") ||
-      (can("booking", "mark-lost") && booking.bookingStatus !== "Lost" && booking.bookingStatus !== "Confirmed") ||
-      (can("booking", "restore") && (booking.bookingStatus === "Lost" || booking.bookingStatus === "Confirmed"));
 
     // Quick approve — pending non-client steps the current user can act on.
     const actableSteps = nonClientSteps.filter((step) => {
@@ -368,10 +498,14 @@ export function SalesBookingsTable({ salesId }: SalesBookingsTableProps): React.
       );
     });
 
+    const isCanceled = booking.bookingStatus === "Canceled";
+    const manualPO = getManualPO(booking);
+    const revisions = revisionCache[booking.id] ?? [];
+
     return (
       <div className="flex items-center gap-0.5" onClick={(e) => e.stopPropagation()}>
-        {/* Quick: Client Agreement — once manager + finance approved, before signing */}
-        {can("booking", "client-agreement") && internalApproved && booking.clientAgreement?.status !== "Signed" && (
+        {/* Quick: Client Agreement — once ALL internal steps approved, before signing */}
+        {!isCanceled && can("booking", "client-agreement") && internalApproved && booking.clientAgreement?.status !== "Signed" && (
           <TooltipProvider delay={200}>
             <Tooltip>
               <TooltipTrigger render={<Button variant="ghost" size="icon" className="cursor-pointer h-8 w-8" onClick={(e) => { e.stopPropagation(); setAgreementModal({ bookingId: booking.id, customerName: booking.snapCustomer?.name ?? "Client" }); }} />}>
@@ -383,7 +517,7 @@ export function SalesBookingsTable({ salesId }: SalesBookingsTableProps): React.
         )}
 
         {/* Quick: Approval — dropdown of non-client steps (mirrors booking-weddings table) */}
-        {!allInternalApproved && approvalMap.has(booking.id) && nonClientSteps.length > 0 && (
+        {!isCanceled && approvalMap.has(booking.id) && hasPending && (
           <DropdownMenu>
             <TooltipProvider delay={200}>
               <Tooltip>
@@ -439,168 +573,176 @@ export function SalesBookingsTable({ salesId }: SalesBookingsTableProps): React.
           </TooltipProvider>
         )}
 
+        {/* Preview PO — ungated standalone dropdown (mirrors booking-weddings) */}
+        <DropdownMenu onOpenChange={(open) => { if (open) fetchRevisions(booking.id); }}>
+          <TooltipProvider delay={200}>
+            <Tooltip>
+              <DropdownMenuTrigger className={cn("p-1.5", "rounded-md", "hover:bg-muted", "cursor-pointer")}>
+                <TooltipTrigger render={<span />}>
+                  <Printer weight="BoldDuotone" className="h-4 w-4 text-primary" />
+                </TooltipTrigger>
+              </DropdownMenuTrigger>
+              <TooltipContent side="top"><p className="text-xs">Preview PO</p></TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+          <DropdownMenuContent align="end">
+            {/* 1. PO Manual — only when a signed PO was uploaded for the current revision */}
+            {manualPO && (
+              <>
+                <DropdownMenuItem className="cursor-pointer" onClick={() => previewPO(booking, undefined, undefined, "manual")}>
+                  <FileSignature weight="BoldDuotone" className="mr-2 h-4 w-4 text-primary" />
+                  <span className="flex-1">PO Manual</span>
+                  <span className={cn("ml-2", "rounded-full", "bg-primary/10", "px-2", "py-0.5", "text-[10px]", "font-semibold", "text-primary")}>Upload</span>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+              </>
+            )}
+            {/* 2. PO Digital — system-generated document */}
+            <DropdownMenuItem className="cursor-pointer" onClick={() => previewPO(booking, undefined, undefined, "digital")}>
+              <Printer weight="BoldDuotone" className="mr-2 h-4 w-4 text-primary" />
+              PO Digital
+            </DropdownMenuItem>
+            {revisions.map((rev) => (
+              <DropdownMenuItem key={rev.id} className="cursor-pointer" onClick={() => previewPO(booking, rev.id, `Rev ${rev.revisionNumber}`, "digital")}>
+                <span className="truncate">Rev {rev.revisionNumber} — {rev.packageName}{rev.pax ? ` · ${rev.pax} PAX` : ""}</span>
+              </DropdownMenuItem>
+            ))}
+            <DropdownMenuSeparator />
+            {/* 3. New PDF — theme V2 (Kediaman) */}
+            <DropdownMenuItem className="cursor-pointer" onClick={() => previewNewPdf(booking)}>
+              <DocumentText weight="BoldDuotone" className="mr-2 h-4 w-4 text-primary" />
+              New PDF
+            </DropdownMenuItem>
+            <DropdownMenuItem className="cursor-pointer" onClick={() => setRevisionHistoryTarget(booking)}>
+              <ClockCircle weight="BoldDuotone" className="mr-2 h-4 w-4" />
+              Kelola Versi…
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+
         {/* More actions */}
         <DropdownMenu>
-        <DropdownMenuTrigger className={cn("p-1.5", "rounded-md", "hover:bg-muted", "cursor-pointer")}>
-          <EllipsisVertical weight="BoldDuotone" className={cn("h-4", "w-4", "text-muted-foreground")} />
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-52">
-          {/* Detail */}
-          {can("booking", "view") && (
-            <DropdownMenuItem
-              className="cursor-pointer"
-              onClick={(e) => { e.stopPropagation(); setDetailTarget(booking.id); }}
-            >
-              <Eye weight="BoldDuotone" className={cn("mr-2", "h-4", "w-4", "text-primary")} />
-              Lihat Detail
-            </DropdownMenuItem>
-          )}
-
-          <DropdownMenuSeparator />
-
-          {/* Edit */}
-          {can("booking", "edit") && (
-            <DropdownMenuItem
-              className="cursor-pointer"
-              onClick={(e) => { e.stopPropagation(); setEditTarget(booking); }}
-            >
-              <Pencil weight="BoldDuotone" className={cn("mr-2", "h-4", "w-4", "text-primary")} />
-              Edit Booking
-            </DropdownMenuItem>
-          )}
-
-          {/* Preview PO */}
-          {can("booking", "print") && (
-            <DropdownMenuSub
-              onOpenChange={(open) => { if (open) fetchRevisions(booking.id); }}
-            >
-              <DropdownMenuSubTrigger className="cursor-pointer">
-                <Printer weight="BoldDuotone" className={cn("mr-2", "h-4", "w-4", "text-primary")} />
-                Preview PO Booking
-              </DropdownMenuSubTrigger>
-              <DropdownMenuSubContent>
-                <DropdownMenuItem
-                  className="cursor-pointer"
-                  onClick={() => previewPO(booking)}
-                >
-                  Lihat Terbaru (Live)
+          <DropdownMenuTrigger className={cn("p-1.5", "rounded-md", "hover:bg-muted", "cursor-pointer")}>
+            <EllipsisVertical weight="BoldDuotone" className={cn("h-4", "w-4", "text-muted-foreground")} />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-52">
+            {isCanceled ? (
+              <>
+                {/* Canceled: only Detail + Restore */}
+                <DropdownMenuItem className="cursor-pointer" onClick={(e) => { e.stopPropagation(); goToDetailPage(booking.id); }} onMouseEnter={() => prefetchDetailPage(booking.id)} onFocus={() => prefetchDetailPage(booking.id)}>
+                  <Eye weight="BoldDuotone" className={cn("mr-2", "h-4", "w-4", "text-primary")} />
+                  Lihat Detail
                 </DropdownMenuItem>
-                {(revisionCache[booking.id] ?? []).length > 0 && <DropdownMenuSeparator />}
-                {(revisionCache[booking.id] ?? []).map((rev) => (
-                  <DropdownMenuItem
-                    key={rev.id}
-                    className="cursor-pointer"
-                    onClick={() => previewPO(booking, rev.id, `Rev ${rev.revisionNumber}`)}
-                  >
-                    <span className="truncate">
-                      Rev {rev.revisionNumber} — {rev.packageName}
-                      {rev.pax ? ` · ${rev.pax} PAX` : ""}
-                    </span>
+                {can("booking", "restore") && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem className={cn("cursor-pointer", "text-muted-foreground", "focus:text-foreground")} onClick={(e) => { e.stopPropagation(); setRestoreTarget(booking); }}>
+                      <Refresh weight="BoldDuotone" className={cn("mr-2", "h-4", "w-4")} />
+                      Restore Booking
+                    </DropdownMenuItem>
+                  </>
+                )}
+              </>
+            ) : (
+              <>
+                {/* Detail — full page */}
+                <DropdownMenuItem className="cursor-pointer" onClick={(e) => { e.stopPropagation(); goToDetailPage(booking.id); }} onMouseEnter={() => prefetchDetailPage(booking.id)} onFocus={() => prefetchDetailPage(booking.id)}>
+                  <Eye weight="BoldDuotone" className={cn("mr-2", "h-4", "w-4", "text-primary")} />
+                  Lihat Detail
+                </DropdownMenuItem>
+
+                <DropdownMenuSeparator />
+
+                {/* Edit */}
+                {can("booking", "edit") && (
+                  <DropdownMenuItem className="cursor-pointer" onClick={(e) => { e.stopPropagation(); setEditTarget(booking); }}>
+                    <Pencil weight="BoldDuotone" className={cn("mr-2", "h-4", "w-4", "text-primary")} />
+                    Edit Booking
                   </DropdownMenuItem>
-                ))}
-              </DropdownMenuSubContent>
-            </DropdownMenuSub>
-          )}
+                )}
 
-          {/* Upload Dokumen */}
-          <DropdownMenuItem
-            className="cursor-pointer"
-            onClick={(e) => { e.stopPropagation(); setUploadDocTarget(booking); }}
-          >
-            <FileUp weight="BoldDuotone" className={cn("mr-2", "h-4", "w-4", "text-primary")} />
-            Upload Dokumen
-          </DropdownMenuItem>
+                {/* Sync Paket dari Master */}
+                {can("booking", "edit") && booking.bookingStatus !== "Lost" && booking.bookingStatus !== "Rejected" && (
+                  <DropdownMenuItem className="cursor-pointer" onClick={(e) => { e.stopPropagation(); setSyncPackageTarget(booking); }}>
+                    <Refresh weight="BoldDuotone" className={cn("mr-2", "h-4", "w-4", "text-primary")} />
+                    Sync Paket dari Master
+                  </DropdownMenuItem>
+                )}
 
-          {/* Transfer Booking */}
-          {can("booking", "transfer") && (
-            <DropdownMenuItem
-              className="cursor-pointer"
-              onClick={(e) => { e.stopPropagation(); setTransferTarget(booking); }}
-            >
-              <ArrowLeftRight weight="BoldDuotone" className={cn("mr-2", "h-4", "w-4", "text-primary")} />
-              Transfer Booking
-            </DropdownMenuItem>
-          )}
+                {/* Set Harga */}
+                {can("booking", "edit-set-harga") && (
+                  <DropdownMenuItem className="cursor-pointer" onClick={(e) => { e.stopPropagation(); setSetHargaTarget({ bookingId: booking.id, customerName: booking.snapCustomer?.name ?? "Customer", packageName: booking.snapPackage?.packageName ?? booking.snapPackagePricing?.packageName ?? "Package", pax: booking.snapPackagePricing?.pax ?? 0, venueName: booking.snapVenue?.venueName ?? undefined }); }}>
+                    <TagPrice weight="BoldDuotone" className={cn("mr-2", "h-4", "w-4", "text-primary")} />
+                    Set Harga
+                  </DropdownMenuItem>
+                )}
 
-          {/* Transfer Manager */}
-          {can("booking", "transfer-manager") && (
-            <DropdownMenuItem
-              className="cursor-pointer"
-              onClick={(e) => { e.stopPropagation(); setManagerTarget(booking); }}
-            >
-              <UsersGroupRounded weight="BoldDuotone" className={cn("mr-2", "h-4", "w-4", "text-primary")} />
-              Transfer Manager
-            </DropdownMenuItem>
-          )}
+                {/* Term & Condition */}
+                {can("booking", "term-&-condition") && (
+                  <DropdownMenuItem className="cursor-pointer" onClick={(e) => { e.stopPropagation(); setTcTarget({ bookingId: booking.id, customerName: booking.snapCustomer?.name ?? "Customer" }); }}>
+                    <DocumentText weight="BoldDuotone" className={cn("mr-2", "h-4", "w-4", "text-primary")} />
+                    Term & Condition
+                  </DropdownMenuItem>
+                )}
 
-          {/* Activity Log */}
-          {can("booking", "view") && (
-            <DropdownMenuItem
-              className="cursor-pointer"
-              onClick={(e) => { e.stopPropagation(); setActivityLogTarget(booking); }}
-            >
-              <ClipboardCheck weight="BoldDuotone" className={cn("mr-2", "h-4", "w-4", "text-primary")} />
-              Lihat Activity
-            </DropdownMenuItem>
-          )}
+                {/* Upload Dokumen — ungated */}
+                <DropdownMenuItem className="cursor-pointer" onClick={(e) => { e.stopPropagation(); setUploadDocTarget(booking); }}>
+                  <FileUp weight="BoldDuotone" className={cn("mr-2", "h-4", "w-4", "text-primary")} />
+                  Upload Dokumen
+                </DropdownMenuItem>
 
-          {/* Approval dialog (read-only view of full timeline) */}
-          {approvalMap.has(booking.id) && (
-            <DropdownMenuItem
-              className="cursor-pointer"
-              onClick={(e) => { e.stopPropagation(); setApprovalDialogTarget(booking); }}
-            >
-              <ClipboardCheck weight="BoldDuotone" className={cn("mr-2", "h-4", "w-4", "text-primary")} />
-              Lihat Approval
-            </DropdownMenuItem>
-          )}
+                {/* Transfer Booking */}
+                {can("booking", "transfer") && (
+                  <DropdownMenuItem className="cursor-pointer" onClick={(e) => { e.stopPropagation(); setTransferTarget(booking); }}>
+                    <ArrowLeftRight weight="BoldDuotone" className={cn("mr-2", "h-4", "w-4", "text-primary")} />
+                    Transfer Booking
+                  </DropdownMenuItem>
+                )}
 
-          {showSeparatorStatus && <DropdownMenuSeparator />}
+                {/* Transfer Manager */}
+                {can("booking", "transfer-manager") && (
+                  <DropdownMenuItem className="cursor-pointer" onClick={(e) => { e.stopPropagation(); setManagerTarget(booking); }}>
+                    <UsersGroupRounded weight="BoldDuotone" className={cn("mr-2", "h-4", "w-4", "text-primary")} />
+                    Transfer Manager
+                  </DropdownMenuItem>
+                )}
 
-          {/* Reject */}
-          {can("booking", "reject") && booking.bookingStatus !== "Confirmed" && booking.bookingStatus !== "Lost" && (
-            <DropdownMenuItem
-              className={cn("cursor-pointer", "text-destructive", "focus:text-destructive")}
-              onClick={(e) => { e.stopPropagation(); setRejectTarget(booking); }}
-            >
-              <SquareX weight="BoldDuotone" className={cn("mr-2", "h-4", "w-4", "text-destructive")} />
-              Reject Booking
-            </DropdownMenuItem>
-          )}
+                {/* Activity Log — card has no dedicated column, keep it reachable here */}
+                {can("booking", "view") && (
+                  <DropdownMenuItem className="cursor-pointer" onClick={(e) => { e.stopPropagation(); setActivityLogTarget(booking); }}>
+                    <ClipboardCheck weight="BoldDuotone" className={cn("mr-2", "h-4", "w-4", "text-primary")} />
+                    Lihat Activity
+                  </DropdownMenuItem>
+                )}
 
-          {/* Mark Lost */}
-          {can("booking", "mark-lost") && booking.bookingStatus !== "Lost" && booking.bookingStatus !== "Confirmed" && (
-            <DropdownMenuItem
-              className={cn("cursor-pointer", "text-muted-foreground", "focus:text-foreground")}
-              onClick={(e) => { e.stopPropagation(); setLostTarget(booking); }}
-            >
-              <SquareX weight="BoldDuotone" className={cn("mr-2", "h-4", "w-4")} />
-              Lost Booking
-            </DropdownMenuItem>
-          )}
+                {(can("booking", "cancel") || (can("booking", "restore") && booking.bookingStatus === "Confirmed")) && <DropdownMenuSeparator />}
 
-          {/* Restore */}
-          {can("booking", "restore") && (booking.bookingStatus === "Lost" || booking.bookingStatus === "Confirmed") && (
-            <DropdownMenuItem
-              className={cn("cursor-pointer", "text-muted-foreground", "focus:text-foreground")}
-              onClick={(e) => { e.stopPropagation(); setRestoreTarget(booking); }}
-            >
-              <Refresh weight="BoldDuotone" className={cn("mr-2", "h-4", "w-4")} />
-              Restore Booking
-            </DropdownMenuItem>
-          )}
+                {/* Cancel Booking */}
+                {can("booking", "cancel") && (
+                  <DropdownMenuItem className={cn("cursor-pointer", "text-destructive", "focus:text-destructive")} onClick={(e) => { e.stopPropagation(); setCancelTarget(booking); }}>
+                    <SquareX weight="BoldDuotone" className={cn("mr-2", "h-4", "w-4", "text-destructive")} />
+                    Cancel Booking
+                  </DropdownMenuItem>
+                )}
 
-          {can("booking", "delete") && <DropdownMenuSeparator />}
-          {can("booking", "delete") && (
-            <DropdownMenuItem
-              className={cn("cursor-pointer", "text-destructive", "focus:text-destructive")}
-              onClick={(e) => { e.stopPropagation(); setDeleteTarget(booking); }}
-            >
-              <Trash2 weight="BoldDuotone" className={cn("mr-2", "h-4", "w-4", "text-destructive")} />
-              Hapus
-            </DropdownMenuItem>
-          )}
-        </DropdownMenuContent>
+                {/* Restore — only when Confirmed */}
+                {can("booking", "restore") && booking.bookingStatus === "Confirmed" && (
+                  <DropdownMenuItem className={cn("cursor-pointer", "text-muted-foreground", "focus:text-foreground")} onClick={(e) => { e.stopPropagation(); setRestoreTarget(booking); }}>
+                    <Refresh weight="BoldDuotone" className={cn("mr-2", "h-4", "w-4")} />
+                    Restore Booking
+                  </DropdownMenuItem>
+                )}
+
+                {can("booking", "delete") && <DropdownMenuSeparator />}
+                {can("booking", "delete") && (
+                  <DropdownMenuItem className={cn("cursor-pointer", "text-destructive", "focus:text-destructive")} onClick={(e) => { e.stopPropagation(); setDeleteTarget(booking); }}>
+                    <Trash2 weight="BoldDuotone" className={cn("mr-2", "h-4", "w-4", "text-destructive")} />
+                    Hapus
+                  </DropdownMenuItem>
+                )}
+              </>
+            )}
+          </DropdownMenuContent>
         </DropdownMenu>
       </div>
     );
@@ -636,7 +778,21 @@ export function SalesBookingsTable({ salesId }: SalesBookingsTableProps): React.
         />
       </div>
 
-      {/* Status filter */}
+      {/* Source of Information */}
+      <div className="space-y-1">
+        <label className="text-xs font-medium text-muted-foreground">Source of Information</label>
+        <SearchableSelect
+          options={[{ id: "all", name: "Semua Source" }, ...sourceOfInformations.map((s) => ({ id: s.id, name: s.name }))]}
+          value={sourceOfInformationFilter || "all"}
+          onChange={(val) => { setSourceOfInformationFilter(val === "all" ? "" : val); setPage(1); }}
+          placeholder="Semua Source"
+          searchPlaceholder="Cari source..."
+          emptyText="Source tidak ditemukan"
+          className="h-9"
+        />
+      </div>
+
+      {/* Status Data filter */}
       <div className="space-y-1">
         <label className="text-xs font-medium text-muted-foreground">Status Data</label>
         <SearchableSelect
@@ -645,6 +801,20 @@ export function SalesBookingsTable({ salesId }: SalesBookingsTableProps): React.
           onChange={(val) => { setRecordStatus(val as "saved" | "draft" | "all"); setPage(1); }}
           placeholder="Saved"
           searchPlaceholder="Cari status..."
+          emptyText="Status tidak ditemukan"
+          className="h-9"
+        />
+      </div>
+
+      {/* Status Booking filter */}
+      <div className="space-y-1">
+        <label className="text-xs font-medium text-muted-foreground">Status Booking</label>
+        <SearchableSelect
+          options={BOOKING_STATUS_OPTIONS}
+          value={bookingStatusFilter || ""}
+          onChange={(val) => { setBookingStatusFilter(val as BookingStatus | ""); setPage(1); }}
+          placeholder="Semua"
+          searchPlaceholder="Cari status booking..."
           emptyText="Status tidak ditemukan"
           className="h-9"
         />
@@ -708,6 +878,34 @@ export function SalesBookingsTable({ salesId }: SalesBookingsTableProps): React.
           </button>
         )}
       </div>
+
+      {/* Tahun filter */}
+      <div className="space-y-1">
+        <label className="text-xs font-medium text-muted-foreground">Tahun</label>
+        <SearchableSelect
+          options={availableYears.map((y) => ({ id: String(y), name: String(y) }))}
+          value={yearFilter !== null ? String(yearFilter) : ""}
+          onChange={(val) => { setYearFilter(val ? Number(val) : null); setPage(1); }}
+          placeholder="Semua tahun"
+          searchPlaceholder="Cari tahun..."
+          emptyText="Tahun tidak ditemukan"
+          className="h-9"
+        />
+      </div>
+
+      {/* Status Approval filter */}
+      <div className="space-y-1">
+        <label className="text-xs font-medium text-muted-foreground">Status Approval</label>
+        <SearchableSelect
+          options={APPROVAL_STATUS_OPTIONS}
+          value={approvalFilter || ""}
+          onChange={(val) => { setApprovalFilter(val as ApprovalStatusFilter | ""); setPage(1); }}
+          placeholder="Semua"
+          searchPlaceholder="Cari status approval..."
+          emptyText="Status tidak ditemukan"
+          className="h-9"
+        />
+      </div>
     </div>
   );
 
@@ -742,8 +940,20 @@ export function SalesBookingsTable({ salesId }: SalesBookingsTableProps): React.
           <Refresh weight="BoldDuotone" className={cn("h-4", "w-4", isFetching && "animate-spin")} />
         </Button>
 
+        {/* Export */}
+        <Button
+          type="button"
+          variant="outline"
+          size="icon"
+          onClick={() => setExportOpen(true)}
+          aria-label="Export data booking sales ini"
+          className="shrink-0"
+        >
+          <Download weight="BoldDuotone" className="h-4 w-4" />
+        </Button>
+
         {/* Filter popover */}
-        <Popover>
+        <Popover onOpenChange={(o) => { if (o) setFilterOpened(true); }}>
           <PopoverTrigger
             render={
               <Button
@@ -781,9 +991,8 @@ export function SalesBookingsTable({ salesId }: SalesBookingsTableProps): React.
 
       {/* Booking list — compact card layout, overflow-x-hidden */}
       <div className="overflow-x-hidden w-full">
-        {(isFetching && bookings.length === 0) || (approvalsLoading && bookings.length > 0) ? (
-          // Hold the skeleton until BOTH bookings and approvals have resolved on first
-          // load — otherwise rows paint first and approval badges pop in a frame later.
+        {isFetching && bookings.length === 0 ? (
+          // Approvals ride along with the bookings query, so a single load gate suffices.
           <div className="space-y-2">
             {[...Array(4)].map((_, i) => (
               <Skeleton key={i} className="h-24 w-full rounded-2xl" />
@@ -929,34 +1138,79 @@ export function SalesBookingsTable({ salesId }: SalesBookingsTableProps): React.
         )}
       </div>
 
-      {/* Pagination */}
-      {totalPages > 1 && (
-        <div className="flex justify-between items-center pt-3 mt-1 border-t border-border">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setPage((p) => Math.max(p - 1, 1))}
-            disabled={page === 1}
-          >
-            <ArrowLeft weight="BoldDuotone" className="w-4 h-4 mr-1" />
-            Prev
-          </Button>
-          <span className="text-xs text-muted-foreground">
-            {page} / {totalPages}
-          </span>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setPage((p) => Math.min(p + 1, totalPages))}
-            disabled={page === totalPages}
-          >
-            Next
-            <ArrowRight weight="BoldDuotone" className="w-4 h-4 ml-1" />
-          </Button>
+      {/* Footer: page-size selector (always) + numbered pagination (when >1 page) */}
+      {totalBookings > 0 && (
+        <div className="flex flex-col gap-3 pt-3 mt-1 border-t border-border sm:flex-row sm:items-center sm:justify-between">
+          {/* Page size */}
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted-foreground">Tampilkan</span>
+            <Select
+              value={String(pageSize)}
+              onValueChange={(v) => { setPageSize(Number(v)); setPage(1); }}
+            >
+              <SelectTrigger size="sm" className="w-20 rounded-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {PAGE_SIZE_OPTIONS.map((n) => (
+                  <SelectItem key={n} value={String(n)}>{n}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <span className="text-xs text-muted-foreground tabular-nums">dari {totalBookings}</span>
+          </div>
+
+          {/* Numbered pagination */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between gap-2 sm:justify-end">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPage((p) => Math.max(p - 1, 1))}
+                disabled={page === 1}
+              >
+                <ArrowLeft weight="BoldDuotone" className="w-4 h-4 sm:mr-1" />
+                <span className="hidden sm:inline">Prev</span>
+              </Button>
+              <div className="flex items-center gap-1">
+                {buildPageRange(page, totalPages).map((item, idx) =>
+                  item === "..." ? (
+                    <span key={`gap-${idx}`} className="px-1.5 py-1 text-xs text-muted-foreground select-none">…</span>
+                  ) : (
+                    <button
+                      key={item}
+                      type="button"
+                      onClick={() => setPage(item as number)}
+                      className={cn(
+                        "min-w-8 rounded-md px-2.5 py-1 text-xs font-medium cursor-pointer transition-colors",
+                        page === item
+                          ? "bg-primary text-primary-foreground"
+                          : "text-foreground hover:bg-muted",
+                      )}
+                    >
+                      {item}
+                    </button>
+                  ),
+                )}
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPage((p) => Math.min(p + 1, totalPages))}
+                disabled={page === totalPages}
+              >
+                <span className="hidden sm:inline">Next</span>
+                <ArrowRight weight="BoldDuotone" className="w-4 h-4 sm:ml-1" />
+              </Button>
+            </div>
+          )}
         </div>
       )}
 
       {/* ── Modals ──────────────────────────────────────────────────────────── */}
+
+      {/* Export — scoped to this sales (PIC) */}
+      <ExportBookingsModal open={exportOpen} onClose={() => setExportOpen(false)} salesId={salesId} />
 
       {/* Edit Booking Drawer */}
       <EditBookingDrawer
@@ -988,11 +1242,8 @@ export function SalesBookingsTable({ salesId }: SalesBookingsTableProps): React.
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Reject */}
-      <RejectBookingModal open={!!rejectTarget} booking={rejectTarget} onClose={() => setRejectTarget(null)} />
-
-      {/* Mark Lost */}
-      <MarkLostDialog open={!!lostTarget} booking={lostTarget} onClose={() => setLostTarget(null)} />
+      {/* Cancel Booking */}
+      <CancelBookingDialog open={!!cancelTarget} booking={cancelTarget} onClose={() => setCancelTarget(null)} />
 
       {/* Restore */}
       <RestoreBookingDialog open={!!restoreTarget} booking={restoreTarget} onClose={() => setRestoreTarget(null)} />
@@ -1058,6 +1309,100 @@ export function SalesBookingsTable({ salesId }: SalesBookingsTableProps): React.
         target={poPreviewTarget}
       />
 
+      {/* Term & Condition Drawer */}
+      {tcTarget && (
+        <BookingTCDrawer
+          open={!!tcTarget}
+          onClose={() => setTcTarget(null)}
+          bookingId={tcTarget.bookingId}
+          customerName={tcTarget.customerName}
+        />
+      )}
+
+      {/* Set Harga Booking Drawer */}
+      {setHargaTarget && (
+        <SetHargaBookingDrawer
+          key={setHargaTarget.bookingId}
+          isOpen={!!setHargaTarget}
+          onClose={() => {
+            void qc.invalidateQueries({ queryKey: ["bookings"] });
+            void qc.invalidateQueries({ queryKey: ["booking-approvals"] });
+            void qc.invalidateQueries({ queryKey: ["groups"] });
+            setSetHargaTarget(null);
+          }}
+          bookingId={setHargaTarget.bookingId}
+          customerName={setHargaTarget.customerName}
+          packageName={setHargaTarget.packageName}
+          pax={setHargaTarget.pax}
+          venueName={setHargaTarget.venueName}
+        />
+      )}
+
+      {/* Riwayat Versi — lihat & restore versi lama */}
+      <RevisionHistoryDrawer
+        booking={revisionHistoryTarget}
+        open={!!revisionHistoryTarget}
+        onOpenChange={(open) => { if (!open) setRevisionHistoryTarget(null); }}
+        onPreviewPO={previewPO}
+      />
+
+      {/* Sync Paket dari Master */}
+      <AlertDialog open={!!syncPackageTarget} onOpenChange={(o) => { if (!o) setSyncPackageTarget(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Sync paket dari master?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Isi paket booking <strong>{syncPackageTarget?.snapCustomer?.name ?? "ini"}</strong> akan ditarik ulang dari data master terbaru. Yang akan terjadi:
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+
+          <ol className={cn("space-y-2.5", "rounded-xl", "border", "border-border", "bg-muted/30", "p-4")}>
+            {(syncPackageTarget?.snapshotFrozenAt
+              ? [
+                  "Data paket (nama, harga, item, dan T&C) ditarik ulang dari master terbaru dan menimpa isi booking ini.",
+                  "Setelan takeout (harga jual custom per kategori) tetap dipertahankan.",
+                  "Dibuat revisi baru dan approval di-reset ke Pending — perlu approval ulang dari awal.",
+                  "Persetujuan klien dibatalkan; klien harus tanda tangan ulang kontraknya.",
+                  "⚠️ Jika harga berubah dan booking sudah punya pembayaran, cek ulang cicilan (TOP) lewat Set Harga.",
+                ]
+              : [
+                  "Data paket (nama, harga, item, dan T&C) ditarik ulang dari master terbaru dan menimpa isi booking ini.",
+                  "Setelan takeout (harga jual custom per kategori) tetap dipertahankan.",
+                  "Approval yang sudah berjalan (Manager/Finance) TIDAK direset — tetap seperti sekarang.",
+                  "Booking belum ditandatangani klien, jadi tidak dibuat revisi baru dan klien tidak perlu tanda tangan ulang.",
+                  "⚠️ Jika harga berubah dan booking sudah punya pembayaran, cek ulang cicilan (TOP) lewat Set Harga.",
+                ]
+            ).map((text, i) => (
+              <li key={i} className={cn("flex", "gap-2.5", "text-sm", "text-muted-foreground")}>
+                <span className={cn("mt-0.5", "flex", "h-5", "w-5", "shrink-0", "items-center", "justify-center", "rounded-full", "bg-primary/10", "text-xs", "font-semibold", "text-primary")}>
+                  {i + 1}
+                </span>
+                <span>{text}</span>
+              </li>
+            ))}
+          </ol>
+
+          <AlertDialogFooter>
+            <AlertDialogCancel>Batal</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={syncPackageMut.isPending}
+              onClick={async () => {
+                if (!syncPackageTarget) return;
+                const res = await syncPackageMut.mutateAsync({ bookingId: syncPackageTarget.id });
+                if (!res.success) { toast.error(res.error ?? "Gagal sync paket."); return; }
+                toast.success("Paket berhasil di-sync dari master");
+                void qc.invalidateQueries({ queryKey: ["bookings"] });
+                void qc.invalidateQueries({ queryKey: ["booking-approvals"] });
+                void qc.invalidateQueries({ queryKey: ["groups"] });
+                setSyncPackageTarget(null);
+              }}
+            >
+              {syncPackageMut.isPending ? "Memproses..." : "Ya, sync sekarang"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       {/* Approval Dialog (from approval badge) */}
       {approvalDialogTarget && user && (
         <ApprovalDialog
@@ -1068,6 +1413,9 @@ export function SalesBookingsTable({ salesId }: SalesBookingsTableProps): React.
               console.error("[SalesBookingsTable] invalidateQueries error:", err);
             });
             qc.invalidateQueries({ queryKey: ["booking-approvals"] }).catch((err) => {
+              console.error("[SalesBookingsTable] invalidateQueries error:", err);
+            });
+            qc.invalidateQueries({ queryKey: ["groups"] }).catch((err) => {
               console.error("[SalesBookingsTable] invalidateQueries error:", err);
             });
           }}
@@ -1090,6 +1438,9 @@ export function SalesBookingsTable({ salesId }: SalesBookingsTableProps): React.
               console.error("[SalesBookingsTable] invalidateQueries error:", err);
             });
             qc.invalidateQueries({ queryKey: ["booking-approvals"] }).catch((err) => {
+              console.error("[SalesBookingsTable] invalidateQueries error:", err);
+            });
+            qc.invalidateQueries({ queryKey: ["groups"] }).catch((err) => {
               console.error("[SalesBookingsTable] invalidateQueries error:", err);
             });
           }}

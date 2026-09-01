@@ -144,6 +144,34 @@ export async function getApprovalRecordsByModule(module: string, page = 1, limit
 
 export type ApprovalRecordWithSteps = NonNullable<Awaited<ReturnType<typeof getApprovalRecord>>>;
 
+/**
+ * Scoped variant of getApprovalRecordsByModule: fetch approval records for a
+ * specific set of entity IDs only (e.g. the bookings currently visible in one
+ * page of a table) instead of pulling up to 500 module-wide records with nested
+ * steps just to badge a handful of rows. Empty input short-circuits to avoid an
+ * unbounded `IN ()`.
+ */
+export async function getApprovalRecordsByEntityIds(
+  module: string,
+  entityIds: string[],
+): Promise<ApprovalRecordWithSteps[]> {
+  if (entityIds.length === 0) return [];
+  return db.approvalRecord.findMany({
+    where: { module, entityId: { in: entityIds } },
+    include: {
+      steps: {
+        orderBy: { stepOrder: "asc" },
+        include: {
+          approverRole: { select: { id: true, name: true } },
+          approverUser: { select: { id: true, fullName: true } },
+          decidedBy: { select: { id: true, fullName: true } },
+        },
+      },
+      createdBy: { select: { id: true, fullName: true } },
+    },
+  });
+}
+
 export async function getPackageById(id: string) {
   return db.package.findUnique({
     where: { id },

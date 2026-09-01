@@ -2,8 +2,7 @@ import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { apiLimiter, rateLimitResponse } from "@/lib/rate-limit";
 import { db } from "@/lib/db";
-import { isSuperAdmin } from "@/lib/permissions";
-import { getBookingStatsRaw } from "@/lib/queries/dashboard";
+import { getBookingStatsRaw, resolveDealingRange } from "@/lib/queries/dashboard";
 
 export async function GET(req: Request): Promise<Response> {
   const session = await auth();
@@ -15,9 +14,11 @@ export async function GET(req: Request): Promise<Response> {
     return rateLimitResponse();
   }
 
+  // Dealing-date (createdAt) range — absent params → no range (all-time), see
+  // resolveDealingRange().
   const querySchema = z.object({
-    year:  z.coerce.number().int().min(2000).max(2100).optional(),
-    month: z.coerce.number().int().min(1).max(12).optional(),
+    dealFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+    dealTo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   });
 
   const qParsed = querySchema.safeParse(
@@ -27,14 +28,10 @@ export async function GET(req: Request): Promise<Response> {
     return Response.json({ error: "Invalid query parameters" }, { status: 400 });
   }
 
-  const now = new Date();
-  const year = qParsed.data.year ?? now.getFullYear();
-  const monthParam = qParsed.data.month ?? now.getMonth() + 1;
-  const month = monthParam - 1;
-  const startDate = new Date(year, month, 1);
-  const endDate = new Date(year, month + 1, 0, 23, 59, 59, 999);
+  const { range } = resolveDealingRange(qParsed.data.dealFrom, qParsed.data.dealTo);
 
-  const isAdmin = await isSuperAdmin(session.user.roleId);
+  // isSuperAdmin is already on the JWT (session.user) — no DB round-trip.
+  const isAdmin = session.user.isSuperAdmin;
 
   let salesIds: string[] | null = null;
   if (!isAdmin) {
@@ -54,6 +51,6 @@ export async function GET(req: Request): Promise<Response> {
     salesIds = ids.length > 0 ? ids : null;
   }
 
-  const stats = await getBookingStatsRaw(salesIds, startDate, endDate);
+  const stats = await getBookingStatsRaw(salesIds, range);
   return Response.json(stats);
 }

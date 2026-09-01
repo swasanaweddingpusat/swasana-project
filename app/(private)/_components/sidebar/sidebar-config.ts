@@ -100,7 +100,7 @@ export const SETTINGS_MODULES = [
   "settings-booking-log",
 ] as const;
 
-export type ModuleKey = "finance" | "hrd" | "booking" | "purchase";
+export type ModuleKey = "finance" | "hrd" | "booking" | "purchase" | "stakeholder";
 
 export const MODULE_NAV_MAP: Record<ModuleKey, NavItem[]> = {
   finance: [
@@ -146,6 +146,10 @@ export const MODULE_NAV_MAP: Record<ModuleKey, NavItem[]> = {
         { name: "Evaluasi", href: "/purchase/vendor-specialist/evaluations", icon: ClipboardCheck, subtitle: "Lihat dan kelola evaluasi kinerja vendor" },
         { name: "Analitik", href: "/purchase/vendor-specialist/analytics", icon: ChartSquare, subtitle: "Statistik dan analisis kinerja vendor" },
       ] },
+  ],
+  stakeholder: [
+    // HIDDEN sementara — fitur belum di-expose. Hapus `hidden: true` untuk munculin lagi.
+    { name: "Performance Sales", href: "/stakeholder/performance-sales", icon: GraphUp, subtitle: "Monitoring performa penjualan lintas tim", permission: { module: "performance-sales", action: "view" }, hidden: true },
   ],
 };
 

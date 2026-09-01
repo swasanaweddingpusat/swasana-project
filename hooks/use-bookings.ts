@@ -89,6 +89,8 @@ export function useCreateBooking() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["bookings"] });
       qc.invalidateQueries({ queryKey: ["booking-approvals"] });
+      // Booking changes shift group target-vs-revenue → refresh group performance.
+      qc.invalidateQueries({ queryKey: ["groups"] });
     },
   });
 }
@@ -100,6 +102,8 @@ export function useUpdateBooking() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["bookings"] });
       qc.invalidateQueries({ queryKey: ["booking-approvals"] });
+      // Update/mark-lost/reject/restore all flow through here — refresh group perf.
+      qc.invalidateQueries({ queryKey: ["groups"] });
     },
   });
 }
@@ -111,6 +115,7 @@ export function useCancelBooking() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["bookings"] });
       qc.invalidateQueries({ queryKey: ["booking-approvals"] });
+      qc.invalidateQueries({ queryKey: ["groups"] });
     },
   });
 }
@@ -119,7 +124,11 @@ export function useDeleteBooking() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => deleteBooking(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["bookings"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["bookings"] });
+      qc.invalidateQueries({ queryKey: ["booking-approvals"] });
+      qc.invalidateQueries({ queryKey: ["groups"] });
+    },
   });
 }
 
@@ -128,7 +137,11 @@ export function useTransferBooking() {
   return useMutation({
     mutationFn: ({ bookingId, targetSalesId }: { bookingId: string; targetSalesId: string }) =>
       transferBooking(bookingId, targetSalesId),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["bookings"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["bookings"] });
+      qc.invalidateQueries({ queryKey: ["booking-approvals"] });
+      qc.invalidateQueries({ queryKey: ["groups"] });
+    },
   });
 }
 
@@ -137,6 +150,10 @@ export function useTransferBookingManager() {
   return useMutation({
     mutationFn: ({ bookingId, targetManagerId }: { bookingId: string; targetManagerId: string }) =>
       transferBookingManager(bookingId, targetManagerId),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["bookings"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["bookings"] });
+      qc.invalidateQueries({ queryKey: ["booking-approvals"] });
+      qc.invalidateQueries({ queryKey: ["groups"] });
+    },
   });
 }
