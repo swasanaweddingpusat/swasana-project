@@ -103,6 +103,7 @@ export function CrmOverviewMetrics(): React.ReactElement | null {
     const from = new Date(to.getFullYear(), to.getMonth(), to.getDate() - 6);
     return { from, to };
   });
+  const [open, setOpen] = useState(false);
 
   const from = range?.from ? toIsoDay(range.from) : "";
   const to = range?.to ? toIsoDay(range.to) : from;
@@ -116,42 +117,14 @@ export function CrmOverviewMetrics(): React.ReactElement | null {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-center gap-2">
-        <Bolt weight="BoldDuotone" className="h-5 w-5 text-[var(--brand-gold)]" />
-        <h2 className="text-base font-semibold text-foreground">Perolehan Database</h2>
-      </div>
-
-      <SourceCard data={data} loading={loading} range={range} onRangeChange={setRange} />
-      <FollowUpCard data={data} loading={loading} />
-    </div>
-  );
-}
-
-// ─── Source card (Kantor vs Mandiri) ──────────────────────────────────────────
-
-function SourceCard({
-  data,
-  loading,
-  range,
-  onRangeChange,
-}: {
-  data: BitrixOverviewData | null;
-  loading: boolean;
-  range: DateRange | undefined;
-  onRangeChange: (range: DateRange | undefined) => void;
-}): React.ReactElement {
-  const [open, setOpen] = useState(false);
-  const kantor = data?.kantor ?? 0;
-  const mandiri = data?.mandiri ?? 0;
-  const total = kantor + mandiri;
-
-  return (
-    <Card className="rounded-2xl p-5 shadow-sm sm:p-6">
-      <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <CardHeading
-          icon={<Buildings weight="BoldDuotone" className="h-4 w-4 text-foreground" />}
-          title="Sumber Database"
-        />
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2.5">
+          <Bolt weight="BoldDuotone" className="h-5 w-5 text-[var(--brand-gold)]" />
+          <div className="flex flex-col gap-0.5">
+            <h2 className="text-base font-semibold text-foreground">Perolehan Database</h2>
+            <p className="text-xs text-muted-foreground">Database masuk & status follow-up dalam rentang tanggal terpilih</p>
+          </div>
+        </div>
 
         <Popover open={open} onOpenChange={setOpen}>
           <PopoverTrigger
@@ -165,9 +138,37 @@ function SourceCard({
             <span className="truncate">{formatRangeLabel(range)}</span>
           </PopoverTrigger>
           <PopoverContent className="w-auto p-0" align="end">
-            <Calendar mode="range" numberOfMonths={1} selected={range} onSelect={onRangeChange} autoFocus />
+            <Calendar mode="range" numberOfMonths={1} selected={range} onSelect={setRange} autoFocus />
           </PopoverContent>
         </Popover>
+      </div>
+
+      <SourceCard data={data} loading={loading} />
+      <FollowUpCard data={data} loading={loading} />
+    </div>
+  );
+}
+
+// ─── Source card (Kantor vs Mandiri) ──────────────────────────────────────────
+
+function SourceCard({
+  data,
+  loading,
+}: {
+  data: BitrixOverviewData | null;
+  loading: boolean;
+}): React.ReactElement {
+  const kantor = data?.kantor ?? 0;
+  const mandiri = data?.mandiri ?? 0;
+  const total = kantor + mandiri;
+
+  return (
+    <Card className="rounded-2xl p-5 shadow-sm sm:p-6">
+      <div className="mb-5">
+        <CardHeading
+          icon={<Buildings weight="BoldDuotone" className="h-4 w-4 text-foreground" />}
+          title="Sumber Database"
+        />
       </div>
 
       {/* Hero total */}
@@ -267,7 +268,10 @@ function FollowUpCard({ data, loading }: { data: BitrixOverviewData | null; load
         </div>
         <div className="flex items-end gap-5">
           <div className="text-right">
-            <p className="text-xs text-muted-foreground">Sudah</p>
+            <p className="flex items-center justify-end gap-1.5 text-xs text-muted-foreground">
+              <span className="size-2 rounded-full bg-primary" />
+              Sudah
+            </p>
             {loading ? (
               <Skeleton className="mt-1 h-7 w-12" />
             ) : (
@@ -277,16 +281,14 @@ function FollowUpCard({ data, loading }: { data: BitrixOverviewData | null; load
             )}
           </div>
           <div className="text-right">
-            <p className="text-xs text-muted-foreground">Perlu</p>
+            <p className="flex items-center justify-end gap-1.5 text-xs text-muted-foreground">
+              <span className="size-2 rounded-full bg-[var(--brand-gold)]" />
+              Perlu
+            </p>
             {loading ? (
               <Skeleton className="mt-1 h-7 w-12" />
             ) : (
-              <p
-                className={cn(
-                  "font-heading text-lg font-semibold tabular-nums",
-                  notResponded > 0 ? "text-destructive" : "text-foreground",
-                )}
-              >
+              <p className="font-heading text-lg font-semibold text-foreground tabular-nums">
                 {fmt(notResponded)}
               </p>
             )}
@@ -301,7 +303,7 @@ function FollowUpCard({ data, loading }: { data: BitrixOverviewData | null; load
           className="mt-3 h-2.5"
           segments={[
             { value: responded, className: "bg-primary" },
-            { value: notResponded, className: "bg-destructive" },
+            { value: notResponded, className: "bg-[var(--brand-gold)]" },
           ]}
         />
       )}
@@ -366,7 +368,7 @@ function SalesBreakdownTable({
             <TableCell
               className={cn(
                 "text-right tabular-nums",
-                row.notResponded > 0 ? "text-destructive" : "text-muted-foreground",
+                row.notResponded > 0 ? "text-foreground" : "text-muted-foreground",
               )}
             >
               {fmt(row.notResponded)}
