@@ -1,4 +1,4 @@
-import { requirePermissionForRoute, isSuperAdmin } from "@/lib/permissions";
+import { requirePermissionForRoute } from "@/lib/permissions";
 import { apiLimiter, rateLimitResponse } from "@/lib/rate-limit";
 import { db } from "@/lib/db";
 import { getDealingSummary } from "@/lib/queries/bookings";
@@ -34,7 +34,7 @@ export async function GET(request: Request) {
   const to = new Date(`${toDay}T23:59:59.999`);
 
   const profileId = session.user.profileId;
-  const isAdmin = await isSuperAdmin(session.user.roleId);
+  const isAdmin = session.user.isSuperAdmin;
 
   // Super-admin: no scope filter (undefined → all). Others: scope by their
   // Profile.dataScope (own/group), defaulting to the safest "own".

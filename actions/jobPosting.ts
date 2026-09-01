@@ -3,7 +3,7 @@
 import { revalidateTag } from "next/cache";
 import { db } from "@/lib/db";
 import { Prisma } from "@prisma/client";
-import { requirePermission, isSuperAdmin } from "@/lib/permissions";
+import { requirePermission } from "@/lib/permissions";
 import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
 import { logAudit } from "@/lib/audit";
 import { createJobPostingSchema, updateJobPostingSchema } from "@/lib/validations/jobPosting";
@@ -148,7 +148,7 @@ export async function updateJobPosting(
 
     if (existing.status === "open") {
       const isCreator = existing.createdBy === session!.user.profileId;
-      const isAdmin = await isSuperAdmin(session!.user.roleId);
+      const isAdmin = session!.user.isSuperAdmin;
       if (!isCreator && !isAdmin) {
         return { success: false, error: "Hanya pengaju atau super admin yang dapat mengedit lowongan yang sudah dipublikasikan." };
       }
@@ -382,7 +382,7 @@ export async function approveJobPosting(
     if (!posting) return { success: false, error: "Lowongan tidak ditemukan." };
 
     const profileId = session!.user.profileId;
-    const isAdmin = await isSuperAdmin(session!.user.roleId);
+    const isAdmin = session!.user.isSuperAdmin;
     const isApprover1 = posting.approverId === profileId;
     const isApprover2 = posting.approver2Id === profileId;
 
@@ -477,7 +477,7 @@ export async function rejectJobPosting(
     if (!posting) return { success: false, error: "Lowongan tidak ditemukan." };
 
     const profileId = session!.user.profileId;
-    const isAdmin = await isSuperAdmin(session!.user.roleId);
+    const isAdmin = session!.user.isSuperAdmin;
     const isApprover1 = posting.approverId === profileId;
     const isApprover2 = posting.approver2Id === profileId;
 

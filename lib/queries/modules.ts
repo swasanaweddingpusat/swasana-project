@@ -1,3 +1,4 @@
+import { cacheTag, cacheLife } from "next/cache";
 import { db } from "@/lib/db";
 
 export interface AccessibleModule {
@@ -70,6 +71,10 @@ export async function getPermissionModules(): Promise<string[]> {
 export async function getAccessibleModules(
   roleId: string | null | undefined,
 ): Promise<AccessibleModule[]> {
+  "use cache";
+  cacheTag("modules");
+  cacheLife("hours");
+
   if (!roleId) return [];
 
   const [modules, role] = await Promise.all([

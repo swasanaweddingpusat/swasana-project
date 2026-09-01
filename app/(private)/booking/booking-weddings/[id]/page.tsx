@@ -1,11 +1,11 @@
 import { notFound, redirect } from "next/navigation";
 import { connection } from "next/server";
 import { auth } from "@/lib/auth";
-import { hasPermission, isSuperAdmin } from "@/lib/permissions";
+import { hasPermission } from "@/lib/permissions";
 import { getBookingById } from "@/lib/queries/bookings";
 import { getBookingCashIns, getTermPaidMap, deriveTermStatus } from "@/lib/queries/ledger";
 import { getPublicUrl } from "@/lib/storage";
-import { getProfileDataScope, canAccessBooking } from "@/lib/access-control";
+import { canAccessBooking } from "@/lib/access-control";
 import { BookingDetailClient } from "./_components/BookingDetailClient";
 import type { BookingDetailResolved } from "./_components/BookingDetailClient";
 
@@ -21,7 +21,7 @@ export default async function BookingWeddingDetailPage({ params }: Props) {
   if (!session?.user?.id) redirect("/auth/login");
 
   // ── Authorization: module-level view permission (super-admin bypasses) ──
-  const isAdmin = await isSuperAdmin(session.user.roleId);
+  const isAdmin = session.user.isSuperAdmin;
   if (!isAdmin) {
     const canView = await hasPermission(session.user.roleId, "booking", "view");
     if (!canView) redirect("/forbidden");
@@ -37,7 +37,7 @@ export default async function BookingWeddingDetailPage({ params }: Props) {
   if (!isAdmin) {
     const profileId = session.user.profileId;
     if (!profileId) redirect("/forbidden");
-    const scope = await getProfileDataScope(profileId);
+    const scope = session.user.dataScope ?? "own";
     const allowed = await canAccessBooking(profileId, scope, id);
     if (!allowed) notFound();
   }

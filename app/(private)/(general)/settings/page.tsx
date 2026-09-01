@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { auth } from "@/lib/auth";
 import { requirePagePermission } from "@/lib/require-page-permission";
-import { hasPermission, isSuperAdmin } from "@/lib/permissions";
+import { hasPermission } from "@/lib/permissions";
 import { cn } from "@/lib/utils";
 import {
   UsersGroupRounded,
@@ -204,7 +204,7 @@ export default async function SettingsHubPage() {
 
   const session = await auth();
   const roleId = session?.user?.roleId ?? null;
-  const isAdmin = await isSuperAdmin(roleId);
+  const isAdmin = session?.user?.isSuperAdmin ?? false;
 
   // Filter items per group based on user permission
   const visibleGroups = (

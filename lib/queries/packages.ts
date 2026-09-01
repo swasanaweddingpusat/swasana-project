@@ -1,3 +1,4 @@
+import { cacheTag, cacheLife } from "next/cache";
 import { db } from "@/lib/db";
 
 const packageInclude = {
@@ -23,6 +24,10 @@ export async function getPackages({
   search,
   category = "WEDDINGS",
 }: GetPackagesParams = {}) {
+  "use cache";
+  cacheTag("packages");
+  cacheLife("hours");
+
   const where = {
     category,
     ...(venueId ? { venueId } : {}),
@@ -52,6 +57,10 @@ export async function getPackages({
 }
 
 export async function getPackagesForBooking(venueId?: string, category: "WEDDINGS" | "MICE" = "WEDDINGS") {
+  "use cache";
+  cacheTag("packages");
+  cacheLife("hours");
+
   const packages = await db.package.findMany({
     where: {
       category,
@@ -77,6 +86,10 @@ export async function getPackagesForBooking(venueId?: string, category: "WEDDING
  * instead, and only include the minimal shape the quotation explode needs.
  */
 export async function getMicePackagesForQuotation(venueId?: string) {
+  "use cache";
+  cacheTag("packages");
+  cacheLife("hours");
+
   const packages = await db.package.findMany({
     where: {
       category: "MICE",

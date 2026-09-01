@@ -9,7 +9,7 @@ import type { POCateringV2 } from "@/types/po-catering";
 import type { Prisma } from "@prisma/client";
 import type { SettlementType } from "@prisma/client";
 import type { PORow } from "@/types/po-catering";
-import { canAccessBooking, getProfileDataScope } from "@/lib/access-control";
+import { canAccessBooking } from "@/lib/access-control";
 
 /**
  * Build array-form transaction ops for syncing settlement rows.
@@ -99,7 +99,7 @@ export async function savePODecorationData(
     });
     if (!item) return { success: false, error: "Vendor item tidak ditemukan." };
 
-    const scope = await getProfileDataScope(session!.user.profileId);
+    const scope = session!.user.dataScope ?? "own";
     if (!(await canAccessBooking(session!.user.profileId, scope, item.bookingId))) {
       return { success: false, error: "Anda tidak memiliki akses ke booking ini." };
     }

@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { connection } from "next/server";
 import { auth } from "@/lib/auth";
-import { hasPermission, isSuperAdmin } from "@/lib/permissions";
+import { hasPermission } from "@/lib/permissions";
 import { getGroupsWithPerformance } from "@/lib/queries/groups";
 import { PerformanceSalesClient } from "./_components/PerformanceSalesClient";
 
@@ -18,7 +18,7 @@ export default async function PerformanceSalesPage({
   const session = await auth();
   if (!session?.user.profileId) redirect("/auth/login");
 
-  const isAdmin = await isSuperAdmin(session.user.roleId);
+  const isAdmin = session.user.isSuperAdmin;
   const canView =
     isAdmin || (await hasPermission(session.user.roleId, "performance-sales", "view"));
   if (!canView) redirect("/forbidden");

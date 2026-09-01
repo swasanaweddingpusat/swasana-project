@@ -23,10 +23,16 @@ export async function isSuperAdmin(roleId: string | null | undefined): Promise<b
 export async function hasPermission(
   roleId: string | null | undefined,
   module: string,
-  action: string
+  action: string,
+  // Caller already knows the answer (e.g. session.user.isSuperAdmin, cached in the
+  // JWT) — pass it to skip the redundant DB round-trip below. Omit when checking a
+  // DIFFERENT role than the caller's own session (e.g. a target manager's roleId);
+  // in that case this always falls back to the DB query.
+  knownIsSuperAdmin?: boolean
 ): Promise<boolean> {
   if (!roleId) return false;
-  if (await isSuperAdmin(roleId)) return true;
+  const isAdmin = knownIsSuperAdmin ?? (await isSuperAdmin(roleId));
+  if (isAdmin) return true;
 
   const rp = await db.rolePermission.findFirst({
     where: {
@@ -51,7 +57,7 @@ export async function requirePermission(
     return { session: null, error: "Sesi tidak ditemukan. Silakan login kembali." };
   }
 
-  const allowed = await hasPermission(session.user.roleId, check.module, check.action);
+  const allowed = await hasPermission(session.user.roleId, check.module, check.action, session.user.isSuperAdmin);
   if (!allowed) {
     return { session: null, error: "Anda tidak memiliki izin untuk melakukan tindakan ini." };
   }
@@ -74,11 +80,12 @@ export async function requireAnyPermission(
   if (!session?.user?.id) {
     return { session: null, error: "Sesi tidak ditemukan. Silakan login kembali." };
   }
-  if (await isSuperAdmin(session.user.roleId)) {
+  if (session.user.isSuperAdmin) {
     return { session, error: null };
   }
   for (const check of checks) {
-    if (await hasPermission(session.user.roleId, check.module, check.action)) {
+    // knownIsSuperAdmin=false: already ruled out above, skip the redundant re-check.
+    if (await hasPermission(session.user.roleId, check.module, check.action, false)) {
       return { session, error: null };
     }
   }
@@ -102,7 +109,7 @@ export async function requirePermissionForRoute(
     };
   }
 
-  const allowed = await hasPermission(session.user.roleId, check.module, check.action);
+  const allowed = await hasPermission(session.user.roleId, check.module, check.action, session.user.isSuperAdmin);
   if (!allowed) {
     return {
       session: null,
@@ -132,12 +139,16 @@ export async function canViewSalesBookings(
   myProfileId: string,
   roleId: string | null | undefined,
   salesId: string,
+  // Pass session.user.isSuperAdmin when roleId is the caller's own session role —
+  // skips the redundant DB round-trip below. Omit for an arbitrary/other role.
+  knownIsSuperAdmin?: boolean,
 ): Promise<boolean> {
   // 1. Super admin bypasses everything
-  if (await isSuperAdmin(roleId)) return true;
+  const isAdmin = knownIsSuperAdmin ?? (await isSuperAdmin(roleId));
+  if (isAdmin) return true;
 
   // 2. Explicit groups:view-all permission
-  if (await hasPermission(roleId, "groups", "view-all")) return true;
+  if (await hasPermission(roleId, "groups", "view-all", false)) return true;
 
   // 3. Share at least one group with the salesId target
   //    Find all groups where caller is leader OR member
@@ -187,12 +198,13 @@ export async function requireAnyPermissionForRoute(
     };
   }
 
-  if (await isSuperAdmin(session.user.roleId)) {
+  if (session.user.isSuperAdmin) {
     return { session, response: null };
   }
 
   for (const check of checks) {
-    if (await hasPermission(session.user.roleId, check.module, check.action)) {
+    // knownIsSuperAdmin=false: already ruled out above, skip the redundant re-check.
+    if (await hasPermission(session.user.roleId, check.module, check.action, false)) {
       return { session, response: null };
     }
   }

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requirePermissionForRoute } from "@/lib/permissions";
-import { getProfileDataScope, canAccessBooking } from "@/lib/access-control";
+import { canAccessBooking } from "@/lib/access-control";
 import { apiLimiter, rateLimitResponse } from "@/lib/rate-limit";
 import { getBookingFinanceDetail } from "@/lib/queries/booking-finance-detail";
 
@@ -29,7 +29,7 @@ export async function GET(
 
   // Guard IDOR — caller wajib punya akses ke booking ini (data-scope). Tanpa ini
   // Sales scope "own" bisa baca detail keuangan booking milik siapa pun via ID.
-  const scope = await getProfileDataScope(session.user.profileId);
+  const scope = session.user.dataScope ?? "own";
   if (!(await canAccessBooking(session.user.profileId, scope, id))) {
     return NextResponse.json({ error: "Anda tidak memiliki akses ke booking ini." }, { status: 403 });
   }
