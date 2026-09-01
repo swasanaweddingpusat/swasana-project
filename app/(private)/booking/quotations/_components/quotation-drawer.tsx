@@ -71,7 +71,7 @@ import { useComplimentaries } from "@/hooks/use-complimentaries";
 import { usePermissions } from "@/hooks/use-permissions";
 import { createComplimentary } from "@/actions/complimentary";
 import { parseContactNumbers } from "@/types/daily-activity";
-import type { QuotationItem, QuotationComplimentaryItem } from "./quotations-table";
+import type { QuotationItem } from "./quotations-table";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 

@@ -368,7 +368,7 @@ function SalesBreakdownTable({
             <TableCell
               className={cn(
                 "text-right tabular-nums",
-                row.notResponded > 0 ? "text-foreground" : "text-muted-foreground",
+                row.notResponded > 0 ? "text-destructive" : "text-muted-foreground",
               )}
             >
               {fmt(row.notResponded)}
