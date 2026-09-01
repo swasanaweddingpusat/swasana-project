@@ -15,7 +15,7 @@ export interface SalesPerformanceCardItem {
   name: string;
   avatarUrl: string | null;
   revenue: number;
-  confirmedBookings: number;
+  bookingCount: number;
   target: number;
   hasTarget: boolean;
   achievementPct: number;
@@ -31,12 +31,8 @@ function computeBreakdown(
     price: number;
   }[],
 ): SalesCategoryBreakdown {
-  const confirmed = bookings.filter(
-    (b) => b.bookingStatus === BookingStatus.Confirmed,
-  );
-
-  const weddings = confirmed.filter((b) => b.category === EventCategory.WEDDINGS);
-  const mice = confirmed.filter((b) => b.category === EventCategory.MICE);
+  const weddings = bookings.filter((b) => b.category === EventCategory.WEDDINGS);
+  const mice = bookings.filter((b) => b.category === EventCategory.MICE);
 
   return {
     weddings: {
@@ -89,7 +85,7 @@ async function _queryTopSales(
       where: {
         recordStatus: "saved",
         salesId: { in: candidateSalesIds },
-        bookingStatus: { not: BookingStatus.Canceled },
+        bookingStatus: { notIn: [BookingStatus.Canceled, BookingStatus.Lost] },
         ...(range ? { createdAt: { gte: range.from, lt: range.to } } : {}),
         ...(eventRange ? { eventDate: { gte: eventRange.from, lt: eventRange.to } } : {}),
       },
@@ -152,11 +148,11 @@ async function _queryTopSales(
   const aggregated = candidateSalesIds.map((profileId) => {
     const profile = profileMap.get(profileId);
     const bookings = bookingsBySalesId.get(profileId) ?? [];
-    const confirmed = bookings.filter(
-      (b) => b.bookingStatus === BookingStatus.Confirmed,
-    );
-    const revenue = confirmed.reduce((s, b) => s + b.price, 0);
-    const confirmedBookings = confirmed.length;
+    // Revenue & count = semua booking yang ter-fetch (query sudah exclude Lost/Canceled),
+    // jadi Confirmed + Pending + Uploaded + Rejected semuanya ikut — konsisten dengan
+    // Group Revenue Rule di lib/queries/groups.ts.
+    const revenue = bookings.reduce((s, b) => s + b.price, 0);
+    const bookingCount = bookings.length;
     const target = targetMap.get(profileId) ?? 0;
     const hasTarget = hasTargetMap.get(profileId) ?? false;
     const achievementPct =
@@ -168,7 +164,7 @@ async function _queryTopSales(
       name: profile?.fullName ?? "—",
       avatarUrl: resolveAvatarUrl(profile?.avatarUrl),
       revenue,
-      confirmedBookings,
+      bookingCount,
       target,
       hasTarget,
       achievementPct,

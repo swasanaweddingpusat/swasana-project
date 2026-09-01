@@ -46,7 +46,7 @@ function getInitials(name: string): string {
 
 const chartConfig: ChartConfig = {
   revenue: {
-    label: "Revenue Confirmed",
+    label: "Revenue",
     color: "var(--brand-ink)",
   },
 };
@@ -146,7 +146,7 @@ function SalesListRow({
       <AvatarCircle name={item.name} avatarUrl={item.avatarUrl} rank={rank} />
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-semibold text-foreground">{item.name}</p>
-        <p className="text-xs text-muted-foreground">{item.confirmedBookings} booking confirmed</p>
+        <p className="text-xs text-muted-foreground">{item.bookingCount} booking</p>
         <div className="mt-1.5 flex items-center gap-2">
           <div className="h-2 min-w-0 flex-1 overflow-hidden rounded-full bg-secondary">
             <div
