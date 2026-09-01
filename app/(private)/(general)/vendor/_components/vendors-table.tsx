@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
@@ -116,15 +116,15 @@ export function VendorsTable() {
   const total = vendorsResult?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / ROWS_PER_PAGE));
 
-  const openAdd = useCallback(() => {
+  const openAdd = () => {
     setEditingVendor(null);
     setVendorDrawerOpen(true);
-  }, []);
+  };
 
-  const openEdit = useCallback((vendor: VendorItem) => {
+  const openEdit = (vendor: VendorItem) => {
     setEditingVendor(vendor);
     setVendorDrawerOpen(true);
-  }, []);
+  };
 
   async function handleRefresh() {
     setRefreshing(true);
