@@ -8,6 +8,7 @@ import { db } from "@/lib/db";
 import { getDashboardData, resolveDealingRange, resolveEventRange } from "@/lib/queries/dashboard";
 import { getDashboardCalendarEvents } from "@/lib/queries/calendar-events";
 import { getTopSalesByRecentBooking } from "@/lib/queries/salesPerformance";
+import { getActiveBanners } from "@/lib/queries/banners";
 import type { DataScope } from "@/types/user";
 import { SalesStatCards } from "./_components/sales-stat-cards";
 import { GroupAchievementSection } from "./_components/group-achievement-section";
@@ -82,10 +83,13 @@ export default async function DashboardPage({
     calendarScope,
   );
 
-  const [{ stats, groups }, userGroups, calendarEvents] = await Promise.all([
+  const bannersPromise = getActiveBanners();
+
+  const [{ stats, groups }, userGroups, calendarEvents, banners] = await Promise.all([
     dashboardDataPromise,
     userGroupsPromise,
     calendarEventsPromise,
+    bannersPromise,
   ]);
 
   // Sales performance — depends on the group-members scope above, so it runs
@@ -124,8 +128,8 @@ export default async function DashboardPage({
         </div>
       )}
 
-      {/* Banner — carousel, tambah slide baru di dashboard-banner-carousel.tsx */}
-      <DashboardBannerCarousel />
+      {/* Banner — carousel, dikelola dari Settings > Banner (DB-driven) */}
+      <DashboardBannerCarousel banners={banners} />
 
       {/* Header + Filter — Tanggal Dealing drives every dealing-scoped section below */}
       <div
