@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
@@ -11,12 +11,10 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { AddCircle, PenNewSquare, TrashBinTrash, ArrowLeft, ArrowRight, Refresh, Magnifer } from "@solar-icons/react";
 import { cn } from "@/lib/utils";
 import { usePermissions } from "@/hooks/use-permissions";
-import { useVendorCategories, useDeleteVendor } from "@/hooks/use-vendors";
-import type { VendorCategoryItem } from "@/lib/queries/vendors";
+import { useVendorCategoriesLite, useVendorList, useDeleteVendor } from "@/hooks/use-vendors";
+import type { VendorItem } from "@/lib/queries/vendors";
 import { toast } from "sonner";
 import { VendorDrawer } from "./vendor-drawer";
-
-type FlatVendor = VendorCategoryItem["vendors"][number] & { categoryName: string };
 
 const ROWS_PER_PAGE = 10;
 
@@ -85,7 +83,7 @@ function SkeletonTable() {
 }
 
 export function VendorsTable() {
-  const { data: categories = [], isLoading, refetch } = useVendorCategories();
+  const { data: categories = [], isLoading: categoriesLoading, refetch: refetchCategories } = useVendorCategoriesLite();
   const deleteMutation = useDeleteVendor();
   const { can, isAdmin } = usePermissions();
   const [refreshing, setRefreshing] = useState(false);
@@ -95,9 +93,9 @@ export function VendorsTable() {
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [vendorDrawerOpen, setVendorDrawerOpen] = useState(false);
-  const [editingVendor, setEditingVendor] = useState<FlatVendor | null>(null);
+  const [editingVendor, setEditingVendor] = useState<VendorItem | null>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
-  const [vendorToDelete, setVendorToDelete] = useState<FlatVendor | null>(null);
+  const [vendorToDelete, setVendorToDelete] = useState<VendorItem | null>(null);
 
   useEffect(() => {
     const t = setTimeout(() => {
@@ -107,40 +105,30 @@ export function VendorsTable() {
     return () => clearTimeout(t);
   }, [search]);
 
-  const allVendors: FlatVendor[] = useMemo(() =>
-    categories
-      .flatMap((cat) => cat.vendors.map((v) => ({ ...v, categoryName: cat.name })))
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()),
-    [categories]
-  );
+  const { data: vendorsResult, isLoading: vendorsLoading, refetch: refetchVendors } = useVendorList({
+    page: currentPage,
+    pageSize: ROWS_PER_PAGE,
+    search: debouncedSearch,
+    categoryId: categoryFilter,
+  });
 
-  const filtered = useMemo(() => {
-    let result = categoryFilter === "all"
-      ? allVendors
-      : allVendors.filter((v) => v.categoryId === categoryFilter);
-    if (debouncedSearch.trim()) {
-      const q = debouncedSearch.toLowerCase();
-      result = result.filter((v) => v.name.toLowerCase().includes(q) || v.categoryName.toLowerCase().includes(q));
-    }
-    return result;
-  }, [allVendors, categoryFilter, debouncedSearch]);
-
-  const totalPages = Math.ceil(filtered.length / ROWS_PER_PAGE);
-  const paginated = filtered.slice((currentPage - 1) * ROWS_PER_PAGE, currentPage * ROWS_PER_PAGE);
+  const paginated = vendorsResult?.data ?? [];
+  const total = vendorsResult?.total ?? 0;
+  const totalPages = Math.max(1, Math.ceil(total / ROWS_PER_PAGE));
 
   const openAdd = useCallback(() => {
     setEditingVendor(null);
     setVendorDrawerOpen(true);
   }, []);
 
-  const openEdit = useCallback((vendor: FlatVendor) => {
+  const openEdit = useCallback((vendor: VendorItem) => {
     setEditingVendor(vendor);
     setVendorDrawerOpen(true);
   }, []);
 
   async function handleRefresh() {
     setRefreshing(true);
-    await refetch();
+    await Promise.all([refetchCategories(), refetchVendors()]);
     setRefreshing(false);
   }
 
@@ -156,7 +144,7 @@ export function VendorsTable() {
     setVendorToDelete(null);
   };
 
-  if (isLoading) return <SkeletonTable />;
+  if (categoriesLoading || vendorsLoading) return <SkeletonTable />;
 
   return (
     <>
@@ -167,12 +155,12 @@ export function VendorsTable() {
             <div className={cn('flex', 'items-center', 'gap-2')}>
               <h2 className={cn('text-base', 'font-bold', 'text-foreground')}>Vendors</h2>
               <span className={cn('text-xs', 'font-medium', 'bg-secondary', 'text-secondary-foreground', 'px-3', 'py-1', 'rounded-full')}>
-                {filtered.length} vendor
+                {total} vendor
               </span>
             </div>
             <div className={cn('flex', 'flex-wrap', 'items-center', 'gap-2', 'w-full', 'sm:w-auto')}>
               <SearchableSelect
-                options={[{ id: "all", name: "All Categories" }, ...categories.map((cat) => ({ id: cat.id, name: `${cat.name} (${cat.vendors.length})` }))]}
+                options={[{ id: "all", name: "All Categories" }, ...categories.map((cat) => ({ id: cat.id, name: `${cat.name} (${cat.vendorCount})` }))]}
                 value={categoryFilter}
                 onChange={(v) => { setCategoryFilter(v); setCurrentPage(1); }}
                 placeholder="All Categories"
@@ -252,7 +240,7 @@ export function VendorsTable() {
                         </TableCell>
                         <TableCell>
                           <span className={cn('px-2', 'py-1', 'rounded-full', 'text-xs', 'font-medium', 'bg-secondary', 'text-secondary-foreground')}>
-                            {vendor.categoryName}
+                            {vendor.category.name}
                           </span>
                         </TableCell>
                         <TableCell>
@@ -298,7 +286,7 @@ export function VendorsTable() {
                           {rowNumber}. {vendor.name}
                         </span>
                         <span className={cn('inline-flex', 'shrink-0', 'px-2', 'py-0.5', 'rounded-full', 'text-[10px]', 'font-medium', 'bg-secondary', 'text-secondary-foreground')}>
-                          {vendor.categoryName}
+                          {vendor.category.name}
                         </span>
                       </div>
 

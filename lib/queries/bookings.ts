@@ -230,17 +230,28 @@ export async function getBookings(
         },
       },
     });
-    // Fetch currentRevisionId for all bookings — used to pick the active revision's steps
-    const revRows = await db.booking.findMany({
-      where: { category: "WEDDINGS" },
-      select: { id: true, currentRevisionId: true },
-    });
+    // currentRevisionId is only consulted below when a record actually has
+    // revisioned steps (hasRevisioned) — precompute that per record so the
+    // booking lookup can be scoped to just those entityIds instead of pulling
+    // every WEDDINGS booking's id/currentRevisionId.
+    const hasRevisionedByEntityId = new Map(
+      records.map((rec) => [rec.entityId, rec.steps.some((s) => s.revisionId !== null)]),
+    );
+    const revisionedEntityIds = [...hasRevisionedByEntityId.entries()]
+      .filter(([, hasRevisioned]) => hasRevisioned)
+      .map(([entityId]) => entityId);
+    const revRows = revisionedEntityIds.length
+      ? await db.booking.findMany({
+          where: { id: { in: revisionedEntityIds } },
+          select: { id: true, currentRevisionId: true },
+        })
+      : [];
     const revMap = new Map(revRows.map((r) => [r.id, r.currentRevisionId]));
 
     const approvedIds: string[] = [];
     for (const rec of records) {
       const currentRev = revMap.get(rec.entityId) ?? null;
-      const hasRevisioned = rec.steps.some((s) => s.revisionId !== null);
+      const hasRevisioned = hasRevisionedByEntityId.get(rec.entityId) ?? false;
       const currentSteps =
         currentRev && hasRevisioned
           ? rec.steps.filter((s) => s.revisionId === currentRev)

@@ -28,15 +28,10 @@ export async function markAsRead(notificationId: string, _userId: string): Promi
 }
 
 export async function markAllAsRead(userId: string): Promise<void> {
-  // updateMany uses implicit transaction on Neon HTTP — fetch unread IDs then update one by one
-  const unread = await db.notification.findMany({
+  await db.notification.updateMany({
     where: { userId, isRead: false },
-    select: { id: true },
-    take: 100,
+    data: { isRead: true },
   });
-  for (const n of unread) {
-    await db.notification.update({ where: { id: n.id }, data: { isRead: true } });
-  }
 }
 
 export type NotificationItem = Awaited<ReturnType<typeof getNotifications>>[number];
