@@ -1,5 +1,6 @@
 import { cacheTag, cacheLife } from "next/cache";
 import { db } from "@/lib/db";
+import { buildOwnerScopeWhere } from "@/lib/access-control";
 
 /** Extract phone numbers from a Customer.mobileNumber value (Json array of
  *  `{ name, number }`, or legacy comma-separated string) into a single display
@@ -550,37 +551,15 @@ function buildDateFilter(dateFrom?: string, dateTo?: string, year?: number): Pri
   return {};
 }
 
-async function buildScopeFilter(profileId?: string, dataScope?: DataScope) {
-  if (!profileId || !dataScope || dataScope === "all") return {};
-  if (dataScope === "own") return { salesId: profileId };
-
-  // group: find all groups where profileId is a member
-  const myGroups = await db.userGroupMember.findMany({
-    where: { userId: profileId },
-    select: { groupId: true },
-  });
-  if (myGroups.length === 0) return { salesId: profileId };
-  const groupIds = myGroups.map((g) => g.groupId);
-
-  // Fetch all members + group leaders (defensive: covers legacy leaders who
-  // weren't added as members before this fix was deployed)
-  const [members, groupLeaders] = await Promise.all([
-    db.userGroupMember.findMany({
-      where: { groupId: { in: groupIds } },
-      select: { userId: true },
-    }),
-    db.userGroup.findMany({
-      where: { id: { in: groupIds }, leaderId: { not: null } },
-      select: { leaderId: true },
-    }),
-  ]);
-
-  const memberIds = new Set(members.map((m) => m.userId));
-  for (const g of groupLeaders) {
-    if (g.leaderId) memberIds.add(g.leaderId);
-  }
-
-  return { salesId: { in: [...memberIds] } };
+// Delegates to the generic owner-scope helper (Fase 0 refactor — see
+// lib/access-control.ts buildOwnerScopeWhere/resolveGroupOwnerIds). Kept as a
+// thin wrapper (same signature, same call sites) so getBookings/getDealingSummary/
+// getBookingsForExport are untouched. Behavior is unchanged: the cast is safe
+// because buildOwnerScopeWhere("salesId") always returns one of `{}`,
+// `{ salesId: string }`, or `{ salesId: { in: string[] } }` — all valid
+// Prisma.BookingWhereInput shapes, identical to the old inline implementation.
+async function buildScopeFilter(profileId?: string, dataScope?: DataScope): Promise<Prisma.BookingWhereInput> {
+  return (await buildOwnerScopeWhere(profileId, dataScope, "salesId")) as Prisma.BookingWhereInput;
 }
 
 export async function getBookingById(id: string) {

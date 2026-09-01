@@ -492,6 +492,29 @@ export async function resolveBitrixContactInfo(ids: string[]): Promise<Record<st
   return out;
 }
 
+export interface BitrixContactMatch {
+  id: string;
+  name: string;
+  phone: string | null;
+}
+
+/**
+ * Find CONTACT records whose phone matches `phone` (must be pre-normalized to a
+ * bare MSISDN via normalizePhoneId). Uses crm.duplicate.findbycomm. Bitrix does
+ * NOT guarantee phone uniqueness, so this returns 0, 1, or many matches. Names
+ * are resolved in one batched call.
+ */
+export async function findBitrixContactsByPhone(phone: string): Promise<BitrixContactMatch[]> {
+  const { result } = await bitrixCall<{ CONTACT?: string[] } | unknown[]>(
+    "crm.duplicate.findbycomm",
+    { type: "PHONE", entity_type: "CONTACT", values: [phone] },
+  );
+  const ids = (result && !Array.isArray(result) ? (result as { CONTACT?: string[] }).CONTACT : undefined) ?? [];
+  if (ids.length === 0) return [];
+  const info = await resolveBitrixContactInfo(ids);
+  return ids.map((id) => ({ id, name: info[id]?.name ?? `#${id}`, phone: info[id]?.phone ?? null }));
+}
+
 /**
  * Resolve a set of Bitrix user IDs (ASSIGNED_BY_ID etc.) to display names in
  * one batched call. Requires the `user` scope on the webhook — degrades

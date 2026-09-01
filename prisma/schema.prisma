@@ -230,6 +230,7 @@ model Profile {
   recruitmentRequestsApproved2 RecruitmentRequest[] @relation("RecruitmentRequestApprover2")
   guestbookHosted             GuestbookEntry[]     @relation("GuestbookHost")
   guestbookCreated            GuestbookEntry[]     @relation("GuestbookCreator")
+  guestbookSales              GuestbookEntry[]     @relation("GuestbookSales")
   blacklistCreated            BlacklistEntry[]     @relation("BlacklistCreator")
   memosCreated                Memo[]               @relation("MemoCreator")
   memoComments                MemoComment[]        @relation("MemoCommentAuthor")
@@ -870,6 +871,20 @@ enum GuestVisitStatus {
   deal
   to_be_discuss
   not_joined
+}
+
+enum GuestInteractionType {
+  client_visit
+  online_meeting
+  jemput_bola
+}
+
+enum OnlineMeetingMedium {
+  zoom
+  google_meet
+  whatsapp_call
+  microsoft_teams
+  other
 }
 
 enum Religion {
@@ -3564,6 +3579,11 @@ model GuestbookEntry {
   idPhotoUrl      String?
   purpose         GuestVisitPurpose @default(other)
   purposeNote     String?
+  interactionType GuestInteractionType?
+  onlineMedium    OnlineMeetingMedium?
+  meetingUrl      String?
+  meetingLocation String?
+  scheduledAt     DateTime?
   hostId          String?
   venueId         String?
   numberOfGuests  Int               @default(1)
@@ -3574,16 +3594,24 @@ model GuestbookEntry {
   visitStatus     GuestVisitStatus?
   notJoinReason   String?
   createdById     String?
+  salesId         String?
+  phoneNumberNorm String?
+  bitrixContactId String?
+  bitrixName      String?
   createdAt       DateTime          @default(now())
   updatedAt       DateTime          @updatedAt
 
   host            Profile?          @relation("GuestbookHost", fields: [hostId], references: [id], onDelete: SetNull)
   createdBy       Profile?          @relation("GuestbookCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  sales           Profile?          @relation("GuestbookSales", fields: [salesId], references: [id], onDelete: SetNull)
   venue           Venue?            @relation(fields: [venueId], references: [id], onDelete: SetNull)
 
   @@index([checkInAt])
   @@index([hostId])
   @@index([venueId])
+  @@index([salesId])
+  @@index([interactionType])
+  @@index([phoneNumberNorm])
   @@map("guestbook_entries")
 }
 
