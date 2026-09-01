@@ -10,18 +10,16 @@ import { SearchableSelect } from "@/components/ui/searchable-select";
 import { AddCircle, TrashBinTrash } from "@solar-icons/react";
 import { toast } from "sonner";
 import { useCreateVendor, useUpdateVendor, useCreateVendorCategory } from "@/hooks/use-vendors";
-import type { VendorCategoryItem } from "@/lib/queries/vendors";
+import type { VendorItem, VendorCategoriesLiteResult } from "@/lib/queries/vendors";
 import type { PaymentMethodInput } from "@/lib/validations/vendor";
 import { cn } from "@/lib/utils";
 import { PhoneInput } from "@/components/shared/PhoneInput";
 
-type VendorWithPayments = VendorCategoryItem["vendors"][number] & { categoryName?: string };
-
 interface VendorDrawerProps {
   isOpen: boolean;
   onClose: () => void;
-  vendor?: VendorWithPayments | null;
-  categories: VendorCategoryItem[];
+  vendor?: VendorItem | null;
+  categories: VendorCategoriesLiteResult;
 }
 
 export function VendorDrawer({ isOpen, onClose, vendor, categories }: VendorDrawerProps) {

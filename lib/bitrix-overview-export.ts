@@ -18,11 +18,15 @@ interface SalesBucket {
   label: string;
   count: number;
   getback: number;
+  kantor: number;
+  mandiri: number;
 }
 
 interface OverviewData {
   range: { from: string; to: string };
   total: number;
+  kantor: number;
+  mandiri: number;
   withVenue: number;
   organik: number;
   fromAds: number;
@@ -108,6 +112,8 @@ export async function exportBitrixOverviewPdf(data: OverviewData): Promise<void>
   const metrics: [string, number][] = [
     ["Database Venue", data.withVenue],
     ["Total Transaksi", data.total],
+    ["Database Kantor", data.kantor],
+    ["Database Mandiri", data.mandiri],
     ["Dari Iklan", data.fromAds],
     ["Organik", data.organik],
     ["Spam/Prank", data.spamPrank],
@@ -141,6 +147,8 @@ function buildOverviewSheet(ws: Worksheet, data: OverviewData): void {
   const metrics: [string, number][] = [
     ["Database Venue", data.withVenue],
     ["Total Transaksi", data.total],
+    ["Database Kantor", data.kantor],
+    ["Database Mandiri", data.mandiri],
     ["Dari Iklan", data.fromAds],
     ["Organik", data.organik],
     ["Spam/Prank", data.spamPrank],
@@ -166,9 +174,9 @@ function buildSalesSheet(ws: Worksheet, buckets: SalesBucket[] | undefined): voi
   const heading = ws.addRow(["Database Sales"]);
   heading.font = { bold: true, size: 13 };
   ws.addRow([]);
-  ws.addRow(["Nama", "Jumlah", "Getback"]);
+  ws.addRow(["Nama", "Jumlah", "Kantor", "Mandiri", "Getback"]);
   for (const b of buckets ?? []) {
-    ws.addRow([b.label, b.count, b.getback]);
+    ws.addRow([b.label, b.count, b.kantor, b.mandiri, b.getback]);
   }
   fitColumns(ws);
 }
@@ -251,7 +259,12 @@ function drawPdfSalesSection(
       y = margin;
     }
     doc.text(b.label, margin, y);
-    doc.text(`${b.count}${b.getback > 0 ? ` · ${b.getback} getback` : ""}`, pageWidth - margin, y, { align: "right" });
+    doc.text(
+      `${b.count} (K:${b.kantor} M:${b.mandiri})${b.getback > 0 ? ` · ${b.getback} getback` : ""}`,
+      pageWidth - margin,
+      y,
+      { align: "right" },
+    );
     y += 13;
   }
   y += 10;

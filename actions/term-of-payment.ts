@@ -5,7 +5,7 @@ import { db } from "@/lib/db";
 import { requireAnyPermission } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
 import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
-import { canAccessBooking, getProfileDataScope } from "@/lib/access-control";
+import { canAccessBooking } from "@/lib/access-control";
 import { refreshCurrentRevisionSnapshot } from "@/lib/booking-revision";
 import { Prisma } from "@prisma/client";
 import { getTermPaidMapForBookings, getTermAllocatedMap } from "@/lib/queries/ledger";
@@ -56,7 +56,7 @@ export async function updateTermOfPayments(
   if (error) return { success: false, error };
   if (!mutationLimiter.check(`top-update:${session!.user.id}`)) return { success: false, ...rateLimitError() };
 
-  const scope = await getProfileDataScope(session!.user.profileId);
+  const scope = session!.user.dataScope ?? "own";
   if (!(await canAccessBooking(session!.user.profileId, scope, bookingId))) {
     return { success: false, error: "Anda tidak memiliki akses ke booking ini." };
   }

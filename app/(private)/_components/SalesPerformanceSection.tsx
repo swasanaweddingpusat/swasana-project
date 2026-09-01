@@ -17,7 +17,7 @@ import {
 import {
   CupStar,
   Crown,
-  Buildings2,
+  Star,
   CalendarDate,
 } from "@solar-icons/react";
 import { cn } from "@/lib/utils";
@@ -46,12 +46,31 @@ function getInitials(name: string): string {
 
 const chartConfig: ChartConfig = {
   revenue: {
-    label: "Revenue Confirmed",
+    label: "Revenue",
     color: "var(--brand-ink)",
   },
 };
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
+
+// Podium — juara 1 mahkota, juara 2 & 3 bintang. Semua gold, ukuran diperbesar.
+function PodiumIcon({ rank }: { rank: number }): React.ReactElement | null {
+  if (rank === 0)
+    return (
+      <Crown
+        weight="BoldDuotone"
+        className="h-6 w-6 absolute -top-3 -right-1.5 text-[var(--brand-gold)]"
+      />
+    );
+  if (rank === 1 || rank === 2)
+    return (
+      <Star
+        weight="BoldDuotone"
+        className="h-5 w-5 absolute -top-2.5 -right-1.5 text-[var(--brand-gold)]"
+      />
+    );
+  return null;
+}
 
 function AvatarCircle({
   name,
@@ -62,7 +81,6 @@ function AvatarCircle({
   avatarUrl: string | null;
   rank: number;
 }) {
-  const isTop = rank === 0;
   return (
     <div className="relative shrink-0">
       <div
@@ -82,136 +100,77 @@ function AvatarCircle({
           getInitials(name)
         )}
       </div>
-      {isTop && (
-        <Crown
-          weight="BoldDuotone"
-          className="h-4 w-4 absolute -top-2 -right-1 text-[var(--brand-gold)]"
-        />
-      )}
+      <PodiumIcon rank={rank} />
     </div>
   );
 }
 
-function AchievementBar({
-  pct,
-  hasTarget,
-}: {
-  pct: number;
-  hasTarget: boolean;
-}) {
-  if (!hasTarget) {
-    return (
-      <span className="text-xs text-muted-foreground italic">
-        Target belum diset
-      </span>
-    );
-  }
+// Dummy target sales — placeholder sampai fitur target-per-sales beneran dipasang.
+// Kalau item udah punya target asli (hasTarget), pakai itu; kalau belum, generate
+// target dummy dari revenue biar progress bar tetep kelihatan masuk akal.
+const DUMMY_TARGET_MULTIPLIER = 1.35;
+const DUMMY_TARGET_FLOOR = 1_000_000;
 
-  const capped = Math.min(pct, 100);
-
-  return (
-    <div className="flex flex-col gap-1 w-full">
-      <div className="flex items-center justify-between">
-        <span className="text-xs text-muted-foreground">Achievement</span>
-        <span className="text-xs font-semibold text-foreground">{pct}%</span>
-      </div>
-      <div className="h-1.5 bg-secondary rounded-full overflow-hidden">
-        <div
-          className="h-full bg-primary rounded-full transition-all"
-          style={{ width: `${capped}%` }}
-        />
-      </div>
-    </div>
-  );
+function resolveDummyTarget(item: SalesPerformanceCardItem): number {
+  if (item.hasTarget && item.target > 0) return item.target;
+  if (item.revenue <= 0) return DUMMY_TARGET_FLOOR;
+  return Math.round((item.revenue * DUMMY_TARGET_MULTIPLIER) / 100_000) * 100_000;
 }
 
-function CategoryBadge({
-  label,
-  count,
-  revenue,
-  colorClass,
-}: {
-  label: string;
-  count: number;
-  revenue: number;
-  colorClass: string;
-}) {
-  return (
-    <div className="flex flex-col gap-0.5 flex-1 min-w-0">
-      <div className="flex items-center gap-1">
-        <span className={cn("h-2 w-2 rounded-full shrink-0", colorClass)} />
-        <span className="text-xs text-muted-foreground">{label}</span>
-      </div>
-      <p className="text-xs font-semibold text-foreground">{formatCurrency(revenue)}</p>
-      <p className="text-xs text-muted-foreground">{count} booking</p>
-    </div>
-  );
-}
-
-function SalesCard({
+function SalesListRow({
   item,
   rank,
 }: {
   item: SalesPerformanceCardItem;
   rank: number;
 }) {
+  const target = resolveDummyTarget(item);
+  const collected = item.revenue;
+  const pct = target > 0 ? Math.min(100, Math.round((collected / target) * 100)) : 0;
+
   return (
-    <div
+    <li
       className={cn(
-        "bg-card border rounded-2xl p-5 flex flex-col gap-4",
-        "shadow-sm hover:shadow-md transition-shadow",
-        rank === 0 && "border-[var(--brand-gold)]/40",
+        "flex items-center gap-3 px-4 py-3 sm:gap-4 sm:px-5 sm:py-4",
+        rank === 0 && "bg-[var(--brand-gold)]/5",
       )}
     >
-      {/* Header: avatar + name + booking count */}
-      <div className="flex items-center gap-3">
-        <AvatarCircle name={item.name} avatarUrl={item.avatarUrl} rank={rank} />
-        <div className="flex flex-col flex-1 min-w-0">
-          <p className="text-sm font-semibold text-foreground truncate">
-            {item.name}
-          </p>
-          <p className="text-xs text-muted-foreground">
-            {item.confirmedBookings} booking confirmed
-          </p>
-        </div>
-        <span className="text-xs text-muted-foreground font-mono shrink-0">
-          #{rank + 1}
-        </span>
-      </div>
-
-      {/* Revenue */}
-      <div>
-        <p className="text-xs text-muted-foreground">Revenue Confirmed</p>
-        <p className="text-xl font-heading font-bold text-foreground">
-          {formatCurrency(item.revenue)}
-        </p>
-        {item.hasTarget && (
-          <p className="text-xs text-muted-foreground mt-0.5">
-            dari {formatCurrency(item.target)}
-          </p>
+      <span
+        className={cn(
+          "w-4 shrink-0 text-center font-mono text-xs",
+          rank === 0 ? "font-semibold text-[var(--brand-gold)]" : "text-muted-foreground",
         )}
+      >
+        {rank + 1}
+      </span>
+      <AvatarCircle name={item.name} avatarUrl={item.avatarUrl} rank={rank} />
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-semibold text-foreground">{item.name}</p>
+        <p className="text-xs text-muted-foreground">{item.bookingCount} booking</p>
+        <div className="mt-1.5 flex items-center gap-2">
+          <div className="h-2 min-w-0 flex-1 overflow-hidden rounded-full bg-secondary">
+            <div
+              className="h-full rounded-full bg-primary transition-all"
+              style={{ width: `${pct}%` }}
+            />
+          </div>
+          <span className="shrink-0 text-xs font-semibold text-foreground">{pct}%</span>
+        </div>
+        <p className="mt-0.5 text-xs text-muted-foreground">
+          {formatCurrency(collected)} dari target {formatCurrency(target)}
+        </p>
       </div>
+    </li>
+  );
+}
 
-      {/* Achievement bar */}
-      <AchievementBar pct={item.achievementPct} hasTarget={item.hasTarget} />
-
-      {/* Category breakdown */}
-      <div className="border-t pt-3 flex gap-4">
-        <CategoryBadge
-          label="Wedding"
-          count={item.breakdown.weddings.count}
-          revenue={item.breakdown.weddings.revenue}
-          colorClass="bg-primary"
-        />
-        <div className="w-px bg-border shrink-0" />
-        <CategoryBadge
-          label="MICE"
-          count={item.breakdown.mice.count}
-          revenue={item.breakdown.mice.revenue}
-          colorClass="bg-[var(--brand-gold)]"
-        />
-      </div>
-    </div>
+function SalesPerformanceTable({ data }: { data: SalesPerformanceCardItem[] }) {
+  return (
+    <ol className="flex flex-col divide-y divide-border overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
+      {data.map((item, idx) => (
+        <SalesListRow key={item.profileId} item={item} rank={idx} />
+      ))}
+    </ol>
   );
 }
 
@@ -233,6 +192,9 @@ function RevenueBarChart({ data }: { data: SalesPerformanceCardItem[] }) {
     "oklch(0.75 0 0)",
   ];
 
+  // Grow height with the number of sales so bars stay legible (≈40px/row).
+  const chartHeight = Math.max(208, chartData.length * 40 + 32);
+
   return (
     <div className="bg-card border rounded-2xl p-5 shadow-sm flex flex-col gap-4">
       <div className="flex items-center gap-2">
@@ -242,7 +204,11 @@ function RevenueBarChart({ data }: { data: SalesPerformanceCardItem[] }) {
         </h3>
       </div>
 
-      <ChartContainer config={chartConfig} className="h-52 w-full">
+      <ChartContainer
+        config={chartConfig}
+        className="aspect-auto w-full"
+        style={{ height: chartHeight }}
+      >
         <BarChart
           data={chartData}
           layout="vertical"
@@ -286,101 +252,26 @@ function RevenueBarChart({ data }: { data: SalesPerformanceCardItem[] }) {
   );
 }
 
-// ─── Category split summary ───────────────────────────────────────────────────
-
-function CategorySplitSummary({ data }: { data: SalesPerformanceCardItem[] }) {
-  const totals = data.reduce(
-    (acc, item) => ({
-      weddingCount: acc.weddingCount + item.breakdown.weddings.count,
-      weddingRevenue: acc.weddingRevenue + item.breakdown.weddings.revenue,
-      miceCount: acc.miceCount + item.breakdown.mice.count,
-      miceRevenue: acc.miceRevenue + item.breakdown.mice.revenue,
-    }),
-    { weddingCount: 0, weddingRevenue: 0, miceCount: 0, miceRevenue: 0 },
-  );
-
-  const totalRevenue = totals.weddingRevenue + totals.miceRevenue;
-  const weddingPct =
-    totalRevenue > 0
-      ? Math.round((totals.weddingRevenue / totalRevenue) * 100)
-      : 0;
-  const micePct = totalRevenue > 0 ? 100 - weddingPct : 0;
-
-  return (
-    <div className="bg-card border rounded-2xl p-5 shadow-sm flex flex-col gap-4">
-      <div className="flex items-center gap-2">
-        <Buildings2 weight="BoldDuotone" className="h-5 w-5 text-muted-foreground" />
-        <h3 className="text-sm font-semibold text-foreground">
-          Split Wedding vs MICE
-        </h3>
-      </div>
-
-      {/* Stacked bar */}
-      <div className="flex flex-col gap-2">
-        <div className="flex h-4 rounded-full overflow-hidden gap-0.5">
-          {weddingPct > 0 && (
-            <div
-              className="bg-primary rounded-l-full"
-              style={{ width: `${weddingPct}%` }}
-            />
-          )}
-          {micePct > 0 && (
-            <div
-              className="bg-[var(--brand-gold)] rounded-r-full"
-              style={{ width: `${micePct}%` }}
-            />
-          )}
-          {totalRevenue === 0 && (
-            <div className="bg-secondary rounded-full w-full" />
-          )}
-        </div>
-
-        <div className="flex gap-6">
-          <div className="flex items-center gap-2">
-            <span className="h-2.5 w-2.5 rounded-full bg-primary shrink-0" />
-            <div>
-              <p className="text-xs text-muted-foreground">Wedding</p>
-              <p className="text-sm font-semibold text-foreground">
-                {formatCurrency(totals.weddingRevenue)}
-              </p>
-              <p className="text-xs text-muted-foreground">
-                {totals.weddingCount} booking · {weddingPct}%
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <span className="h-2.5 w-2.5 rounded-full bg-[var(--brand-gold)] shrink-0" />
-            <div>
-              <p className="text-xs text-muted-foreground">MICE</p>
-              <p className="text-sm font-semibold text-foreground">
-                {formatCurrency(totals.miceRevenue)}
-              </p>
-              <p className="text-xs text-muted-foreground">
-                {totals.miceCount} booking · {micePct}%
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 // ─── Main export ──────────────────────────────────────────────────────────────
 
 interface SalesPerformanceSectionProps {
   initialData: SalesPerformanceCardItem[];
-  year: number;
-  month: number;
+  /** Dealing-date (createdAt) range, calendar-day strings (YYYY-MM-DD). */
+  dealFrom: string;
+  dealTo: string;
+  /** Event-date (eventDate) range, calendar-day strings (YYYY-MM-DD). */
+  eventFrom: string;
+  eventTo: string;
 }
 
 export function SalesPerformanceSection({
   initialData,
-  year,
-  month,
+  dealFrom,
+  dealTo,
+  eventFrom,
+  eventTo,
 }: SalesPerformanceSectionProps) {
-  const { data: liveData } = useDashboardSalesPerformance(year, month, initialData);
+  const { data: liveData } = useDashboardSalesPerformance(dealFrom, dealTo, eventFrom, eventTo, initialData);
   const data = liveData ?? initialData;
 
   if (data.length === 0) {
@@ -402,22 +293,15 @@ export function SalesPerformanceSection({
           Achievement & Performance Sales
         </h2>
         <span className="text-xs text-muted-foreground ml-1">
-          (top 5 by revenue)
+          (semua sales, by revenue)
         </span>
       </div>
 
-      {/* Cards per sales */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-        {data.map((item, idx) => (
-          <SalesCard key={item.profileId} item={item} rank={idx} />
-        ))}
-      </div>
+      {/* Table per sales */}
+      <SalesPerformanceTable data={data} />
 
-      {/* Charts row */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <RevenueBarChart data={data} />
-        <CategorySplitSummary data={data} />
-      </div>
+      {/* Revenue chart — full width */}
+      <RevenueBarChart data={data} />
     </div>
   );
 }

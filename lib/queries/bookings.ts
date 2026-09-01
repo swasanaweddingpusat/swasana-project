@@ -230,17 +230,28 @@ export async function getBookings(
         },
       },
     });
-    // Fetch currentRevisionId for all bookings — used to pick the active revision's steps
-    const revRows = await db.booking.findMany({
-      where: { category: "WEDDINGS" },
-      select: { id: true, currentRevisionId: true },
-    });
+    // currentRevisionId is only consulted below when a record actually has
+    // revisioned steps (hasRevisioned) — precompute that per record so the
+    // booking lookup can be scoped to just those entityIds instead of pulling
+    // every WEDDINGS booking's id/currentRevisionId.
+    const hasRevisionedByEntityId = new Map(
+      records.map((rec) => [rec.entityId, rec.steps.some((s) => s.revisionId !== null)]),
+    );
+    const revisionedEntityIds = [...hasRevisionedByEntityId.entries()]
+      .filter(([, hasRevisioned]) => hasRevisioned)
+      .map(([entityId]) => entityId);
+    const revRows = revisionedEntityIds.length
+      ? await db.booking.findMany({
+          where: { id: { in: revisionedEntityIds } },
+          select: { id: true, currentRevisionId: true },
+        })
+      : [];
     const revMap = new Map(revRows.map((r) => [r.id, r.currentRevisionId]));
 
     const approvedIds: string[] = [];
     for (const rec of records) {
       const currentRev = revMap.get(rec.entityId) ?? null;
-      const hasRevisioned = rec.steps.some((s) => s.revisionId !== null);
+      const hasRevisioned = hasRevisionedByEntityId.get(rec.entityId) ?? false;
       const currentSteps =
         currentRev && hasRevisioned
           ? rec.steps.filter((s) => s.revisionId === currentRev)
@@ -333,6 +344,9 @@ export interface BookingExportFilters {
   dealingFrom?: string;
   /** Tanggal dealing (created_at) — batas atas (inklusif), ISO date string. */
   dealingTo?: string;
+  /** Scope ke satu sales (PIC). Di-AND-kan dengan dataScope pemanggil, jadi hanya
+   *  bisa mempersempit di dalam yang boleh dilihat pemanggil — tidak melebarkan. */
+  salesId?: string;
 }
 
 /** Satu baris siap-export — sudah dipetakan ke kolom laporan. `bitrixId` dibawa
@@ -374,6 +388,66 @@ function buildDealingFilter(filters?: BookingExportFilters): Prisma.BookingWhere
   };
 }
 
+export interface DealingSalesRow {
+  salesId: string;
+  name: string;
+  count: number;
+}
+
+export interface DealingSummary {
+  total: number;
+  perSales: DealingSalesRow[];
+}
+
+/**
+ * Ringkasan "Jumlah Dealing" — booking Confirmed (recordStatus saved) yang
+ * dibuat (createdAt = "tanggal dealing") dalam rentang [from, to], dihitung
+ * total + per-sales. Menghormati dataScope pemanggil (own/group/all) lewat
+ * buildScopeFilter. Nama sales di-resolve dari Profile (fullName → nickName).
+ * Mencakup semua kategori (WEDDINGS + MICE) — "dealing" tidak dibedakan kategori.
+ */
+export async function getDealingSummary(
+  profileId: string | undefined,
+  dataScope: DataScope | undefined,
+  from: Date,
+  to: Date,
+): Promise<DealingSummary> {
+  const scopeFilter = await buildScopeFilter(profileId, dataScope);
+
+  const bookings = await db.booking.findMany({
+    where: {
+      recordStatus: "saved",
+      bookingStatus: "Confirmed" as BookingStatus,
+      createdAt: { gte: from, lte: to },
+      ...scopeFilter,
+    },
+    select: { salesId: true },
+    take: 10000,
+  });
+
+  const counts = new Map<string, number>();
+  for (const b of bookings) {
+    if (!b.salesId) continue;
+    counts.set(b.salesId, (counts.get(b.salesId) ?? 0) + 1);
+  }
+
+  const salesIds = [...counts.keys()];
+  const profiles = salesIds.length
+    ? await db.profile.findMany({
+        where: { id: { in: salesIds } },
+        select: { id: true, fullName: true, nickName: true },
+      })
+    : [];
+  const nameById = new Map(profiles.map((p) => [p.id, p.fullName ?? p.nickName ?? "Tanpa nama"]));
+
+  const perSales: DealingSalesRow[] = [...counts.entries()]
+    .map(([salesId, count]) => ({ salesId, name: nameById.get(salesId) ?? "Tanpa nama", count }))
+    .sort((a, b) => b.count - a.count);
+
+  const total = perSales.reduce((s, r) => s + r.count, 0);
+  return { total, perSales };
+}
+
 /**
  * Fetch wedding bookings for Excel export — respects the caller's data scope,
  * applies the (AND-combined) tanggal dealing filters, and returns rows already
@@ -386,12 +460,15 @@ export async function getBookingsForExport(
 ): Promise<BookingExportRow[]> {
   const scopeFilter = await buildScopeFilter(profileId, dataScope);
   const dealingFilter = buildDealingFilter(filters);
+  // AND-combine the caller's scope with the optional per-sales narrowing so a
+  // salesId can only ever narrow within the caller's dataScope, never widen it.
+  const salesFilter: Prisma.BookingWhereInput = filters?.salesId ? { salesId: filters.salesId } : {};
 
   const where: Prisma.BookingWhereInput = {
     category: "WEDDINGS",
     recordStatus: "saved",
-    ...scopeFilter,
     ...dealingFilter,
+    AND: [scopeFilter, salesFilter],
   };
 
   const rows = await db.booking.findMany({

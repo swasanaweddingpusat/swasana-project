@@ -1,11 +1,11 @@
 import { notFound, redirect } from "next/navigation";
 import { connection } from "next/server";
 import { auth } from "@/lib/auth";
-import { hasPermission, isSuperAdmin } from "@/lib/permissions";
+import { hasPermission } from "@/lib/permissions";
 import { getBookingById } from "@/lib/queries/bookings";
 import { getBookingCashIns, getTermPaidMap, deriveTermStatus } from "@/lib/queries/ledger";
 import { getPublicUrl } from "@/lib/storage";
-import { getProfileDataScope, canAccessBooking } from "@/lib/access-control";
+import { canAccessBooking } from "@/lib/access-control";
 import { BookingDetailClient } from "./_components/BookingDetailClient";
 import type { BookingDetailResolved } from "./_components/BookingDetailClient";
 
@@ -21,26 +21,30 @@ export default async function BookingWeddingDetailPage({ params }: Props) {
   if (!session?.user?.id) redirect("/auth/login");
 
   // ── Authorization: module-level view permission (super-admin bypasses) ──
-  const isAdmin = await isSuperAdmin(session.user.roleId);
+  const isAdmin = session.user.isSuperAdmin;
   if (!isAdmin) {
     const canView = await hasPermission(session.user.roleId, "booking", "view");
     if (!canView) redirect("/forbidden");
   }
 
-  const data = await getBookingById(id);
-  if (!data) notFound();
-
   // ── Defense-in-depth: this URL is directly navigable (unlike the modal, which
   // is only reachable from an already dataScope-filtered list). Enforce the same
   // per-record scope here so a sales rep can't read another team's booking by
   // guessing the id. A scope miss returns notFound (don't confirm existence). ──
-  if (!isAdmin) {
-    const profileId = session.user.profileId;
-    if (!profileId) redirect("/forbidden");
-    const scope = await getProfileDataScope(profileId);
-    const allowed = await canAccessBooking(profileId, scope, id);
-    if (!allowed) notFound();
-  }
+  const profileId = session.user.profileId;
+  if (!isAdmin && !profileId) redirect("/forbidden");
+  const scope = session.user.dataScope ?? "own";
+
+  // getBookingById and the per-record scope check are independent of each
+  // other's result (neither needs `data`, neither needs `allowed`) — run them
+  // in parallel instead of a waterfall.
+  const [data, allowed] = await Promise.all([
+    getBookingById(id),
+    isAdmin ? Promise.resolve(true) : canAccessBooking(profileId, scope, id),
+  ]);
+
+  if (!data) notFound();
+  if (!isAdmin && !allowed) notFound();
 
   // Status termin + riwayat cash-in di-resolve server-side (pola sama dgn
   // GET /api/bookings/[id]): status termin diturunkan dari gross terbayar,

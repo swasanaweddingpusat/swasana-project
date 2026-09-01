@@ -1,5 +1,5 @@
 import { getBookings, type ApprovalStatusFilter } from "@/lib/queries/bookings";
-import { requirePermissionForRoute, canViewSalesBookings, isSuperAdmin, hasPermission } from "@/lib/permissions";
+import { requirePermissionForRoute, canViewSalesBookings, hasPermission } from "@/lib/permissions";
 import { apiLimiter, rateLimitResponse } from "@/lib/rate-limit";
 import type { DataScope } from "@/types/user";
 import type { BookingStatus } from "@prisma/client";
@@ -92,7 +92,7 @@ export async function GET(request: Request) {
   // On denial we return an empty result with the same shape — no error detail exposed.
   if (salesId === "__none__") {
     const allowed =
-      (await isSuperAdmin(session.user.roleId)) ||
+      session.user.isSuperAdmin ||
       (await hasPermission(session.user.roleId, "groups", "view-all")) ||
       (await hasPermission(session.user.roleId, "booking", "transfer"));
     if (!allowed) return emptyResult();

@@ -7,7 +7,7 @@ import { requirePermission } from "@/lib/permissions";
 import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
 import { randomUUID } from "crypto";
 import { revalidateTag } from "next/cache";
-import { canAccessBooking, getProfileDataScope } from "@/lib/access-control";
+import { canAccessBooking } from "@/lib/access-control";
 import { logAudit } from "@/lib/audit";
 import { generateAccessCode } from "@/lib/access-code";
 import { isAllowedAgreementUploadMimeType } from "@/lib/validations/upload";
@@ -19,7 +19,7 @@ export async function generateAgreementToken(bookingId: string) {
     return { success: false as const, ...rateLimitError() };
   }
 
-  const scope = await getProfileDataScope(session!.user.profileId);
+  const scope = session!.user.dataScope ?? "own";
   if (!(await canAccessBooking(session!.user.profileId, scope, bookingId))) {
     return { success: false as const, error: "Anda tidak memiliki akses ke booking ini." };
   }
@@ -92,7 +92,7 @@ export async function uploadManualAgreement(input: {
   if (!parsed.success) return { success: false as const, error: parsed.error.issues[0].message };
   const { bookingId, path, fileName, fileType, noPO } = parsed.data;
 
-  const scope = await getProfileDataScope(session!.user.profileId);
+  const scope = session!.user.dataScope ?? "own";
   if (!(await canAccessBooking(session!.user.profileId, scope, bookingId))) {
     return { success: false as const, error: "Anda tidak memiliki akses ke booking ini." };
   }
@@ -213,7 +213,7 @@ export async function markAgreementSent(bookingId: string) {
   if (error) return { success: false as const, error };
   if (!mutationLimiter.check(`agreement-sent:${session!.user.id}`)) return { success: false as const, ...rateLimitError() };
 
-  const scope = await getProfileDataScope(session!.user.profileId);
+  const scope = session!.user.dataScope ?? "own";
   if (!(await canAccessBooking(session!.user.profileId, scope, bookingId))) {
     return { success: false as const, error: "Anda tidak memiliki akses ke booking ini." };
   }

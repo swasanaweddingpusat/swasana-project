@@ -310,15 +310,15 @@ function GroupCard({
         >
           <div className="flex flex-col items-center gap-0.5 px-2 first:pl-0 last:pr-0">
             <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
-              Piutang
+              Target
             </span>
-            <span className="text-sm font-semibold tabular-nums text-destructive/80">{formatRp(group.piutang ?? 0)}</span>
+            <span className="text-sm font-semibold tabular-nums">{formatRp(group.target)}</span>
           </div>
           <div className="flex flex-col items-center gap-0.5 px-2">
             <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
               Revenue
             </span>
-            <span className="text-sm font-semibold tabular-nums">{formatRp(group.totalRevenue ?? 0)}</span>
+            <span className="text-sm font-semibold tabular-nums">{formatRp(group.revenue)}</span>
           </div>
           <div className="flex flex-col items-center gap-0.5 px-2 last:pr-0">
             <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">

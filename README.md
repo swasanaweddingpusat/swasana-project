@@ -160,7 +160,7 @@ swasana-project/
 │   ├── (public)/             # Tanpa auth: login, client-agreement, form publik
 │   ├── (private)/            # Butuh session (AuthGate)
 │   │   ├── _components/      # shell: sidebar, header, auth-gate, mobile-bottom-nav
-│   │   ├── select-module/    # picker "world" setelah login
+│   │   ├── page.tsx          # Overview general (landing "/") — lintas-world, no picker
 │   │   ├── (general)/        # menu lintas-world (vendor, procurement, bitrix24, …)
 │   │   ├── finance/          # world: Finance
 │   │   ├── hrd/              # world: HRD

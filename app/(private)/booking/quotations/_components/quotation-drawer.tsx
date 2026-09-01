@@ -20,6 +20,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { useCreateQuotation, useUpdateQuotation } from "@/hooks/use-quotations";
 import { toast } from "sonner";
 import { format, startOfMonth } from "date-fns";
+import type { DateRange } from "react-day-picker";
 import SignatureCanvas from "react-signature-canvas";
 import { Drawer } from "@/components/shared/drawer";
 import {
@@ -32,19 +33,13 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   SearchableSelect,
 } from "@/components/ui/searchable-select";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import {
   Collapsible,
   CollapsibleTrigger,
@@ -54,6 +49,7 @@ import { SimpleEditor } from "@/components/shared/SimpleEditor";
 import { BankAccountSelect } from "@/components/shared/bank-account-select";
 import { PhoneInput } from "@/components/shared/PhoneInput";
 import { TimeRangePicker } from "@/components/shared/time-range-picker";
+import { ComplimentarySelect } from "@/components/shared/ComplimentarySelect";
 import {
   AddCircle,
   TrashBinTrash,
@@ -63,12 +59,18 @@ import {
   Calendar as CalendarSolarIcon,
   AlignVerticalSpacing,
   Box,
+  BillList,
+  Gift,
 } from "@solar-icons/react";
 import { cn } from "@/lib/utils";
 import { useVenues } from "@/hooks/use-venues";
 import { useEventTypes } from "@/hooks/use-event-types";
 import { useSalesUsers } from "@/hooks/use-sales-users";
 import { useCurrentUser } from "@/hooks/use-current-user";
+import { useComplimentaries } from "@/hooks/use-complimentaries";
+import { usePermissions } from "@/hooks/use-permissions";
+import { createComplimentary } from "@/actions/complimentary";
+import { parseContactNumbers } from "@/types/daily-activity";
 import type { QuotationItem } from "./quotations-table";
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -107,9 +109,13 @@ interface QuotationFormValues {
   venueId: string;
   venue: string;
   eventDate: string;
+  eventEndDate: string;
   status: QuotationStatusValue;
   // Step 2 — items + ringkasan
   items: QuotationItemForm[];
+  // Additional — priced line items, UI-only for now (belum ada di server/DB;
+  // JANGAN dikirim ke server action sampai schema server siap).
+  additionals: QuotationItemForm[];
   discount: string;
   bookingFee: string;
   validUntil: string;
@@ -118,6 +124,16 @@ interface QuotationFormValues {
 }
 
 // ── API response types ───────────────────────────────────────────────────────
+
+interface ComplimentaryRow {
+  id: string;
+  complimentaryId: string | null;
+  name: string;
+  price: number;
+  isShowPrice: boolean;
+  description: string;
+  qty: number;
+}
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -190,14 +206,6 @@ const EMPTY_ITEM: QuotationItemForm = {
   manualTotal: false,
 };
 
-const STATUS_OPTIONS: { value: QuotationStatusValue; label: string }[] = [
-  { value: "draft", label: "Draft" },
-  { value: "sent", label: "Sent" },
-  { value: "revised", label: "Revised" },
-  { value: "accepted", label: "Dealing" },
-  { value: "rejected", label: "Rejected" },
-];
-
 const DEFAULT_VALUES: QuotationFormValues = {
   clientName: "",
   clientPhone: "",
@@ -213,8 +221,10 @@ const DEFAULT_VALUES: QuotationFormValues = {
   venueId: "",
   venue: "",
   eventDate: "",
+  eventEndDate: "",
   status: "draft",
   items: DEFAULT_ITEMS.map((it) => ({ ...it })),
+  additionals: [],
   discount: "",
   bookingFee: "",
   validUntil: "",
@@ -224,12 +234,13 @@ const DEFAULT_VALUES: QuotationFormValues = {
 
 // ── Draft persistence (create mode only) ─────────────────────────────────────
 
-const QUOTATION_DRAFT_KEY = "quotation-draft-v1";
+const QUOTATION_DRAFT_KEY = "quotation-draft-v4";
 
 type QuotationDraft = {
   values: Partial<QuotationFormValues>;
   signingLocation?: string;
   signatureSales?: string;
+  complimentaries?: ComplimentaryRow[];
 };
 
 function readQuotationDraft(): QuotationDraft | null {
@@ -246,6 +257,7 @@ function persistQuotationDraft(
   values: Partial<QuotationFormValues>,
   signingLocation?: string,
   signatureSales?: string,
+  complimentaries?: ComplimentaryRow[],
 ) {
   if (typeof window === "undefined") return;
   const { ...rest } = values;
@@ -253,10 +265,11 @@ function persistQuotationDraft(
     if (Array.isArray(v)) return v.some((item: QuotationItemForm) => item.title?.trim());
     return typeof v === "string" && v.trim() !== "";
   });
-  if (hasContent || signingLocation?.trim() || signatureSales) {
+  if (hasContent || signingLocation?.trim() || signatureSales || (complimentaries && complimentaries.length > 0)) {
     const draft: QuotationDraft = { values: rest };
     if (signingLocation !== undefined) draft.signingLocation = signingLocation;
     if (signatureSales !== undefined) draft.signatureSales = signatureSales;
+    if (complimentaries !== undefined) draft.complimentaries = complimentaries;
     localStorage.setItem(QUOTATION_DRAFT_KEY, JSON.stringify(draft));
   } else {
     localStorage.removeItem(QUOTATION_DRAFT_KEY);
@@ -271,7 +284,7 @@ function clearQuotationDraft() {
 // ── Sub-component: ItemListEditor (DRY untuk step 2 & 3) ────────────────────
 
 interface ItemListEditorProps {
-  arrayName: "items";
+  arrayName: "items" | "additionals";
   fields: Array<{ id: string }>;
   append: (value: QuotationItemForm) => void;
   remove: (index: number) => void;
@@ -288,7 +301,7 @@ interface ItemListEditorProps {
 interface SortableItemRowProps {
   fieldItem: { id: string };
   index: number;
-  arrayName: "items";
+  arrayName: "items" | "additionals";
   remove: (index: number) => void;
   form: UseFormReturn<QuotationFormValues>;
   expandedSet: Set<string>;
@@ -419,6 +432,27 @@ function SortableItemRow({
               )}
             />
 
+            {/* Description — rich text (TipTap) */}
+            <FormField
+              control={form.control}
+              name={`${arrayName}.${index}.description` as FieldPath<QuotationFormValues>}
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="text-xs text-muted-foreground">
+                    Description{" "}
+                    <span className="font-normal">(opsional)</span>
+                  </FormLabel>
+                  <FormControl>
+                    <SimpleEditor
+                      value={field.value as string}
+                      onChange={field.onChange}
+                      placeholder="Deskripsi detail item..."
+                    />
+                  </FormControl>
+                </FormItem>
+              )}
+            />
+
             <div className="grid grid-cols-3 gap-2">
               <FormField
                 control={form.control}
@@ -507,27 +541,6 @@ function SortableItemRow({
                 )}
               />
             </div>
-
-            {/* Description — rich text (TipTap) */}
-            <FormField
-              control={form.control}
-              name={`${arrayName}.${index}.description` as FieldPath<QuotationFormValues>}
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel className="text-xs text-muted-foreground">
-                    Description{" "}
-                    <span className="font-normal">(opsional)</span>
-                  </FormLabel>
-                  <FormControl>
-                    <SimpleEditor
-                      value={field.value as string}
-                      onChange={field.onChange}
-                      placeholder="Deskripsi detail item..."
-                    />
-                  </FormControl>
-                </FormItem>
-              )}
-            />
           </div>
         </CollapsibleContent>
       </Collapsible>
@@ -638,7 +651,7 @@ export function QuotationDrawer({
   onSuccess,
 }: QuotationDrawerProps) {
   const isEdit = !!editQuotation;
-  const [step, setStep] = useState<1 | 2 | 3>(1);
+  const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
   const queryClient = useQueryClient();
 
   // ── Mutation hooks ───────────────────────────────────────────────────────
@@ -652,22 +665,48 @@ export function QuotationDrawer({
   const pendingExpandItemsRef = useRef(false);
   // Ref to signal that the first card should auto-expand on open.
   const pendingExpandFirstItemsRef = useRef(false);
+  // Same, but for the "Additional" section (mirror items — separate ref since
+  // it's a separate field array).
+  const pendingExpandAdditionalsRef = useRef(false);
 
-  // TTD state (step 3)
+  // TTD state (step 4)
   const sigSalesRef = useRef<SignatureCanvas>(null);
   const [signatureSales, setSignatureSales] = useState("");
   const [signingLocation, setSigningLocation] = useState("");
-  // Signature dataURL pending repaint onto the canvas once it mounts (step 3 only).
+  // Signature dataURL pending repaint onto the canvas once it mounts (step 4 only).
   const pendingSignatureRestoreRef = useRef<string | null>(null);
 
   // Package MICE picker (Step 2 — explode into line items, filtered by venue)
   const [selectedPackageId, setSelectedPackageId] = useState("");
-  // Guards the auto-apply-on-first-open behavior from re-firing on every
-  // micePackages refetch, and from overriding items the user already edited.
-  const autoAppliedPackageRef = useRef(false);
 
   function toggleItem(id: string) {
     setExpandedItems((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }
+
+  // ── Complimentary (Step 2) ───────────────────────────────────────────────
+  const [complimentaries, setComplimentaries] = useState<ComplimentaryRow[]>([]);
+  // "none" = collapsed button | "create-new" = inline mini-form
+  const [complimentaryMode, setComplimentaryMode] = useState<"none" | "create-new">("none");
+  // Tracks which complimentary rows are collapsed (by c.id). Default = none → all open.
+  const [collapsedComplimentaries, setCollapsedComplimentaries] = useState<Set<string>>(new Set());
+  // Inline "buat baru" form state
+  const [createNewComp, setCreateNewComp] = useState({ name: "", price: 0, description: "", isShowPrice: false });
+  const [isCreatingComp, setIsCreatingComp] = useState(false);
+  const { data: complimentaryResult } = useComplimentaries({ activeOnly: true, pageSize: 100 });
+  const complimentaryOptions = complimentaryResult?.items ?? [];
+  const { can: canPermission } = usePermissions();
+  const canCreateComplimentary = canPermission("complimentary", "create");
+
+  function toggleComplimentaryCollapse(id: string) {
+    setCollapsedComplimentaries((prev) => {
       const next = new Set(prev);
       if (next.has(id)) {
         next.delete(id);
@@ -694,6 +733,7 @@ export function QuotationDrawer({
     id: string;
     name: string;
     instansi: string | null;
+    contactNumbers: unknown;
   }
   const [instansiSearch, setInstansiSearch] = useState("");
   const [debouncedInstansi, setDebouncedInstansi] = useState("");
@@ -738,6 +778,16 @@ export function QuotationDrawer({
     name: "items",
   });
 
+  const {
+    fields: additionalFields,
+    append: appendAdditional,
+    remove: removeAdditional,
+    move: moveAdditional,
+  } = useFieldArray({
+    control: form.control,
+    name: "additionals",
+  });
+
   /**
    * Load the per-venue quotation template (items + default payment method) and
    * populate the form. Create mode only — never overwrites an existing edit.
@@ -748,20 +798,12 @@ export function QuotationDrawer({
       const res = await fetch(`/api/quotation-templates/${venueId}`);
       if (!res.ok) return;
       const data = (await res.json()) as {
-        items?: Array<{ title: string; description: string | null; qty: number; price: number; total: number; manualTotal: boolean }>;
         paymentMethodId?: string | null;
         bookingFee?: number | null;
       };
-      const tplItems: QuotationItemForm[] = (data.items ?? []).map((it) => ({
-        title: it.title,
-        description: it.description ?? "",
-        qty: it.qty > 0 ? formatNumericDisplay(it.qty) : "",
-        price: it.price > 0 ? formatNumericDisplay(it.price) : "",
-        total: it.total > 0 ? formatNumericDisplay(it.total) : "",
-        manualTotal: it.manualTotal,
-      }));
-      replaceItems(tplItems);
-      setExpandedItems(new Set());
+      // Item template per-venue SENGAJA tidak di-load ke daftar item — item MICE
+      // diisi manual lewat dropdown "Pilih Package MICE". Cuma payment method &
+      // booking fee (boilerplate Term & Payment) yang di-prefill dari template.
       form.setValue("paymentMethodId", data.paymentMethodId ?? "");
       form.setValue(
         "bookingFee",
@@ -790,11 +832,21 @@ export function QuotationDrawer({
     }
   }, [itemFields]);
 
+  // Auto-expand the last item when a new one is appended (additionals).
+  useEffect(() => {
+    if (pendingExpandAdditionalsRef.current && additionalFields.length > 0) {
+      const lastId = additionalFields[additionalFields.length - 1].id;
+      setExpandedItems((prev) => new Set([...prev, lastId]));
+      pendingExpandAdditionalsRef.current = false;
+    }
+  }, [additionalFields]);
+
   const watchedClientName = form.watch("clientName");
   const watchedSalesId = form.watch("salesId");
   const watchedSalesPhone = form.watch("salesPhone");
   const watchedVenueId = form.watch("venueId");
   const watchedItems = form.watch("items");
+  const watchedAdditionals = form.watch("additionals");
   const watchedDiscount = form.watch("discount");
   const watchedEventTypeId = form.watch("eventTypeId");
   const watchedEventDate = form.watch("eventDate");
@@ -828,9 +880,10 @@ export function QuotationDrawer({
   const micePackages: MicePackageQuotationOption[] = micePackagesData ?? [];
 
   /**
-   * Explode a package's items into editable quotation line items and append
-   * them (does not overwrite existing template/manual items). PAX items
-   * multiply by the package's default pax; NOMINAL items are flat.
+   * Explode a package's items into editable quotation line items and REPLACE
+   * the entire items list with them (overwrites any existing template/manual
+   * items). PAX items multiply by the package's default pax; NOMINAL items
+   * are flat.
    */
   function handleApplyPackage(packageId: string) {
     const pkg = micePackages.find((p) => p.id === packageId);
@@ -839,7 +892,7 @@ export function QuotationDrawer({
       toast.error("Paket ini belum punya item.");
       return;
     }
-    for (const item of pkg.miceItems) {
+    const newItems = pkg.miceItems.map((item) => {
       let qty: string;
       let total: number;
       if (item.itemType === "PAX") {
@@ -849,31 +902,35 @@ export function QuotationDrawer({
         qty = "1";
         total = item.itemPrice;
       }
-      appendItem({
+      return {
         title: item.itemName,
         description: miceDescriptionToHtml(item.itemDescription),
         qty,
         price: item.itemPrice > 0 ? formatNumericDisplay(item.itemPrice) : "",
         total: total > 0 ? formatNumericDisplay(total) : "",
         manualTotal: false,
-      });
-    }
+      };
+    });
+    replaceItems(newItems);
     toast.success(
-      `${pkg.miceItems.length} item dari paket "${pkg.packageName}" ditambahkan.`,
+      `${pkg.miceItems.length} item dari paket "${pkg.packageName}" diterapkan (menggantikan item sebelumnya).`,
     );
     setSelectedPackageId("");
   }
 
-  const isStep1Incomplete =
-    !watchedClientName?.trim() ||
-    !watchedSalesId ||
-    !watchedEventTypeId ||
-    !watchedEventDate;
+  // TEMP — testing UI Step 1: skip required-field gate so "Lanjut" can be clicked even with
+  // incomplete fields. Set to false / remove once Step 1's data logic is finalized.
+  const TEMP_SKIP_STEP1_REQUIRED_GATE = true;
 
-  // Step 2 (items + discount) has no hard-required field — items default to one row.
-  const isStep2Incomplete = false;
-  // Step 3 (signature) requires a signature + signing location.
-  const isStep3Complete = !!signatureSales && !!signingLocation.trim();
+  const isStep1Incomplete =
+    !TEMP_SKIP_STEP1_REQUIRED_GATE &&
+    (!watchedClientName?.trim() ||
+      !watchedSalesId ||
+      !watchedEventTypeId ||
+      !watchedEventDate);
+
+  // Step 4 (signature) requires a signature + signing location.
+  const isSignatureComplete = !!signatureSales && !!signingLocation.trim();
 
   // Name shown in the locked sales field — resolves from the current salesId so
   // edit mode displays the record's actual sales (not the logged-in user).
@@ -952,27 +1009,17 @@ export function QuotationDrawer({
   }
 
   // ── Item totals ──────────────────────────────────────────────────────────
-  const subtotal = (watchedItems ?? []).reduce(
+  const itemsSubtotal = (watchedItems ?? []).reduce(
     (sum, it) => sum + parseNumericInput(it?.total ?? ""),
     0,
   );
+  const additionalsSubtotal = (watchedAdditionals ?? []).reduce(
+    (sum, it) => sum + parseNumericInput(it?.total ?? ""),
+    0,
+  );
+  const subtotal = itemsSubtotal + additionalsSubtotal;
   const discountNum = parseNumericInput(watchedDiscount);
   const grandTotal = Math.max(0, subtotal - discountNum);
-
-  // Auto-apply the venue's package when the quotation is still empty — i.e. a
-  // brand-new draft (no items typed yet, nothing restored from localStorage)
-  // and the venue has exactly one approved MICE package. Ambiguous (>1 package)
-  // or already-populated quotations are left for the user to pick manually via
-  // the "Pilih Package MICE" dropdown.
-  useEffect(() => {
-    if (autoAppliedPackageRef.current) return;
-    if (isEdit || !watchedVenueId) return;
-    const hasExistingItems = (watchedItems ?? []).some((it) => it?.title?.trim());
-    if (hasExistingItems) return;
-    if (micePackages.length !== 1) return;
-    autoAppliedPackageRef.current = true;
-    handleApplyPackage(micePackages[0].id);
-  }, [watchedVenueId, micePackages, isEdit]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Reset on open ────────────────────────────────────────────────────────
   useEffect(() => {
@@ -993,7 +1040,12 @@ export function QuotationDrawer({
     setInstansiDropdownOpen(false);
     // Reset Package MICE picker state
     setSelectedPackageId("");
-    autoAppliedPackageRef.current = false;
+    // Reset Complimentary state
+    setComplimentaries([]);
+    setComplimentaryMode("none");
+    setCollapsedComplimentaries(new Set());
+    setCreateNewComp({ name: "", price: 0, description: "", isShowPrice: false });
+    setIsCreatingComp(false);
 
     if (editQuotation) {
       const matchedVenue = venues.find((v) => v.name === editQuotation.venue);
@@ -1026,8 +1078,12 @@ export function QuotationDrawer({
         venueId: matchedVenue?.id ?? "",
         venue: editQuotation.venue,
         eventDate: editQuotation.eventDate,
+        eventEndDate: editQuotation.eventEndDate ?? "",
         status: (editQuotation.status as QuotationStatusValue) ?? "draft",
         items,
+        // Additional belum ada di server/DB — quotation existing selalu mulai
+        // kosong di sini (murni UI state, tidak dibaca dari editQuotation).
+        additionals: [],
         discount:
           editQuotation.discount > 0
             ? formatNumericDisplay(editQuotation.discount)
@@ -1042,6 +1098,18 @@ export function QuotationDrawer({
       });
       // Sync instansi search input with existing value
       setInstansiSearch(editQuotation.instansi ?? "");
+      // Restore complimentaries
+      setComplimentaries(
+        (editQuotation.complimentaries ?? []).map((c) => ({
+          id: crypto.randomUUID(),
+          complimentaryId: c.complimentaryId ?? null,
+          name: c.name,
+          price: c.price,
+          isShowPrice: c.isShowPrice,
+          description: c.description ?? "",
+          qty: c.qty,
+        })),
+      );
     } else {
       const draft = readQuotationDraft();
       if (draft?.values) {
@@ -1068,11 +1136,13 @@ export function QuotationDrawer({
           setSigningLocation(draft.signingLocation);
         }
         // Restore signature — canvas belum mount di step 1, jadi dataURL-nya
-        // ditahan dulu dan baru di-paint saat step 3 aktif (lihat effect di bawah).
+        // ditahan dulu dan baru di-paint saat step 4 aktif (lihat effect di bawah).
         if (draft.signatureSales) {
           setSignatureSales(draft.signatureSales);
           pendingSignatureRestoreRef.current = draft.signatureSales;
         }
+        // Restore complimentaries dari draft
+        setComplimentaries(draft.complimentaries ?? []);
       } else {
         form.reset({
           ...DEFAULT_VALUES,
@@ -1093,23 +1163,22 @@ export function QuotationDrawer({
   // Persist draft on form changes (create mode only).
   useEffect(() => {
     if (!open || isEdit) return;
-    // eslint-disable-next-line react-hooks/incompatible-library
     const sub = form.watch((values) => {
-      persistQuotationDraft(values as Partial<QuotationFormValues>, signingLocation, signatureSales);
+      persistQuotationDraft(values as Partial<QuotationFormValues>, signingLocation, signatureSales, complimentaries);
     });
     return () => sub.unsubscribe();
-  }, [open, isEdit, signingLocation, signatureSales]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [open, isEdit, signingLocation, signatureSales, complimentaries]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Persist signingLocation/signatureSales changes to draft (not triggered by form.watch).
+  // Persist signingLocation/signatureSales/complimentaries changes to draft (not triggered by form.watch).
   useEffect(() => {
     if (!open || isEdit) return;
-    persistQuotationDraft(form.getValues(), signingLocation, signatureSales);
-  }, [signingLocation, signatureSales]); // eslint-disable-line react-hooks/exhaustive-deps
+    persistQuotationDraft(form.getValues(), signingLocation, signatureSales, complimentaries);
+  }, [signingLocation, signatureSales, complimentaries]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Repaint the restored signature once the canvas mounts (step 3 only — see the
-  // "Mount only when step 3 is active" note on SignatureCanvas below).
+  // Repaint the restored signature once the canvas mounts (step 4 only — see the
+  // "Mount only when step 4 is active" note on SignatureCanvas below).
   useEffect(() => {
-    if (step !== 3 || !pendingSignatureRestoreRef.current) return;
+    if (step !== 4 || !pendingSignatureRestoreRef.current) return;
     sigSalesRef.current?.fromDataURL(pendingSignatureRestoreRef.current);
     pendingSignatureRestoreRef.current = null;
   }, [step]);
@@ -1117,6 +1186,10 @@ export function QuotationDrawer({
   // ── Navigation ───────────────────────────────────────────────────────────
   async function handleNext() {
     if (step === 1) {
+      if (TEMP_SKIP_STEP1_REQUIRED_GATE) {
+        setStep(2);
+        return;
+      }
       const step1Fields = [
         "clientName",
         "salesId",
@@ -1128,6 +1201,8 @@ export function QuotationDrawer({
       if (ok) setStep(2);
     } else if (step === 2) {
       setStep(3);
+    } else if (step === 3) {
+      setStep(4);
     }
   }
 
@@ -1135,10 +1210,12 @@ export function QuotationDrawer({
     if (step === 2) {
       setStep(1);
     } else if (step === 3) {
-      // Clear signature saat kembali dari step 3
+      setStep(2);
+    } else if (step === 4) {
+      // Clear signature saat kembali dari step TTD
       sigSalesRef.current?.clear();
       setSignatureSales("");
-      setStep(2);
+      setStep(3);
     }
   }
 
@@ -1168,8 +1245,17 @@ export function QuotationDrawer({
       eventTypeName: values.eventTypeName || null,
       category: "MICE" as const,
       weddingSession: null,
-      complimentaries: [],
+      complimentaries: complimentaries.map((c, i) => ({
+        complimentaryId: c.complimentaryId,
+        name: c.name,
+        price: c.price,
+        isShowPrice: c.isShowPrice,
+        description: c.description || null,
+        qty: c.qty,
+        sortOrder: i,
+      })),
       eventDate: values.eventDate || null,
+      eventEndDate: values.eventEndDate || null,
       time: values.time || null,
       place: values.place || null,
       details: values.details || null,
@@ -1205,6 +1291,10 @@ export function QuotationDrawer({
     sigSalesRef.current?.clear();
     setSignatureSales("");
     setSigningLocation("");
+    // Reset complimentary state setelah submit sukses
+    setComplimentaries([]);
+    setComplimentaryMode("none");
+    setCollapsedComplimentaries(new Set());
     if (!isEdit) onSuccess?.();
     onOpenChange(false);
   }
@@ -1217,7 +1307,7 @@ export function QuotationDrawer({
       title={isEdit ? "Edit Quotation" : "Tambah Quotation"}
       maxWidth="sm:max-w-2xl"
       steps={step}
-      totalSteps={3}
+      totalSteps={4}
       stepperType="short"
     >
       <div className="flex flex-col h-full">
@@ -1227,36 +1317,6 @@ export function QuotationDrawer({
 
               {/* ════════════════ STEP 1 — INFORMASI ════════════════ */}
               <div className={cn(step !== 1 && "hidden", "space-y-4")}>
-
-                {/* ── Status banner (edit mode only) ──────────────── */}
-                {isEdit && (
-                  <div className="rounded-xl border border-border bg-muted/40 px-4 py-3">
-                    <FormField
-                      control={form.control}
-                      name="status"
-                      render={({ field }) => (
-                        <FormItem className="w-full">
-                          <FormLabel className={LABEL_CLASS}>Status Quotation</FormLabel>
-                          <Select value={field.value} onValueChange={field.onChange}>
-                            <FormControl>
-                              <SelectTrigger className="w-full">
-                                <SelectValue placeholder="Pilih status..." />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              {STATUS_OPTIONS.map((opt) => (
-                                <SelectItem key={opt.value} value={opt.value}>
-                                  {opt.label}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
-                )}
 
                 {/* ── Klien ───────────────────────────────────────── */}
                 <div className="rounded-2xl border bg-card p-5 space-y-3">
@@ -1303,6 +1363,15 @@ export function QuotationDrawer({
                                         setInstansiSearch(lead.name);
                                         field.onChange(lead.name);
                                         setInstansiDropdownOpen(false);
+                                        const [pic] = parseContactNumbers(lead.contactNumbers);
+                                        form.setValue("clientName", pic?.label ?? "", {
+                                          shouldDirty: true,
+                                          shouldValidate: true,
+                                        });
+                                        form.setValue("clientPhone", pic?.number ?? "", {
+                                          shouldDirty: true,
+                                          shouldValidate: true,
+                                        });
                                       }}
                                     >
                                       <p className="font-medium">{lead.name}</p>
@@ -1451,6 +1520,7 @@ export function QuotationDrawer({
                               const matched = venues.find((v) => v.id === id);
                               form.setValue("venue", matched?.name ?? "");
                               form.setValue("eventDate", "");
+                              form.setValue("eventEndDate", "");
                               void loadVenueTemplate(id);
                             }}
                             placeholder="Pilih / cari venue..."
@@ -1494,72 +1564,94 @@ export function QuotationDrawer({
                     )}
                   />
 
-                  {/* Tanggal Event */}
+                  {/* Tanggal Event — bisa single atau rentang (klik 1 tanggal = single, klik ke-2 = rentang) */}
                   <FormField
                     control={form.control}
                     name="eventDate"
                     rules={{ required: "Tanggal event wajib diisi" }}
-                    render={({ field }) => (
-                      <FormItem className="w-full">
-                        <FormLabel className={LABEL_CLASS}>
-                          Tanggal Event <span className="text-destructive">*</span>
-                        </FormLabel>
-                        <Popover>
-                          <PopoverTrigger
-                            render={
-                              <Button
-                                variant="outline"
-                                className={cn(
-                                  "w-full justify-start text-left font-normal",
-                                  !field.value && "text-muted-foreground",
-                                )}
-                              >
-                                <CalendarSolarIcon weight="BoldDuotone" className="mr-2 h-4 w-4" />
-                                {field.value
-                                  ? format(new Date(field.value + "T00:00:00"), "PPP")
-                                  : "Pilih tanggal event"}
-                              </Button>
-                            }
-                          />
-                          <PopoverContent className="w-auto p-0" align="start">
-                            <Calendar
-                              mode="single"
-                              captionLayout="dropdown"
-                              selected={field.value ? new Date(field.value + "T00:00:00") : undefined}
-                              onSelect={(date) => {
-                                if (date) {
-                                  const y = date.getFullYear();
-                                  const m = String(date.getMonth() + 1).padStart(2, "0");
-                                  const d = String(date.getDate()).padStart(2, "0");
-                                  field.onChange(`${y}-${m}-${d}`);
-                                } else {
-                                  field.onChange("");
-                                }
-                              }}
-                              disabled={(d) => getDateStatus(d) === "unavailable"}
-                              fromYear={new Date().getFullYear() - 10}
-                              toYear={new Date().getFullYear() + 5}
-                              defaultMonth={field.value ? new Date(field.value + "T00:00:00") : new Date()}
-                              onMonthChange={setVisibleMonth}
-                              modifiers={{
-                                available: (d) => !!watchedVenueId && getDateStatus(d) === "available",
-                                partial: (d) => !!watchedVenueId && getDateStatus(d) === "partial",
-                                unavailable: (d) => !!watchedVenueId && getDateStatus(d) === "unavailable",
-                              }}
-                              modifiersClassNames={{
-                                available: "day-available",
-                                partial: "day-partial",
-                                unavailable: "day-unavailable",
-                              }}
+                    render={({ field }) => {
+                      const watchedEnd = form.watch("eventEndDate");
+                      const selected: DateRange | undefined = field.value
+                        ? {
+                            from: new Date(field.value + "T00:00:00"),
+                            to: watchedEnd ? new Date(watchedEnd + "T00:00:00") : undefined,
+                          }
+                        : undefined;
+
+                      function fmt(date: Date): string {
+                        const y = date.getFullYear();
+                        const m = String(date.getMonth() + 1).padStart(2, "0");
+                        const d = String(date.getDate()).padStart(2, "0");
+                        return `${y}-${m}-${d}`;
+                      }
+
+                      let triggerLabel: string;
+                      if (!field.value) {
+                        triggerLabel = "Pilih tanggal event";
+                      } else if (!watchedEnd || watchedEnd === field.value) {
+                        triggerLabel = format(new Date(field.value + "T00:00:00"), "PPP");
+                      } else {
+                        triggerLabel = `${format(new Date(field.value + "T00:00:00"), "PPP")} – ${format(new Date(watchedEnd + "T00:00:00"), "PPP")}`;
+                      }
+
+                      return (
+                        <FormItem className="w-full">
+                          <FormLabel className={LABEL_CLASS}>
+                            Tanggal Event <span className="text-destructive">*</span>
+                          </FormLabel>
+                          <Popover>
+                            <PopoverTrigger
+                              render={
+                                <Button
+                                  variant="outline"
+                                  className={cn(
+                                    "w-full justify-start text-left font-normal",
+                                    !field.value && "text-muted-foreground",
+                                  )}
+                                >
+                                  <CalendarSolarIcon weight="BoldDuotone" className="mr-2 h-4 w-4" />
+                                  {triggerLabel}
+                                </Button>
+                              }
                             />
-                          </PopoverContent>
-                        </Popover>
-                        {availLoading && (
-                          <p className="text-xs text-muted-foreground mt-1">Mengecek ketersediaan...</p>
-                        )}
-                        <FormMessage />
-                      </FormItem>
-                    )}
+                            <PopoverContent className="w-auto p-0" align="start">
+                              <Calendar
+                                mode="range"
+                                numberOfMonths={2}
+                                captionLayout="dropdown"
+                                selected={selected}
+                                onSelect={(range: DateRange | undefined) => {
+                                  field.onChange(range?.from ? fmt(range.from) : "");
+                                  form.setValue("eventEndDate", range?.to ? fmt(range.to) : "");
+                                }}
+                                disabled={(d) => getDateStatus(d) === "unavailable"}
+                                fromYear={new Date().getFullYear() - 10}
+                                toYear={new Date().getFullYear() + 5}
+                                defaultMonth={field.value ? new Date(field.value + "T00:00:00") : new Date()}
+                                onMonthChange={setVisibleMonth}
+                                modifiers={{
+                                  available: (d) => !!watchedVenueId && getDateStatus(d) === "available",
+                                  partial: (d) => !!watchedVenueId && getDateStatus(d) === "partial",
+                                  unavailable: (d) => !!watchedVenueId && getDateStatus(d) === "unavailable",
+                                }}
+                                modifiersClassNames={{
+                                  available: "day-available",
+                                  partial: "day-partial",
+                                  unavailable: "day-unavailable",
+                                }}
+                              />
+                            </PopoverContent>
+                          </Popover>
+                          {availLoading && (
+                            <p className="text-xs text-muted-foreground mt-1">Mengecek ketersediaan...</p>
+                          )}
+                          <p className="text-xs text-muted-foreground">
+                            Klik 1 tanggal untuk single, klik tanggal ke-2 untuk rentang.
+                          </p>
+                          <FormMessage />
+                        </FormItem>
+                      );
+                    }}
                   />
 
                   {/* Waktu */}
@@ -1625,7 +1717,7 @@ export function QuotationDrawer({
               </div>
 
               {/* ════════════════ STEP 2 — ITEMS + RINGKASAN ════════════════ */}
-              <div className={cn(step !== 2 && "hidden", "space-y-3")}>
+              <div className={cn(step !== 2 && "hidden", "space-y-4")}>
                 {/* ── Pilih Package MICE ────────────────────────────── */}
                 {watchedVenueId && (
                   <div className="rounded-xl border border-border bg-muted/30 p-3 space-y-2">
@@ -1636,7 +1728,7 @@ export function QuotationDrawer({
                     <p className="text-xs text-muted-foreground">
                       {micePackages.length === 0
                         ? "Belum ada paket MICE approved untuk venue ini."
-                        : "Pilih paket — item paket akan ditambahkan ke daftar di bawah (bisa diedit)."}
+                        : "Pilih paket — item paket akan MENGGANTIKAN daftar item di bawah (bisa diedit setelahnya)."}
                     </p>
                     <SearchableSelect
                       options={micePackages.map((p) => ({ id: p.id, name: p.packageName }))}
@@ -1653,9 +1745,17 @@ export function QuotationDrawer({
                 )}
 
                 {/* ── Items ─────────────────────────────────────────── */}
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <p className={LABEL_CLASS}>Items</p>
+                <div className="rounded-2xl border bg-card p-5 space-y-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <BillList weight="BoldDuotone" className="h-4 w-4 text-primary" />
+                      <p className={LABEL_CLASS}>Items</p>
+                    </div>
+                    {itemsSubtotal > 0 && (
+                      <span className="text-xs font-medium tabular-nums text-muted-foreground">
+                        {formatRupiah(itemsSubtotal)}
+                      </span>
+                    )}
                   </div>
 
                   <ItemListEditor
@@ -1670,6 +1770,293 @@ export function QuotationDrawer({
                     pendingExpandRef={pendingExpandItemsRef}
                     watchedArray={watchedItems ?? []}
                   />
+                </div>
+
+                {/* ── Additional ────────────────────────────────────── */}
+                <div className="rounded-2xl border bg-card p-5 space-y-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <AddCircle weight="BoldDuotone" className="h-4 w-4 text-primary" />
+                      <p className={LABEL_CLASS}>Additional</p>
+                    </div>
+                    {additionalsSubtotal > 0 && (
+                      <span className="text-xs font-medium tabular-nums text-muted-foreground">
+                        {formatRupiah(additionalsSubtotal)}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground -mt-1">
+                    Item tambahan berbayar — ikut menambah subtotal &amp; total.
+                  </p>
+
+                  <ItemListEditor
+                    arrayName="additionals"
+                    fields={additionalFields}
+                    append={appendAdditional}
+                    remove={removeAdditional}
+                    move={moveAdditional}
+                    form={form}
+                    expandedSet={expandedItems}
+                    toggleExpanded={toggleItem}
+                    pendingExpandRef={pendingExpandAdditionalsRef}
+                    watchedArray={watchedAdditionals ?? []}
+                  />
+                </div>
+
+                {/* ── Complimentary ─────────────────────────────────── */}
+                <div className="rounded-2xl border bg-card p-5 space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <Gift weight="BoldDuotone" className="h-4 w-4 text-primary" />
+                      <p className={LABEL_CLASS}>Complimentary</p>
+                    </div>
+                    <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
+                      Gratis
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted-foreground -mt-1">
+                    Bonus/fasilitas gratis untuk client — tidak masuk ke total biaya.
+                  </p>
+
+                  {/* Pilih dari daftar (dropdown inline) — "Tambah" muncul di dalam dropdown saat search tidak exact-match */}
+                  {complimentaryMode !== "create-new" && (
+                    <ComplimentarySelect
+                      options={complimentaryOptions
+                        .filter((opt) => !complimentaries.some((c) => c.complimentaryId === opt.id))
+                        .map((opt) => ({ id: opt.id, name: opt.name, badge: formatRupiah(opt.price), description: opt.description ?? undefined }))}
+                      value=""
+                      onChange={(selectedId) => {
+                        const found = complimentaryOptions.find((x) => x.id === selectedId);
+                        if (found) {
+                          setComplimentaries((prev) => [...prev, {
+                            id: crypto.randomUUID(),
+                            complimentaryId: found.id,
+                            name: found.name,
+                            price: found.price,
+                            isShowPrice: found.isShowPrice,
+                            description: found.description ?? "",
+                            qty: 1,
+                          }]);
+                        }
+                      }}
+                      onAddTrigger={canCreateComplimentary ? (text) => {
+                        setComplimentaryMode("create-new");
+                        setCreateNewComp({ name: text, price: 0, description: "", isShowPrice: false });
+                      } : undefined}
+                      placeholder="Pilih dari daftar complimentary..."
+                      searchPlaceholder="Cari complimentary..."
+                      emptyText="Tidak ada complimentary"
+                    />
+                  )}
+
+                  {/* Mode: buat baru */}
+                  {complimentaryMode === "create-new" && (
+                    <div className="rounded-xl border border-border bg-muted/30 p-3 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs font-medium text-muted-foreground">Tambah complimentary baru ke master</p>
+                        <button
+                          type="button"
+                          className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                          onClick={() => setComplimentaryMode("none")}
+                        >
+                          Batal
+                        </button>
+                      </div>
+
+                      {/* Nama */}
+                      <div>
+                        <label className="text-xs font-medium text-foreground block mb-1">
+                          Nama <span className="text-destructive">*</span>
+                        </label>
+                        <Input
+                          value={createNewComp.name}
+                          onChange={(e) => setCreateNewComp((p) => ({ ...p, name: e.target.value }))}
+                          placeholder="Nama complimentary..."
+                          className="h-8 text-sm"
+                        />
+                      </div>
+
+                      {/* Harga + Tampil harga */}
+                      <div className="flex items-center gap-2">
+                        <div className="relative flex-1">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground select-none">
+                            Rp
+                          </span>
+                          <Input
+                            value={createNewComp.price ? formatNumericDisplay(createNewComp.price) : ""}
+                            onChange={(e) => {
+                              const n = parseNumericInput(e.target.value);
+                              setCreateNewComp((p) => ({ ...p, price: n }));
+                            }}
+                            placeholder="Harga (opsional)"
+                            inputMode="numeric"
+                            className="h-8 text-sm pl-8"
+                          />
+                        </div>
+                        <label className="flex items-center gap-1.5 shrink-0 cursor-pointer">
+                          <Switch
+                            checked={createNewComp.isShowPrice}
+                            onCheckedChange={(v) => setCreateNewComp((p) => ({ ...p, isShowPrice: v }))}
+                          />
+                          <span className="text-xs text-muted-foreground">Tampil harga</span>
+                        </label>
+                      </div>
+
+                      {/* Deskripsi */}
+                      <div>
+                        <label className="text-xs font-medium text-foreground block mb-1">Deskripsi</label>
+                        <Textarea
+                          value={createNewComp.description}
+                          onChange={(e) => setCreateNewComp((p) => ({ ...p, description: e.target.value }))}
+                          placeholder="Keterangan complimentary (opsional)..."
+                          rows={2}
+                          className="resize-none text-sm"
+                        />
+                      </div>
+
+                      {/* Tombol simpan */}
+                      <Button
+                        type="button"
+                        className="w-full rounded-xl"
+                        disabled={!createNewComp.name.trim() || isCreatingComp}
+                        onClick={async () => {
+                          if (!createNewComp.name.trim() || isCreatingComp) return;
+                          setIsCreatingComp(true);
+                          try {
+                            const result = await createComplimentary({
+                              name: createNewComp.name.trim(),
+                              price: createNewComp.price,
+                              description: createNewComp.description.trim() || null,
+                              isShowPrice: createNewComp.isShowPrice,
+                              isActive: true,
+                            });
+                            if (result.success && result.item) {
+                              setComplimentaries((prev) => [...prev, {
+                                id: crypto.randomUUID(),
+                                complimentaryId: result.item!.id,
+                                name: result.item!.name,
+                                price: result.item!.price,
+                                isShowPrice: result.item!.isShowPrice,
+                                description: result.item!.description ?? "",
+                                qty: 1,
+                              }]);
+                              setComplimentaryMode("none");
+                              toast.success(`"${result.item.name}" berhasil ditambahkan`);
+                            } else {
+                              toast.error(result.error ?? "Gagal menambahkan complimentary");
+                            }
+                          } finally {
+                            setIsCreatingComp(false);
+                          }
+                        }}
+                      >
+                        {isCreatingComp ? "Menyimpan..." : "Simpan & Tambahkan"}
+                      </Button>
+                    </div>
+                  )}
+
+                  {/* List complimentary yang sudah ditambahkan — collapsible rows */}
+                  {complimentaries.map((c) => {
+                    const isOpen = !collapsedComplimentaries.has(c.id);
+                    return (
+                      <Collapsible
+                        key={c.id}
+                        open={isOpen}
+                        onOpenChange={() => toggleComplimentaryCollapse(c.id)}
+                        className="rounded-xl border border-border bg-muted/30 overflow-hidden"
+                      >
+                        {/* Header */}
+                        <div className="flex items-center gap-1 px-3 py-2.5">
+                          <CollapsibleTrigger className="flex flex-1 items-center gap-2 min-w-0 cursor-pointer text-left">
+                            <AltArrowDown
+                              weight="BoldDuotone"
+                              className={cn(
+                                "h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200",
+                                isOpen && "rotate-180",
+                              )}
+                            />
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium text-foreground truncate">{c.name}</p>
+                              {!isOpen && (
+                                <p className="text-xs text-muted-foreground tabular-nums">
+                                  {c.isShowPrice && c.price ? formatRupiah(c.price) : "Harga tidak ditampilkan"}
+                                </p>
+                              )}
+                            </div>
+                          </CollapsibleTrigger>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setComplimentaries((prev) => prev.filter((x) => x.id !== c.id));
+                              setCollapsedComplimentaries((prev) => {
+                                const next = new Set(prev);
+                                next.delete(c.id);
+                                return next;
+                              });
+                            }}
+                            aria-label="Hapus complimentary"
+                            className="shrink-0 h-7 w-7 text-destructive hover:bg-destructive/10"
+                          >
+                            <TrashBinTrash weight="BoldDuotone" className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+
+                        {/* Body */}
+                        <CollapsibleContent>
+                          <div className="px-3 pb-3 space-y-2 border-t border-border/60 pt-2">
+                            <div>
+                              <label className="text-xs font-medium text-foreground block mb-1">
+                                Nama <span className="text-destructive">*</span>
+                              </label>
+                              <Input
+                                value={c.name}
+                                onChange={(e) => setComplimentaries((prev) => prev.map((x) => x.id === c.id ? { ...x, name: e.target.value } : x))}
+                                placeholder="Nama complimentary..."
+                                className="h-8 text-sm"
+                              />
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <div className="relative flex-1">
+                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground select-none">
+                                  Rp
+                                </span>
+                                <Input
+                                  value={c.price ? formatNumericDisplay(c.price) : ""}
+                                  onChange={(e) => {
+                                    const n = parseNumericInput(e.target.value);
+                                    setComplimentaries((prev) => prev.map((x) => x.id === c.id ? { ...x, price: n } : x));
+                                  }}
+                                  placeholder="Harga"
+                                  inputMode="numeric"
+                                  className="h-8 text-sm pl-8"
+                                />
+                              </div>
+                              <label className="flex items-center gap-1.5 shrink-0 cursor-pointer">
+                                <Switch
+                                  checked={c.isShowPrice}
+                                  onCheckedChange={(v) => setComplimentaries((prev) => prev.map((x) => x.id === c.id ? { ...x, isShowPrice: v } : x))}
+                                />
+                                <span className="text-xs text-muted-foreground">Tampil harga</span>
+                              </label>
+                            </div>
+                            <Textarea
+                              value={c.description}
+                              onChange={(e) => setComplimentaries((prev) => prev.map((x) => x.id === c.id ? { ...x, description: e.target.value } : x))}
+                              placeholder="Keterangan complimentary..."
+                              rows={2}
+                              className="resize-none text-sm"
+                            />
+                          </div>
+                        </CollapsibleContent>
+                      </Collapsible>
+                    );
+                  })}
+                  {complimentaries.length === 0 && complimentaryMode === "none" && (
+                    <p className="text-xs text-muted-foreground italic text-center py-1">Belum ada complimentary</p>
+                  )}
                 </div>
 
                 {/* ── Ringkasan ─────────────────────────────────────── */}
@@ -1726,7 +2113,10 @@ export function QuotationDrawer({
                     </div>
                   </div>
                 </div>
+              </div>
 
+              {/* ════════════════ STEP 3 — KETENTUAN PENAWARAN ════════════════ */}
+              <div className={cn(step !== 3 && "hidden", "space-y-3")}>
                 {/* ── Ketentuan Penawaran ───────────────────────────── */}
                 <div className="rounded-2xl border bg-card p-5 space-y-3">
                   <p className="text-sm font-semibold text-foreground mb-1">Ketentuan Penawaran</p>
@@ -1858,8 +2248,8 @@ export function QuotationDrawer({
                 </div>
               </div>
 
-              {/* ════════════════ STEP 3 — TTD ════════════════ */}
-              <div className={cn(step !== 3 && "hidden", "space-y-3")}>
+              {/* ════════════════ STEP 4 — TTD ════════════════ */}
+              <div className={cn(step !== 4 && "hidden", "space-y-3")}>
                 <div className="rounded-2xl border bg-card p-5 space-y-4">
                   <p className="text-sm font-semibold text-foreground mb-1">Tanda Tangan & Lokasi</p>
                   <div>
@@ -1882,10 +2272,10 @@ export function QuotationDrawer({
                         !signatureSales ? "border-destructive/40" : "border-border",
                       )}
                     >
-                      {/* Mount only when step 3 is active — a SignatureCanvas mounted
+                      {/* Mount only when step 4 is active — a SignatureCanvas mounted
                           inside a display:none container has 0 dimensions and never
                           captures strokes. */}
-                      {step === 3 && (
+                      {step === 4 && (
                         <SignatureCanvas
                           ref={sigSalesRef}
                           penColor="black"
@@ -1944,10 +2334,10 @@ export function QuotationDrawer({
                 Kembali
               </Button>
             )}
-            {step < 3 ? (
+            {step < 4 ? (
               <Button
                 onClick={handleNext}
-                disabled={step === 1 ? isStep1Incomplete : isStep2Incomplete}
+                disabled={step === 1 ? isStep1Incomplete : false}
                 className="flex-[60%] cursor-pointer"
               >
                 Lanjut
@@ -1956,7 +2346,7 @@ export function QuotationDrawer({
             ) : (
               <Button
                 onClick={form.handleSubmit(onSubmit)}
-                disabled={!isStep3Complete || isPending}
+                disabled={!isSignatureComplete || isPending}
                 className="flex-[60%] cursor-pointer"
               >
                 {isPending ? "Menyimpan..." : isEdit ? "Simpan" : "Tambah"}

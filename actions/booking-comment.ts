@@ -6,7 +6,7 @@ import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/permissions";
 import { deleteFromStorage, resolveAvatarUrl } from "@/lib/storage";
 import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
-import { canAccessBooking, getProfileDataScope } from "@/lib/access-control";
+import { canAccessBooking } from "@/lib/access-control";
 import { createNotifications } from "@/lib/notifications";
 import { logAudit } from "@/lib/audit";
 
@@ -36,7 +36,7 @@ export async function createBookingComment(data: {
   if (!data.content.trim() && !data.attachments?.length) return { success: false as const, error: "Komentar tidak boleh kosong." };
 
   if (!session!.user.profileId) return { success: false as const, error: "Sesi tidak valid, silakan login ulang." };
-  const scope = await getProfileDataScope(session!.user.profileId);
+  const scope = session!.user.dataScope;
   if (!(await canAccessBooking(session!.user.profileId, scope, data.bookingId))) {
     return { success: false as const, error: "Anda tidak memiliki akses ke booking ini." };
   }
@@ -184,7 +184,7 @@ export async function toggleCommentReaction(
     });
     if (!comment) return { success: false, error: "Komentar tidak ditemukan." };
 
-    const scope = await getProfileDataScope(profileId);
+    const scope = session!.user.dataScope;
     if (!(await canAccessBooking(profileId, scope, comment.bookingId))) {
       return { success: false, error: "Anda tidak memiliki akses ke booking ini." };
     }

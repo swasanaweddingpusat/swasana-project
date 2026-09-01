@@ -15,7 +15,7 @@ export interface SalesPerformanceCardItem {
   name: string;
   avatarUrl: string | null;
   revenue: number;
-  confirmedBookings: number;
+  bookingCount: number;
   target: number;
   hasTarget: boolean;
   achievementPct: number;
@@ -31,12 +31,8 @@ function computeBreakdown(
     price: number;
   }[],
 ): SalesCategoryBreakdown {
-  const confirmed = bookings.filter(
-    (b) => b.bookingStatus === BookingStatus.Confirmed,
-  );
-
-  const weddings = confirmed.filter((b) => b.category === EventCategory.WEDDINGS);
-  const mice = confirmed.filter((b) => b.category === EventCategory.MICE);
+  const weddings = bookings.filter((b) => b.category === EventCategory.WEDDINGS);
+  const mice = bookings.filter((b) => b.category === EventCategory.MICE);
 
   return {
     weddings: {
@@ -53,27 +49,33 @@ function computeBreakdown(
 // ─── Internal query logic ─────────────────────────────────────────────────────
 
 async function _queryTopSales(
-  startDate: Date,
-  endDate: Date,
   allowedProfileIds?: string[],
+  range?: { from: Date; to: Date },
+  eventRange?: { from: Date; to: Date },
 ): Promise<SalesPerformanceCardItem[]> {
-  // Step 1: Get all distinct salesIds active in the date range (candidates pool).
-  // Cap at 500 rows to bound memory; deduplication done in-memory.
+  // Step 1: Get all distinct salesIds with saved bookings (candidates pool),
+  // optionally scoped to a dealing-date (createdAt) `range` and/or an
+  // event-date (eventDate) `eventRange` — both AND together when given, falls
+  // back to whole-database (all-time) when omitted. Ranks confirmed revenue
+  // within the caller's access scope. `distinct` returns every salesId in one
+  // round-trip without a truncating row cap (a raw `take` here could silently
+  // drop sales whose bookings fall past the cap).
   const candidateBookings = await db.booking.findMany({
     where: {
       recordStatus: "saved",
       // Exclude "tanpa PIC" bookings (salesId null) — they belong to no sales and
       // must not be attributed to anyone's performance.
       salesId: allowedProfileIds ? { in: allowedProfileIds } : { not: null },
-      eventDate: { gte: startDate, lte: endDate },
+      ...(range ? { createdAt: { gte: range.from, lt: range.to } } : {}),
+      ...(eventRange ? { eventDate: { gte: eventRange.from, lt: eventRange.to } } : {}),
     },
+    distinct: ["salesId"],
     select: { salesId: true },
-    take: 500,
   });
 
-  const candidateSalesIds = [
-    ...new Set(candidateBookings.map((b) => b.salesId).filter((id): id is string => id !== null)),
-  ];
+  const candidateSalesIds = candidateBookings
+    .map((b) => b.salesId)
+    .filter((id): id is string => id !== null);
 
   if (candidateSalesIds.length === 0) return [];
 
@@ -83,8 +85,9 @@ async function _queryTopSales(
       where: {
         recordStatus: "saved",
         salesId: { in: candidateSalesIds },
-        eventDate: { gte: startDate, lte: endDate },
-        bookingStatus: { not: BookingStatus.Canceled },
+        bookingStatus: { notIn: [BookingStatus.Canceled, BookingStatus.Lost] },
+        ...(range ? { createdAt: { gte: range.from, lt: range.to } } : {}),
+        ...(eventRange ? { eventDate: { gte: eventRange.from, lt: eventRange.to } } : {}),
       },
       select: {
         salesId: true,
@@ -141,15 +144,15 @@ async function _queryTopSales(
     bookingsBySalesId.set(b.salesId, list);
   }
 
-  // Step 4: Aggregate all candidates, sort by confirmed revenue desc, take top 5.
+  // Step 4: Aggregate all candidates, sort by confirmed revenue desc (all sales).
   const aggregated = candidateSalesIds.map((profileId) => {
     const profile = profileMap.get(profileId);
     const bookings = bookingsBySalesId.get(profileId) ?? [];
-    const confirmed = bookings.filter(
-      (b) => b.bookingStatus === BookingStatus.Confirmed,
-    );
-    const revenue = confirmed.reduce((s, b) => s + b.price, 0);
-    const confirmedBookings = confirmed.length;
+    // Revenue & count = semua booking yang ter-fetch (query sudah exclude Lost/Canceled),
+    // jadi Confirmed + Pending + Uploaded + Rejected semuanya ikut — konsisten dengan
+    // Group Revenue Rule di lib/queries/groups.ts.
+    const revenue = bookings.reduce((s, b) => s + b.price, 0);
+    const bookingCount = bookings.length;
     const target = targetMap.get(profileId) ?? 0;
     const hasTarget = hasTargetMap.get(profileId) ?? false;
     const achievementPct =
@@ -161,7 +164,7 @@ async function _queryTopSales(
       name: profile?.fullName ?? "—",
       avatarUrl: resolveAvatarUrl(profile?.avatarUrl),
       revenue,
-      confirmedBookings,
+      bookingCount,
       target,
       hasTarget,
       achievementPct,
@@ -169,34 +172,32 @@ async function _queryTopSales(
     };
   });
 
-  // Sort by confirmed revenue descending, then slice to top 5.
-  return aggregated
-    .sort((a, b) => b.revenue - a.revenue)
-    .slice(0, 5);
+  // Sort by confirmed revenue descending — return every sales, not just the top few.
+  return aggregated.sort((a, b) => b.revenue - a.revenue);
 }
 
 // ─── Cached wrapper ──────────────────────────────────────────────────────────
 
 export async function getTopSalesByRecentBooking(
-  startDate: Date,
-  endDate: Date,
   allowedProfileIds?: string[],
+  range?: { from: Date; to: Date },
+  eventRange?: { from: Date; to: Date },
 ): Promise<SalesPerformanceCardItem[]> {
   "use cache";
   cacheTag("bookings", "groups");
   cacheLife("minutes");
 
-  return _queryTopSales(startDate, endDate, allowedProfileIds);
+  return _queryTopSales(allowedProfileIds, range, eventRange);
 }
 
 // ─── Raw (uncached) for API route ────────────────────────────────────────────
 
 export async function getTopSalesByRecentBookingRaw(
-  startDate: Date,
-  endDate: Date,
   allowedProfileIds?: string[],
+  range?: { from: Date; to: Date },
+  eventRange?: { from: Date; to: Date },
 ): Promise<SalesPerformanceCardItem[]> {
-  return _queryTopSales(startDate, endDate, allowedProfileIds);
+  return _queryTopSales(allowedProfileIds, range, eventRange);
 }
 
 // ─── Return type alias ────────────────────────────────────────────────────────

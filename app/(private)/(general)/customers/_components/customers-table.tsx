@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -25,11 +25,6 @@ import type { CustomerItem, CustomersResult } from "@/lib/queries/customers";
 function formatMobileNumbers(raw: unknown): string {
   const entries = parseMobileNumbers(raw);
   return entries.map((e) => e.name ? `${e.name}: ${e.number}` : e.number).join(", ");
-}
-
-function mobileNumbersSearchable(raw: unknown): string {
-  const entries = parseMobileNumbers(raw);
-  return entries.map((e) => `${e.name} ${e.number}`).join(" ").toLowerCase();
 }
 
 const ROWS_PER_PAGE = 10;
@@ -139,14 +134,13 @@ function MobileCustomerCard({
 // ─── Main Table ───────────────────────────────────────────────────────────────
 
 export function CustomersTable({ initialData }: { initialData: CustomersResult }) {
-  const { data: customersResult } = useCustomers(initialData);
-  const customers = customersResult?.data ?? initialData.data;
   const deleteMut = useDeleteCustomer();
   const bulkDeleteMut = useDeleteBulkCustomers();
   const isMobile = useIsMobile();
 
   const [currentPage, setCurrentPage] = useState(1);
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const qc = useQueryClient();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editCustomer, setEditCustomer] = useState<CustomerItem | null>(null);
@@ -154,29 +148,25 @@ export function CustomersTable({ initialData }: { initialData: CustomersResult }
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
 
+  useEffect(() => {
+    const t = setTimeout(() => { setDebouncedSearch(search); setCurrentPage(1); }, 400);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  const { data: customersResult = initialData, isFetching } = useCustomers(
+    { page: currentPage, pageSize: ROWS_PER_PAGE, search: debouncedSearch },
+    initialData,
+  );
+  const customers = customersResult.data;
+  const total = customersResult.total;
+  const totalPages = Math.ceil(total / ROWS_PER_PAGE);
+  const paginated = customers;
+
   function handleDrawerClose(open: boolean) {
     setDrawerOpen(open);
     if (!open) qc.invalidateQueries({ queryKey: ["customers"] });
   }
   const [deleteTarget, setDeleteTarget] = useState<CustomerItem | null>(null);
-
-  const filtered = customers.filter((c) => {
-    if (!search.trim()) return true;
-    const q = search.toLowerCase();
-    return (
-      c.name.toLowerCase().includes(q) ||
-      mobileNumbersSearchable(c.mobileNumber).includes(q) ||
-      (c.emailCpp ?? c.emailCpw ?? "").toLowerCase().includes(q) ||
-      (c.type ?? "").toLowerCase().includes(q) ||
-      (c.club ?? "").toLowerCase().includes(q) ||
-      (c.memberStatus ?? "").toLowerCase().includes(q) ||
-      (c.notes ?? "").toLowerCase().includes(q) ||
-      (c.updatedBy ?? "").toLowerCase().includes(q)
-    );
-  });
-
-  const totalPages = Math.ceil(filtered.length / ROWS_PER_PAGE);
-  const paginated = filtered.slice((currentPage - 1) * ROWS_PER_PAGE, currentPage * ROWS_PER_PAGE);
 
   function handleEdit(customer: CustomerItem) {
     setEditCustomer(customer);
@@ -255,12 +245,12 @@ export function CustomersTable({ initialData }: { initialData: CustomersResult }
             <div className={cn('flex', 'items-center', 'gap-3')}>
               <h2 className={cn('text-base', 'font-bold', 'text-foreground')}>List Customers</h2>
               <span className={cn('text-xs', 'font-medium', 'bg-muted', 'text-muted-foreground', 'px-3', 'py-1', 'border', 'rounded-full')}>
-                {filtered.length} {search ? `dari ${customers.length}` : "member"}
+                {total} {debouncedSearch ? "hasil" : "member"}
               </span>
               <Button
                 variant="outline"
                 size="sm"
-                disabled={isRefreshing}
+                disabled={isRefreshing || isFetching}
                 className={cn('h-8', 'px-2')}
                 title="Refresh data"
                 onClick={async () => {
@@ -285,7 +275,7 @@ export function CustomersTable({ initialData }: { initialData: CustomersResult }
                 <Input
                   placeholder="Cari customer..."
                   value={search}
-                  onChange={(e) => { setSearch(e.target.value); setCurrentPage(1); }}
+                  onChange={(e) => setSearch(e.target.value)}
                   className={cn('pl-9', 'w-full', 'sm:w-55')}
                 />
               </div>
@@ -299,7 +289,7 @@ export function CustomersTable({ initialData }: { initialData: CustomersResult }
           </div>
 
           {/* Content — mobile cards / desktop table */}
-          {filtered.length === 0 ? (
+          {customers.length === 0 ? (
             <div className={cn('flex', 'flex-col', 'items-center', 'justify-center', 'py-16', 'text-muted-foreground')}>
               <UsersGroupRounded weight="BoldDuotone" className={cn('h-10', 'w-10', 'mb-3', 'opacity-40')} />
               <p className="text-sm">{search ? `Tidak ada hasil untuk "${search}"` : "Belum ada customer."}</p>

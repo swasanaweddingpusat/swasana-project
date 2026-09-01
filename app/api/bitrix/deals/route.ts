@@ -111,6 +111,10 @@ export async function GET(request: Request) {
   // Sales filter — ASSIGNED_BY_ID is a Bitrix user id (the deal's PIC).
   const salesId = searchParams.get("salesId")?.trim();
 
+  // Source filter — SOURCE_ID is a crm_status id (e.g. "15|FBINSTAGRAMDIRECT"),
+  // matched directly (no label→id resolution needed, unlike issue/subIssue).
+  const sourceId = searchParams.get("sourceId")?.trim();
+
   // Date-range filters (ISO day strings, all optional). Two independent ranges:
   //   created* → DATE_CREATE (datetime; +03:00 in Bitrix, filtered on bare date)
   //   db*      → UF_DB_DATE  ("Tanggal Database", a date-only custom field)
@@ -149,6 +153,7 @@ export async function GET(request: Request) {
       stageFilter[UF_SUB_ISSUE] = subIssueId ?? "__none__";
     }
     if (salesId) stageFilter.ASSIGNED_BY_ID = salesId;
+    if (sourceId) stageFilter.SOURCE_ID = sourceId;
 
     // Tanggal Dibuat range → DATE_CREATE. The "to" bound is exclusive on the
     // next day so the whole end day is included.
@@ -217,6 +222,11 @@ export async function GET(request: Request) {
       issueCatalog: Object.values(issueEnum),
       // Distinct sub issue labels — powers the sub issue filter dropdown on the client.
       subIssueCatalog: Object.values(subIssueEnum),
+      // Full SOURCE status catalog ({id,name}) — powers the source filter
+      // dropdown; the value carried is the STATUS_ID, filtered directly above.
+      sourceCatalog: Object.entries(meta.sources)
+        .map(([id, name]) => ({ id, name }))
+        .sort((a, b) => a.name.localeCompare(b.name, "id")),
     });
   } catch (e) {
     if (e instanceof BitrixApiError) {

@@ -1,24 +1,40 @@
 "use client";
 
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import type { CustomersResult } from "@/lib/queries/customers";
 import { createCustomer, updateCustomer, deleteCustomer, deleteBulkCustomers } from "@/actions/customer";
 import type { CustomerInput, UpdateCustomerInput } from "@/lib/validations/customer";
 
-async function fetchCustomers(): Promise<CustomersResult> {
-  const res = await fetch("/api/customers");
+interface CustomersParams {
+  page: number;
+  pageSize: number;
+  search: string;
+}
+
+async function fetchCustomers(params: CustomersParams): Promise<CustomersResult> {
+  const qs = new URLSearchParams({
+    page: String(params.page),
+    pageSize: String(params.pageSize),
+    ...(params.search ? { search: params.search } : {}),
+  });
+  const res = await fetch(`/api/customers?${qs}`);
   if (!res.ok) throw new Error("Failed to fetch customers");
   return res.json();
 }
 
-export function useCustomers(initialData?: CustomersResult) {
+export function useCustomers(params: CustomersParams, initialData?: CustomersResult) {
+  // SSR fetches page 1 / default pageSize / no search (see page.tsx) — initialData
+  // is only a valid seed for that exact query; any other page/search must trigger
+  // a real fetch instead of showing the SSR seed under different filters.
+  const isDefaultQuery = params.page === 1 && params.pageSize === 10 && !params.search;
   return useQuery({
-    queryKey: ["customers"],
-    queryFn: fetchCustomers,
-    initialData,
-    staleTime: 0,
-    refetchOnMount: true,
+    queryKey: ["customers", params.page, params.pageSize, params.search],
+    queryFn: () => fetchCustomers(params),
+    initialData: isDefaultQuery ? initialData : undefined,
+    placeholderData: keepPreviousData,
+    staleTime: 60 * 1000,
     refetchOnWindowFocus: false,
+    refetchOnMount: false,
   });
 }
 

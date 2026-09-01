@@ -5,7 +5,7 @@ import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/permissions";
 import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
 import { logAudit } from "@/lib/audit";
-import { canAccessBooking, getProfileDataScope } from "@/lib/access-control";
+import { canAccessBooking } from "@/lib/access-control";
 
 /**
  * Updates the per-booking Term & Condition. The PO PDF renders T&C from the
@@ -21,7 +21,7 @@ export async function updateBookingTC(
   if (error) return { success: false, error };
   if (!mutationLimiter.check(`booking-tc:${session!.user.id}`)) return { success: false, ...rateLimitError() };
 
-  const scope = await getProfileDataScope(session!.user.profileId);
+  const scope = session!.user.dataScope ?? "own";
   if (!(await canAccessBooking(session!.user.profileId, scope, bookingId))) {
     return { success: false, error: "Anda tidak memiliki akses ke booking ini." };
   }

@@ -30,6 +30,7 @@ import {
   TrashBinTrash,
   AddCircle,
   AltArrowDown,
+  ArrowRight,
 } from "@solar-icons/react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { useVenues } from "@/hooks/use-venues";
@@ -91,12 +92,18 @@ interface CustomerOption {
   emailCpp: string | null;
   emailCpw: string | null;
 }
-interface LeadOption {
+interface QuotationOption {
   id: string;
-  name: string;
-  email: string | null;
-  contactNumbers: Array<{ label?: string; name?: string; number: string }>;
-  assignedTo: { id: string; fullName: string | null } | null;
+  quotationNo: string | null;
+  clientName: string;
+  clientPhone: string;
+  instansi: string | null;
+  venue: { id: string; name: string } | null;
+  eventType: { id: string; name: string } | null;
+  eventDate: string | null;
+  time: string | null;
+  notes: string | null;
+  sales: { id: string; fullName: string | null } | null;
 }
 
 async function fetchJson<T>(url: string): Promise<T> {
@@ -141,6 +148,11 @@ const DEFAULT_VALUES: MiceFormValues = {
 };
 
 const TOTAL_STEPS = 3;
+
+// ─── TEMP: design-review mode ────────────────────────────────────────────────
+// Melewati validasi required & pembuatan draft di tombol "Lanjut" supaya Step 2/3
+// bisa dipreview tanpa isi form dulu. Set ke false untuk balikin alur normal.
+const SKIP_STEP_VALIDATION_FOR_DESIGN = true;
 
 // ─── localStorage helpers for MICE draft pointer ─────────────────────────────
 
@@ -215,14 +227,29 @@ export function MiceBookingDrawer({
   const [availLoading, setAvailLoading] = useState(false);
   const [visibleMonth, setVisibleMonth] = useState<Date>(new Date());
   const [eventDatePopoverOpen, setEventDatePopoverOpen] = useState(false);
+  // UI-only for now — belum ada kolom `eventDateEnd` di DB/schema. Dipakai buat
+  // preview date-range picker; wiring ke payload menyusul setelah migration.
+  const [eventDateEnd, setEventDateEnd] = useState("");
 
   // Customer / Lead picker (mirror wedding drawer)
   const [selectedCustomerId, setSelectedCustomerId] = useState("");
   const [selectedLeadId, setSelectedLeadId] = useState("");
+  const [selectedQuotationId, setSelectedQuotationId] = useState("");
   const [clientSearch, setClientSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [clientDropdownOpen, setClientDropdownOpen] = useState(false);
   const clientDropdownRef = useRef<HTMLDivElement>(null);
+
+  function clearClientSelection() {
+    setSelectedLeadId("");
+    setSelectedCustomerId("");
+    setSelectedQuotationId("");
+    form.setValue("clientName", "");
+    form.setValue("clientPhone", "");
+    form.setValue("companyName", "");
+    setClientSearch("");
+    setClientDropdownOpen(false);
+  }
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(clientSearch), 300);
@@ -246,12 +273,12 @@ export function MiceBookingDrawer({
   });
   const customers = customersResult?.data ?? [];
 
-  const { data: leadsResult } = useQuery({
-    queryKey: ["leads-search", debouncedSearch],
-    queryFn: () => fetchJson<{ items: LeadOption[] }>(`/api/daily-activity?search=${encodeURIComponent(debouncedSearch)}&pageSize=5`),
+  const { data: quotationsResult } = useQuery({
+    queryKey: ["quotations-search", debouncedSearch],
+    queryFn: () => fetchJson<{ data: QuotationOption[] }>(`/api/quotations?search=${encodeURIComponent(debouncedSearch)}&category=MICE&pageSize=5`),
     enabled: open && debouncedSearch.trim().length > 0,
   });
-  const leadOptions = leadsResult?.items ?? [];
+  const quotationOptions = quotationsResult?.data ?? [];
 
   // Real data hooks
   const { data: venues = [] } = useVenues();
@@ -291,6 +318,7 @@ export function MiceBookingDrawer({
   // eslint-disable-next-line react-hooks/incompatible-library
   const watchedVenueId = form.watch("venueId");
   const watchedEventDate = form.watch("eventDate");
+  const watchedClientName = form.watch("clientName");
 
   // In edit mode, pass the current booking id as `exclude` so the booking being
   // edited does not block its own slot in the availability response.
@@ -495,10 +523,12 @@ export function MiceBookingDrawer({
       if (initialDraftId) saveMiceDraftToStorage(initialDraftId);
       setClientSearch("");
       setSelectedLeadId(!booking && prefillLead ? prefillLead.leadId : "");
+      setSelectedQuotationId("");
       setClientDropdownOpen(false);
       setAvailability({});
       setVisibleMonth(new Date());
       setEventDatePopoverOpen(false);
+      setEventDateEnd("");
       setHasPendingWriteError(false);
       setPendingWriteErrorMsg(null);
       retryWriteRef.current = null;
@@ -519,6 +549,11 @@ export function MiceBookingDrawer({
     // If a prior background save failed, clicking Lanjut fires the retry
     if (hasPendingWriteError && retryWriteRef.current) {
       await retryWriteRef.current();
+      return;
+    }
+
+    if (SKIP_STEP_VALIDATION_FOR_DESIGN) {
+      setCurrentStep((s) => Math.min(s + 1, 3));
       return;
     }
 
@@ -716,69 +751,76 @@ export function MiceBookingDrawer({
       isCloseButton={false}
     >
       <div className="flex flex-col h-full">
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-y-auto px-2">
           <Form {...form}>
-            <form className="space-y-5 pb-2">
+            <form className="space-y-3 pb-2">
 
               {/* ─── Step 1: Info Event ─── */}
               {currentStep === 1 && (
-                <>
+                <div className="space-y-4">
                   {/* Informasi Client */}
-                  <div className="space-y-3">
-                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Informasi Client</p>
-                    {/* Nama Client — search lead atau customer terdaftar */}
+                  <div className="rounded-2xl border bg-card p-5 space-y-3">
+                    <p className="text-sm font-semibold text-foreground mb-1">Informasi Client</p>
+                    {/* Client — search dari Quotation / Customer terdaftar, fallback ketik manual buat client baru */}
                     <FormField control={form.control} name="clientName" rules={{ required: "Nama Client wajib diisi" }} render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Nama Client *</FormLabel>
-                        {selectedLeadId && (
-                          <p className="text-xs text-[var(--brand-gold)]">Dari Lead — konversi otomatis saat booking dibuat</p>
-                        )}
+                        <FormLabel>Client / Instansi / Perusahaan *</FormLabel>
                         <div ref={clientDropdownRef} className="relative">
                           <FormControl>
                             <Input
                               {...field}
-                              placeholder="Cari lead / customer, atau ketik nama client..."
+                              disabled={!!(selectedLeadId || selectedCustomerId || selectedQuotationId)}
+                              placeholder="Cari client / instansi terdaftar, atau ketik nama baru..."
                               autoComplete="off"
                               onChange={(e) => {
                                 field.onChange(e);
                                 setClientSearch(e.target.value);
                                 setSelectedCustomerId("");
                                 setSelectedLeadId("");
+                                setSelectedQuotationId("");
                                 setClientDropdownOpen(true);
                               }}
                               onFocus={() => { if (field.value.trim()) setClientDropdownOpen(true); }}
                             />
                           </FormControl>
-                          {clientDropdownOpen && clientSearch.trim() && (leadOptions.length > 0 || customers.length > 0) && (
+                          {clientDropdownOpen && clientSearch.trim() && (quotationOptions.length > 0 || customers.length > 0) && (
                             <div className="absolute z-50 w-full mt-1 max-h-72 overflow-auto rounded-xl border bg-background shadow-md">
-                              {leadOptions.length > 0 && (
+                              {quotationOptions.length > 0 && (
                                 <div>
-                                  <p className="px-3 pt-2 pb-1 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Dari Leads</p>
-                                  {leadOptions.map((lead) => (
+                                  <p className="px-3 pt-2 pb-1 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Dari Quotation</p>
+                                  {quotationOptions.map((q) => (
                                     <div
-                                      key={lead.id}
+                                      key={q.id}
                                       className="cursor-pointer px-3 py-2 text-sm hover:bg-accent transition-colors"
                                       onClick={() => {
-                                        form.setValue("clientName", lead.name);
-                                        // LeadOption does not carry a company/instansi field — left empty
-                                        form.setValue("companyName", "");
-                                        const phone = lead.contactNumbers?.[0]?.number ?? "";
-                                        if (phone) form.setValue("clientPhone", phone.replace(/\D/g, ""));
-                                        if (!currentUserIsSalesMice && lead.assignedTo?.id) form.setValue("salesId", lead.assignedTo.id);
-                                        setSelectedLeadId(lead.id);
+                                        form.setValue("clientName", q.clientName);
+                                        form.setValue("companyName", q.instansi ?? "");
+                                        if (q.clientPhone) form.setValue("clientPhone", q.clientPhone.replace(/\D/g, ""));
+                                        if (!currentUserIsSalesMice && q.sales?.id) form.setValue("salesId", q.sales.id);
+                                        // Auto-display field-field setelahnya dari data quotation
+                                        form.setValue("venueId", q.venue?.id ?? "");
+                                        form.setValue("eventTypeId", q.eventType?.id ?? "");
+                                        form.setValue("eventDate", q.eventDate ? toDateOnly(new Date(q.eventDate)) : "");
+                                        form.setValue("time", q.time ?? "");
+                                        form.setValue("notes", q.notes ?? "");
+                                        setSelectedQuotationId(q.id);
+                                        setSelectedLeadId("");
                                         setSelectedCustomerId("");
+                                        setClientSearch("");
                                         setClientDropdownOpen(false);
                                       }}
                                     >
-                                      <p className="font-medium">{lead.name}</p>
-                                      {lead.email && <p className="text-xs text-muted-foreground">{lead.email}</p>}
+                                      <p className="font-medium">{q.clientName}</p>
+                                      <p className="text-xs text-muted-foreground">
+                                        {q.quotationNo ?? "Belum ada nomor"}{q.instansi ? ` · ${q.instansi}` : ""}
+                                      </p>
                                     </div>
                                   ))}
                                 </div>
                               )}
                               {customers.length > 0 && (
                                 <div>
-                                  {leadOptions.length > 0 && <div className="border-t my-1" />}
+                                  {quotationOptions.length > 0 && <div className="border-t my-1" />}
                                   <p className="px-3 pt-2 pb-1 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Customer Terdaftar</p>
                                   {customers.map((c) => (
                                     <div
@@ -792,6 +834,8 @@ export function MiceBookingDrawer({
                                         if (phone) form.setValue("clientPhone", phone.replace(/\D/g, ""));
                                         setSelectedCustomerId(c.id);
                                         setSelectedLeadId("");
+                                        setSelectedQuotationId("");
+                                        setClientSearch("");
                                         setClientDropdownOpen(false);
                                       }}
                                     >
@@ -807,31 +851,59 @@ export function MiceBookingDrawer({
                         <FormMessage />
                       </FormItem>
                     )} />
-                    <FormField control={form.control} name="companyName" render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Nama Perusahaan / Instansi</FormLabel>
-                        <FormControl><Input {...field} placeholder="PT. Contoh Jaya (opsional)" /></FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )} />
-                    <FormField control={form.control} name="clientPhone" rules={{ required: "No. telepon wajib diisi" }} render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>No. Telepon *</FormLabel>
-                        <FormControl>
-                          <PhoneInput
-                            value={field.value}
-                            onChange={field.onChange}
-                            onBlur={field.onBlur}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )} />
+
+                    {(selectedLeadId || selectedCustomerId || selectedQuotationId) ? (
+                      /* Client terpilih dari quotation/lead/customer — tampilkan ringkasan, sembunyikan field manual */
+                      <div className="flex items-center justify-between gap-3 rounded-xl bg-muted/40 px-3 py-2.5">
+                        <div className="min-w-0">
+                          <span className="inline-flex items-center rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
+                            {selectedQuotationId ? "Dari Quotation" : selectedLeadId ? "Dari Daily Activity" : "Customer Terdaftar"}
+                          </span>
+                          <p className="mt-1 truncate text-xs text-muted-foreground">
+                            {form.watch("clientPhone") ? `+${form.watch("clientPhone")}` : "No. telepon tidak tersedia"}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={clearClientSelection}
+                          className="shrink-0 cursor-pointer text-xs font-medium text-primary hover:underline"
+                        >
+                          Ganti
+                        </button>
+                      </div>
+                    ) : (
+                      watchedClientName.trim().length > 0 && (
+                        /* Tidak ada match — client baru, minta lengkapi kontak */
+                        <div className="space-y-3 rounded-xl border border-dashed border-border/70 p-3">
+                          <p className="text-xs text-muted-foreground">Client baru — lengkapi data kontak:</p>
+                          <FormField control={form.control} name="companyName" render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Nama Perusahaan / Instansi</FormLabel>
+                              <FormControl><Input {...field} placeholder="PT. Contoh Jaya (opsional)" /></FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )} />
+                          <FormField control={form.control} name="clientPhone" rules={{ required: "No. telepon wajib diisi" }} render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>No. Telepon *</FormLabel>
+                              <FormControl>
+                                <PhoneInput
+                                  value={field.value}
+                                  onChange={field.onChange}
+                                  onBlur={field.onBlur}
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )} />
+                        </div>
+                      )
+                    )}
                   </div>
 
                   {/* Detail Event */}
-                  <div className="border-t border-border pt-4 space-y-3">
-                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Detail Event</p>
+                  <div className="rounded-2xl border bg-card p-5 space-y-3">
+                    <p className="text-sm font-semibold text-foreground mb-1">Detail Event</p>
                     <FormField control={form.control} name="venueId" rules={{ required: "Venue wajib dipilih" }} render={({ field }) => (
                       <FormItem>
                         <FormLabel>Venue *</FormLabel>
@@ -853,55 +925,83 @@ export function MiceBookingDrawer({
                   </div>
 
                   {/* Jadwal Event */}
-                  <div className="border-t border-border pt-4 space-y-3">
-                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Jadwal Event</p>
-                    <FormField control={form.control} name="eventDate" rules={{ required: "Tanggal event wajib diisi" }} render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Tanggal Event *</FormLabel>
-                        <Popover open={eventDatePopoverOpen} onOpenChange={setEventDatePopoverOpen}>
-                          <PopoverTrigger render={
-                            <Button
-                              variant="outline"
-                              disabled={!watchedVenueId}
-                              className={cn("w-full justify-start text-left font-normal", !field.value && "text-muted-foreground")}
-                            >
-                              <CalendarIcon weight="BoldDuotone" className="mr-2 h-4 w-4" />
-                              {watchedVenueId
-                                ? (field.value ? format(parseDateOnly(field.value), "dd MMM yyyy") : "Pilih tanggal event")
-                                : "Pilih venue terlebih dahulu"}
-                            </Button>
-                          } />
-                          <PopoverContent className="w-auto p-0" align="start">
-                            <Calendar
-                              mode="single"
-                              captionLayout="dropdown"
-                              selected={field.value ? parseDateOnly(field.value) : undefined}
-                              onSelect={(date) => {
-                                field.onChange(date ? toDateOnly(date) : "");
-                                setEventDatePopoverOpen(false);
-                              }}
-                              disabled={(d) => getDateStatus(d) === "unavailable"}
-                              fromYear={new Date().getFullYear() - 2}
-                              toYear={new Date().getFullYear() + 5}
-                              defaultMonth={field.value ? parseDateOnly(field.value) : new Date()}
-                              onMonthChange={setVisibleMonth}
-                              modifiers={{
-                                available: (d) => !!watchedVenueId && getDateStatus(d) === "available",
-                                partial: (d) => !!watchedVenueId && getDateStatus(d) === "partial",
-                                unavailable: (d) => !!watchedVenueId && getDateStatus(d) === "unavailable",
-                              }}
-                              modifiersClassNames={{
-                                available: "day-available",
-                                partial: "day-partial",
-                                unavailable: "day-unavailable",
-                              }}
-                            />
-                          </PopoverContent>
-                        </Popover>
-                        {availLoading && <p className="text-xs text-muted-foreground mt-1">Mengecek ketersediaan...</p>}
-                        <FormMessage />
-                      </FormItem>
-                    )} />
+                  <div className="rounded-2xl border bg-card p-5 space-y-3">
+                    <p className="text-sm font-semibold text-foreground mb-1">Jadwal Event</p>
+                    <FormField control={form.control} name="eventDate" rules={{ required: "Tanggal event wajib diisi" }} render={({ field }) => {
+                      const rangeLabel = (() => {
+                        if (!field.value) return "Pilih tanggal event";
+                        const from = parseDateOnly(field.value);
+                        if (!eventDateEnd || eventDateEnd === field.value) return format(from, "dd MMM yyyy");
+                        const to = parseDateOnly(eventDateEnd);
+                        const sameMonth = from.getFullYear() === to.getFullYear() && from.getMonth() === to.getMonth();
+                        return sameMonth
+                          ? `${format(from, "dd")} - ${format(to, "dd MMM yyyy")}`
+                          : `${format(from, "dd MMM yyyy")} - ${format(to, "dd MMM yyyy")}`;
+                      })();
+                      return (
+                        <FormItem>
+                          <FormLabel>Tanggal Event *</FormLabel>
+                          <Popover open={eventDatePopoverOpen} onOpenChange={setEventDatePopoverOpen}>
+                            <PopoverTrigger render={
+                              <Button
+                                variant="outline"
+                                disabled={!watchedVenueId}
+                                className={cn("w-full justify-start text-left font-normal", !field.value && "text-muted-foreground")}
+                              >
+                                <CalendarIcon weight="BoldDuotone" className="mr-2 h-4 w-4" />
+                                {watchedVenueId ? rangeLabel : "Pilih venue terlebih dahulu"}
+                              </Button>
+                            } />
+                            <PopoverContent className="w-auto p-0" align="start">
+                              <Calendar
+                                mode="range"
+                                captionLayout="dropdown"
+                                selected={{
+                                  from: field.value ? parseDateOnly(field.value) : undefined,
+                                  to: eventDateEnd ? parseDateOnly(eventDateEnd) : undefined,
+                                }}
+                                onSelect={(range) => {
+                                  field.onChange(range?.from ? toDateOnly(range.from) : "");
+                                  setEventDateEnd(range?.to ? toDateOnly(range.to) : "");
+                                }}
+                                disabled={(d) => getDateStatus(d) === "unavailable"}
+                                fromYear={new Date().getFullYear() - 2}
+                                toYear={new Date().getFullYear() + 5}
+                                defaultMonth={field.value ? parseDateOnly(field.value) : new Date()}
+                                onMonthChange={setVisibleMonth}
+                                modifiers={{
+                                  available: (d) => !!watchedVenueId && getDateStatus(d) === "available",
+                                  partial: (d) => !!watchedVenueId && getDateStatus(d) === "partial",
+                                  unavailable: (d) => !!watchedVenueId && getDateStatus(d) === "unavailable",
+                                }}
+                                modifiersClassNames={{
+                                  available: "day-available",
+                                  partial: "day-partial",
+                                  unavailable: "day-unavailable",
+                                }}
+                              />
+                              <div className="flex items-center justify-between gap-2 border-t border-border/60 px-3 py-2.5">
+                                <p className="text-xs text-muted-foreground">
+                                  {field.value ? rangeLabel : "Klik 1 tanggal untuk single day, atau klik 2 tanggal untuk rentang"}
+                                </p>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  className="cursor-pointer"
+                                  disabled={!field.value}
+                                  onClick={() => setEventDatePopoverOpen(false)}
+                                >
+                                  Selesai
+                                </Button>
+                              </div>
+                            </PopoverContent>
+                          </Popover>
+                          {availLoading && <p className="text-xs text-muted-foreground mt-1">Mengecek ketersediaan...</p>}
+                          <FormMessage />
+                        </FormItem>
+                      );
+                    }} />
                     <FormField control={form.control} name="miceSession" render={({ field }) => {
                       const SESSION_LABELS: Record<string, string> = {
                         morning: "Pagi (Morning)",
@@ -971,8 +1071,8 @@ export function MiceBookingDrawer({
                   </div>
 
                   {/* Informasi Sales */}
-                  <div className="border-t border-border pt-4 space-y-3">
-                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Informasi Sales</p>
+                  <div className="rounded-2xl border bg-card p-5 space-y-3">
+                    <p className="text-sm font-semibold text-foreground mb-1">Informasi Sales</p>
                     {currentUserIsSalesMice ? (
                       <div>
                         <p className="text-sm font-medium mb-1.5">Sales *</p>
@@ -993,8 +1093,8 @@ export function MiceBookingDrawer({
                   </div>
 
                   {/* Catatan */}
-                  <div className="border-t border-border pt-4 space-y-3">
-                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Catatan</p>
+                  <div className="rounded-2xl border bg-card p-5 space-y-3">
+                    <p className="text-sm font-semibold text-foreground mb-1">Catatan</p>
                     <FormField control={form.control} name="notes" render={({ field }) => (
                       <FormItem>
                         <FormLabel>Catatan Tambahan</FormLabel>
@@ -1003,13 +1103,14 @@ export function MiceBookingDrawer({
                       </FormItem>
                     )} />
                   </div>
-                </>
+                </div>
               )}
 
               {/* ─── Step 2: Term of Payments ─── */}
               {currentStep === 2 && (
                 <div className="space-y-4">
-                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Informasi Pembayaran</p>
+                  <div className="rounded-2xl border bg-card p-5 space-y-3">
+                  <p className="text-sm font-semibold text-foreground mb-1">Informasi Pembayaran</p>
 
                   <div className="space-y-2">
                     {terms.map((t, idx) => {
@@ -1126,17 +1227,30 @@ export function MiceBookingDrawer({
                     <AddCircle weight="BoldDuotone" className="h-4 w-4" />
                     Tambah Term
                   </Button>
+                  </div>
                 </div>
               )}
 
               {/* ─── Step 3: Tanda Tangan & Lokasi ─── */}
               {currentStep === 3 && (
                 <div className="space-y-4">
-                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Tanda Tangan &amp; Lokasi</p>
+                  <div className="rounded-2xl border bg-card p-5 space-y-4">
+                  <p className="text-sm font-semibold text-foreground mb-1">Tanda Tangan &amp; Lokasi</p>
+
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium text-foreground">Lokasi Penandatanganan</label>
+                    <Input
+                      value={signingLocation}
+                      onChange={(e) => setSigningLocation(e.target.value)}
+                      placeholder="e.g. Kantor Swasana, Jakarta"
+                    />
+                    <p className="text-xs text-muted-foreground">Lokasi ini akan ditampilkan di dokumen PO.</p>
+                  </div>
 
                   {/* Sales signature — only when the logged-in user IS the assigned
                       sales. Manager/admin-assigned bookings are signed later by the
                       assigned sales via the approval page. */}
+                  <div className="border-t border-border/60 pt-4">
                   {currentUserIsSalesMice ? (
                     <SignaturePad
                       onSignature={(url) => { signatureRef.current = url; }}
@@ -1149,15 +1263,7 @@ export function MiceBookingDrawer({
                       </p>
                     </div>
                   )}
-
-                  <div className="space-y-1.5">
-                    <label className="text-sm font-medium text-foreground">Lokasi Penandatanganan</label>
-                    <Input
-                      value={signingLocation}
-                      onChange={(e) => setSigningLocation(e.target.value)}
-                      placeholder="e.g. Kantor Swasana, Jakarta"
-                    />
-                    <p className="text-xs text-muted-foreground">Lokasi ini akan ditampilkan di dokumen PO.</p>
+                  </div>
                   </div>
                 </div>
               )}
@@ -1177,21 +1283,22 @@ export function MiceBookingDrawer({
           )}
           <div className="flex gap-2">
             {currentStep > 1 ? (
-              <Button type="button" variant="outline" onClick={handleBack} className="flex-1" disabled={isPending}>
+              <Button type="button" variant="outline" onClick={handleBack} className="flex-[40%] cursor-pointer" disabled={isPending}>
                 Kembali
               </Button>
             ) : (
-              <Button type="button" variant="outline" onClick={() => onOpenChange(false)} className="flex-1" disabled={isPending}>
+              <Button type="button" variant="outline" onClick={() => onOpenChange(false)} className="flex-[40%] cursor-pointer text-destructive border-destructive hover:bg-destructive/10" disabled={isPending}>
                 Batal
               </Button>
             )}
 
             {currentStep < 3 ? (
-              <Button type="button" onClick={handleNext} className="flex-1" disabled={isPending && !hasPendingWriteError}>
+              <Button type="button" onClick={handleNext} className="flex-[60%] cursor-pointer" disabled={isPending && !hasPendingWriteError}>
                 {hasPendingWriteError ? "Coba Lagi" : "Lanjut"}
+                {!hasPendingWriteError && <ArrowRight weight="BoldDuotone" className="h-4 w-4 ml-1" />}
               </Button>
             ) : (
-              <Button type="button" onClick={() => { void form.handleSubmit(onSubmit)(); }} className="flex-1" disabled={isPending}>
+              <Button type="button" onClick={() => { void form.handleSubmit(onSubmit)(); }} className="flex-[60%] cursor-pointer" disabled={isPending}>
                 {isPending ? "Menyimpan..." : isEdit ? "Simpan" : "Tambah"}
               </Button>
             )}

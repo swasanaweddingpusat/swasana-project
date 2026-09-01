@@ -188,6 +188,7 @@ export async function deleteVendor(id: string) {
       description: `Deleted vendor "${vendor.name}"`,
     });
 
+    revalidateTag("vendors", "max");
     return { success: true };
   } catch (e) {
     console.error("[deleteVendor]", e);

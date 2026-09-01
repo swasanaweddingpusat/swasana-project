@@ -2,7 +2,7 @@ import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { auth } from "@/lib/auth";
-import { isSuperAdmin, hasPermission } from "@/lib/permissions";
+import { hasPermission } from "@/lib/permissions";
 import { mutationLimiter, rateLimitResponse } from "@/lib/rate-limit";
 import { logAudit } from "@/lib/audit";
 import { deleteFromStorage } from "@/lib/storage";
@@ -35,14 +35,14 @@ export async function POST(req: Request): Promise<Response> {
   if (step.record.module === "booking") {
     // booking module: allow if super-admin OR has booking:reset-approval permission
     const allowed =
-      (await isSuperAdmin(session.user.roleId)) ||
+      session.user.isSuperAdmin ||
       (await hasPermission(session.user.roleId, "booking", "reset-approval"));
     if (!allowed) {
       return Response.json({ error: "Tidak memiliki izin untuk reset step approval booking" }, { status: 403 });
     }
   } else {
     // All other modules (e.g. package): super-admin only
-    const isAdmin = await isSuperAdmin(session.user.roleId);
+    const isAdmin = session.user.isSuperAdmin;
     if (!isAdmin) {
       return Response.json({ error: "Hanya super-admin yang bisa reset step" }, { status: 403 });
     }

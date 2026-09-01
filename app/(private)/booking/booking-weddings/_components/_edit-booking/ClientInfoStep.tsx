@@ -11,7 +11,7 @@ import { SearchableSelect } from "@/components/ui/searchable-select";
 import { ContactEntry, parseStoredPhone } from "@/components/shared/PhoneInput";
 import { LBL } from "./useEditBookingForm";
 import { validateIdNumber } from "@/lib/validations/booking-form";
-import { BitrixIdField } from "../BitrixIdField";
+import { BitrixIdField } from "@/components/shared/BitrixIdField";
 import type { EditBookingForm } from "./useEditBookingForm";
 
 // ─── ClientInfoStep ───────────────────────────────────────────────────────────

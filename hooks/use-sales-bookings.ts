@@ -1,7 +1,8 @@
 "use client";
 
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
-import type { BookingsResult } from "@/lib/queries/bookings";
+import type { BookingsResult, ApprovalStatusFilter } from "@/lib/queries/bookings";
+import type { BookingStatus } from "@prisma/client";
 
 export interface UseSalesBookingsParams {
   salesId: string;
@@ -12,6 +13,10 @@ export interface UseSalesBookingsParams {
   recordStatus?: "saved" | "draft" | "all";
   dateFrom?: string;
   dateTo?: string;
+  year?: number;
+  approvalStatus?: ApprovalStatusFilter;
+  bookingStatus?: BookingStatus;
+  sourceOfInformationId?: string;
   enabled?: boolean;
 }
 
@@ -25,6 +30,10 @@ async function fetchSalesBookings(p: UseSalesBookingsParams): Promise<BookingsRe
     ...(p.venueId ? { venueId: p.venueId } : {}),
     ...(p.dateFrom ? { dateFrom: p.dateFrom } : {}),
     ...(p.dateTo ? { dateTo: p.dateTo } : {}),
+    ...(p.year ? { year: String(p.year) } : {}),
+    ...(p.approvalStatus ? { approvalStatus: p.approvalStatus } : {}),
+    ...(p.bookingStatus ? { bookingStatus: p.bookingStatus } : {}),
+    ...(p.sourceOfInformationId ? { sourceOfInformationId: p.sourceOfInformationId } : {}),
   });
   const res = await fetch(`/api/bookings?${qs}`);
   if (!res.ok) throw new Error("Failed to fetch sales bookings");
@@ -39,9 +48,13 @@ export function useSalesBookings(p: UseSalesBookingsParams) {
   const recordStatus = p.recordStatus ?? "saved";
   const dateFrom = p.dateFrom ?? "";
   const dateTo = p.dateTo ?? "";
+  const year = p.year ?? "";
+  const approvalStatus = p.approvalStatus ?? "";
+  const bookingStatus = p.bookingStatus ?? "";
+  const sourceOfInformationId = p.sourceOfInformationId ?? "";
 
   return useQuery({
-    queryKey: ["bookings", "sales", p.salesId, page, pageSize, search, venueId, recordStatus, dateFrom, dateTo],
+    queryKey: ["bookings", "sales", p.salesId, page, pageSize, search, venueId, recordStatus, dateFrom, dateTo, year, approvalStatus, bookingStatus, sourceOfInformationId],
     queryFn: () => fetchSalesBookings(p),
     enabled: (p.enabled ?? true) && !!p.salesId,
     placeholderData: keepPreviousData,

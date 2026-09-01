@@ -1,17 +1,17 @@
 import { auth } from "@/lib/auth";
-import { hasPermission, isSuperAdmin } from "@/lib/permissions";
+import { hasPermission } from "@/lib/permissions";
 import { redirect } from "next/navigation";
 
 export async function requirePagePermission(module: string | string[], action: string = "view"): Promise<void> {
   const session = await auth();
   if (!session?.user?.id) redirect("/auth/login");
 
-  const isAdmin = await isSuperAdmin(session.user.roleId);
-  if (isAdmin) return;
+  if (session.user.isSuperAdmin) return;
 
   const modules = Array.isArray(module) ? module : [module];
   for (const mod of modules) {
-    const allowed = await hasPermission(session.user.roleId, mod, action);
+    // knownIsSuperAdmin=false: already ruled out above, skip the redundant re-check.
+    const allowed = await hasPermission(session.user.roleId, mod, action, false);
     if (allowed) return;
   }
   redirect("/forbidden");

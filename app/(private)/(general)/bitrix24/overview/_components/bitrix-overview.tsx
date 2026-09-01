@@ -26,6 +26,14 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableHead,
+  TableRow,
+  TableCell,
+} from "@/components/ui/table";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -48,6 +56,14 @@ import {
   exportBitrixOverviewExcel,
   exportBitrixOverviewPdf,
 } from "@/lib/bitrix-overview-export";
+import {
+  useBitrixOverview,
+  type BitrixOverviewData as OverviewData,
+  type Bucket,
+  type AdBucket,
+  type OverviewSalesBucket as SalesBucket,
+  type StageCatalogItem,
+} from "@/hooks/use-bitrix-overview";
 
 // Pipeline (CATEGORY_ID) options — mirrors the Transaksi page; stable regardless
 // of the current result set. "" = all pipelines.
@@ -67,49 +83,6 @@ const PIPELINE_OPTIONS: { id: string; name: string }[] = [
 interface PersonOption {
   id: string;
   name: string;
-}
-
-interface StageCatalogItem {
-  name: string;
-  color: string;
-  semantic: "won" | "lost" | "process";
-  order: number;
-}
-
-interface Bucket {
-  key: string;
-  label: string;
-  count: number;
-}
-
-interface AdBucket {
-  key: string;
-  url: string;
-  count: number;
-}
-
-interface SalesBucket {
-  key: string;
-  label: string;
-  count: number;
-  getback: number;
-}
-
-interface OverviewData {
-  range: { from: string; to: string };
-  total: number;
-  withVenue: number;
-  organik: number;
-  fromAds: number;
-  spamPrank: number;
-  sources: Bucket[];
-  ads: AdBucket[];
-  sales: SalesBucket[];
-  venues: Bucket[];
-  responseStatus: { responded: number; notResponded: number };
-  stageCatalog: StageCatalogItem[];
-  issueCatalog: string[];
-  error?: string;
 }
 
 // Yesterday as a local Date — matches the daily report cadence.
@@ -169,11 +142,40 @@ export function BitrixOverview() {
   const [filterOpen, setFilterOpen] = useState(false);
   const [stageCatalog, setStageCatalog] = useState<StageCatalogItem[]>([]);
   const [issueCatalog, setIssueCatalog] = useState<string[]>([]);
-  const [data, setData] = useState<OverviewData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [reloadKey, setReloadKey] = useState(0);
   const [exporting, setExporting] = useState(false);
+
+  const from = filters.range?.from ? toIsoDay(filters.range.from) : "";
+  const to = filters.range?.to ? toIsoDay(filters.range.to) : from;
+  const dbFrom = filters.dbRange?.from ? toIsoDay(filters.dbRange.from) : "";
+  const dbTo = filters.dbRange?.from ? toIsoDay(filters.dbRange.to ?? filters.dbRange.from) : "";
+
+  // Live-polled via TanStack Query, 30s TTL mirroring the server's Bitrix read
+  // cache (lib/bitrix-cache.ts FRESH_WINDOW_MS) — see hooks/use-bitrix-overview.ts.
+  const overviewQuery = useBitrixOverview({
+    from,
+    to,
+    pipeline: filters.pipeline || undefined,
+    stage: filters.stage || undefined,
+    issue: filters.issue || undefined,
+    clientId: filters.client?.id,
+    salesId: filters.sales?.id,
+    dbFrom: dbFrom || undefined,
+    dbTo: dbTo || undefined,
+  });
+
+  const data = overviewQuery.data ?? null;
+  const loading = overviewQuery.isPending;
+  const error = overviewQuery.isError
+    ? overviewQuery.error instanceof Error
+      ? overviewQuery.error.message
+      : "Gagal memuat ringkasan."
+    : null;
+  const refreshing = overviewQuery.isFetching;
+
+  useEffect(() => {
+    if (overviewQuery.data?.stageCatalog?.length) setStageCatalog(overviewQuery.data.stageCatalog);
+    if (overviewQuery.data?.issueCatalog?.length) setIssueCatalog(overviewQuery.data.issueCatalog);
+  }, [overviewQuery.data]);
 
   async function handleExport(format: "pdf" | "excel"): Promise<void> {
     if (!data) return;
@@ -187,48 +189,6 @@ export function BitrixOverview() {
       setExporting(false);
     }
   }
-
-  const from = filters.range?.from ? toIsoDay(filters.range.from) : "";
-  const to = filters.range?.to ? toIsoDay(filters.range.to) : from;
-  const dbFrom = filters.dbRange?.from ? toIsoDay(filters.dbRange.from) : "";
-  const dbTo = filters.dbRange?.from ? toIsoDay(filters.dbRange.to ?? filters.dbRange.from) : "";
-
-  useEffect(() => {
-    if (!from) return;
-    let cancelled = false;
-    void (async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const params = new URLSearchParams({ from, to });
-        if (filters.pipeline) params.set("pipeline", filters.pipeline);
-        if (filters.stage) params.set("stage", filters.stage);
-        if (filters.issue) params.set("issue", filters.issue);
-        if (filters.client) params.set("clientId", filters.client.id);
-        if (filters.sales) params.set("salesId", filters.sales.id);
-        if (dbFrom) params.set("dbFrom", dbFrom);
-        if (dbTo) params.set("dbTo", dbTo);
-        const res = await fetch(`/api/bitrix/overview?${params.toString()}`);
-        const json = (await res.json()) as OverviewData;
-        if (cancelled) return;
-        if (!res.ok) {
-          setError(json.error ?? "Gagal memuat ringkasan.");
-          setData(null);
-          return;
-        }
-        setData(json);
-        if (json.stageCatalog?.length) setStageCatalog(json.stageCatalog);
-        if (json.issueCatalog?.length) setIssueCatalog(json.issueCatalog);
-      } catch {
-        if (!cancelled) setError("Gagal terhubung ke server.");
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [from, to, filters.pipeline, filters.stage, filters.issue, filters.client, filters.sales, dbFrom, dbTo, reloadKey]);
 
   const adsPct = data && data.total > 0 ? Math.round((data.fromAds / data.total) * 100) : 0;
 
@@ -301,11 +261,13 @@ export function BitrixOverview() {
             variant="outline"
             size="icon"
             className="shrink-0 rounded-full"
-            onClick={() => setReloadKey((k) => k + 1)}
-            disabled={loading}
+            onClick={() => {
+              void overviewQuery.refetch();
+            }}
+            disabled={refreshing}
             aria-label="Refresh"
           >
-            <RefreshCircle weight="BoldDuotone" className={cn("h-4 w-4", loading && "animate-spin")} />
+            <RefreshCircle weight="BoldDuotone" className={cn("h-4 w-4", refreshing && "animate-spin")} />
           </Button>
         </div>
       </Card>
@@ -346,6 +308,9 @@ export function BitrixOverview() {
             />
           </div>
 
+          {/* Database Kantor vs Mandiri — mandiri = Live TikTok / Referral */}
+          <KantorMandiriCard data={data} loading={loading} />
+
           {/* Response Status — sudah dibalas vs belum dibalas, filter-aware */}
           <ResponseStatusCard data={data} loading={loading} />
 
@@ -359,9 +324,11 @@ export function BitrixOverview() {
               loading={loading}
             />
             <VenueCard buckets={data?.venues} total={data?.withVenue ?? 0} loading={loading} />
-            <SalesCard buckets={data?.sales} total={data?.total ?? 0} loading={loading} />
-            <AdsCard buckets={data?.ads} organik={data?.organik ?? 0} total={data?.total ?? 0} loading={loading} />
           </div>
+
+          <SalesTable buckets={data?.sales} loading={loading} />
+
+          <AdsCard buckets={data?.ads} organik={data?.organik ?? 0} total={data?.total ?? 0} loading={loading} />
 
           <p className="px-1 text-xs text-muted-foreground">
             Data ditarik langsung dari CRM Bitrix24 (transaksi/deals dibuat pada rentang tanggal terpilih). Angka
@@ -705,6 +672,59 @@ function MetricCard({
   );
 }
 
+function KantorMandiriCard({ data, loading }: { data: OverviewData | null; loading: boolean }) {
+  const kantor = data?.kantor ?? 0;
+  const mandiri = data?.mandiri ?? 0;
+  const total = kantor + mandiri;
+  const kantorPct = total > 0 ? Math.round((kantor / total) * 100) : 0;
+  const mandiriPct = total > 0 ? Math.round((mandiri / total) * 100) : 0;
+
+  return (
+    <Card className="rounded-xl p-5">
+      <div className="mb-1 flex items-center gap-2">
+        <UsersGroupRounded weight="BoldDuotone" className="h-4 w-4 text-muted-foreground" />
+        <h3 className="font-heading text-sm font-semibold">Database Kantor vs Mandiri</h3>
+      </div>
+      <p className="mb-4 text-xs text-muted-foreground">
+        Mandiri = sumber <span className="font-medium">Live TikTok</span> &amp;{" "}
+        <span className="font-medium">Referral</span>; sisanya dihitung sebagai kantor.
+      </p>
+      <div className="grid grid-cols-2 gap-4">
+        <div className="flex items-start gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-accent">
+            <Buildings weight="BoldDuotone" className="h-5 w-5 text-foreground" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-xs text-muted-foreground">Database Kantor</p>
+            <p className="font-heading text-2xl font-semibold leading-tight">
+              {loading ? "…" : kantor.toLocaleString("id-ID")}
+              {!loading && <span className="ml-1 text-xs text-muted-foreground">({kantorPct}%)</span>}
+            </p>
+            <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-muted">
+              <div className="h-full rounded-full bg-primary" style={{ width: `${kantorPct}%` }} />
+            </div>
+          </div>
+        </div>
+        <div className="flex items-start gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-accent">
+            <UsersGroupRounded weight="BoldDuotone" className="h-5 w-5 text-foreground" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-xs text-muted-foreground">Database Mandiri</p>
+            <p className="font-heading text-2xl font-semibold leading-tight">
+              {loading ? "…" : mandiri.toLocaleString("id-ID")}
+              {!loading && <span className="ml-1 text-xs text-muted-foreground">({mandiriPct}%)</span>}
+            </p>
+            <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-muted">
+              <div className="h-full rounded-full bg-primary" style={{ width: `${mandiriPct}%` }} />
+            </div>
+          </div>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
 function ResponseStatusCard({ data, loading }: { data: OverviewData | null; loading: boolean }) {
   const notResponded = data?.responseStatus.notResponded ?? 0;
 
@@ -769,7 +789,19 @@ function LoadingRows() {
   );
 }
 
-function BarRow({ label, count, total, right }: { label: React.ReactNode; count: number; total: number; right?: React.ReactNode }) {
+function BarRow({
+  label,
+  count,
+  total,
+  right,
+  sub,
+}: {
+  label: React.ReactNode;
+  count: number;
+  total: number;
+  right?: React.ReactNode;
+  sub?: React.ReactNode;
+}) {
   const pct = total > 0 ? Math.round((count / total) * 100) : 0;
   return (
     <li className="space-y-1">
@@ -786,7 +818,57 @@ function BarRow({ label, count, total, right }: { label: React.ReactNode; count:
       <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
         <div className="h-full rounded-full bg-primary" style={{ width: `${pct}%` }} />
       </div>
+      {sub && <div className="text-xs text-muted-foreground">{sub}</div>}
     </li>
+  );
+}
+
+function SalesTable({ buckets, loading }: { buckets: SalesBucket[] | undefined; loading: boolean }) {
+  return (
+    <CardShell
+      title="Database Sales"
+      icon={<UsersGroupRounded weight="BoldDuotone" className="h-4 w-4 text-muted-foreground" />}
+    >
+      {loading ? (
+        <LoadingRows />
+      ) : !buckets || buckets.length === 0 ? (
+        <p className="py-6 text-center text-sm text-muted-foreground">Tidak ada data.</p>
+      ) : (
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Sales</TableHead>
+              <TableHead className="text-right">Total</TableHead>
+              <TableHead className="text-right">DB Kantor</TableHead>
+              <TableHead className="text-right">DB Mandiri</TableHead>
+              <TableHead className="text-right">Getback</TableHead>
+              <TableHead className="text-right">Sudah FU</TableHead>
+              <TableHead className="text-right">Belum FU</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {buckets.map((b) => (
+              <TableRow key={b.key}>
+                <TableCell className="font-medium">{b.label}</TableCell>
+                <TableCell className="text-right tabular-nums">{b.count.toLocaleString("id-ID")}</TableCell>
+                <TableCell className="text-right tabular-nums">{b.kantor.toLocaleString("id-ID")}</TableCell>
+                <TableCell className="text-right tabular-nums">{b.mandiri.toLocaleString("id-ID")}</TableCell>
+                <TableCell className="text-right tabular-nums">{b.getback.toLocaleString("id-ID")}</TableCell>
+                <TableCell className="text-right tabular-nums">{b.responded.toLocaleString("id-ID")}</TableCell>
+                <TableCell
+                  className={cn(
+                    "text-right tabular-nums",
+                    b.notResponded > 0 ? "text-destructive" : "text-muted-foreground",
+                  )}
+                >
+                  {b.notResponded.toLocaleString("id-ID")}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      )}
+    </CardShell>
   );
 }
 
@@ -829,39 +911,6 @@ function VenueCard({ buckets, total, loading }: { buckets: Bucket[] | undefined;
       total={total}
       loading={loading}
     />
-  );
-}
-
-function SalesCard({ buckets, total, loading }: { buckets: SalesBucket[] | undefined; total: number; loading: boolean }) {
-  return (
-    <CardShell
-      title="Database Sales"
-      icon={<UsersGroupRounded weight="BoldDuotone" className="h-4 w-4 text-muted-foreground" />}
-    >
-      {loading ? (
-        <LoadingRows />
-      ) : !buckets || buckets.length === 0 ? (
-        <p className="py-6 text-center text-sm text-muted-foreground">Tidak ada data.</p>
-      ) : (
-        <ul className="space-y-3">
-          {buckets.map((b) => (
-            <BarRow
-              key={b.key}
-              label={b.label}
-              count={b.count}
-              total={total}
-              right={
-                b.getback > 0 ? (
-                  <Badge variant="secondary" className="rounded-full font-normal">
-                    {b.getback} getback
-                  </Badge>
-                ) : undefined
-              }
-            />
-          ))}
-        </ul>
-      )}
-    </CardShell>
   );
 }
 

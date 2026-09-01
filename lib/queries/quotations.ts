@@ -14,6 +14,7 @@ const quotationListSelect = {
   eventTypeName: true,
   weddingSession: true,
   eventDate: true,
+  eventEndDate: true,
   time: true,
   place: true,
   details: true,

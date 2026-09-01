@@ -4,7 +4,7 @@ import { revalidatePath, revalidateTag } from "next/cache";
 import { headers } from "next/headers";
 import { db } from "@/lib/db";
 import { logAudit } from "@/lib/audit";
-import { requirePermission, isSuperAdmin } from "@/lib/permissions";
+import { requirePermission } from "@/lib/permissions";
 import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
 import type { Prisma } from "@prisma/client";
 import {
@@ -453,7 +453,7 @@ export async function updateGroupLeader(groupId: string, leaderId: string) {
   if (error) return { success: false, error };
   if (!mutationLimiter.check(`groups-leader:${session!.user.id}`)) return { success: false, ...rateLimitError() };
 
-  const isAdmin = await isSuperAdmin(session!.user.roleId);
+  const isAdmin = session!.user.isSuperAdmin;
   if (!isAdmin) return { success: false, error: "Hanya super admin yang bisa mengganti leader." };
 
   try {

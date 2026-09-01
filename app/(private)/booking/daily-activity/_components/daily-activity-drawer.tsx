@@ -17,6 +17,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { PhoneInput } from "@/components/shared/PhoneInput";
+import { BitrixIdField } from "@/components/shared/BitrixIdField";
 import { cn } from "@/lib/utils";
 import {
   CalendarDate,
@@ -523,11 +524,9 @@ export function DailyActivityDrawer({ open, onOpenChange, editLead, onSuccess }:
                   <label className="text-sm font-medium text-foreground">
                     Bitrix ID <span className="text-destructive">*</span>
                   </label>
-                  <Input
+                  <BitrixIdField
                     value={form.bitrixId}
-                    onChange={(e) => setField("bitrixId", e.target.value)}
-                    placeholder="e.g. 12345"
-                    className="rounded-xl"
+                    onChange={(id) => setField("bitrixId", id)}
                   />
                 </div>
               )}

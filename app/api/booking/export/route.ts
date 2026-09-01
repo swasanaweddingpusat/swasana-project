@@ -106,6 +106,7 @@ export async function GET(req: Request): Promise<Response> {
   const filters: BookingExportFilters = {
     dealingFrom: searchParams.get("dealingFrom") ?? undefined,
     dealingTo: searchParams.get("dealingTo") ?? undefined,
+    salesId: searchParams.get("salesId") ?? undefined,
   };
 
   try {

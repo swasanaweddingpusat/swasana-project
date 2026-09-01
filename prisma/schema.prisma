@@ -1005,6 +1005,13 @@ model Booking {
   @@index([currentRevisionId])
   @@index([recordStatus, poYear, poSeq])
   @@index([recognizedById])
+  // Dashboard read paths: stat cards / group performance / sales performance
+  // filter `recordStatus = 'saved'` AND a dealing-date (createdAt) or event-date
+  // (eventDate) range, often further scoped by salesId. Single-column indexes
+  // forced a large index scan; these composites let Postgres seek directly.
+  @@index([recordStatus, createdAt])
+  @@index([recordStatus, eventDate])
+  @@index([recordStatus, salesId])
   @@map("bookings")
 }
 
@@ -1411,6 +1418,9 @@ model Ledger {
   @@index([acknowledgedById])
   @@index([voidedById])
   @@index([createdById])
+  // Composite index buat Finance AR listing: filter direction + ackStatus +
+  // exclude voided, urut occurredAt.
+  @@index([direction, ackStatus, voidedAt, occurredAt])
   @@map("ledgers")
 }
 
@@ -1966,6 +1976,10 @@ model DailyActivity {
   @@index([venueId, eventDate, weddingSession, isDateLocked])
   // Composite index buat alt-date availability check: cari locked leads per venue+altDate+sessionAlt
   @@index([venueId, eventDateAlt, weddingSessionAlt, isDateLocked])
+  @@index([createdAt])
+  @@index([eventTypeId])
+  // Composite index buat listing "assigned to me" urut terbaru
+  @@index([assignedToId, createdAt])
   @@map("leads")
 }
 
@@ -2022,6 +2036,7 @@ model Quotation {
   // Event
   weddingSession WeddingSession?
   eventDate      DateTime?
+  eventEndDate   DateTime?
   time           String?
   place          String? // Area/ruang venue (mis. Ballroom, Outdoor, Gazebo)
   details        String?
@@ -2058,6 +2073,8 @@ model Quotation {
   @@index([paymentMethodId])
   @@index([status])
   @@index([createdAt])
+  // Composite index buat listing quotations: filter category + status, urut createdAt
+  @@index([category, status, createdAt])
   @@map("quotations")
 }
 

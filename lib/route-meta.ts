@@ -28,18 +28,11 @@ function walk(
 
 function buildRouteMetaFromNavTrees(): Record<string, RouteMeta> {
   const acc: Record<string, RouteMeta> = {};
+  // Per-module overview pages are retired, so top-level module items no longer
+  // have a synthetic overview parent — walk each tree with no parent, letting
+  // submenu items inherit their own parent href.
   for (const key of Object.keys(MODULE_NAV_MAP) as Array<keyof typeof MODULE_NAV_MAP>) {
-    const items = MODULE_NAV_MAP[key];
-    const overviewHref = `/${key}/overview`;
-    for (const item of items) {
-      // Top-level module items get the module overview as parent (except overview itself).
-      acc[item.href] = {
-        title: item.title ?? item.name,
-        subtitle: item.subtitle,
-        parent: item.href === overviewHref ? undefined : overviewHref,
-      };
-      if (item.submenu?.length) walk(item.submenu, item.href, acc);
-    }
+    walk(MODULE_NAV_MAP[key], undefined, acc);
   }
   walk(GENERAL_NAV, undefined, acc);
   return acc;
@@ -48,7 +41,7 @@ function buildRouteMetaFromNavTrees(): Record<string, RouteMeta> {
 const DERIVED_ROUTE_META = buildRouteMetaFromNavTrees();
 
 const DYNAMIC_ROUTE_META: Record<string, RouteMeta> = {
-  "/": { title: "Dashboard", subtitle: "Ringkasan aktivitas" },
+  "/": { title: "Overview", subtitle: "Ringkasan aktivitas dan performa" },
   "/settings": { title: "Settings", subtitle: "Kelola pengaturan sistem" },
   "/booking/groups/[groupId]": { title: "Detail Group", subtitle: "Kinerja dan target penjualan tim", parent: "/booking/groups" },
   "/booking/booking-weddings/[id]": { title: "Detail Booking", subtitle: "Informasi lengkap booking wedding", parent: "/booking/booking-weddings" },

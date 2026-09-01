@@ -1,4 +1,4 @@
-import { requirePermissionForRoute, hasPermission, isSuperAdmin } from "@/lib/permissions";
+import { requirePermissionForRoute, hasPermission } from "@/lib/permissions";
 import { apiLimiter, rateLimitResponse } from "@/lib/rate-limit";
 import { getGroupsWithPerformance } from "@/lib/queries/groups";
 
@@ -8,7 +8,7 @@ export async function GET(request: Request) {
   if (!apiLimiter.check(`groups-perf:${session.user.id}`)) return rateLimitResponse();
 
   const isViewAll =
-    (await isSuperAdmin(session.user.roleId)) ||
+    session.user.isSuperAdmin ||
     (await hasPermission(session.user.roleId, "groups", "view-all"));
 
   const { searchParams } = new URL(request.url);

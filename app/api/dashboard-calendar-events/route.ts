@@ -1,4 +1,4 @@
-import { requirePermissionForRoute, isSuperAdmin } from "@/lib/permissions";
+import { requirePermissionForRoute } from "@/lib/permissions";
 import { apiLimiter, rateLimitResponse } from "@/lib/rate-limit";
 import { getDashboardCalendarEvents } from "@/lib/queries/calendar-events";
 import { db } from "@/lib/db";
@@ -14,7 +14,7 @@ export async function GET(request: Request): Promise<Response> {
   const month = Number(searchParams.get("month")) || new Date().getMonth() + 1;
 
   const profileId = session.user.profileId ?? undefined;
-  const isAdmin = await isSuperAdmin(session.user.roleId);
+  const isAdmin = session.user.isSuperAdmin;
 
   let dataScope: DataScope = "own";
   if (!isAdmin && profileId) {
