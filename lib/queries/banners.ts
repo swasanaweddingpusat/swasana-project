@@ -1,6 +1,9 @@
 import { cacheTag, cacheLife } from "next/cache";
+import { BannerLocation } from "@prisma/client";
 import { db } from "@/lib/db";
 import { getPublicUrl } from "@/lib/storage";
+
+export { BannerLocation };
 
 export async function getBanners() {
   "use cache";
@@ -19,6 +22,7 @@ export async function getBanners() {
       linkUrl: true,
       sortOrder: true,
       isActive: true,
+      location: true,
       createdAt: true,
     },
     orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
@@ -37,13 +41,13 @@ export interface ActiveBanner {
   linkUrl: string | null;
 }
 
-export async function getActiveBanners(): Promise<ActiveBanner[]> {
+export async function getActiveBanners(location: BannerLocation): Promise<ActiveBanner[]> {
   "use cache";
   cacheTag("banners");
   cacheLife("minutes");
 
   const banners = await db.banner.findMany({
-    where: { isActive: true },
+    where: { isActive: true, location },
     select: { id: true, title: true, caption: true, imageKey: true, linkUrl: true },
     orderBy: { sortOrder: "asc" },
     take: 20,

@@ -83,7 +83,7 @@ export default async function DashboardPage({
     calendarScope,
   );
 
-  const bannersPromise = getActiveBanners();
+  const bannersPromise = getActiveBanners("dashboard");
 
   const [{ stats, groups }, userGroups, calendarEvents, banners] = await Promise.all([
     dashboardDataPromise,

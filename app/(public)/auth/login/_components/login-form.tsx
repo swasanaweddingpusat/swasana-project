@@ -13,11 +13,13 @@ import { useSearchParams } from "next/navigation"
 import { signIn } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import { resolveLoginDestination } from "@/actions/modules"
+import { LoginBannerCarousel, type LoginBannerSlide } from "./login-banner-carousel"
 
 export function LoginForm({
   className,
+  loginBanners,
   ...props
-}: React.ComponentProps<"div">) {
+}: React.ComponentProps<"div"> & { loginBanners?: LoginBannerSlide[] }) {
   const [showPassword, setShowPassword] = useState(false)
   const [isPending, startTransition] = useTransition()
   const searchParams = useSearchParams()
@@ -179,13 +181,17 @@ export function LoginForm({
             </div>
           </form>
           <div className={cn('bg-muted', 'relative', 'hidden', 'md:block', 'overflow-hidden', 'min-h-105')}>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src="/thumbnail.webp"
-              alt="Login background"
-              className={cn('absolute', 'inset-0', 'h-full', 'w-full', 'object-cover', 'dark:brightness-[0.2]', 'dark:grayscale')}
-              loading="eager"
-            />
+            {loginBanners && loginBanners.length > 0 ? (
+              <LoginBannerCarousel banners={loginBanners} />
+            ) : (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src="/thumbnail.webp"
+                alt="Login background"
+                className={cn('absolute', 'inset-0', 'h-full', 'w-full', 'object-cover', 'dark:brightness-[0.2]', 'dark:grayscale')}
+                loading="eager"
+              />
+            )}
           </div>
         </CardContent>
       </Card>

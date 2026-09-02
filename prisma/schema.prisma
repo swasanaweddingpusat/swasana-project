@@ -713,15 +713,22 @@ model Banner {
   fileName     String?
   mimeType     String?
   linkUrl      String?
-  sortOrder    Int      @default(0)
-  isActive     Boolean  @default(true)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  sortOrder    Int            @default(0)
+  isActive     Boolean        @default(true)
+  location     BannerLocation @default(dashboard)
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
 
+  @@index([location, isActive, sortOrder])
   @@map("banners")
 }
 
 // ─── Enums ───────────────────────────────────────────────────────────────────
+
+enum BannerLocation {
+  login
+  dashboard
+}
 
 enum ProfileStatus {
   active
