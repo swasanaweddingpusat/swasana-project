@@ -27,10 +27,8 @@ export async function GET(req: Request): Promise<Response> {
     return Response.json({ error: "Invalid query parameters" }, { status: 400 });
   }
 
-  // isSuperAdmin is already on the JWT (session.user) — no DB round-trip.
-  const isAdmin = session.user.isSuperAdmin;
-  const profileId = isAdmin ? undefined : session.user.profileId;
-
-  const leaderboard = await getSalesLeaderboardRaw(profileId);
+  // Overview is company-wide: leaderboard always covers ALL sales, regardless
+  // of the viewer's dataScope. Dashboard-only — other endpoints stay scoped.
+  const leaderboard = await getSalesLeaderboardRaw(undefined);
   return Response.json(leaderboard);
 }

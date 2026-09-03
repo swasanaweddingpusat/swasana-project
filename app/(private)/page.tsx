@@ -3,13 +3,10 @@ import { format } from "date-fns";
 import { id as localeId } from "date-fns/locale";
 import { ShieldCross } from "@solar-icons/react";
 import { cn } from "@/lib/utils";
-import { auth } from "@/lib/auth";
-import { db } from "@/lib/db";
 import { getDashboardData, resolveDealingRange, resolveEventRange } from "@/lib/queries/dashboard";
 import { getDashboardCalendarEvents } from "@/lib/queries/calendar-events";
 import { getTopSalesByRecentBooking } from "@/lib/queries/salesPerformance";
 import { getActiveBanners } from "@/lib/queries/banners";
-import type { DataScope } from "@/types/user";
 import { SalesStatCards } from "./_components/sales-stat-cards";
 import { GroupAchievementSection } from "./_components/group-achievement-section";
 import { CalendarWidget } from "./_components/calendar-widget";
@@ -26,10 +23,6 @@ export default async function DashboardPage({
   searchParams: Promise<Record<string, string | undefined>>;
 }) {
   const params = await searchParams;
-  const session = await auth();
-  const profileId = session?.user?.profileId;
-  // isSuperAdmin is already on the JWT (session.user) — no DB round-trip.
-  const isAdmin = session?.user?.isSuperAdmin ?? false;
 
   const now = new Date();
   // Calendar widget always shows the current month — it is not driven by the
@@ -50,59 +43,28 @@ export default async function DashboardPage({
     toDay: eventToDay,
   } = resolveEventRange(params.eventFrom, params.eventTo);
 
-  // Calendar widget — super-admin sees all; others use their JWT dataScope
-  // (already on session.user — no extra DB round-trip).
-  const calendarScope: DataScope = isAdmin ? "all" : session?.user?.dataScope ?? "own";
-
-  // Kick off every independent read in parallel — the dashboard aggregate, the
-  // sales-performance scope (group members for non-admins), and the calendar.
-  const dashboardDataPromise = getDashboardData(
-    isAdmin ? undefined : profileId,
-    range,
-    eventRange,
-  );
-
-  const userGroupsPromise: Promise<{ members: { userId: string }[] }[]> =
-    !isAdmin && profileId
-      ? db.userGroup.findMany({
-          where: {
-            OR: [
-              { leaderId: profileId },
-              { members: { some: { userId: profileId } } },
-            ],
-          },
-          select: { members: { select: { userId: true } } },
-          take: 200,
-        })
-      : Promise.resolve([]);
+  // Overview is company-wide: every booking-scoped section here shows ALL data,
+  // regardless of the viewer's dataScope (own/group/all). This applies ONLY to
+  // the dashboard endpoints — other menus (booking listing, booking calendar,
+  // finance, etc.) still enforce per-user dataScope. Hence `undefined`/"all".
+  const dashboardDataPromise = getDashboardData(undefined, range, eventRange);
 
   const calendarEventsPromise = getDashboardCalendarEvents(
     calendarYear,
     calendarMonth + 1,
-    isAdmin ? undefined : profileId,
-    calendarScope,
+    undefined,
+    "all",
   );
 
   const bannersPromise = getActiveBanners("dashboard");
 
-  const [{ stats, groups }, userGroups, calendarEvents, banners] = await Promise.all([
+  const [{ stats, groups }, calendarEvents, banners] = await Promise.all([
     dashboardDataPromise,
-    userGroupsPromise,
     calendarEventsPromise,
     bannersPromise,
   ]);
 
-  // Sales performance — depends on the group-members scope above, so it runs
-  // after that resolves.
-  let allowedProfileIds: string[] | undefined;
-  if (!isAdmin) {
-    const ids = [
-      ...new Set(userGroups.flatMap((g) => g.members.map((m) => m.userId))),
-    ];
-    allowedProfileIds = ids.length > 0 ? ids : [];
-  }
-
-  const topSalesData = await getTopSalesByRecentBooking(allowedProfileIds, range, eventRange);
+  const topSalesData = await getTopSalesByRecentBooking(undefined, range, eventRange);
 
   // No filter picked → whole-database totals. Otherwise show the picked range
   // (display uses the inclusive `toDay`, not the exclusive `to` upper bound).

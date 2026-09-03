@@ -1,7 +1,6 @@
 import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { apiLimiter, rateLimitResponse } from "@/lib/rate-limit";
-import { db } from "@/lib/db";
 import { getBookingStatsRaw, resolveDealingRange } from "@/lib/queries/dashboard";
 
 export async function GET(req: Request): Promise<Response> {
@@ -30,27 +29,9 @@ export async function GET(req: Request): Promise<Response> {
 
   const { range } = resolveDealingRange(qParsed.data.dealFrom, qParsed.data.dealTo);
 
-  // isSuperAdmin is already on the JWT (session.user) — no DB round-trip.
-  const isAdmin = session.user.isSuperAdmin;
-
-  let salesIds: string[] | null = null;
-  if (!isAdmin) {
-    const userGroups = await db.userGroup.findMany({
-      where: {
-        OR: [
-          { leaderId: session.user.profileId },
-          { members: { some: { userId: session.user.profileId } } },
-        ],
-      },
-      select: { members: { select: { userId: true } } },
-      take: 200,
-    });
-    const ids = [
-      ...new Set(userGroups.flatMap((g) => g.members.map((m) => m.userId))),
-    ];
-    salesIds = ids.length > 0 ? ids : null;
-  }
-
-  const stats = await getBookingStatsRaw(salesIds, range);
+  // Overview is company-wide: stats always cover ALL sales, regardless of the
+  // viewer's dataScope. Dashboard-only — other endpoints stay scoped. `null` =
+  // no salesId filter (whole database).
+  const stats = await getBookingStatsRaw(null, range);
   return Response.json(stats);
 }
