@@ -21,15 +21,6 @@ import { computeFullPrice, calcFinalFromFullPrice } from "@/lib/package-prices";
 import { getTermAllocatedMap } from "@/lib/queries/ledger";
 import { z } from "zod";
 
-/**
- * Financial delta (IDR) at or below which a change to an ALREADY-SIGNED booking is a
- * minor amendment: persisted + audited, but no approval reset and no client re-sign.
- * Above it, the change is material and re-triggers the full approval + re-sign flow.
- * Structural changes (venue / package / event date / base-price) are always material,
- * regardless of amount.
- */
-const MINOR_AMENDMENT_THRESHOLD_RP = 500_000;
-
 export async function createBooking(data: unknown) {
   const { session, error } = await requirePermission({ module: "booking", action: "create" });
   if (error) return { success: false, error };
@@ -1166,9 +1157,9 @@ export async function updateBookingClientInfo(data: unknown): Promise<{ success:
     const contactDisplay = serializeContactNumbersToDisplay(contactNumbers ?? "");
     const contactArray = parseContactNumbersToArray(contactNumbers ?? "");
 
-    // This path never triggers a revision/re-approval, so a frozen booking must keep
-    // its client-signed SnapCustomer intact. The Customer master still updates (CRM).
-    const skipSnapCustomerWrite = booking.snapshotFrozenAt != null;
+    // Customer contact is a NON-trigger field — editable even when frozen (no re-approval).
+    // Write SnapCustomer always; the signed PO snapshot is synced via patchSnapshotAdminFields below.
+    const skipSnapCustomerWrite = false;
 
     const ops: Prisma.PrismaPromise<unknown>[] = [
       db.booking.update({
@@ -1218,6 +1209,14 @@ export async function updateBookingClientInfo(data: unknown): Promise<{ success:
     ];
 
     await db.$transaction(ops);
+
+    // Keep the signed PO snapshot in sync with the edited client contact (best-effort;
+    // no-ops when the booking never went through approval / has no current revision).
+    try {
+      await patchSnapshotAdminFields(id);
+    } catch (e) {
+      console.error("[updateBookingClientInfo] snapshot patch failed:", e);
+    }
 
     await logAudit({
       userId: session!.user.id,
@@ -1304,7 +1303,8 @@ export async function editBooking(data: unknown) {
 
     const venueChanged = rest.venueId !== booking.venueId;
     const packageChanged = rest.packageId !== booking.packageId;
-    const typeChanged = (rest.weddingType ?? null) !== (booking.weddingType ?? null);
+    const typeProvided = rest.weddingType !== undefined;
+    const typeChanged = typeProvided && ((rest.weddingType ?? null) !== (booking.weddingType ?? null));
     // shouldRefreshPrice = true saat paket beda (packageChanged) ATAU user re-select
     // paket yang sama (refreshPackagePrice signal dari drawer). Pada keduanya kita fetch
     // master price terbaru dan rebuild snapshot pricing + snapPackageCategoryPrices.
@@ -1317,6 +1317,13 @@ export async function editBooking(data: unknown) {
     const ed = booking.eventDate!; // saved bookings always have eventDate
     const oldEventDate = `${ed.getUTCFullYear()}-${String(ed.getUTCMonth() + 1).padStart(2, "0")}-${String(ed.getUTCDate()).padStart(2, "0")}`;
     const eventDateChanged = newEventDate !== oldEventDate;
+
+    // Session & time are trigger fields too. Guard against absent fields (a save-path that
+    // omits them must NOT spuriously fire re-approval and wipe the client signature).
+    const sessionProvided = rest.weddingSession !== undefined;
+    const sessionChanged = sessionProvided && ((rest.weddingSession ?? null) !== (booking.weddingSession ?? null));
+    const eventTimeProvided = rest.eventTime !== undefined;
+    const eventTimeChanged = eventTimeProvided && ((rest.eventTime || null) !== (booking.eventTime ?? null));
 
     // Compare discount — ONLY when the caller actually sent discount fields.
     // Since the TOP-drawer refactor, discount is owned by updateTermOfPayments
@@ -1483,14 +1490,11 @@ export async function editBooking(data: unknown) {
     // Total financial movement this edit makes to the signed deal.
     const financialDelta = discountDelta + takeoutDelta + topTotalDelta;
 
-    // Structural changes redefine the deal (what / where / when / base price) and
-    // always require re-approval + client re-sign, whatever the amount.
-    const structuralChange = venueChanged || packageChanged || eventDateChanged || priceRefreshed;
+    // The 6 trigger fields that redefine the deal and require re-approval + client re-sign.
+    // priceRefreshed (same package, master price moved) is financial → NOT a trigger.
+    const structuralChange = venueChanged || packageChanged || typeChanged || eventDateChanged || sessionChanged || eventTimeChanged;
 
-    // A financial edit above the threshold is material; at/below it is a minor amendment.
-    const financialMaterial = financialDelta > MINOR_AMENDMENT_THRESHOLD_RP;
-
-    const hasMaterialChange = isFrozen && (structuralChange || financialMaterial);
+    const hasMaterialChange = isFrozen && structuralChange;
 
     // Minor amendment = frozen booking, some financial tweak fired, but under threshold.
     // Persisted + audited (revision spun for the trail), signature kept, freeze intact.
@@ -1503,9 +1507,10 @@ export async function editBooking(data: unknown) {
     // so the new display order is persisted correctly.
     const termsNeedWrite = topChanged || topSortOrderChanged;
 
-    // Minor amendments (finance-only) also skip the SnapCustomer rewrite — the signed
-    // client identity is never touched by a discount/takeout/schedule tweak.
-    const skipSnapCustomerWrite = isFrozen && !hasMaterialChange;
+    // Customer contact is a NON-trigger field: editable even after the client signs
+    // (no re-approval). Always write the SnapCustomer; the signed PO snapshot is kept in
+    // sync by patchSnapshotAdminFields below. Only trigger fields force a re-sign.
+    const skipSnapCustomerWrite = false;
 
     // Fetch old snap names for activity log (before transaction overwrites them)
     const [oldSnapVenue, oldSnapPackage, oldSnapVariant] = await Promise.all([
@@ -1912,6 +1917,9 @@ export async function editBooking(data: unknown) {
       if (packageChanged) reasons.push("package");
       if (priceRefreshed) reasons.push("package price refreshed");
       if (eventDateChanged) reasons.push("event date");
+      if (typeChanged) reasons.push("event type");
+      if (sessionChanged) reasons.push("event session");
+      if (eventTimeChanged) reasons.push("event time");
       if (discountChanged) reasons.push("discount");
       if (takeoutChanged) reasons.push("takeout");
       if (topChanged) reasons.push("terms of payment");

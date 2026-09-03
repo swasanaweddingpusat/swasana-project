@@ -7,8 +7,8 @@ import { requirePermission } from "@/lib/permissions";
 import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
 import { logAudit } from "@/lib/audit";
 import { canAccessBooking } from "@/lib/access-control";
-import { isBookingSnapshotFrozen, frozenSnapshotError } from "@/lib/booking-freeze";
-import { refreshCurrentRevisionSnapshot, patchSnapshotPackageItems } from "@/lib/booking-revision";
+import { isBookingSnapshotFrozen } from "@/lib/booking-freeze";
+import { refreshCurrentRevisionSnapshot, patchSnapshotPackageItems, patchSnapshotComplimentaries } from "@/lib/booking-revision";
 import {
   saveSnapInternalItemsSchema,
   saveSnapVendorItemsSchema,
@@ -224,9 +224,6 @@ export async function saveSnapComplimentaries(
     return { success: false, error: "Anda tidak memiliki akses ke booking ini." };
   }
 
-  // Complimentaries carry prices shown on the PO — locked after client signature.
-  if (await isBookingSnapshotFrozen(bookingId)) return frozenSnapshotError();
-
   try {
     const ops: Prisma.PrismaPromise<unknown>[] = [
       db.snapComplimentary.deleteMany({ where: { bookingId } }),
@@ -248,10 +245,13 @@ export async function saveSnapComplimentaries(
 
     await db.$transaction(ops);
 
-    // Re-freeze the in-flight revision snapshot so the PO PDF reflects the edited
-    // complimentaries. No-ops when frozen (client signed) — best-effort.
+    // Keep the PO PDF in sync with the edited complimentaries: refresh the in-flight
+    // revision when still unfrozen, or — post-signature — patch just the complimentaries
+    // into the signed snapshot (complimentary is a non-trigger field, editable after
+    // signature without re-approval). Best-effort.
     try {
-      await refreshCurrentRevisionSnapshot(bookingId);
+      const refreshed = await refreshCurrentRevisionSnapshot(bookingId);
+      if (!refreshed) await patchSnapshotComplimentaries(bookingId);
     } catch (e) {
       console.error("[saveSnapComplimentaries] revision snapshot refresh failed:", e);
     }
