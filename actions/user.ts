@@ -119,6 +119,12 @@ export async function inviteUser(formData: FormData) {
     // right cause — not every P2002 is a duplicate email. The Profile table also
     // has unique constraints on `employeeNumber` (autoincrement) and `email`, so
     // an out-of-sync sequence surfaces here as employeeNumber, not email.
+    //
+    // The Neon HTTP driver adapter doesn't reliably populate `meta.target` (it
+    // can come back as `[]` even for a genuine email collision) — same class of
+    // gap documented in lib/booking-slot-error.ts. Fall back to scanning the raw
+    // Prisma message text, which does carry the field name
+    // ("Unique constraint failed on the fields: (`email`)").
     if (
       error instanceof Error &&
       "code" in error &&
@@ -130,14 +136,28 @@ export async function inviteUser(formData: FormData) {
         : typeof target === "string"
           ? [target]
           : [];
-      const hit = (name: string) => fields.some((f) => f.toLowerCase().includes(name));
+      const haystack = `${fields.join(" ")} ${error.message}`.toLowerCase();
 
-      if (hit("email")) {
+      if (haystack.includes("email")) {
+        // Look up the conflicting profile so the message tells the admin what
+        // to actually do — "sudah terdaftar" alone reads as a dead end even
+        // when the fix is a one-click reactivation (see reactivateUser below).
+        const existing = await db.profile.findUnique({
+          where: { email },
+          select: { status: true },
+        });
+        if (existing?.status === "inactive") {
+          return {
+            success: false,
+            error:
+              "Email sudah terdaftar sebagai pengguna nonaktif. Aktifkan kembali lewat menu pengguna, bukan undang baru.",
+          };
+        }
         return { success: false, error: "Email sudah terdaftar." };
       }
       // employeeNumber collision = sequence out of sync at the DB level, not a
       // user-input problem. Surface it explicitly so it isn't misread as a dup email.
-      console.error("[inviteUser] P2002 on non-email constraint:", fields);
+      console.error("[inviteUser] P2002 on non-email constraint:", fields, error.message);
       return {
         success: false,
         error: "Gagal membuat pengguna karena konflik data internal. Hubungi administrator.",
@@ -299,7 +319,10 @@ export async function deleteUser(userId: string) {
         // another sales via the Booking list. Only touches the sales assignment;
         // manager, snapshots, approvals and payments are untouched.
         db.booking.updateMany({ where: { salesId: profile.id }, data: { salesId: null } }),
-        db.profile.update({ where: { id: profile.id }, data: { status: "inactive" } }),
+        // Reset verification too — a deactivated account should re-verify (via
+        // Resend Invitation) when reactivated, not silently stay "Verified"
+        // while login is disabled.
+        db.profile.update({ where: { id: profile.id }, data: { status: "inactive", isEmailVerified: false } }),
         db.session.deleteMany({ where: { userId: profile.userId } }),
       ]);
 
@@ -400,9 +423,11 @@ export async function resendInvitation(userId: string) {
       return { success: false, error: "Pengguna tidak ditemukan." };
     }
 
-    if (profile.isEmailVerified) {
-      return { success: false, error: "Email pengguna sudah diverifikasi." };
-    }
+    // Allowed even when already verified — an admin resending on a verified
+    // account is a deliberate re-invite (e.g. onboarding gone stale), so reset
+    // isEmailVerified back to false in the same transaction as the token swap
+    // instead of blocking with "sudah diverifikasi".
+    const wasVerified = profile.isEmailVerified;
 
     // Fetch active tokens, then invalidate them + create new token in one atomic transaction
     const existingTokens = await db.emailVerificationToken.findMany({
@@ -421,6 +446,9 @@ export async function resendInvitation(userId: string) {
       db.emailVerificationToken.create({
         data: { profileId: userId, token, expiresAt },
       }),
+      ...(wasVerified
+        ? [db.profile.update({ where: { id: userId }, data: { isEmailVerified: false } })]
+        : []),
     ]);
 
     // Send invitation email
@@ -436,6 +464,21 @@ export async function resendInvitation(userId: string) {
         verificationLink,
       }),
     });
+
+    if (wasVerified) {
+      revalidateTag("users", "max");
+      const h = await headers();
+      await logAudit({
+        userId: session!.user.profileId,
+        action: "user.reinvited",
+        entityType: "profile",
+        entityId: userId,
+        description: `Pengguna ${profile.email} diundang ulang; status verifikasi direset ke belum terverifikasi`,
+        changes: { before: { isEmailVerified: true }, after: { isEmailVerified: false } },
+        ipAddress: h.get("x-forwarded-for") ?? h.get("x-real-ip") ?? undefined,
+        userAgent: h.get("user-agent") ?? undefined,
+      });
+    }
 
     return { success: true, message: "Undangan berhasil dikirim ulang." };
   } catch (error) {
