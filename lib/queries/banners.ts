@@ -46,12 +46,21 @@ export async function getActiveBanners(location: BannerLocation): Promise<Active
   cacheTag("banners");
   cacheLife("minutes");
 
-  const banners = await db.banner.findMany({
-    where: { isActive: true, location },
-    select: { id: true, title: true, caption: true, imageKey: true, linkUrl: true },
-    orderBy: { sortOrder: "asc" },
-    take: 20,
-  });
+  // Decorative carousel, not critical path — a transient DB hiccup here (e.g.
+  // during static prerender of the public login page) must not fail the whole
+  // build/request. Degrade to an empty list instead of throwing.
+  let banners: { id: string; title: string; caption: string | null; imageKey: string; linkUrl: string | null }[];
+  try {
+    banners = await db.banner.findMany({
+      where: { isActive: true, location },
+      select: { id: true, title: true, caption: true, imageKey: true, linkUrl: true },
+      orderBy: { sortOrder: "asc" },
+      take: 20,
+    });
+  } catch (e) {
+    console.error("[getActiveBanners]", e);
+    return [];
+  }
 
   return banners.map((b) => ({
     id: b.id,
