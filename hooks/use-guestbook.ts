@@ -4,10 +4,12 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { fetchGuestbookEntries } from "@/services/guestbookService";
 import { createGuestbookEntry, checkOutGuestbookEntry, updateGuestbookEntry } from "@/actions/guestbook";
 
-export function useGuestbookEntries() {
+export function useGuestbookEntries(params?: { page?: number; pageSize?: number }) {
+  const page = params?.page ?? 1;
+  const pageSize = params?.pageSize ?? 50;
   return useQuery({
-    queryKey: ["guestbook-entries"],
-    queryFn: fetchGuestbookEntries,
+    queryKey: ["guestbook-entries", page, pageSize],
+    queryFn: () => fetchGuestbookEntries({ page, pageSize }),
     staleTime: 5 * 60 * 1000,
   });
 }

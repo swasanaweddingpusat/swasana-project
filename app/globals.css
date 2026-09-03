@@ -241,6 +241,37 @@ input[type="text"]::-webkit-credentials-auto-fill-button {
   scrollbar-color: #4b5563 #1a1a1a;
 }
 
+/* Sidebar scroll — thumb hidden until the sidebar is hovered. No layout shift:
+   the 6px track stays reserved (inherited from *:not(body)), only the thumb &
+   track color fade in on hover. Selectors are scoped tighter than the global
+   *:not(body) rules above (and their .dark variants) so they win the cascade. */
+.sidebar-scroll::-webkit-scrollbar-track,
+.dark .sidebar-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.sidebar-scroll::-webkit-scrollbar-thumb,
+.dark .sidebar-scroll::-webkit-scrollbar-thumb {
+  background: transparent;
+  transition: background 0.2s ease;
+}
+.sidebar-scroll:hover::-webkit-scrollbar-thumb {
+  background: #c4c4c6;
+}
+.dark .sidebar-scroll:hover::-webkit-scrollbar-thumb {
+  background: #4b5563;
+}
+/* Firefox */
+.sidebar-scroll,
+.dark .sidebar-scroll {
+  scrollbar-color: transparent transparent;
+}
+.sidebar-scroll:hover {
+  scrollbar-color: #c4c4c6 transparent;
+}
+.dark .sidebar-scroll:hover {
+  scrollbar-color: #4b5563 transparent;
+}
+
 /* Calendar availability indicators
    gold dot  = partially booked (some sessions still open)
    green dot = fully booked (date disabled)

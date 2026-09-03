@@ -98,6 +98,7 @@ export const SETTINGS_MODULES = [
   "settings-maintenance-status",
   "settings-tutorial",
   "settings-booking-log",
+  "settings-banner",
 ] as const;
 
 export type ModuleKey = "finance" | "hrd" | "booking" | "purchase" | "stakeholder";

@@ -1,6 +1,5 @@
 import { z } from "zod";
 import { auth } from "@/lib/auth";
-import { db } from "@/lib/db";
 import { apiLimiter, rateLimitResponse } from "@/lib/rate-limit";
 import { getTopSalesByRecentBookingRaw } from "@/lib/queries/salesPerformance";
 import { resolveDealingRange, resolveEventRange } from "@/lib/queries/dashboard";
@@ -34,25 +33,9 @@ export async function GET(req: Request): Promise<Response> {
   const { range } = resolveDealingRange(qParsed.data.dealFrom, qParsed.data.dealTo);
   const { range: eventRange } = resolveEventRange(qParsed.data.eventFrom, qParsed.data.eventTo);
 
-  // isSuperAdmin is already on the JWT (session.user) — no DB round-trip.
-  const isAdmin = session.user.isSuperAdmin;
-
-  let allowedProfileIds: string[] | undefined;
-  if (!isAdmin) {
-    const userGroups = await db.userGroup.findMany({
-      where: {
-        OR: [
-          { leaderId: session.user.profileId },
-          { members: { some: { userId: session.user.profileId } } },
-        ],
-      },
-      select: { members: { select: { userId: true } } },
-      take: 200,
-    });
-    const ids = [...new Set(userGroups.flatMap((g) => g.members.map((m) => m.userId)))];
-    allowedProfileIds = ids.length > 0 ? ids : [];
-  }
-
-  const data = await getTopSalesByRecentBookingRaw(allowedProfileIds, range, eventRange);
+  // Overview is company-wide: performance always ranks ALL sales, regardless of
+  // the viewer's dataScope. Dashboard-only — other endpoints stay scoped.
+  // `undefined` = no profile filter (every sales).
+  const data = await getTopSalesByRecentBookingRaw(undefined, range, eventRange);
   return Response.json(data);
 }

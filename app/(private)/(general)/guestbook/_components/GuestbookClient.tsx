@@ -242,7 +242,8 @@ export function GuestbookClient() {
   const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
   const [filterVenueId, setFilterVenueId] = useState<string>("all");
 
-  const { data: entries = [], isLoading } = useGuestbookEntries();
+  const { data: guestbookData, isLoading } = useGuestbookEntries();
+  const entries = guestbookData?.data ?? [];
   const { data: venues = [] } = useVenues();
   const checkOutMutation = useCheckOutGuestbookEntry();
 

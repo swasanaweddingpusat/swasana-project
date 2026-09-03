@@ -2,44 +2,70 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import { AltArrowLeft, AltArrowRight } from "@solar-icons/react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-interface BannerSlide {
-  src: string;
-  alt: string;
+export interface DashboardBannerSlide {
+  id: string;
+  title: string;
+  caption?: string | null;
+  imageUrl: string;
+  linkUrl?: string | null;
 }
 
-// Tambah banner baru di sini (taruh file webp-nya di public/) — carousel otomatis
-// nyesuain jumlah slide, dot indicator, dan tombol prev/next.
-const BANNERS: BannerSlide[] = [
-  { src: "/sales-champion-banner-v3.webp", alt: "Sales Champion — Top 3 Pemenang Sales" },
-];
+interface Props {
+  banners: DashboardBannerSlide[];
+}
 
 const AUTOPLAY_INTERVAL_MS = 6000;
 
-export function DashboardBannerCarousel(): React.ReactElement | null {
+/** Wrap the slide in a Link/anchor when linkUrl is set — Next.js Link for
+ *  internal paths (starting with "/"), plain anchor (new tab) otherwise. */
+function BannerSlideLink({
+  linkUrl,
+  children,
+}: {
+  linkUrl?: string | null;
+  children: React.ReactNode;
+}): React.ReactElement {
+  if (!linkUrl) return <>{children}</>;
+  if (linkUrl.startsWith("/")) {
+    return (
+      <Link href={linkUrl} className="absolute inset-0 block">
+        {children}
+      </Link>
+    );
+  }
+  return (
+    <a href={linkUrl} target="_blank" rel="noopener noreferrer" className="absolute inset-0 block">
+      {children}
+    </a>
+  );
+}
+
+export function DashboardBannerCarousel({ banners }: Props): React.ReactElement | null {
   const [index, setIndex] = useState(0);
   const [paused, setPaused] = useState(false);
 
   const goTo = useCallback((i: number) => {
-    setIndex((i + BANNERS.length) % BANNERS.length);
-  }, []);
+    setIndex((i + banners.length) % banners.length);
+  }, [banners.length]);
 
   const handlePrev = useCallback(() => goTo(index - 1), [goTo, index]);
   const handleNext = useCallback(() => goTo(index + 1), [goTo, index]);
 
   useEffect(() => {
-    if (BANNERS.length <= 1 || paused) return;
+    if (banners.length <= 1 || paused) return;
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
     const timer = setInterval(() => {
-      setIndex((i) => (i + 1) % BANNERS.length);
+      setIndex((i) => (i + 1) % banners.length);
     }, AUTOPLAY_INTERVAL_MS);
     return () => clearInterval(timer);
-  }, [paused]);
+  }, [paused, banners.length]);
 
-  if (BANNERS.length === 0) return null;
+  if (banners.length === 0) return null;
 
   return (
     <div
@@ -48,22 +74,29 @@ export function DashboardBannerCarousel(): React.ReactElement | null {
       onMouseLeave={() => setPaused(false)}
     >
       <div className={cn("relative", "aspect-[3/1]", "w-full")}>
-        {BANNERS.map((banner, i) => (
-          <Image
-            key={banner.src}
-            src={banner.src}
-            alt={banner.alt}
-            fill
-            priority={i === 0}
+        {banners.map((banner, i) => (
+          <div
+            key={banner.id}
             className={cn(
-              "object-cover", "transition-opacity", "duration-500", "motion-reduce:transition-none",
-              i === index ? "opacity-100" : "opacity-0",
+              "absolute", "inset-0", "transition-opacity", "duration-500", "motion-reduce:transition-none",
+              i === index ? "opacity-100" : "opacity-0 pointer-events-none",
             )}
-          />
+          >
+            <BannerSlideLink linkUrl={banner.linkUrl}>
+              <Image
+                src={banner.imageUrl}
+                alt={banner.caption ?? banner.title}
+                fill
+                priority={i === 0}
+                sizes="100vw"
+                className="object-cover"
+              />
+            </BannerSlideLink>
+          </div>
         ))}
       </div>
 
-      {BANNERS.length > 1 && (
+      {banners.length > 1 && (
         <>
           <Button
             variant="outline"
@@ -85,9 +118,9 @@ export function DashboardBannerCarousel(): React.ReactElement | null {
           </Button>
 
           <div className={cn("absolute", "bottom-1.5", "left-1/2", "-translate-x-1/2", "flex", "items-center")}>
-            {BANNERS.map((banner, i) => (
+            {banners.map((banner, i) => (
               <button
-                key={banner.src}
+                key={banner.id}
                 type="button"
                 onClick={() => goTo(i)}
                 aria-label={`Ke banner ${i + 1}`}

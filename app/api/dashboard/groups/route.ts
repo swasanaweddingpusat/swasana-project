@@ -32,10 +32,9 @@ export async function GET(req: Request): Promise<Response> {
   const { range } = resolveDealingRange(qParsed.data.dealFrom, qParsed.data.dealTo);
   const { range: eventRange } = resolveEventRange(qParsed.data.eventFrom, qParsed.data.eventTo);
 
-  // isSuperAdmin is already on the JWT (session.user) — no DB round-trip.
-  const isAdmin = session.user.isSuperAdmin;
-  const profileId = isAdmin ? undefined : session.user.profileId;
-
-  const groups = await getGroupAchievementRaw(profileId, range, eventRange);
+  // Overview is company-wide: group achievement always covers ALL groups,
+  // regardless of the viewer's dataScope. Dashboard-only — other endpoints stay
+  // scoped. `undefined` = every group.
+  const groups = await getGroupAchievementRaw(undefined, range, eventRange);
   return Response.json(groups);
 }

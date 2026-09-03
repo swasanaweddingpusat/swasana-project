@@ -20,6 +20,7 @@ import {
   Buildings2,
   Widget,
   ClipboardList,
+  GalleryWide,
   type IconProps,
 } from "@solar-icons/react";
 import type { ComponentType } from "react";
@@ -156,6 +157,13 @@ const GROUPS: SettingGroup[] = [
         href: "/settings/event-types",
         module: "settings-event-types",
       },
+      {
+        title: "Banner",
+        description: "Kelola banner carousel di halaman dashboard.",
+        icon: GalleryWide,
+        href: "/settings/banner",
+        module: "settings-banner",
+      },
     ],
   },
   {
@@ -200,6 +208,7 @@ export default async function SettingsHubPage() {
     "settings-maintenance-priority",
     "settings-maintenance-status",
     "settings-booking-log",
+    "settings-banner",
   ]);
 
   const session = await auth();
