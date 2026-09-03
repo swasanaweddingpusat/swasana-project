@@ -3,7 +3,7 @@
   "name": "Swasana Wedding Management",
   "short_name": "Swasana",
   "description": "Sistem manajemen wedding & MICE Swasana — CRM, booking, approval, hingga finance dalam satu aplikasi.",
-  "start_url": "/select-module?source=pwa",
+  "start_url": "/?source=pwa",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait-primary",
@@ -50,8 +50,8 @@
     {
       "name": "Finance",
       "short_name": "Finance",
-      "description": "Ringkasan keuangan & piutang",
-      "url": "/finance/overview?source=pwa",
+      "description": "Status termin pembayaran per booking",
+      "url": "/finance/ar?source=pwa",
       "icons": [{ "src": "/icons/shortcut-96x96.png", "sizes": "96x96", "type": "image/png" }]
     },
     {

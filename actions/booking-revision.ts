@@ -6,7 +6,7 @@ import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/permissions";
 import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
 import { logAudit } from "@/lib/audit";
-import { canAccessBooking, getProfileDataScope } from "@/lib/access-control";
+import { canAccessBooking } from "@/lib/access-control";
 import { createBookingRevision, refreshCurrentRevisionSnapshot } from "@/lib/booking-revision";
 import { buildBookingApprovalSteps } from "@/lib/approval-flows";
 import { generateAccessCode } from "@/lib/access-code";
@@ -135,7 +135,7 @@ export async function restoreBookingRevision(
   const { bookingId, revisionId } = parsed.data;
 
   if (!session!.user.profileId) return { success: false, error: "Sesi tidak valid, silakan login ulang." };
-  const scope = await getProfileDataScope(session!.user.profileId);
+  const scope = session!.user.dataScope ?? "own";
   if (!(await canAccessBooking(session!.user.profileId, scope, bookingId))) {
     return { success: false, error: "Anda tidak memiliki akses ke booking ini." };
   }
@@ -438,7 +438,7 @@ export async function syncBookingPackage(
   const { bookingId } = parsed.data;
 
   if (!session!.user.profileId) return { success: false, error: "Sesi tidak valid, silakan login ulang." };
-  const scope = await getProfileDataScope(session!.user.profileId);
+  const scope = session!.user.dataScope ?? "own";
   if (!(await canAccessBooking(session!.user.profileId, scope, bookingId))) {
     return { success: false, error: "Anda tidak memiliki akses ke booking ini." };
   }

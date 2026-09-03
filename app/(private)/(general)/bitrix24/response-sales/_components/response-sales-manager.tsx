@@ -31,10 +31,10 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+import { Drawer } from "@/components/shared/drawer";
 import {
   exportResponseSalesExcel,
   exportResponseSalesPdf,
@@ -49,6 +49,7 @@ interface ResponseSalesRow {
   seconds: number;
   minutes: number;
   hours: string;
+  belumDibalasCount: number;
   conversations: SalesConversation[];
 }
 
@@ -84,6 +85,7 @@ export function ResponseSalesManager() {
     const y = yesterday();
     return { from: y, to: y };
   });
+  const [dbRange, setDbRange] = useState<DateRange | undefined>(undefined);
   const [filterOpen, setFilterOpen] = useState(false);
   const [rows, setRows] = useState<ResponseSalesRow[]>([]);
   const [grandTotal, setGrandTotal] = useState<GrandTotal | null>(null);
@@ -111,6 +113,8 @@ export function ResponseSalesManager() {
 
   const from = range?.from ? toIsoDay(range.from) : "";
   const to = range?.to ? toIsoDay(range.to) : from;
+  const dbFrom = dbRange?.from ? toIsoDay(dbRange.from) : "";
+  const dbTo = dbRange?.from ? toIsoDay(dbRange.to ?? dbRange.from) : "";
 
   useEffect(() => {
     const t = setTimeout(() => {
@@ -120,14 +124,20 @@ export function ResponseSalesManager() {
   }, [search]);
 
   useEffect(() => {
-    if (!from) return;
+    // Either a primary range OR a Tanggal Database range is enough to fetch —
+    // clearing the primary date but setting a DB date still drives a query.
+    if (!from && !dbFrom) return;
     let cancelled = false;
     void (async () => {
       setLoading(true);
       setError(null);
       try {
-        const params = new URLSearchParams({ from, to });
+        const params = new URLSearchParams();
+        if (from) params.set("from", from);
+        if (to) params.set("to", to);
         if (query) params.set("sales", query);
+        if (dbFrom) params.set("dbFrom", dbFrom);
+        if (dbTo) params.set("dbTo", dbTo);
         const res = await fetch(`/api/bitrix/response-sales?${params.toString()}`);
         const json = (await res.json()) as ApiResponse;
         if (cancelled) return;
@@ -149,15 +159,16 @@ export function ResponseSalesManager() {
     return () => {
       cancelled = true;
     };
-  }, [from, to, query, reloadKey]);
+  }, [from, to, query, dbFrom, dbTo, reloadKey]);
 
   function resetRange() {
     const y = yesterday();
     setRange({ from: y, to: y });
+    setDbRange(undefined);
     setFilterOpen(false);
   }
 
-  const activeCount = range?.from ? 1 : 0;
+  const activeCount = (range?.from ? 1 : 0) + (dbRange?.from ? 1 : 0);
 
   return (
     <div className="flex flex-col gap-4">
@@ -209,44 +220,15 @@ export function ResponseSalesManager() {
             />
           </div>
 
-          <Popover open={filterOpen} onOpenChange={setFilterOpen}>
-            <PopoverTrigger
-              render={
-                <Button variant="outline" className="shrink-0 rounded-full">
-                  <Tuning weight="BoldDuotone" className="h-4 w-4" />
-                  Filter
-                  {activeCount > 0 && (
-                    <Badge className="ml-1 h-5 min-w-5 justify-center rounded-full px-1.5 text-[10px]">
-                      {activeCount}
-                    </Badge>
-                  )}
-                </Button>
-              }
-            />
-            <PopoverContent className="w-auto max-w-[92vw] p-0" align="end">
-              <div className="flex flex-col">
-                <div className="flex items-center gap-2 border-b px-4 py-3">
-                  <Tuning weight="BoldDuotone" className="h-4 w-4 text-muted-foreground" />
-                  <h4 className="font-heading text-sm font-semibold">Filter Tanggal</h4>
-                </div>
-                <div className="space-y-1.5 px-4 py-4">
-                  <Label className="text-xs text-muted-foreground">Rentang Tanggal</Label>
-                  <div className="flex justify-center rounded-xl border">
-                    <Calendar mode="range" numberOfMonths={2} selected={range} onSelect={setRange} autoFocus />
-                  </div>
-                </div>
-                <div className="flex items-center justify-between gap-2 border-t px-4 py-3">
-                  <Button variant="ghost" size="sm" className="rounded-full" onClick={resetRange}>
-                    <CloseCircle weight="BoldDuotone" className="h-4 w-4" />
-                    Reset
-                  </Button>
-                  <Button size="sm" className="rounded-full" onClick={() => setFilterOpen(false)}>
-                    Tutup
-                  </Button>
-                </div>
-              </div>
-            </PopoverContent>
-          </Popover>
+          <Button variant="outline" className="shrink-0 rounded-full" onClick={() => setFilterOpen(true)}>
+            <Tuning weight="BoldDuotone" className="h-4 w-4" />
+            Filter
+            {activeCount > 0 && (
+              <Badge className="ml-1 h-5 min-w-5 justify-center rounded-full px-1.5 text-[10px]">
+                {activeCount}
+              </Badge>
+            )}
+          </Button>
 
           <Button
             variant="outline"
@@ -269,6 +251,7 @@ export function ResponseSalesManager() {
               <TableHeader className="bg-muted/50">
                 <TableRow className="hover:bg-transparent">
                   <TableHead className="px-3 py-2 text-muted-foreground min-w-52">Nama</TableHead>
+                  <TableHead className="px-3 py-2 text-muted-foreground text-right min-w-28">Belum Dibalas</TableHead>
                   <TableHead className="px-3 py-2 text-muted-foreground text-right min-w-24">Detik</TableHead>
                   <TableHead className="px-3 py-2 text-muted-foreground text-right min-w-24">Menit</TableHead>
                   <TableHead className="px-3 py-2 text-muted-foreground text-right min-w-28">Jam</TableHead>
@@ -278,7 +261,7 @@ export function ResponseSalesManager() {
                 {loading ? (
                   Array.from({ length: 8 }).map((_, i) => (
                     <TableRow key={i}>
-                      {Array.from({ length: 4 }).map((__, j) => (
+                      {Array.from({ length: 5 }).map((__, j) => (
                         <TableCell key={j} className="px-3 py-2">
                           <Skeleton className="h-4 w-full" />
                         </TableCell>
@@ -287,13 +270,13 @@ export function ResponseSalesManager() {
                   ))
                 ) : error ? (
                   <TableRow>
-                    <TableCell colSpan={4} className="py-12 text-center text-sm text-destructive">
+                    <TableCell colSpan={5} className="py-12 text-center text-sm text-destructive">
                       {error}
                     </TableCell>
                   </TableRow>
                 ) : rows.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={4} className="py-12 text-center text-sm text-muted-foreground">
+                    <TableCell colSpan={5} className="py-12 text-center text-sm text-muted-foreground">
                       {query ? "Tidak ada sales yang cocok." : "Belum ada data response sales."}
                     </TableCell>
                   </TableRow>
@@ -311,6 +294,13 @@ export function ResponseSalesManager() {
                             {r.conversations.length} percakapan · {r.samples} respons
                           </span>
                         </div>
+                      </TableCell>
+                      <TableCell className="px-3 py-2 text-right tabular-nums">
+                        {r.belumDibalasCount > 0 ? (
+                          <span className="font-medium text-destructive">{r.belumDibalasCount}</span>
+                        ) : (
+                          <span className="text-muted-foreground">0</span>
+                        )}
                       </TableCell>
                       <TableCell className="px-3 py-2 text-right tabular-nums">{r.seconds.toLocaleString("id-ID")}</TableCell>
                       <TableCell className="px-3 py-2 text-right tabular-nums">{r.minutes.toLocaleString("id-ID")}</TableCell>
@@ -342,9 +332,10 @@ export function ResponseSalesManager() {
       </Card>
 
       <p className="px-1 text-xs text-muted-foreground">
-        Waktu respons dihitung dari saat percakapan ditugaskan/ditransfer ke sales hingga sales mengirim pesan
-        pertama. Dihitung langsung dari riwayat Open Lines Bitrix24 — Bitrix tidak menyediakan statistik respons
-        lewat REST API.
+        Waktu respons dihitung dari saat sales menerima percakapan (via transfer/antrean) atau dari pesan pelanggan
+        yang belum dibalas, hingga sales mengirim balasan pertama. Chat yang dioper ke beberapa sales dihitung
+        terpisah per sales. Dihitung langsung dari riwayat Open Lines Bitrix24 — Bitrix tidak menyediakan statistik
+        respons lewat REST API.
       </p>
 
       <SalesConversationsDrawer
@@ -352,6 +343,67 @@ export function ResponseSalesManager() {
         conversations={selectedSales?.conversations ?? []}
         onClose={() => setSelectedSales(null)}
       />
+
+      <Drawer
+        isOpen={filterOpen}
+        onClose={() => setFilterOpen(false)}
+        title="Filter Tanggal"
+        maxWidth="sm:max-w-md"
+      >
+        <div className="flex h-full flex-col">
+          <div className="flex-1 overflow-y-auto pr-1">
+            <div className="flex flex-col gap-6">
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Rentang Tanggal</Label>
+                <div
+                  className={cn(
+                    "flex justify-center rounded-xl border",
+                    dbRange?.from && "opacity-50",
+                  )}
+                >
+                  <Calendar mode="range" numberOfMonths={2} selected={range} onSelect={setRange} autoFocus />
+                </div>
+                {dbRange?.from && (
+                  <p className="text-xs text-muted-foreground">
+                    Diabaikan saat filter Tanggal Database aktif.
+                  </p>
+                )}
+              </div>
+
+              {/* By tanggal database — optional, independent from the mandatory range above */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs text-muted-foreground">Tanggal Database</Label>
+                  {dbRange?.from && (
+                    <button
+                      type="button"
+                      onClick={() => setDbRange(undefined)}
+                      className="text-xs font-medium text-primary hover:underline"
+                    >
+                      Bersihkan
+                    </button>
+                  )}
+                </div>
+                <div className="flex justify-center rounded-xl border">
+                  <Calendar mode="range" numberOfMonths={1} selected={dbRange} onSelect={setDbRange} />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="shrink-0 border-t bg-background px-0 pt-4">
+            <div className="flex items-center justify-between gap-2">
+              <Button variant="ghost" size="sm" className="rounded-full" onClick={resetRange}>
+                <CloseCircle weight="BoldDuotone" className="h-4 w-4" />
+                Reset
+              </Button>
+              <Button size="sm" className="rounded-full" onClick={() => setFilterOpen(false)}>
+                Tutup
+              </Button>
+            </div>
+          </div>
+        </div>
+      </Drawer>
     </div>
   );
 }

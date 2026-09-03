@@ -25,6 +25,7 @@ import {
   Refresh,
   CloseCircle,
   Copy,
+  FileText,
 } from "@solar-icons/react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
@@ -54,6 +55,8 @@ import { MicePackageDetailModal } from "./mice-package-detail-modal";
 import { MicePackageFinanceDrawer } from "./mice-package-finance-drawer";
 import { ApprovalDialog } from "../../packages/_components/approval-dialog";
 import { ApproveModal } from "../../packages/_components/approve-modal";
+import { PackageTCDrawer } from "@/components/shared/PackageTCDrawer";
+import { fetchPackages } from "@/services/package-service";
 
 const ROWS_PER_PAGE = 10;
 const PERM = "package-mice" as const;
@@ -203,6 +206,8 @@ export function MicePackagesTable() {
   const [financePkg, setFinancePkg] = useState<PackageQueryItem | null>(null);
   const [approvalPkg, setApprovalPkg] = useState<PackageQueryItem | null>(null);
   const [approveModal, setApproveModal] = useState<{ stepId: string; stepLabel: string; packageName: string } | null>(null);
+  const [tcDrawerOpen, setTcDrawerOpen] = useState(false);
+  const [tcPkg, setTcPkg] = useState<PackageQueryItem | null>(null);
 
   const { data: approvals = [], isLoading: approvalsLoading } = usePackageApprovals(PERM);
 
@@ -296,6 +301,36 @@ export function MicePackagesTable() {
   function renderPackageActions(pkg: PackageQueryItem) {
     return (
       <>
+        {can(PERM, "term-&-condition") && (
+          <Tooltip>
+            <TooltipTrigger
+              className={cn("p-1.5 rounded-md hover:bg-muted cursor-pointer")}
+              onClick={async () => {
+                // Open immediately with current data, then silently refresh just this
+                // package's T&C in the background — without touching the table query
+                // (refetchQueries would flip isFetching and flash the whole table).
+                setTcPkg(pkg);
+                setTcDrawerOpen(true);
+                try {
+                  const fresh = await fetchPackages({
+                    page: currentPage,
+                    pageSize: ROWS_PER_PAGE,
+                    search: debouncedSearch || undefined,
+                    venueId: selectedVenueId,
+                    category: "MICE",
+                  });
+                  const updated = fresh.data.find((p) => p.id === pkg.id);
+                  if (updated) setTcPkg(updated);
+                } catch {
+                  /* keep the already-shown data on failure */
+                }
+              }}
+            >
+              <FileText weight="BoldDuotone" className={cn("h-4 w-4 text-muted-foreground")} />
+            </TooltipTrigger>
+            <TooltipContent>Term & Payment</TooltipContent>
+          </Tooltip>
+        )}
         {can(PERM, "set-harga") && (
           <Tooltip>
             <TooltipTrigger
@@ -426,6 +461,7 @@ export function MicePackagesTable() {
   // ─── Mobile actions ────────────────────────────────────────────────────────────
 
   function renderMobileActions(pkg: PackageQueryItem) {
+    const hasTc = can(PERM, "term-&-condition");
     const hasSetHarga = can(PERM, "set-harga");
     const hasDuplicate = can(PERM, "create");
     const hasDelete = can(PERM, "delete");
@@ -433,7 +469,7 @@ export function MicePackagesTable() {
     const hasApproval = !!approvalRecord && approvalRecord.status !== "approved" && pkg.approvalStatus !== "approved";
     const hasUnverify = can(PERM, "set-status") && pkg.approvalStatus === "approved";
 
-    const hasAnySecondary = hasSetHarga || hasDuplicate || hasDelete || hasApproval || hasUnverify;
+    const hasAnySecondary = hasTc || hasSetHarga || hasDuplicate || hasDelete || hasApproval || hasUnverify;
     if (!hasAnySecondary) return null;
 
     return (
@@ -448,6 +484,30 @@ export function MicePackagesTable() {
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="min-w-44">
+          {hasTc && (
+            <DropdownMenuItem
+              onSelect={async () => {
+                setTcPkg(pkg);
+                setTcDrawerOpen(true);
+                try {
+                  const fresh = await fetchPackages({
+                    page: currentPage,
+                    pageSize: ROWS_PER_PAGE,
+                    search: debouncedSearch || undefined,
+                    venueId: selectedVenueId,
+                    category: "MICE",
+                  });
+                  const updated = fresh.data.find((p) => p.id === pkg.id);
+                  if (updated) setTcPkg(updated);
+                } catch {
+                  /* keep the already-shown data on failure */
+                }
+              }}
+            >
+              <FileText weight="BoldDuotone" className="mr-2 h-4 w-4 text-primary" />
+              Term & Payment
+            </DropdownMenuItem>
+          )}
           {hasSetHarga && (
             <DropdownMenuItem onSelect={() => { setFinancePkg(pkg); setFinanceOpen(true); }}>
               <SettingsMinimalistic weight="BoldDuotone" className="mr-2 h-4 w-4 text-primary" />
@@ -493,7 +553,7 @@ export function MicePackagesTable() {
           )}
           {hasUnverify && (
             <>
-              {(hasSetHarga || hasApproval || hasDuplicate) && <DropdownMenuSeparator />}
+              {(hasTc || hasSetHarga || hasApproval || hasDuplicate) && <DropdownMenuSeparator />}
               <DropdownMenuItem
                 disabled={unverifyMutation.isPending}
                 onSelect={async () => {
@@ -510,7 +570,7 @@ export function MicePackagesTable() {
           )}
           {hasDelete && (
             <>
-              {(hasSetHarga || hasApproval || hasDuplicate || hasUnverify) && <DropdownMenuSeparator />}
+              {(hasTc || hasSetHarga || hasApproval || hasDuplicate || hasUnverify) && <DropdownMenuSeparator />}
               <DropdownMenuItem
                 onSelect={() => { setPkgToDelete(pkg.id); setDeleteConfirmOpen(true); }}
                 className="text-destructive focus:text-destructive"
@@ -957,6 +1017,14 @@ export function MicePackagesTable() {
         isOpen={financeOpen}
         onClose={() => { setFinanceOpen(false); setFinancePkg(null); }}
         pkg={financePkg}
+      />
+
+      {/* Term & Payment Drawer */}
+      <PackageTCDrawer
+        open={tcDrawerOpen}
+        onClose={() => { setTcDrawerOpen(false); setTcPkg(null); }}
+        pkg={tcPkg}
+        label="Term & Payment"
       />
 
       {/* Approval Dialog */}

@@ -16,6 +16,8 @@ import {
   ClipboardText,
   User,
   CloseCircle,
+  Videocamera,
+  MapPoint,
 } from "@solar-icons/react";
 import type { GuestbookEntryItem } from "@/lib/queries/guestbookEntries";
 
@@ -37,6 +39,20 @@ const PURPOSE_LABELS: Record<string, string> = {
   vendor_meeting: "Meeting Vendor",
   interview: "Interview",
   delivery: "Pengiriman",
+  other: "Lainnya",
+};
+
+const INTERACTION_TYPE_LABELS: Record<string, string> = {
+  client_visit: "Kunjungan Client",
+  online_meeting: "Online Meeting",
+  jemput_bola: "Jemput Bola",
+};
+
+const ONLINE_MEDIUM_LABELS: Record<string, string> = {
+  zoom: "Zoom",
+  google_meet: "Google Meet",
+  whatsapp_call: "WhatsApp Call",
+  microsoft_teams: "Microsoft Teams",
   other: "Lainnya",
 };
 
@@ -219,28 +235,77 @@ export function GuestbookDetailDrawer({
           <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
             Informasi Kunjungan
           </p>
+          {entry.interactionType && (
+            <InfoRow
+              icon={
+                <ClipboardText
+                  weight="BoldDuotone"
+                  className="h-4 w-4 text-muted-foreground"
+                />
+              }
+              label="Tipe Interaksi"
+              value={
+                <Badge variant="secondary" className="rounded-full text-xs font-medium">
+                  {INTERACTION_TYPE_LABELS[entry.interactionType] ?? entry.interactionType}
+                </Badge>
+              }
+            />
+          )}
+          {!entry.interactionType && (
+            <InfoRow
+              icon={
+                <ClipboardText
+                  weight="BoldDuotone"
+                  className="h-4 w-4 text-muted-foreground"
+                />
+              }
+              label="Tujuan"
+              value={
+                <div className="flex items-center gap-2">
+                  <Badge
+                    variant="secondary"
+                    className="rounded-full text-xs font-medium"
+                  >
+                    {PURPOSE_LABELS[entry.purpose] ?? entry.purpose}
+                  </Badge>
+                  {entry.purposeNote && (
+                    <span className="text-xs text-muted-foreground italic">
+                      {entry.purposeNote}
+                    </span>
+                  )}
+                </div>
+              }
+            />
+          )}
           <InfoRow
             icon={
-              <ClipboardText
+              <Videocamera
                 weight="BoldDuotone"
                 className="h-4 w-4 text-muted-foreground"
               />
             }
-            label="Tujuan"
+            label="Medium"
+            value={entry.onlineMedium ? (ONLINE_MEDIUM_LABELS[entry.onlineMedium] ?? entry.onlineMedium) : null}
+          />
+          <InfoRow
+            icon={
+              <Videocamera
+                weight="BoldDuotone"
+                className="h-4 w-4 text-muted-foreground"
+              />
+            }
+            label="Link Meeting"
             value={
-              <div className="flex items-center gap-2">
-                <Badge
-                  variant="secondary"
-                  className="rounded-full text-xs font-medium"
+              entry.meetingUrl ? (
+                <a
+                  href={entry.meetingUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-primary underline break-all"
                 >
-                  {PURPOSE_LABELS[entry.purpose] ?? entry.purpose}
-                </Badge>
-                {entry.purposeNote && (
-                  <span className="text-xs text-muted-foreground italic">
-                    {entry.purposeNote}
-                  </span>
-                )}
-              </div>
+                  {entry.meetingUrl}
+                </a>
+              ) : null
             }
           />
           <InfoRow
@@ -252,6 +317,26 @@ export function GuestbookDetailDrawer({
             }
             label="Venue"
             value={entry.venue?.name}
+          />
+          <InfoRow
+            icon={
+              <MapPoint
+                weight="BoldDuotone"
+                className="h-4 w-4 text-muted-foreground"
+              />
+            }
+            label="Lokasi"
+            value={entry.meetingLocation}
+          />
+          <InfoRow
+            icon={
+              <Calendar
+                weight="BoldDuotone"
+                className="h-4 w-4 text-muted-foreground"
+              />
+            }
+            label="Jadwal"
+            value={entry.scheduledAt ? formatDateTime(entry.scheduledAt) : null}
           />
           <InfoRow
             icon={

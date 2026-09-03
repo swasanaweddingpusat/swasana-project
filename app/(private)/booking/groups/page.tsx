@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { connection } from "next/server";
 import { auth } from "@/lib/auth";
-import { hasPermission, isSuperAdmin } from "@/lib/permissions";
+import { hasPermission } from "@/lib/permissions";
 import { getGroupsWithPerformance, getEligibleLeaders } from "@/lib/queries/groups";
 import { GroupsClient } from "./_components/GroupsClient";
 
@@ -11,7 +11,7 @@ export default async function GroupsPage() {
   if (!session?.user.profileId) redirect("/auth/login");
 
   const profileId = session.user.profileId;
-  const isAdmin = await isSuperAdmin(session.user.roleId);
+  const isAdmin = session.user.isSuperAdmin;
   const isViewAll =
     isAdmin || (await hasPermission(session.user.roleId, "groups", "view-all"));
 

@@ -18,6 +18,8 @@ export async function getCandidates(params?: { jobPostingId?: string; stage?: st
       coverLetterUrl: true,
       notes: true,
       rejectionReason: true,
+      expectedSalary: true,
+      viewed: true,
       hiredAt: true,
       hiredProfileId: true,
       createdAt: true,

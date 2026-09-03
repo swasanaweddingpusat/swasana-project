@@ -8,6 +8,8 @@ interface ResponseSalesRow {
   seconds: number;
   minutes: number;
   hours: string;
+  belumDibalasCount: number;
+  conversations: { sessionId: string }[];
 }
 
 interface GrandTotal {
@@ -84,8 +86,15 @@ export async function exportResponseSalesPdf(data: ResponseSalesExportData): Pro
 
   doc.setTextColor(0);
   doc.setFontSize(9);
+  const sudahDibalasTotal = data.rows.reduce(
+    (sum, r) => sum + Math.max(0, r.conversations.length - r.belumDibalasCount),
+    0,
+  );
+  const belumDibalasTotal = data.rows.reduce((sum, r) => sum + r.belumDibalasCount, 0);
   const summary: [string, string][] = [
     ["Total Percakapan", String(data.totalSessions)],
+    ["Sudah Dibalas", String(sudahDibalasTotal)],
+    ["Belum Dibalas", String(belumDibalasTotal)],
     ["Total Respons", data.grandTotal ? String(data.grandTotal.samples) : "0"],
     ["Rata-rata Detik", data.grandTotal ? String(data.grandTotal.seconds) : "0"],
     ["Rata-rata Menit", data.grandTotal ? String(data.grandTotal.minutes) : "0"],
@@ -100,8 +109,8 @@ export async function exportResponseSalesPdf(data: ResponseSalesExportData): Pro
   }
 
   y += 12;
-  const colWidths = [160, 70, 70, 70, 70];
-  const headers = ["Nama", "Detik", "Menit", "Jam", "Percakapan"];
+  const colWidths = [150, 60, 60, 60, 80, 80, 80];
+  const headers = ["Nama", "Detik", "Menit", "Jam", "Percakapan", "Sudah Dibalas", "Belum Dibalas"];
   const tableLeft = margin;
   const headerHeight = 18;
 
@@ -130,7 +139,15 @@ export async function exportResponseSalesPdf(data: ResponseSalesExportData): Pro
       doc.addPage();
       y = margin;
     }
-    const cells = [r.name, String(r.seconds), String(r.minutes), r.hours, String(r.samples)];
+    const cells = [
+      r.name,
+      String(r.seconds),
+      String(r.minutes),
+      r.hours,
+      String(r.conversations.length),
+      String(Math.max(0, r.conversations.length - r.belumDibalasCount)),
+      String(r.belumDibalasCount),
+    ];
     x = tableLeft;
     cells.forEach((c, i) => {
       const lines = doc.splitTextToSize(c, colWidths[i] - 8) as string[];
@@ -154,8 +171,15 @@ function buildOverviewSheet(ws: Worksheet, data: ResponseSalesExportData): void 
 
   ws.addRow([]);
   ws.addRow(["Metrik", "Jumlah"]);
+  const sudahDibalasTotal = data.rows.reduce(
+    (sum, r) => sum + Math.max(0, r.conversations.length - r.belumDibalasCount),
+    0,
+  );
+  const belumDibalasTotal = data.rows.reduce((sum, r) => sum + r.belumDibalasCount, 0);
   const summary: [string, string | number][] = [
     ["Total Percakapan", data.totalSessions],
+    ["Sudah Dibalas", sudahDibalasTotal],
+    ["Belum Dibalas", belumDibalasTotal],
     ["Total Respons", data.grandTotal?.samples ?? 0],
     ["Rata-rata Detik", data.grandTotal?.seconds ?? 0],
     ["Rata-rata Menit", data.grandTotal?.minutes ?? 0],
@@ -171,9 +195,10 @@ function buildRowsSheet(ws: Worksheet, rows: ResponseSalesRow[]): void {
   const title = ws.addRow(["Response Sales"]);
   title.font = { bold: true, size: 13 };
   ws.addRow([]);
-  ws.addRow(["Nama", "Detik", "Menit", "Jam", "Percakapan"]);
+  ws.addRow(["Nama", "Detik", "Menit", "Jam", "Percakapan", "Sudah Dibalas", "Belum Dibalas"]);
   for (const r of rows) {
-    ws.addRow([r.name, r.seconds, r.minutes, r.hours, r.samples]);
+    const sudahDibalas = Math.max(0, r.conversations.length - r.belumDibalasCount);
+    ws.addRow([r.name, r.seconds, r.minutes, r.hours, r.conversations.length, sudahDibalas, r.belumDibalasCount]);
   }
   fitColumns(ws);
 }

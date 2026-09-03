@@ -234,19 +234,12 @@ function LeadCard({
       onClick={() => onViewDetail(lead)}
       onKeyDown={handleKeyDown}
       className={cn(
-        "group relative flex flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-sm cursor-pointer",
+        "group flex flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-sm cursor-pointer",
         "transition-shadow hover:shadow-md motion-reduce:transition-none",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
       )}
     >
-      {/* Status spine — pipeline color at a glance */}
-      <span
-        aria-hidden="true"
-        className="absolute inset-y-0 left-0 w-1.5"
-        style={{ backgroundColor: lead.status.color }}
-      />
-
-      <div className="flex flex-col gap-3 p-4 pl-5">
+      <div className="flex flex-col gap-3 p-4">
         {/* Header: name + contact ·· status */}
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">

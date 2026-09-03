@@ -34,6 +34,7 @@ export const createQuotationSchema = z.object({
   category: z.enum(["WEDDINGS", "MICE"]).default("WEDDINGS"),
   weddingSession: z.enum(["morning", "evening", "fullday"]).optional().nullable(),
   eventDate: z.string().optional().nullable(),
+  eventEndDate: z.string().optional().nullable(),
   time: z.string().optional().nullable(),
   place: z.string().optional().nullable(),
   details: z.string().optional().nullable(),

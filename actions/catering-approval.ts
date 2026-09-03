@@ -2,9 +2,9 @@
 
 import { db } from "@/lib/db";
 import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
-import { requirePermission, isSuperAdmin as isSuperAdminFn } from "@/lib/permissions";
+import { requirePermission } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
-import { canAccessBooking, getProfileDataScope } from "@/lib/access-control";
+import { canAccessBooking } from "@/lib/access-control";
 import { revalidateTag } from "next/cache";
 import { resolveApprovalSteps } from "@/lib/approval-flows";
 
@@ -30,7 +30,7 @@ export async function approveCategoryPO(
     const booking = await db.booking.findUnique({ where: { id: bookingId }, select: { id: true } });
     if (!booking) return { success: false, error: "Booking tidak ditemukan." };
 
-    const scope = await getProfileDataScope(session!.user.profileId);
+    const scope = session!.user.dataScope ?? "own";
     if (!(await canAccessBooking(session!.user.profileId, scope, bookingId))) {
       return { success: false, error: "Anda tidak memiliki akses ke booking ini." };
     }
@@ -86,7 +86,7 @@ export async function approveCategoryPO(
     );
 
     // Super-admin can approve any pending step
-    const isSuperAdmin = await isSuperAdminFn(userRoleId);
+    const isSuperAdmin = session!.user.isSuperAdmin;
 
     const stepToApprove = pendingStep ?? (isSuperAdmin ? record.steps.find((s) => s.status === "pending") : null);
     if (!stepToApprove) return { success: false, error: "Tidak ada step yang bisa di-approve." };

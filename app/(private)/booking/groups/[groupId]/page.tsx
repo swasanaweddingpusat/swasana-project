@@ -2,7 +2,7 @@ import { notFound, redirect } from "next/navigation";
 import { connection } from "next/server";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
-import { hasPermission, isSuperAdmin } from "@/lib/permissions";
+import { hasPermission } from "@/lib/permissions";
 import {
   getGroupDetail,
   getGroupPerformance,
@@ -25,7 +25,7 @@ export default async function GroupDetailPage({ params }: Props) {
   if (!session?.user.profileId) redirect("/auth/login");
 
   const profileId = session.user.profileId;
-  const isAdmin = await isSuperAdmin(session.user.roleId);
+  const isAdmin = session.user.isSuperAdmin;
   const hasViewAll = isAdmin || (await hasPermission(session.user.roleId, "groups", "view-all"));
 
   const group = await getGroupDetail(groupId);

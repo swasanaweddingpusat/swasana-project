@@ -1,5 +1,5 @@
+import { cacheTag, cacheLife } from "next/cache";
 import { db } from "@/lib/db";
-import { hasPermission } from "@/lib/permissions";
 
 export interface AccessibleModule {
   key: string;
@@ -65,34 +65,59 @@ export async function getPermissionModules(): Promise<string[]> {
 /**
  * Returns active modules the given role can see in the sidebar switcher / picker.
  * A module is accessible if the role has `view` on at least one of its mapped
- * permission-module strings. Reuses the existing permission system — no new
- * permission code path.
+ * permission-module strings. Resolved with a single batched role-permission
+ * query (no per-module N+1); super-admin (isSystemRole) sees every active module.
  */
 export async function getAccessibleModules(
   roleId: string | null | undefined,
 ): Promise<AccessibleModule[]> {
+  "use cache";
+  cacheTag("modules");
+  cacheLife("hours");
+
   if (!roleId) return [];
 
-  const modules = await db.module.findMany({
-    where: { isActive: true },
-    orderBy: { sortOrder: "asc" },
-    select: {
-      key: true,
-      name: true,
-      icon: true,
-      sortOrder: true,
-      permissionMaps: { select: { permissionModule: true } },
-    },
-  });
+  const [modules, role] = await Promise.all([
+    db.module.findMany({
+      where: { isActive: true },
+      orderBy: { sortOrder: "asc" },
+      select: {
+        key: true,
+        name: true,
+        icon: true,
+        sortOrder: true,
+        permissionMaps: { select: { permissionModule: true } },
+      },
+    }),
+    db.role.findUnique({
+      where: { id: roleId },
+      select: { isSystemRole: true },
+    }),
+  ]);
 
-  const accessible: AccessibleModule[] = [];
-  for (const m of modules) {
-    const checks = await Promise.all(
-      m.permissionMaps.map((pm) => hasPermission(roleId, pm.permissionModule, "view")),
-    );
-    if (checks.some(Boolean)) {
-      accessible.push({ key: m.key, name: m.name, icon: m.icon, sortOrder: m.sortOrder });
-    }
+  if (role?.isSystemRole) {
+    return modules.map(({ key, name, icon, sortOrder }) => ({ key, name, icon, sortOrder }));
   }
-  return accessible;
+
+  // Collect every distinct permission-module string this role can "view".
+  const permissionModules = new Set(
+    (modules.flatMap((m) => m.permissionMaps.map((pm) => pm.permissionModule))),
+  );
+  if (permissionModules.size === 0) return [];
+
+  const viewable = new Set(
+    (
+      await db.rolePermission.findMany({
+        where: {
+          roleId,
+          permission: { action: "view", module: { in: [...permissionModules] } },
+        },
+        select: { permission: { select: { module: true } } },
+      })
+    ).map((rp) => rp.permission.module),
+  );
+
+  return modules
+    .filter((m) => m.permissionMaps.some((pm) => viewable.has(pm.permissionModule)))
+    .map(({ key, name, icon, sortOrder }) => ({ key, name, icon, sortOrder }));
 }

@@ -6,7 +6,7 @@ import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
 import { requirePermission } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
 import { revalidateTag } from "next/cache";
-import { canAccessBooking, getProfileDataScope, getBookingIdFromSnapBonus, getBookingIdFromSnapComplimentary } from "@/lib/access-control";
+import { canAccessBooking, getBookingIdFromSnapBonus, getBookingIdFromSnapComplimentary } from "@/lib/access-control";
 
 interface VendorSelection {
   vendorCategoryId: string;
@@ -26,7 +26,7 @@ export async function saveBookingVendors(
   if (error) return { success: false, error };
   if (!mutationLimiter.check(`save-vendors:${session!.user.id}`)) return { success: false, ...rateLimitError() };
 
-  const scope = await getProfileDataScope(session!.user.profileId);
+  const scope = session!.user.dataScope ?? "own";
   if (!(await canAccessBooking(session!.user.profileId, scope, bookingId))) {
     return { success: false, error: "Anda tidak memiliki akses ke booking ini." };
   }
@@ -112,7 +112,7 @@ export async function updateSnapBonus(id: string, data: { vendorId?: string; ven
 
   const bookingId = await getBookingIdFromSnapBonus(id);
   if (!bookingId) return { success: false as const, error: "Bonus tidak ditemukan." };
-  const scope = await getProfileDataScope(session!.user.profileId);
+  const scope = session!.user.dataScope ?? "own";
   if (!(await canAccessBooking(session!.user.profileId, scope, bookingId))) {
     return { success: false as const, error: "Anda tidak memiliki akses ke booking ini." };
   }
@@ -142,7 +142,7 @@ export async function addSnapBonus(bookingId: string, data: { vendorId: string; 
   if (error) return { success: false as const, error };
   if (!mutationLimiter.check(`add-bonus:${session!.user.id}`)) return { success: false as const, ...rateLimitError() };
 
-  const scope = await getProfileDataScope(session!.user.profileId);
+  const scope = session!.user.dataScope ?? "own";
   if (!(await canAccessBooking(session!.user.profileId, scope, bookingId))) {
     return { success: false as const, error: "Anda tidak memiliki akses ke booking ini." };
   }
@@ -177,7 +177,7 @@ export async function deleteSnapBonus(id: string) {
 
   const bookingId = await getBookingIdFromSnapBonus(id);
   if (!bookingId) return { success: false as const, error: "Bonus tidak ditemukan." };
-  const scope = await getProfileDataScope(session!.user.profileId);
+  const scope = session!.user.dataScope ?? "own";
   if (!(await canAccessBooking(session!.user.profileId, scope, bookingId))) {
     return { success: false as const, error: "Anda tidak memiliki akses ke booking ini." };
   }
@@ -212,7 +212,7 @@ export async function addSnapComplimentary(
   if (error) return { success: false as const, error };
   if (!mutationLimiter.check(`add-complementary:${session!.user.id}`)) return { success: false as const, ...rateLimitError() };
 
-  const scope = await getProfileDataScope(session!.user.profileId);
+  const scope = session!.user.dataScope ?? "own";
   if (!(await canAccessBooking(session!.user.profileId, scope, bookingId))) {
     return { success: false as const, error: "Anda tidak memiliki akses ke booking ini." };
   }
@@ -258,7 +258,7 @@ export async function updateSnapComplimentary(
 
   const bookingId = await getBookingIdFromSnapComplimentary(id);
   if (!bookingId) return { success: false as const, error: "Complimentary tidak ditemukan." };
-  const scope = await getProfileDataScope(session!.user.profileId);
+  const scope = session!.user.dataScope ?? "own";
   if (!(await canAccessBooking(session!.user.profileId, scope, bookingId))) {
     return { success: false as const, error: "Anda tidak memiliki akses ke booking ini." };
   }
@@ -293,7 +293,7 @@ export async function deleteSnapComplimentary(id: string) {
 
   const bookingId = await getBookingIdFromSnapComplimentary(id);
   if (!bookingId) return { success: false as const, error: "Complimentary tidak ditemukan." };
-  const scope = await getProfileDataScope(session!.user.profileId);
+  const scope = session!.user.dataScope ?? "own";
   if (!(await canAccessBooking(session!.user.profileId, scope, bookingId))) {
     return { success: false as const, error: "Anda tidak memiliki akses ke booking ini." };
   }

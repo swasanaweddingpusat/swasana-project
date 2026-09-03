@@ -24,18 +24,28 @@ export function RejectCandidateDrawer({ isOpen, onClose, candidates }: RejectCan
   const rejectCandidateMutation = useRejectCandidate();
 
   const [form, setForm] = useState<RejectForm>({
-    candidateId: candidates[0]?.id ?? "",
+    candidateId: "",
     reason: "",
   });
 
+  const [prevIsOpen, setPrevIsOpen] = useState(isOpen);
+  if (isOpen !== prevIsOpen) {
+    setPrevIsOpen(isOpen);
+    if (isOpen) {
+      setForm({ candidateId: "", reason: "" });
+    }
+  }
+
+  const selectedCandidateId = form.candidateId || candidates[0]?.id || "";
+
   async function handleSubmit() {
-    if (!form.candidateId || !form.reason.trim()) {
+    if (!selectedCandidateId || !form.reason.trim()) {
       toast.error("Kandidat dan alasan penolakan wajib diisi");
       return;
     }
 
     const result = await rejectCandidateMutation.mutateAsync({
-      candidateId: form.candidateId,
+      candidateId: selectedCandidateId,
       reason: form.reason.trim(),
     });
 
@@ -56,7 +66,7 @@ export function RejectCandidateDrawer({ isOpen, onClose, candidates }: RejectCan
           <Label htmlFor="drawer-reject-candidate">Kandidat</Label>
           <select
             id="drawer-reject-candidate"
-            value={form.candidateId}
+            value={selectedCandidateId}
             onChange={(event) => setForm((current) => ({ ...current, candidateId: event.target.value }))}
             className="h-10 w-full rounded-xl border border-input bg-background px-3 text-sm outline-none"
           >

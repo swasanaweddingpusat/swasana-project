@@ -1,17 +1,29 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { AddCircle, ArrowRight, Buildings, CheckCircle, ClipboardText, CloseCircle, Copy, Export, Eye, Link, Pen, Refresh, TrashBinTrash, UserMinus, UserPlus, UsersGroupRounded } from "@solar-icons/react";
+import { AddCircle, ArrowRight, Buildings, CheckCircle, ClipboardText, CloseCircle, Copy, Export, Eye, Link as LinkIcon, Pen, Refresh, TrashBinTrash, UserMinus, UserPlus, UsersGroupRounded } from "@solar-icons/react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { useCandidates, useHireCandidate, useMoveCandidateStage } from "@/hooks/use-candidates";
 import { useEmployees } from "@/hooks/use-employees";
-import { useCloseJobPosting, useJobPostings, usePublishJobPosting } from "@/hooks/use-job-postings";
+import { useCloseJobPosting, useDeleteJobPosting, useGenerateJobPostingAccessCode, useJobPostings, usePublishJobPosting } from "@/hooks/use-job-postings";
+import { useCurrentUser } from "@/hooks/use-current-user";
 import { useOnboardingTemplates, useOnboardingAssignments, useMyOnboarding, useCompleteOnboardingTask } from "@/hooks/use-onboarding";
 import { useExStaff } from "@/hooks/use-ex-staff";
 import { useRecruitmentRequests, useRegenerateFormLink, useRevokeFormLink } from "@/hooks/use-recruitment-requests";
@@ -28,6 +40,7 @@ import { RejectCandidateDrawer } from "@/app/(private)/hrd/rekrutmen-onboarding/
 import { RecruitmentRequestDrawer } from "@/app/(private)/hrd/rekrutmen-onboarding/_components/RecruitmentRequestDrawer";
 import { BlacklistDrawer } from "@/app/(private)/hrd/rekrutmen-onboarding/_components/BlacklistDrawer";
 import { RecruitmentRequestDetailDrawer } from "@/app/(private)/hrd/rekrutmen-onboarding/_components/RecruitmentRequestDetailDrawer";
+import { InviteCandidateModal } from "@/app/(private)/hrd/rekrutmen-onboarding/_components/InviteCandidateModal";
 import { useBlacklistEntries, useDeleteBlacklistEntry } from "@/hooks/use-blacklist";
 import type { BlacklistEntryItem } from "@/lib/queries/blacklistEntries";
 
@@ -42,6 +55,24 @@ const STAGE_LABELS: Record<string, string> = {
 };
 
 const STAGE_OPTIONS = ["applied", "screening", "interview", "assessment", "offering"];
+
+const APPROVAL_STATUS_LABELS: Record<string, string> = {
+  pending: "Menunggu",
+  approved: "Disetujui",
+  rejected: "Ditolak",
+};
+
+function approvalBadgeVariant(status: string): "default" | "secondary" | "destructive" {
+  if (status === "approved") return "default";
+  if (status === "rejected") return "destructive";
+  return "secondary";
+}
+
+function overallApproval(posting: JobPostingItem): "approved" | "rejected" | "pending" {
+  if (posting.approvalStatus === "rejected" || posting.approvalStatus2 === "rejected") return "rejected";
+  if (posting.approvalStatus === "approved" && posting.approvalStatus2 === "approved") return "approved";
+  return "pending";
+}
 
 function formatDate(value: string | Date | null | undefined): string {
   if (!value) return "-";
@@ -99,9 +130,11 @@ export function RekrutmenOnboardingClient() {
   const { data: exStaffList = [] } = useExStaff();
   const { data: blacklistEntries = [] } = useBlacklistEntries();
   const { data: recruitmentRequests = [] } = useRecruitmentRequests();
+  const { user } = useCurrentUser();
 
   const publishJobPostingMutation = usePublishJobPosting();
   const closeJobPostingMutation = useCloseJobPosting();
+  const deleteJobPostingMutation = useDeleteJobPosting();
   const moveCandidateStageMutation = useMoveCandidateStage();
   const hireCandidateMutation = useHireCandidate();
   const completeTaskMutation = useCompleteOnboardingTask();
@@ -118,6 +151,8 @@ export function RekrutmenOnboardingClient() {
   }
 
   const [jobPostingDrawerOpen, setJobPostingDrawerOpen] = useState(false);
+  const [selectedEditId, setSelectedEditId] = useState<string | null>(null);
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [candidatePostingFilter, setCandidatePostingFilter] = useState("all");
   const [candidateStageFilter, setCandidateStageFilter] = useState("all");
   const [candidateStageDrafts, setCandidateStageDrafts] = useState<Record<string, string>>({});
@@ -130,6 +165,35 @@ export function RekrutmenOnboardingClient() {
   const [selectedRequest, setSelectedRequest] = useState<RecruitmentRequestItem | null>(null);
   const [activeTab, setActiveTab] = useState("lowongan");
   const [_selectedJobPostingId, setSelectedJobPostingId] = useState<string | null>(null);
+  const [inviteCandidate, setInviteCandidate] = useState<{ id: string; name: string } | null>(null);
+  const [linkPostingModal, setLinkPostingModal] = useState<{ id: string; title: string; url: string; accessCode: string | null } | null>(null);
+  const [confirmRegenCode, setConfirmRegenCode] = useState(false);
+  const generateAccessCodeMutation = useGenerateJobPostingAccessCode();
+
+  useEffect(() => {
+    if (!linkPostingModal || linkPostingModal.accessCode || generateAccessCodeMutation.isPending) return;
+    generateAccessCodeMutation.mutate(linkPostingModal.id, {
+      onSuccess: (result) => {
+        if (!result.success || !result.data) { toast.error(result.error ?? "Gagal generate kode akses"); return; }
+        setLinkPostingModal((current) => (current ? { ...current, accessCode: result.data!.accessCode } : current));
+      },
+      onError: () => toast.error("Gagal generate kode akses"),
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [linkPostingModal?.id, linkPostingModal?.accessCode]);
+
+  function handleRegenerateAccessCode() {
+    if (!linkPostingModal) return;
+    generateAccessCodeMutation.mutate(linkPostingModal.id, {
+      onSuccess: (result) => {
+        if (!result.success || !result.data) { toast.error(result.error ?? "Gagal generate kode akses"); return; }
+        setLinkPostingModal((current) => (current ? { ...current, accessCode: result.data!.accessCode } : current));
+        setConfirmRegenCode(false);
+        toast.success("Kode akses baru di-generate");
+      },
+      onError: () => toast.error("Gagal generate kode akses"),
+    });
+  }
 
   useEffect(() => {
     setCandidateStageDrafts((current) => {
@@ -292,27 +356,54 @@ export function RekrutmenOnboardingClient() {
                         className="group cursor-pointer hover:bg-muted/50 transition-colors"
                       >
                         <TableCell><div className="flex flex-col gap-0.5"><button onClick={(e) => { e.stopPropagation(); handleViewJobPostingCandidates(posting.id); }} className="font-medium text-foreground hover:text-primary hover:underline text-left transition-colors">{posting.title}</button><span className="text-xs text-muted-foreground">{posting.department?.name ?? posting.position?.name ?? "Umum"}</span></div></TableCell>
-                        <TableCell><Badge variant={posting.status === "open" ? "default" : "secondary"} className="rounded-full">{posting.status === "open" ? "Open" : posting.status}</Badge></TableCell>
+                        <TableCell><div className="flex flex-wrap items-center gap-1.5"><Badge variant={posting.status === "open" ? "default" : "secondary"} className="rounded-full">{posting.status === "open" ? "Open" : posting.status}</Badge><Badge variant={approvalBadgeVariant(overallApproval(posting))} className="rounded-full">{APPROVAL_STATUS_LABELS[overallApproval(posting)] ?? overallApproval(posting)}</Badge></div></TableCell>
                         <TableCell>
                           <div className="flex items-center justify-between gap-2">
                             <span>{posting._count.candidates} kandidat</span>
                             <ArrowRight weight="BoldDuotone" className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
                           </div>
                         </TableCell>
-                        <TableCell><div className="flex flex-col gap-0.5 text-xs text-muted-foreground"><span>{posting.location ?? "Lokasi belum diisi"}</span><span>{formatCurrency(posting.salaryRangeMin ? Number(posting.salaryRangeMin) : null)} - {formatCurrency(posting.salaryRangeMax ? Number(posting.salaryRangeMax) : null)}</span><span>Open: {formatDate(posting.openDate)}</span></div></TableCell>
+                        <TableCell><div className="flex flex-col items-start gap-1 text-xs text-muted-foreground"><span>{posting.location ?? "Lokasi belum diisi"}</span><span>{formatCurrency(posting.salaryRangeMin ? Number(posting.salaryRangeMin) : null)} - {formatCurrency(posting.salaryRangeMax ? Number(posting.salaryRangeMax) : null)}</span><Link href={`/hrd/rekrutmen-onboarding/${posting.id}`} onClick={(e) => e.stopPropagation()} className="inline-flex items-center gap-1 font-medium text-primary hover:underline"><Eye weight="BoldDuotone" className="h-3.5 w-3.5" />Lihat detail</Link></div></TableCell>
                         <TableCell>
                           <div className="flex justify-end gap-2">
+                            {/* Copy link — only for open postings with a publicToken */}
+                            {posting.status === "open" && posting.publicToken && (
+                              <Button size="sm" variant="ghost" className="rounded-full gap-1.5" onClick={(e) => {
+                                e.stopPropagation();
+                                const url = `${process.env.NEXT_PUBLIC_APP_URL}/apply/${posting.publicToken}`;
+                                setLinkPostingModal({ id: posting.id, title: posting.title, url, accessCode: posting.publicAccessCode ?? null });
+                              }}><Copy weight="BoldDuotone" className="h-4 w-4" />Copy Link</Button>
+                            )}
+                            {/* Edit — hide for open postings if user is not creator and not super admin */}
+                            {!(posting.status === "open" && posting.createdBy !== user?.profileId && !user?.isSuperAdmin) && (
+                              <Button size="sm" variant="ghost" className="rounded-full gap-1.5" onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedEditId(posting.id);
+                              }}><Pen weight="BoldDuotone" className="h-4 w-4" />Edit</Button>
+                            )}
                             {posting.status === "open" ? (
-                              <Button size="sm" variant="outline" className="rounded-full gap-1.5" onClick={async () => {
+                              <Button size="sm" variant="outline" className="rounded-full gap-1.5" onClick={async (e) => {
+                                e.stopPropagation();
                                 const result = await closeJobPostingMutation.mutateAsync(posting.id);
                                 if (result.success) toast.success("Lowongan ditutup"); else toast.error(result.error ?? "Gagal menutup lowongan");
                               }} disabled={closeJobPostingMutation.isPending}><TrashBinTrash weight="BoldDuotone" className="h-4 w-4" />Close</Button>
+                            ) : overallApproval(posting) !== "approved" ? (
+                              <Button size="sm" variant="outline" className="rounded-full gap-1.5" onClick={(e) => {
+                                e.stopPropagation();
+                                toast.error("Lowongan harus disetujui kedua penyetuju sebelum dipublikasikan.");
+                              }} disabled={publishJobPostingMutation.isPending}><ArrowRight weight="BoldDuotone" className="h-4 w-4" />Publish</Button>
                             ) : (
-                              <Button size="sm" variant="outline" className="rounded-full gap-1.5" onClick={async () => {
+                              <Button size="sm" variant="outline" className="rounded-full gap-1.5" onClick={async (e) => {
+                                e.stopPropagation();
                                 const result = await publishJobPostingMutation.mutateAsync(posting.id);
                                 if (result.success) toast.success("Lowongan dipublikasikan"); else toast.error(result.error ?? "Gagal publish lowongan");
                               }} disabled={publishJobPostingMutation.isPending}><ArrowRight weight="BoldDuotone" className="h-4 w-4" />Publish</Button>
                             )}
+                            {/* Delete */}
+                            <Button size="sm" variant="ghost" className="rounded-full gap-1.5 text-destructive hover:text-destructive hover:bg-destructive/10" onClick={(e) => {
+                              e.stopPropagation();
+                              setPendingDeleteId(posting.id);
+                            }}><TrashBinTrash weight="BoldDuotone" className="h-4 w-4" />Hapus</Button>
                           </div>
                         </TableCell>
                       </TableRow>
@@ -361,6 +452,7 @@ export function RekrutmenOnboardingClient() {
                           <div className="flex flex-wrap justify-end gap-2">
                             <select value={candidateStageDrafts[candidate.id] ?? candidate.stage} onChange={(event) => setCandidateStageDrafts((current) => ({ ...current, [candidate.id]: event.target.value }))} className="h-10 rounded-full border border-input bg-background px-3 text-sm outline-none">{STAGE_OPTIONS.map((stage) => <option key={stage} value={stage}>{STAGE_LABELS[stage]}</option>)}</select>
                             <Button size="sm" variant="outline" className="rounded-full gap-1.5" onClick={() => handleMoveCandidateStage(candidate.id)}><Pen weight="BoldDuotone" className="h-4 w-4" />Pindah tahap</Button>
+                            <Button size="sm" variant="outline" className="rounded-full gap-1.5" onClick={() => setInviteCandidate({ id: candidate.id, name: candidate.fullName })}><LinkIcon weight="BoldDuotone" className="h-4 w-4" />Undang</Button>
                             <Button size="sm" className="rounded-full gap-1.5" onClick={() => handleHireCandidate(candidate.id)}><CheckCircle weight="BoldDuotone" className="h-4 w-4" />Hire</Button>
                           </div>
                         </TableCell>
@@ -510,7 +602,7 @@ export function RekrutmenOnboardingClient() {
                               <PopoverTrigger
                                 render={
                                   <Button size="sm" variant="outline" className="rounded-full gap-1.5">
-                                    <Link weight="BoldDuotone" className="h-4 w-4" />
+                                    <LinkIcon weight="BoldDuotone" className="h-4 w-4" />
                                     <span>{req.formLink.status === "Active" ? "Aktif" : "Nonaktif"}</span>
                                   </Button>
                                 }
@@ -593,7 +685,7 @@ export function RekrutmenOnboardingClient() {
                               onClick={() => handleRegenerateFormLink(req.id)}
                               disabled={regenerateFormLinkMutation.isPending}
                             >
-                              <Link weight="BoldDuotone" className="h-4 w-4" />
+                              <LinkIcon weight="BoldDuotone" className="h-4 w-4" />
                               Buat link
                             </Button>
                           )}
@@ -732,9 +824,38 @@ export function RekrutmenOnboardingClient() {
       </Tabs>
 
       <JobPostingDrawer
-        isOpen={jobPostingDrawerOpen}
-        onClose={() => setJobPostingDrawerOpen(false)}
+        isOpen={jobPostingDrawerOpen || !!selectedEditId}
+        onClose={() => { setJobPostingDrawerOpen(false); setSelectedEditId(null); }}
+        editId={selectedEditId ?? undefined}
       />
+      <AlertDialog open={!!pendingDeleteId} onOpenChange={(open) => { if (!open) setPendingDeleteId(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Hapus lowongan?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Lowongan akan disembunyikan dari tampilan. Data tetap tersimpan di database.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Batal</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={async () => {
+                if (!pendingDeleteId) return;
+                const result = await deleteJobPostingMutation.mutateAsync(pendingDeleteId);
+                if (result.success) {
+                  toast.success("Lowongan dihapus");
+                } else {
+                  toast.error(result.error ?? "Gagal menghapus lowongan");
+                }
+                setPendingDeleteId(null);
+              }}
+            >
+              Hapus
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       <OnboardingTemplateDrawer
         isOpen={templateDrawerOpen}
         onClose={() => setTemplateDrawerOpen(false)}
@@ -772,6 +893,101 @@ export function RekrutmenOnboardingClient() {
         }}
         request={selectedRequest}
       />
+      {inviteCandidate && (
+        <InviteCandidateModal
+          candidateId={inviteCandidate.id}
+          candidateName={inviteCandidate.name}
+          onClose={() => setInviteCandidate(null)}
+        />
+      )}
+      <AlertDialog open={!!linkPostingModal} onOpenChange={(open) => { if (!open) { setLinkPostingModal(null); setConfirmRegenCode(false); } }}>
+        <AlertDialogContent className="sm:max-w-md!" style={{ width: "min(calc(100vw - 2rem), 28rem)" }}>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Link Pendaftaran</AlertDialogTitle>
+            <AlertDialogDescription>{linkPostingModal?.title}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="space-y-3 py-1">
+            <div className="space-y-1">
+              <p className="text-xs font-medium text-muted-foreground">Link Lowongan</p>
+              <div className="flex items-center gap-2 overflow-hidden">
+                <code className="block min-w-0 flex-1 break-all rounded bg-muted px-2 py-1.5 text-xs">{linkPostingModal?.url}</code>
+                <Button
+                  variant="outline"
+                  size="icon-sm"
+                  disabled={!linkPostingModal?.url}
+                  onClick={() => {
+                    if (!linkPostingModal?.url) return;
+                    navigator.clipboard.writeText(linkPostingModal.url).then(() => toast.success("Link disalin")).catch(() => toast.error("Gagal menyalin link"));
+                  }}
+                >
+                  <Copy weight="BoldDuotone" className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            </div>
+            <div className="space-y-1">
+              <p className="text-xs font-medium text-muted-foreground">Kode Akses</p>
+              <div className="flex items-center gap-2">
+                {linkPostingModal?.accessCode ? (
+                  <>
+                    <code className="flex-1 rounded bg-muted px-2 py-1.5 text-lg font-mono font-bold tracking-widest">{linkPostingModal.accessCode}</code>
+                    <Button
+                      variant="outline"
+                      size="icon-sm"
+                      onClick={() => {
+                        navigator.clipboard.writeText(linkPostingModal.accessCode!).then(() => toast.success("Kode disalin")).catch(() => toast.error("Gagal menyalin kode"));
+                      }}
+                    >
+                      <Copy weight="BoldDuotone" className="h-3.5 w-3.5" />
+                    </Button>
+                  </>
+                ) : (
+                  <div className="flex flex-1 items-center gap-2 rounded bg-muted px-2 py-1.5 text-xs text-muted-foreground">
+                    <Refresh weight="BoldDuotone" className="h-3.5 w-3.5 animate-spin" /> Generating...
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full rounded-full"
+              disabled={!linkPostingModal?.accessCode}
+              onClick={() => {
+                if (!linkPostingModal?.accessCode) return;
+                const message = `${linkPostingModal.url}\n\nKode Akses: ${linkPostingModal.accessCode}`;
+                navigator.clipboard.writeText(message).then(() => toast.success("Link & kode akses disalin")).catch(() => toast.error("Gagal menyalin"));
+              }}
+            >
+              <Copy weight="BoldDuotone" className="h-3.5 w-3.5 mr-1.5" />
+              Salin Link & Kode (untuk dikirim)
+            </Button>
+
+            {confirmRegenCode ? (
+              <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 space-y-2.5">
+                <p className="text-xs font-medium text-foreground">Generate ulang kode akses?</p>
+                <p className="text-xs text-muted-foreground">Kode lama akan langsung nonaktif dan diganti yang baru. Link lowongan tidak berubah.</p>
+                <div className="flex items-center gap-2">
+                  <Button size="sm" variant="destructive" className="rounded-full" onClick={handleRegenerateAccessCode} disabled={generateAccessCodeMutation.isPending}>
+                    {generateAccessCodeMutation.isPending ? "Memproses..." : "Ya, Regenerate"}
+                  </Button>
+                  <Button size="sm" variant="ghost" className="rounded-full" onClick={() => setConfirmRegenCode(false)} disabled={generateAccessCodeMutation.isPending}>
+                    Batal
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <Button variant="outline" size="sm" className="w-full rounded-full" onClick={() => setConfirmRegenCode(true)} disabled={!linkPostingModal?.accessCode || generateAccessCodeMutation.isPending}>
+                <Refresh weight="BoldDuotone" className="h-3.5 w-3.5 mr-1.5" />
+                Regenerate Kode
+              </Button>
+            )}
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => { setLinkPostingModal(null); setConfirmRegenCode(false); }}>Tutup</AlertDialogCancel>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

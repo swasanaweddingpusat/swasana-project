@@ -6,7 +6,7 @@ import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/permissions";
 import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
 import { logAudit } from "@/lib/audit";
-import { canAccessBooking, getProfileDataScope } from "@/lib/access-control";
+import { canAccessBooking } from "@/lib/access-control";
 import { isBookingSnapshotFrozen, frozenSnapshotError } from "@/lib/booking-freeze";
 import { refreshCurrentRevisionSnapshot, patchSnapshotPackageItems } from "@/lib/booking-revision";
 import {
@@ -34,7 +34,7 @@ export async function saveSnapInternalItems(
   }
   const { bookingId, items } = parsed.data;
 
-  const scope = await getProfileDataScope(session!.user.profileId);
+  const scope = session!.user.dataScope ?? "own";
   if (!(await canAccessBooking(session!.user.profileId, scope, bookingId))) {
     return { success: false, error: "Anda tidak memiliki akses ke booking ini." };
   }
@@ -105,7 +105,7 @@ export async function saveSnapVendorItems(
   }
   const { bookingId, items } = parsed.data;
 
-  const scope = await getProfileDataScope(session!.user.profileId);
+  const scope = session!.user.dataScope ?? "own";
   if (!(await canAccessBooking(session!.user.profileId, scope, bookingId))) {
     return { success: false, error: "Anda tidak memiliki akses ke booking ini." };
   }
@@ -219,7 +219,7 @@ export async function saveSnapComplimentaries(
   }
   const { bookingId, items } = parsed.data;
 
-  const scope = await getProfileDataScope(session!.user.profileId);
+  const scope = session!.user.dataScope ?? "own";
   if (!(await canAccessBooking(session!.user.profileId, scope, bookingId))) {
     return { success: false, error: "Anda tidak memiliki akses ke booking ini." };
   }
@@ -291,25 +291,22 @@ export async function saveSnapTakeout(
   const { bookingId, items } = parsed.data;
 
   try {
-    // dataScope and the category-price rows are independent reads — fetch them in
-    // parallel (each DB call is a network round-trip, and the access check below
-    // only needs the resolved scope, not the rows). We need categoryId + isShow here
-    // to resolve which category IDs are taken out (vendor items match by ID, not name).
-    const [scope, existingRows] = await Promise.all([
-      getProfileDataScope(session!.user.profileId),
-      db.snapPackageCategoryPrice.findMany({
-        where: { bookingId },
-        select: {
-          id: true,
-          categoryName: true,
-          categoryId: true,
-          isShow: true,
-          basePrice: true,
-          isTakeout: true,
-          takeoutNominal: true,
-        },
-      }),
-    ]);
+    // dataScope now comes straight off the JWT (no DB round-trip). We need
+    // categoryId + isShow here to resolve which category IDs are taken out
+    // (vendor items match by ID, not name).
+    const scope = session!.user.dataScope ?? "own";
+    const existingRows = await db.snapPackageCategoryPrice.findMany({
+      where: { bookingId },
+      select: {
+        id: true,
+        categoryName: true,
+        categoryId: true,
+        isShow: true,
+        basePrice: true,
+        isTakeout: true,
+        takeoutNominal: true,
+      },
+    });
 
     if (!(await canAccessBooking(session!.user.profileId ?? "", scope, bookingId))) {
       return { success: false, error: "Booking tidak ditemukan atau akses ditolak." };

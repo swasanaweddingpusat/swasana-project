@@ -204,50 +204,26 @@ export async function getProcurementSummaryByVenue(period?: string) {
     ? { tanggalPermintaan: dateRange }
     : {};
 
-  const venues = await db.venue.findMany({
-    where: { isActive: true },
-    select: { id: true, name: true },
-    orderBy: { name: "asc" },
-  });
-
-  const [countsRaw, budgets] = await Promise.all([
-    Promise.all(
-      venues.map(async (venue) => {
-        const [pending, approved, rejected, completed, totalSpent] =
-          await Promise.all([
-            db.procurementItem.count({
-              where: { ...where, venueId: venue.id, status: "PENDING" },
-            }),
-            db.procurementItem.count({
-              where: { ...where, venueId: venue.id, status: "APPROVED" },
-            }),
-            db.procurementItem.count({
-              where: { ...where, venueId: venue.id, status: "REJECTED" },
-            }),
-            db.procurementItem.count({
-              where: { ...where, venueId: venue.id, status: "COMPLETED" },
-            }),
-            db.procurementItem.aggregate({
-              where: {
-                ...where,
-                venueId: venue.id,
-                status: { in: ["APPROVED", "COMPLETED"] },
-              },
-              _sum: { pettyCash: true },
-            }),
-          ]);
-        return {
-          venueId: venue.id,
-          venueName: venue.name,
-          pending,
-          approved,
-          rejected,
-          completed,
-          total: pending + approved + rejected + completed,
-          totalSpent: Number(totalSpent._sum.pettyCash ?? 0),
-        };
-      })
-    ),
+  // Was N+1: one count×4 + one aggregate per venue (5 queries × N venues).
+  // Replaced with two groupBy queries (status counts, spent sum) that cover
+  // every venue in a single round-trip each — total query count is now
+  // constant (4) regardless of how many venues exist.
+  const [venues, statusCounts, spentByVenue, budgets] = await Promise.all([
+    db.venue.findMany({
+      where: { isActive: true },
+      select: { id: true, name: true },
+      orderBy: { name: "asc" },
+    }),
+    db.procurementItem.groupBy({
+      by: ["venueId", "status"],
+      where,
+      _count: { _all: true },
+    }),
+    db.procurementItem.groupBy({
+      by: ["venueId"],
+      where: { ...where, status: { in: ["APPROVED", "COMPLETED"] } },
+      _sum: { pettyCash: true },
+    }),
     period
       ? db.procurementVenueBudget.findMany({
           where: { period },
@@ -259,11 +235,47 @@ export async function getProcurementSummaryByVenue(period?: string) {
   const budgetMap = new Map<string, number>(
     budgets.map((b) => [b.venueId, Number(b.budgetAmount)])
   );
+  const spentMap = new Map<string, number>(
+    spentByVenue.map((s) => [s.venueId, Number(s._sum.pettyCash ?? 0)])
+  );
 
-  const counts = countsRaw.map((row) => ({
-    ...row,
-    budgetAmount: budgetMap.get(row.venueId) ?? 0,
-  }));
+  const statusCountByVenue = new Map<
+    string,
+    { pending: number; approved: number; rejected: number; completed: number }
+  >();
+  for (const row of statusCounts) {
+    const entry = statusCountByVenue.get(row.venueId) ?? {
+      pending: 0,
+      approved: 0,
+      rejected: 0,
+      completed: 0,
+    };
+    if (row.status === "PENDING") entry.pending = row._count._all;
+    if (row.status === "APPROVED") entry.approved = row._count._all;
+    if (row.status === "REJECTED") entry.rejected = row._count._all;
+    if (row.status === "COMPLETED") entry.completed = row._count._all;
+    statusCountByVenue.set(row.venueId, entry);
+  }
+
+  const counts = venues.map((venue) => {
+    const c = statusCountByVenue.get(venue.id) ?? {
+      pending: 0,
+      approved: 0,
+      rejected: 0,
+      completed: 0,
+    };
+    return {
+      venueId: venue.id,
+      venueName: venue.name,
+      pending: c.pending,
+      approved: c.approved,
+      rejected: c.rejected,
+      completed: c.completed,
+      total: c.pending + c.approved + c.rejected + c.completed,
+      totalSpent: spentMap.get(venue.id) ?? 0,
+      budgetAmount: budgetMap.get(venue.id) ?? 0,
+    };
+  });
 
   return counts.filter((c) => c.total > 0);
 }

@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { UserCircle, CallChatRounded, ChatRound, AltArrowRight } from "@solar-icons/react";
 import { Drawer } from "@/components/shared/drawer";
+import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
 import { PercakapanDetailDrawer } from "@/app/(private)/(general)/bitrix24/percakapan/_components/percakapan-detail-drawer";
 
 export interface SalesConversation {
@@ -10,6 +12,7 @@ export interface SalesConversation {
   client: string;
   channel: string;
   avgResponseSec: number | null;
+  status: "Belum Dibalas" | "Sudah Dibalas";
 }
 
 function formatDuration(sec: number | null): string {
@@ -63,15 +66,26 @@ export function SalesConversationsDrawer({
                   </div>
                   <div className="min-w-0">
                     <p className="truncate text-sm font-medium text-foreground">{c.client}</p>
-                    <p className="flex items-center gap-1 text-xs text-muted-foreground">
+                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                       <CallChatRounded weight="BoldDuotone" className="h-3 w-3" />
                       {c.channel}
-                    </p>
+                      <Badge
+                        variant={c.status === "Belum Dibalas" ? "destructive" : "secondary"}
+                        className="rounded-full px-1.5 py-0 text-[10px] leading-4"
+                      >
+                        {c.status}
+                      </Badge>
+                    </div>
                   </div>
                 </div>
                 <div className="flex shrink-0 items-center gap-1.5">
-                  <span className="text-right text-xs font-medium tabular-nums">
-                    {formatDuration(c.avgResponseSec)}
+                  <span
+                    className={cn(
+                      "text-right text-xs font-medium tabular-nums",
+                      c.status === "Belum Dibalas" && "text-destructive",
+                    )}
+                  >
+                    {c.status === "Belum Dibalas" ? "—" : formatDuration(c.avgResponseSec)}
                   </span>
                   <AltArrowRight weight="BoldDuotone" className="h-4 w-4 text-muted-foreground" />
                 </div>

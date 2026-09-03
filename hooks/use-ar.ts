@@ -9,10 +9,12 @@ export function useAR(initialData?: ARBookingsResult) {
     queryKey: ["ar-bookings"],
     queryFn: getARBookingsClient,
     initialData,
-    // staleTime 0 + refetchOnMount "always" biar setelah invalidateQueries (post-ack)
-    // data langsung di-refetch, tidak stale dari cache lama.
-    staleTime: 0,
+    // Setiap mutasi yang mengubah piutang (ack, invoice issue/void, edit TOP)
+    // sudah invalidateQueries(["ar-bookings"]) di hook masing-masing — itu
+    // memaksa refetch terlepas dari staleTime. Jadi staleTime wajar (samain
+    // dengan pola use-bookings.ts) cukup, tidak perlu selalu-stale + always-refetch.
+    staleTime: 60 * 1000,
     refetchOnWindowFocus: false,
-    refetchOnMount: "always",
+    refetchOnMount: false,
   });
 }

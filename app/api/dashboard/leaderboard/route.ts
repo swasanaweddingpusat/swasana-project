@@ -1,7 +1,6 @@
 import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { apiLimiter, rateLimitResponse } from "@/lib/rate-limit";
-import { isSuperAdmin } from "@/lib/permissions";
 import { getSalesLeaderboardRaw } from "@/lib/queries/dashboard";
 
 export async function GET(req: Request): Promise<Response> {
@@ -14,6 +13,8 @@ export async function GET(req: Request): Promise<Response> {
     return rateLimitResponse();
   }
 
+  // Period params accepted for API compatibility but no longer scope the
+  // leaderboard — revenue is all-time while the general period filter is disabled.
   const querySchema = z.object({
     year: z.coerce.number().int().min(2000).max(2100).optional(),
     month: z.coerce.number().int().min(1).max(12).optional(),
@@ -26,16 +27,8 @@ export async function GET(req: Request): Promise<Response> {
     return Response.json({ error: "Invalid query parameters" }, { status: 400 });
   }
 
-  const now = new Date();
-  const year = qParsed.data.year ?? now.getFullYear();
-  const monthParam = qParsed.data.month ?? now.getMonth() + 1;
-  const month = monthParam - 1;
-  const startDate = new Date(year, month, 1);
-  const endDate = new Date(year, month + 1, 0, 23, 59, 59, 999);
-
-  const isAdmin = await isSuperAdmin(session.user.roleId);
-  const profileId = isAdmin ? undefined : session.user.profileId;
-
-  const leaderboard = await getSalesLeaderboardRaw(profileId, startDate, endDate);
+  // Overview is company-wide: leaderboard always covers ALL sales, regardless
+  // of the viewer's dataScope. Dashboard-only — other endpoints stay scoped.
+  const leaderboard = await getSalesLeaderboardRaw(undefined);
   return Response.json(leaderboard);
 }

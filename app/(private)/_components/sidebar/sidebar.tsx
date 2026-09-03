@@ -26,7 +26,7 @@ export function SwasanaSidebar() {
         </div>
       </SidebarHeader>
 
-      <SidebarContent>
+      <SidebarContent className="sidebar-scroll">
         <SidebarNav />
       </SidebarContent>
 

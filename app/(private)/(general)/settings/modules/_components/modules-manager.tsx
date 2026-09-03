@@ -42,7 +42,7 @@ import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 
 // Curated Solar icon set for modules — the string name is what's stored in
-// Module.icon and re-resolved by the sidebar switcher / login picker.
+// Module.icon and re-resolved by the sidebar module-switcher.
 const ICON_OPTIONS = [
   "Wallet", "UsersGroupRounded", "TicketSale", "CartLarge", "Case", "Bill",
   "ShopMinimalistic", "Dollar", "ChartSquare", "Buildings2", "Heart",

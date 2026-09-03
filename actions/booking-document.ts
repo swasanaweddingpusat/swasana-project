@@ -6,7 +6,7 @@ import { requirePermission } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
 import { deleteFromStorage } from "@/lib/storage";
 import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
-import { canAccessBooking, getProfileDataScope } from "@/lib/access-control";
+import { canAccessBooking } from "@/lib/access-control";
 import { isAllowedUploadMimeType, MAX_UPLOAD_SIZE_BYTES } from "@/lib/validations/upload";
 import { z } from "zod";
 
@@ -45,7 +45,7 @@ export async function uploadBookingDocument(formData: FormData) {
     if (!isAllowedUploadMimeType(doc.mimeType)) return { success: false, error: "Tipe file tidak diizinkan." };
   }
 
-  const scope = await getProfileDataScope(session!.user.profileId);
+  const scope = session!.user.dataScope;
   if (!(await canAccessBooking(session!.user.profileId, scope, bookingId))) {
     return { success: false, error: "Anda tidak memiliki akses ke booking ini." };
   }
@@ -97,7 +97,7 @@ export async function deleteBookingDocument(docId: string) {
     });
     if (!doc) return { success: false, error: "Dokumen tidak ditemukan." };
 
-    const scope = await getProfileDataScope(session!.user.profileId);
+    const scope = session!.user.dataScope;
     if (!(await canAccessBooking(session!.user.profileId, scope, doc.bookingId))) {
       return { success: false, error: "Anda tidak memiliki akses ke booking ini." };
     }
@@ -137,7 +137,7 @@ export async function deleteBookingDocuments(ids: string[]) {
     type DocItem = typeof docs[number];
 
     // Ensure user can access ALL bookings referenced by these docs
-    const scope = await getProfileDataScope(session!.user.profileId);
+    const scope = session!.user.dataScope;
     const uniqueBookingIds = [...new Set(docs.map((d: DocItem) => d.bookingId))];
     for (const bId of uniqueBookingIds) {
       if (!(await canAccessBooking(session!.user.profileId, scope, bId))) {

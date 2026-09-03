@@ -58,7 +58,7 @@ app/
 ├── (private)/                # Butuh session (AuthGate). Semua app internal di sini.
 │   ├── layout.tsx            # <AuthGate> — cek status/verified/mustChangePassword
 │   ├── _components/sidebar/  # Shell: sidebar, module-switcher, nav (lihat §5)
-│   ├── select-module/        # Picker "world" saat login (auto-redirect kalau cuma 1)
+│   ├── page.tsx              # Overview general (landing "/") — lintas-world, no picker
 │   ├── (general)/            # ★ MENU GENERAL — lintas-world (lihat §5)
 │   │   ├── vendor/  procurement/  bitrix24/  maintenance/  guestbook/  cuti/
 │   │   ├── slip-gaji/  settings/  profile/  notifications/  tutorial/  wedding-indicators/

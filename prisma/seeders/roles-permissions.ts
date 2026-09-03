@@ -16,6 +16,7 @@ export const roleData = [
   { name: "sales-mice", description: "Sales access for MICE bookings", sortOrder: 10 },
   { name: "manager-mice", description: "Manager access for MICE features (leads, quotations, booking-mice)", sortOrder: 11 },
   { name: "procurement-manager", description: "Manage procurement requests and approvals", sortOrder: 12 },
+  { name: "stakeholder", description: "Monitoring-only access for executives", sortOrder: 15 },
 ];
 
 // ── Modules & Actions ────────────────────────────────────────────────
@@ -40,6 +41,7 @@ export const moduleActions: Record<string, string[]> = {
   "settings-role-permission": ["view", "create", "edit", "delete"],
   "settings-source-of-information": ["view", "create", "edit", "delete"],
   "settings-tutorial": ["view", "create", "edit", "delete"],
+  "settings-banner": ["view", "create", "edit", "delete"],
   // Read-only monitoring hub (Settings > Booking Log) — gabungan activity log
   // booking Wedding + MICE. View-only: tidak ada mutasi dari halaman ini.
   "settings-booking-log": ["view"],
@@ -50,8 +52,8 @@ export const moduleActions: Record<string, string[]> = {
   "settings-daily-activity-segment": ["view", "create", "edit", "delete"],
   quotations: ["view", "create", "edit", "delete"],
   "booking-mice": ["view", "create", "edit", "delete", "print", "approve", "mark-lost", "restore", "transfer", "reject", "comment", "client-agreement"],
-  // NOTE: "term-&-condition" is intentionally absent — T&C is hidden for MICE via missing permission.
-  "package-mice": ["view", "create", "edit", "delete", "set-harga", "set-status"],
+  // "term-&-condition" — FE label ditampilkan sebagai "Term & Payment" (bukan "Term & Condition") khusus MICE.
+  "package-mice": ["view", "create", "edit", "delete", "set-harga", "set-status", "term-&-condition"],
   // Maintenance modules
   maintenance: ["view", "create", "edit", "delete"],
   "settings-maintenance-category": ["view", "create", "edit", "delete"],
@@ -80,13 +82,16 @@ export const moduleActions: Record<string, string[]> = {
   // HR Recruitment & Onboarding — seeded originally via migration 20260622180000.
   // Listed here so the seeder treats it as a valid module (else step 3b would
   // delete these permissions) and can assign them per the role matrix.
-  "hr-recruitment": ["view", "create", "edit", "delete", "hire"],
+  "hr-recruitment": ["view", "create", "edit", "delete", "hire", "approve"],
   // Finance AP — customer payout (cashback program + overpay refund)
   "finance-ap": ["view", "create", "edit", "delete"],
   // Internal FAQ / Memo — general knowledge-base module
   "internal-faq": ["view", "create", "edit", "delete"],
   // Announcement — company-wide announcements module
   "announcement": ["view", "create", "edit", "delete"],
+  // Performance Sales — read-only monitoring hub for the STAKEHOLDER world.
+  // View-only: no mutation surface (dashboard reads getGroupsWithPerformance).
+  "performance-sales": ["view"],
 };
 
 // Modules removed (not used in code):
@@ -265,7 +270,7 @@ export const rolePermissionMap: Record<string, Record<string, string[]>> = {
   // sengaja DICABUT — tidak ada di spec menu HR.
   "human-resource": {
     hr: ["view", "create", "edit", "delete", "approve"],
-    "hr-recruitment": ["view", "create", "edit", "delete", "hire"],
+    "hr-recruitment": ["view", "create", "edit", "delete", "hire", "approve"],
     procurement: ["view"],
   },
   // Sales MICE — persis daftar menu yang disepakati (11 item):
@@ -285,7 +290,7 @@ export const rolePermissionMap: Record<string, Record<string, string[]>> = {
     complimentary: ["view", "create", "edit", "delete"],
     guestbook: ["view", "create", "edit"],
     // sales-mice can view/create/edit packages but NOT set-harga and NOT delete
-    "package-mice": ["view", "create", "edit"],
+    "package-mice": ["view", "create", "edit", "term-&-condition"],
     // Only tab Pengadaan — Ringkasan/Pengumuman/Anggaran Venue reserved for management roles.
     procurement: ["view"],
     bitrix: ["view"],
@@ -301,7 +306,7 @@ export const rolePermissionMap: Record<string, Record<string, string[]>> = {
     "settings-event-types": ["view", "create", "edit", "delete"],
     "settings-quotation-templates": ["view", "create", "edit", "delete"],
     "settings-daily-activity-segment": ["view", "create", "edit", "delete"],
-    "package-mice": ["view", "create", "edit", "delete", "set-harga", "set-status"],
+    "package-mice": ["view", "create", "edit", "delete", "set-harga", "set-status", "term-&-condition"],
     complimentary: ["view", "create", "edit", "delete"],
     bitrix: ["view"],
     "internal-faq": ["view"],
@@ -313,6 +318,11 @@ export const rolePermissionMap: Record<string, Record<string, string[]>> = {
     "procurement-summary": ["view"],
     "procurement-announcement": ["view", "create", "edit", "delete"],
     "procurement-budget": ["view", "create", "edit", "delete"],
+  },
+  // Stakeholder — petinggi, monitoring-only. Satu-satunya akses: Performance Sales
+  // (world "Stakeholder"). Read-only, tidak ada permission mutasi apa pun.
+  stakeholder: {
+    "performance-sales": ["view"],
   },
 };
 

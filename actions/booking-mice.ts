@@ -9,6 +9,8 @@ import { logAudit } from "@/lib/audit";
 import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
 import { getNextSequence } from "@/lib/counter";
 import { resolveManagerId } from "@/lib/resolve-manager";
+import { buildBookingApprovalSteps } from "@/lib/approval-flows";
+import { generateAccessCode } from "@/lib/access-code";
 import {
   createMiceBookingSchema,
   updateMiceBookingSchema,
@@ -153,6 +155,56 @@ export async function createMiceBooking(
         })
       ),
     ];
+
+    // Resolve approval steps for booking-mice flow
+    const bookingApprovalSteps = await buildBookingApprovalSteps({
+      module: "booking-mice",
+      salesId,
+      creatorProfileId: session!.user.profileId!,
+      signatureSales: input.salesSignature ?? null,
+      decidedAt: new Date(),
+      includeClientStep: false, // MICE has no client TTD step
+    });
+
+    if (bookingApprovalSteps && bookingApprovalSteps.length > 0) {
+      const approvalRecordId = crypto.randomUUID();
+      ops.push(
+        db.approvalRecord.create({
+          data: {
+            id: approvalRecordId,
+            module: "booking-mice",
+            entityId: bookingId,
+            status: "pending",
+            createdById: session!.user.profileId!,
+          },
+        }),
+        ...bookingApprovalSteps.map((step) =>
+          db.approvalRecordStep.create({
+            data: {
+              recordId: approvalRecordId,
+              stepOrder: step.stepOrder,
+              approverType: step.approverType,
+              approverRoleId: step.approverRoleId,
+              approverUserId: step.approverUserId,
+              status: step.status,
+              decidedById: step.decidedById,
+              decidedAt: step.decidedAt,
+              signature: step.signature,
+            },
+          })
+        )
+      );
+    }
+
+    ops.push(
+      db.clientAgreement.create({
+        data: {
+          bookingId,
+          token: crypto.randomUUID(),
+          accessCode: generateAccessCode(),
+        },
+      })
+    );
 
     await db.$transaction(ops);
 
@@ -380,5 +432,134 @@ export async function markMiceLost(
   } catch (e) {
     console.error("[markMiceLost]", e);
     return { success: false, error: "Gagal mengubah status booking MICE menjadi Lost." };
+  }
+}
+
+export async function restoreMiceBooking(
+  id: string
+): Promise<{ success: boolean; error?: string }> {
+  const { session, error } = await requirePermission({
+    module: "booking-mice",
+    action: "restore",
+  });
+  if (error) return { success: false, error };
+  if (!mutationLimiter.check(`mice-restore:${session!.user.id}`))
+    return { success: false, ...rateLimitError() };
+
+  const existing = await db.booking.findFirst({
+    where: { id, category: "MICE", recordStatus: "saved" },
+    select: { id: true, bookingStatus: true },
+  });
+  if (!existing) return { success: false, error: "Booking MICE tidak ditemukan." };
+  if (!["Canceled", "Lost", "Rejected"].includes(existing.bookingStatus)) {
+    return {
+      success: false,
+      error: "Hanya booking Canceled, Lost, atau Rejected yang bisa di-restore.",
+    };
+  }
+
+  try {
+    await db.$transaction([
+      db.booking.update({
+        where: { id },
+        data: {
+          bookingStatus: "Pending",
+          cancelReason: null,
+          lostReason: null,
+          rejectionNotes: null,
+        },
+      }),
+      db.approvalRecord.updateMany({
+        where: { module: "booking-mice", entityId: id },
+        data: { status: "pending" },
+      }),
+      db.approvalRecordStep.updateMany({
+        where: { record: { module: "booking-mice", entityId: id } },
+        data: {
+          status: "pending",
+          decidedById: null,
+          decidedAt: null,
+          signature: null,
+          notes: null,
+        },
+      }),
+      db.clientAgreement.updateMany({
+        where: { bookingId: id },
+        data: { status: "Pending", signedAt: null, viewedAt: null },
+      }),
+    ]);
+
+    const hdrs = await headers();
+    await logAudit({
+      userId: session!.user.id,
+      action: "booking_mice.restored",
+      entityType: "booking",
+      entityId: id,
+      result: "success",
+      description: `MICE booking restored from ${existing.bookingStatus}`,
+      ipAddress: hdrs.get("x-forwarded-for") ?? undefined,
+      userAgent: hdrs.get("user-agent") ?? undefined,
+    });
+
+    revalidateTag("bookings", "max");
+    return { success: true };
+  } catch (e) {
+    console.error("[restoreMiceBooking]", e);
+    return { success: false, error: "Gagal me-restore booking MICE." };
+  }
+}
+
+export async function cancelMiceBooking(
+  data: unknown
+): Promise<{ success: boolean; error?: string }> {
+  const parsed = markMiceLostSchema.safeParse(data);
+  if (!parsed.success) return { success: false, error: parsed.error.issues[0].message };
+  const input = parsed.data;
+
+  const { session, error } = await requirePermission({
+    module: "booking-mice",
+    action: "edit",
+  });
+  if (error) return { success: false, error };
+  if (!mutationLimiter.check(`mice-cancel:${session!.user.id}`))
+    return { success: false, ...rateLimitError() };
+
+  const existing = await db.booking.findFirst({
+    where: { id: input.id, category: "MICE", recordStatus: "saved" },
+    select: { id: true, bookingStatus: true },
+  });
+  if (!existing) return { success: false, error: "Booking MICE tidak ditemukan." };
+  if (existing.bookingStatus === "Canceled") {
+    return { success: false, error: "Booking sudah di-cancel." };
+  }
+
+  try {
+    await db.$transaction([
+      db.booking.update({
+        where: { id: input.id },
+        data: {
+          bookingStatus: "Canceled",
+          cancelReason: input.lostReason ?? null,
+        },
+      }),
+    ]);
+
+    const hdrs = await headers();
+    await logAudit({
+      userId: session!.user.id,
+      action: "booking_mice.canceled",
+      entityType: "booking",
+      entityId: input.id,
+      result: "success",
+      description: `MICE booking canceled. Reason: ${input.lostReason ?? "—"}`,
+      ipAddress: hdrs.get("x-forwarded-for") ?? undefined,
+      userAgent: hdrs.get("user-agent") ?? undefined,
+    });
+
+    revalidateTag("bookings", "max");
+    return { success: true };
+  } catch (e) {
+    console.error("[cancelMiceBooking]", e);
+    return { success: false, error: "Gagal meng-cancel booking MICE." };
   }
 }

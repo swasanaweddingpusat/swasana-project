@@ -9,7 +9,7 @@ import { SalesBookingsTable } from "./SalesBookingsTable";
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface SalesBookingsPanelMetrics {
-  /** Revenue confirmed (Rp) */
+  /** Revenue: confirmed + pending, exclude lost/canceled (Rp) */
   actual: number;
   /** Sales target (Rp) */
   target: number;

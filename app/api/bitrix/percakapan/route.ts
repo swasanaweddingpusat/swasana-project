@@ -1,6 +1,6 @@
 import { requirePermissionForRoute } from "@/lib/permissions";
 import { apiLimiter, rateLimitResponse } from "@/lib/rate-limit";
-import { bitrixList, resolveBitrixUsers, BitrixApiError } from "@/lib/bitrix";
+import { bitrixList, bitrixListAll, searchBitrixUsers, resolveBitrixUsers, BitrixApiError } from "@/lib/bitrix";
 import { avgSeconds } from "@/lib/bitrix-response";
 import { resolveSessionMetrics } from "@/lib/bitrix-session-metrics";
 import { parseSubject, channelFromSourceId } from "@/lib/bitrix-conversation";
@@ -14,6 +14,10 @@ import { parseSubject, channelFromSourceId } from "@/lib/bitrix-conversation";
 // — any drift here would warm a different Redis cache key than the one this
 // route actually reads.
 export const PROVIDER_ID = "IMOPENLINES_SESSION";
+
+// Bitrix caps a single `crm.activity.list` page at 50 rows — also the page
+// size the "q" union path slices its merged, sorted result set into.
+const PAGE_SIZE = 50;
 
 // Fields pulled per session — everything the Percakapan table renders.
 export const ACTIVITY_SELECT = [
@@ -74,47 +78,96 @@ export async function GET(request: Request) {
 
   const { searchParams } = new URL(request.url);
 
-  const filter: Record<string, string> = { PROVIDER_ID };
+  // Base filter — everything EXCEPT "%SUBJECT" and RESPONSIBLE_ID, so it can be
+  // reused as-is for both the subject-match and responsible-match legs of the
+  // "q" union below. The `responsible` param is legacy (the drawer no longer
+  // sends it) but stays supported if some caller still passes it.
+  const base: Record<string, unknown> = { PROVIDER_ID };
 
   // Direction filter — "1" inbound, "2" outbound.
   const direction = searchParams.get("direction")?.trim();
-  if (direction === "1" || direction === "2") filter.DIRECTION = direction;
+  if (direction === "1" || direction === "2") base.DIRECTION = direction;
 
   // Status filter — "open" (still handled) vs "closed".
   const status = searchParams.get("status")?.trim();
-  if (status === "open") filter.COMPLETED = "N";
-  if (status === "closed") filter.COMPLETED = "Y";
+  if (status === "open") base.COMPLETED = "N";
+  if (status === "closed") base.COMPLETED = "Y";
 
-  // Free-text search — server-side partial match on the session subject (carries
-  // the client name + phone + venue + channel).
-  const q = searchParams.get("q")?.trim();
-  if (q) filter["%SUBJECT"] = q;
-
-  // Sales filter — RESPONSIBLE_ID is a Bitrix user id.
+  // Legacy sales filter — RESPONSIBLE_ID is a Bitrix user id. Superseded by the
+  // "q" union below (client OR sales), kept tolerant in case a caller still
+  // passes it explicitly.
   const responsibleId = searchParams.get("responsible")?.trim();
-  if (responsibleId) filter.RESPONSIBLE_ID = responsibleId;
+  if (responsibleId) base.RESPONSIBLE_ID = responsibleId;
 
   // Tanggal Dibuat range — CREATED datetime (+03:00 in Bitrix), filtered on bare date.
   const createdFrom = searchParams.get("createdFrom")?.trim();
   const createdTo = searchParams.get("createdTo")?.trim();
-  if (isIsoDay(createdFrom)) filter[">=CREATED"] = `${createdFrom}T00:00:00`;
-  if (isIsoDay(createdTo)) filter["<CREATED"] = `${nextDay(createdTo)}T00:00:00`;
+  if (isIsoDay(createdFrom)) base[">=CREATED"] = `${createdFrom}T00:00:00`;
+  if (isIsoDay(createdTo)) base["<CREATED"] = `${nextDay(createdTo)}T00:00:00`;
+
+  // Free-text search — matches EITHER the session subject (client name/phone/
+  // venue) OR the responsible sales agent's name. Bitrix filters are flat AND
+  // only (no OR), so a match on "q" runs two queries and merges them below.
+  const q = searchParams.get("q")?.trim();
 
   // "Sudah ditransfer" filter — applied post-fetch (the info lives in the session
   // history, not on the activity row). "yes" → only sessions with ≥1 transfer,
   // "no" → only sessions never transferred.
   const transferred = searchParams.get("transferred")?.trim();
 
+  // "Sudah/Belum Dibalas" filter — applied post-fetch, same reason as above.
+  // Derived from the session's `hasPending` flag: "yes" (Sudah Dibalas) → the
+  // anchor was consumed (or never opened); "no" (Belum Dibalas) → the last
+  // customer message / handoff is still unanswered.
+  const responded = searchParams.get("responded")?.trim();
+
   const startRaw = Number(searchParams.get("start"));
   const start = Number.isFinite(startRaw) && startRaw >= 0 ? startRaw : 0;
 
   try {
-    const { items, total, next } = await bitrixList<RawActivity>("crm.activity.list", {
-      select: ACTIVITY_SELECT,
-      filter,
-      order: { ID: "DESC" },
-      start,
-    });
+    let items: RawActivity[];
+    let total: number;
+    let next: number | undefined;
+
+    if (q) {
+      // Client OR sales: one query on SUBJECT, one on RESPONSIBLE_ID (only when
+      // "q" resolves to at least one Bitrix user), merged + deduped by ID.
+      const salesIds = (await searchBitrixUsers(q)).map((u) => u.id);
+
+      const subjectMatches = await bitrixListAll<RawActivity>("crm.activity.list", {
+        select: ACTIVITY_SELECT,
+        filter: { ...base, "%SUBJECT": q },
+        order: { ID: "DESC" },
+      });
+
+      const responsibleMatches =
+        salesIds.length > 0
+          ? await bitrixListAll<RawActivity>("crm.activity.list", {
+              select: ACTIVITY_SELECT,
+              filter: { ...base, RESPONSIBLE_ID: salesIds },
+              order: { ID: "DESC" },
+            })
+          : { items: [] as RawActivity[] };
+
+      const merged = new Map<string, RawActivity>();
+      for (const a of subjectMatches.items) merged.set(a.ID, a);
+      for (const a of responsibleMatches.items) merged.set(a.ID, a);
+      const mergedSorted = [...merged.values()].sort((a, b) => Number(b.ID) - Number(a.ID));
+
+      total = mergedSorted.length;
+      items = mergedSorted.slice(start, start + PAGE_SIZE);
+      next = start + PAGE_SIZE < total ? start + PAGE_SIZE : undefined;
+    } else {
+      const res = await bitrixList<RawActivity>("crm.activity.list", {
+        select: ACTIVITY_SELECT,
+        filter: base,
+        order: { ID: "DESC" },
+        start,
+      });
+      items = res.items;
+      total = res.total;
+      next = res.next;
+    }
 
     // Resolve responsible agents to display names in one batched call.
     const userMap = await resolveBitrixUsers(items.map((a) => a.RESPONSIBLE_ID ?? "").filter(Boolean));
@@ -137,7 +190,7 @@ export async function GET(request: Request) {
         // OWNER_ID, but only when the owner type is a deal (2).
         const sessionId = a.ASSOCIATED_ENTITY_ID ?? stripImol(a.ORIGIN_ID) ?? a.ID;
         const dealId = a.OWNER_TYPE_ID === "2" ? a.OWNER_ID : null;
-        const m = sessionMetrics[sessionId] ?? { samples: [], events: [] };
+        const m = sessionMetrics[sessionId] ?? { samples: [], events: [], hasPending: false };
 
         return {
           id: a.ID,
@@ -158,16 +211,24 @@ export async function GET(request: Request) {
           avgResponseSec: m.samples.length > 0 ? avgSeconds(m.samples) : null,
           transferCount: m.events.length,
           transferred: m.events.length > 0,
+          // "Sudah Dibalas" unless the session still has an open anchor
+          // (unanswered customer message / handoff) at the end of its history.
+          responded: !m.hasPending,
         };
       })
       .filter((r) => {
-        if (transferred === "yes") return r.transferred;
-        if (transferred === "no") return !r.transferred;
+        if (transferred === "yes" && !r.transferred) return false;
+        if (transferred === "no" && r.transferred) return false;
+        if (responded === "yes" && !r.responded) return false;
+        if (responded === "no" && r.responded) return false;
         return true;
       });
 
-    // Re-count the total after a post-fetch filter (transferred) is applied.
-    const totalAfter = transferred === "yes" || transferred === "no" ? rows.length : total;
+    // Re-count the total after a post-fetch filter (transferred/responded) is applied.
+    const totalAfter =
+      transferred === "yes" || transferred === "no" || responded === "yes" || responded === "no"
+        ? rows.length
+        : total;
 
     return Response.json({ items: rows, total: totalAfter, next: next ?? null });
   } catch (e) {

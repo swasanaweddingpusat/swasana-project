@@ -6,17 +6,21 @@
 // now it was recomputed on every page view. This helper caches the PARSED
 // result per session in Redis (see lib/redis.ts — non-fatal, no TTL).
 //
-// Cache key: `bitrix:session-metrics:v2:<sessionId>:<lastUpdated>`. The
+// Cache key: `bitrix:session-metrics:v6:<sessionId>:<lastUpdated>`. The
 // activity's LAST_UPDATED advances every time the session progresses, so a
 // CLOSED session's key is stable forever → permanent cache hit, while an
 // OPEN session's key keeps advancing → the next read naturally misses and
 // recomputes. Correctness falls out of the key shape; no TTL needed.
 //
-// The `v2` segment is an algorithm version bump for parseResponseSamples
-// (client-message → agent-reply timing, replacing the old transfer → first
-// reply model) — without it, closed sessions would keep serving samples
-// computed under the old algorithm forever, since their key never changes.
-// Bump this again if parseResponseSamples' sample logic changes.
+// The `v6` segment is an algorithm version for parseResponseSamples — bumped
+// from v5 to count ONLY transfer/assign-anchored replies: a self-selected pickup
+// (an agent replying to a plain customer message with no handoff to them, e.g.
+// front-desk Fauzan taking a chat off the queue) no longer produces a sample,
+// so it's excluded from the response-time average. (v5/v4 = transfer-anchored
+// sampling that ALSO counted customer-message anchors; v3 = queue-aware.)
+// Without a bump, closed sessions would keep serving samples computed under the
+// old algorithm forever, since their key never changes. Bump this again if
+// parseResponseSamples' sample logic changes.
 import { bitrixCall } from "@/lib/bitrix";
 import type { SessionHistory } from "@/lib/bitrix";
 import { parseResponseSamples, type ResponseSample, type TransferEvent } from "@/lib/bitrix-response";
@@ -25,12 +29,13 @@ import { redisGetJSON, redisSetJSON } from "@/lib/redis";
 export interface SessionMetrics {
   samples: ResponseSample[];
   events: TransferEvent[];
+  hasPending: boolean;
 }
 
-const EMPTY_METRICS: SessionMetrics = { samples: [], events: [] };
+const EMPTY_METRICS: SessionMetrics = { samples: [], events: [], hasPending: false };
 
 function cacheKey(sessionId: string, lastUpdated: string): string {
-  return `bitrix:session-metrics:v2:${sessionId}:${lastUpdated}`;
+  return `bitrix:session-metrics:v6:${sessionId}:${lastUpdated}`;
 }
 
 function chunkArray<T>(arr: T[], size: number): T[][] {

@@ -25,7 +25,7 @@ import { prisma } from "./_client";
 interface ModuleSeed {
   key: string;
   name: string;
-  icon: string; // Solar icon name resolved in module-switcher/select-module ICONS map
+  icon: string; // Solar icon name resolved in module-switcher's ICONS map
   sortOrder: number;
   /** permission-module strings whose `view` unlocks this world. */
   permissions: string[];
@@ -54,6 +54,13 @@ export const MODULE_REGISTRY: ModuleSeed[] = [
   // Purchase world: vendor-specialist only. `procurement` intentionally NOT here
   // (route: /(general)/procurement); `vendor` also moved to GENERAL (/vendor).
   { key: "purchase", name: "Purchase", icon: "CartLarge", sortOrder: 40, permissions: ["vendor-specialist"] },
+  // Stakeholder world: monitoring-only hub for executives. One menu (Performance
+  // Sales), gated by the `performance-sales` permission-module.
+  // HIDDEN sementara — `permissions: []` bikin seeder hapus mapping-nya, jadi world
+  // ini TIDAK muncul di module-switcher (getAccessibleModules butuh ≥1 mapping).
+  // Untuk munculin lagi: kembalikan `permissions: ["performance-sales"]` + hapus
+  // `hidden: true` di MODULE_NAV_MAP.stakeholder, lalu `npm run db:seed:modules`.
+  { key: "stakeholder", name: "Stakeholder", icon: "ChartSquare", sortOrder: 50, permissions: [] },
 ];
 
 export async function seedModules(): Promise<void> {

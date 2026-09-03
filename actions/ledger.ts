@@ -5,7 +5,8 @@ import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { requirePermission, requireAnyPermission } from "@/lib/permissions";
-import { getProfileDataScope, canAccessBooking } from "@/lib/access-control";
+import { canAccessBooking } from "@/lib/access-control";
+import type { DataScope } from "@/types/user";
 import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
 import { getNextSequence } from "@/lib/counter";
 import { logAudit } from "@/lib/audit";
@@ -23,9 +24,8 @@ type ActionResult<T = undefined> =
  * scope bisa "own"/"group") — TANPA guard ini, bookingId/ledgerId arbitrer bikin
  * Sales nyentuh keuangan booking milik orang lain. Finance (scope "all") lolos.
  */
-async function assertBookingAccess(profileId: string, bookingId: string): Promise<boolean> {
-  const scope = await getProfileDataScope(profileId);
-  return canAccessBooking(profileId, scope, bookingId);
+async function assertBookingAccess(profileId: string, dataScope: DataScope, bookingId: string): Promise<boolean> {
+  return canAccessBooking(profileId, dataScope, bookingId);
 }
 
 /* ─── Kwitansi number generator (§7.2) ──────────────────────────────────────── */
@@ -198,7 +198,7 @@ export async function createCashIn(
     if (!booking) return { success: false, error: "Booking tidak ditemukan." };
 
     // Guard IDOR — caller wajib punya akses ke booking ini (data-scope).
-    if (!(await assertBookingAccess(session!.user.profileId!, data.bookingId))) {
+    if (!(await assertBookingAccess(session!.user.profileId!, session!.user.dataScope, data.bookingId))) {
       return { success: false, error: "Anda tidak memiliki akses ke booking ini." };
     }
 
@@ -578,7 +578,7 @@ export async function setLedgerShowInPo(
       select: { id: true, bookingId: true },
     });
     if (!ledger) return { success: false, error: "Transaksi tidak ditemukan." };
-    if (!(await assertBookingAccess(session!.user.profileId!, ledger.bookingId))) {
+    if (!(await assertBookingAccess(session!.user.profileId!, session!.user.dataScope, ledger.bookingId))) {
       return { success: false, error: "Anda tidak memiliki akses ke booking ini." };
     }
 
@@ -656,7 +656,7 @@ export async function setAllocationShowInPo(
       },
     });
     if (!alloc) return { success: false, error: "Alokasi tidak ditemukan." };
-    if (!(await assertBookingAccess(session!.user.profileId!, alloc.ledger.bookingId))) {
+    if (!(await assertBookingAccess(session!.user.profileId!, session!.user.dataScope, alloc.ledger.bookingId))) {
       return { success: false, error: "Anda tidak memiliki akses ke booking ini." };
     }
 
@@ -716,7 +716,7 @@ export async function deleteCashIn(ledgerId: string): Promise<ActionResult> {
       select: { id: true, bookingId: true, ackStatus: true, voidedAt: true },
     });
     if (!ledger) return { success: false, error: "Transaksi tidak ditemukan." };
-    if (!(await assertBookingAccess(session!.user.profileId!, ledger.bookingId))) {
+    if (!(await assertBookingAccess(session!.user.profileId!, session!.user.dataScope, ledger.bookingId))) {
       return { success: false, error: "Anda tidak memiliki akses ke booking ini." };
     }
     if (ledger.ackStatus === "acknowledged")
@@ -790,7 +790,7 @@ export async function updateCashIn(input: UpdateCashInInput): Promise<ActionResu
       select: { id: true, bookingId: true, ackStatus: true, voidedAt: true },
     });
     if (!ledger) return { success: false, error: "Transaksi tidak ditemukan." };
-    if (!(await assertBookingAccess(session!.user.profileId!, ledger.bookingId))) {
+    if (!(await assertBookingAccess(session!.user.profileId!, session!.user.dataScope, ledger.bookingId))) {
       return { success: false, error: "Anda tidak memiliki akses ke booking ini." };
     }
     if (ledger.ackStatus !== "pending")

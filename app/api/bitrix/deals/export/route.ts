@@ -130,6 +130,9 @@ async function fetchFilteredDeals(searchParams: URLSearchParams): Promise<DealRo
   const salesId = searchParams.get("salesId")?.trim();
   if (salesId) filter.ASSIGNED_BY_ID = salesId;
 
+  const sourceId = searchParams.get("sourceId")?.trim();
+  if (sourceId) filter.SOURCE_ID = sourceId;
+
   const createdFrom = searchParams.get("createdFrom")?.trim();
   const createdTo = searchParams.get("createdTo")?.trim();
   if (isIsoDay(createdFrom)) filter[">=DATE_CREATE"] = `${createdFrom}T00:00:00`;

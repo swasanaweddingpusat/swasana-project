@@ -1,4 +1,4 @@
-import { requirePermissionForRoute, isSuperAdmin, hasPermission } from "@/lib/permissions";
+import { requirePermissionForRoute, hasPermission } from "@/lib/permissions";
 import { apiLimiter, rateLimitResponse } from "@/lib/rate-limit";
 import { getGroups } from "@/lib/queries/groups";
 
@@ -12,7 +12,7 @@ export async function GET() {
   if (!apiLimiter.check(`groups-list:${session.user.id}`)) return rateLimitResponse();
 
   try {
-    const isAdmin = await isSuperAdmin(session.user.roleId);
+    const isAdmin = session.user.isSuperAdmin;
     const canViewAll = await hasPermission(session.user.roleId, "groups", "view-all");
 
     const userId = isAdmin || canViewAll ? undefined : session.user.id;

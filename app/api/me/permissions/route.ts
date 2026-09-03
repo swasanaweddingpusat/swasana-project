@@ -1,7 +1,6 @@
 import { auth } from "@/lib/auth";
 import { apiLimiter, rateLimitResponse } from "@/lib/rate-limit";
 import { db } from "@/lib/db";
-import { isSuperAdmin } from "@/lib/permissions";
 import type { PermissionMatrix } from "@/types/user";
 
 export async function GET() {
@@ -14,7 +13,7 @@ export async function GET() {
   const roleId = session.user.roleId;
   const profileId = session.user.profileId;
 
-  const isAdmin = roleId ? await isSuperAdmin(roleId) : false;
+  const isAdmin = session.user.isSuperAdmin ?? false;
 
   // Check if user is leader or member of any group
   const isGroupMember = profileId

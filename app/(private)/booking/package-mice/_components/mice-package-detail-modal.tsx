@@ -3,7 +3,7 @@
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { Box, CloseCircle, Pen, ClipboardList, MapPoint } from "@solar-icons/react";
+import { Box, CloseCircle, Pen, ClipboardList, MapPoint, FileText } from "@solar-icons/react";
 import { cn } from "@/lib/utils";
 import type { PackageQueryItem } from "@/lib/queries/packages";
 
@@ -91,6 +91,20 @@ export function MicePackageDetailModal({ open, onClose, pkg, onEdit }: MicePacka
           <div className="px-6 py-3 border-b bg-muted/20">
             <p className="text-xs font-semibold text-muted-foreground mb-1">Catatan</p>
             <p className="text-sm leading-relaxed whitespace-pre-wrap">{pkg.notes}</p>
+          </div>
+        )}
+
+        {/* Term & Payment (if any) */}
+        {pkg.termAndCondition && (
+          <div className="px-6 py-3 border-b">
+            <p className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
+              <FileText weight="BoldDuotone" className="h-3.5 w-3.5" />
+              Term & Payment
+            </p>
+            <div
+              className="text-xs leading-relaxed rounded-md border bg-muted/20 p-3 max-h-64 overflow-y-auto [&_ol]:list-decimal [&_ol]:pl-4 [&_ul]:list-disc [&_ul]:pl-4 [&_li]:my-0.5 [&_strong]:font-semibold"
+              dangerouslySetInnerHTML={{ __html: pkg.termAndCondition }}
+            />
           </div>
         )}
 

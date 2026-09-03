@@ -13,20 +13,19 @@ import { useSearchParams } from "next/navigation"
 import { signIn } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import { resolveLoginDestination } from "@/actions/modules"
-import type { AccessibleModule } from "@/lib/queries/modules"
-import { ModulePickerDialog } from "./module-picker-dialog"
+import { LoginBannerCarousel, type LoginBannerSlide } from "./login-banner-carousel"
 
 export function LoginForm({
   className,
+  loginBanners,
   ...props
-}: React.ComponentProps<"div">) {
+}: React.ComponentProps<"div"> & { loginBanners?: LoginBannerSlide[] }) {
   const [showPassword, setShowPassword] = useState(false)
   const [isPending, startTransition] = useTransition()
   const searchParams = useSearchParams()
   const toastShownRef = useRef<string | null>(null)
   const router = useRouter()
   const callbackUrl = searchParams.get("callbackUrl")
-  const [pickerModules, setPickerModules] = useState<AccessibleModule[] | null>(null)
 
   useEffect(() => {
     const message = searchParams.get("message")
@@ -89,13 +88,8 @@ export function LoginForm({
             return
           }
           const destination = await resolveLoginDestination()
-          if (destination.kind === "choose") {
-            // >=2 modules: show the inline picker on the login page itself.
-            setPickerModules(destination.modules)
-          } else {
-            toast.success("Login berhasil!", { description: "Mengalihkan..." })
-            router.push(destination.dest)
-          }
+          toast.success("Login berhasil!", { description: "Mengalihkan..." })
+          router.push(destination.dest)
         }
       } catch {
         toast.error("Terjadi kesalahan", {
@@ -187,13 +181,17 @@ export function LoginForm({
             </div>
           </form>
           <div className={cn('bg-muted', 'relative', 'hidden', 'md:block', 'overflow-hidden', 'min-h-105')}>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src="/thumbnail.webp"
-              alt="Login background"
-              className={cn('absolute', 'inset-0', 'h-full', 'w-full', 'object-cover', 'dark:brightness-[0.2]', 'dark:grayscale')}
-              loading="eager"
-            />
+            {loginBanners && loginBanners.length > 0 ? (
+              <LoginBannerCarousel banners={loginBanners} />
+            ) : (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src="/thumbnail.webp"
+                alt="Login background"
+                className={cn('absolute', 'inset-0', 'h-full', 'w-full', 'object-cover', 'dark:brightness-[0.2]', 'dark:grayscale')}
+                loading="eager"
+              />
+            )}
           </div>
         </CardContent>
       </Card>
@@ -208,9 +206,6 @@ export function LoginForm({
         </Link>
         .
       </div>
-      {pickerModules && (
-        <ModulePickerDialog modules={pickerModules} open={pickerModules !== null} />
-      )}
     </div>
   )
 }

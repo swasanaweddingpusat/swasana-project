@@ -98,14 +98,13 @@ export const SETTINGS_MODULES = [
   "settings-maintenance-status",
   "settings-tutorial",
   "settings-booking-log",
+  "settings-banner",
 ] as const;
 
-export type ModuleKey = "finance" | "hrd" | "booking" | "purchase";
+export type ModuleKey = "finance" | "hrd" | "booking" | "purchase" | "stakeholder";
 
 export const MODULE_NAV_MAP: Record<ModuleKey, NavItem[]> = {
   finance: [
-    { name: "Overview", href: "/finance/overview", icon: PieChart, subtitle: "Overview keuangan",
-      anyPermission: [{ module: "finance-ar", action: "view" }, { module: "finance-ap", action: "view" }] },
     { name: "Report & Analytics", href: "/finance/report-analytics", icon: Chart2, subtitle: "Laporan dan analitik performa keuangan",
       anyPermission: [{ module: "finance-ar", action: "view" }, { module: "finance-ap", action: "view" }] },
     { name: "Income", href: "/finance/income", icon: Notebook, subtitle: "Catatan kas masuk — uang riil yang sudah diterima & diverifikasi Finance.",
@@ -130,7 +129,6 @@ export const MODULE_NAV_MAP: Record<ModuleKey, NavItem[]> = {
     { name: "Analitik & Laporan", href: "/hrd/analitik-laporan", icon: GraphNew, subtitle: "Dashboard metrik HR dan laporan", permission: { module: "hr", action: "view" } },
   ],
   booking: [
-    { name: "Overview", href: "/booking/overview", icon: Widget, subtitle: "Ringkasan booking dan sales", permission: { module: "booking", action: "view" } },
     { name: "Calendar Events", href: "/booking/calendar-events", icon: CalendarDate, subtitle: "Lihat jadwal event di kalender", permission: { module: "booking", action: "view" } },
     { name: "Groups", href: "/booking/groups", icon: UsersGroupRounded, subtitle: "Kelola tim dan pantau kinerja penjualan", permission: { module: "groups", action: "view" } },
     { name: "Daily Activity", href: "/booking/daily-activity", icon: ClipboardList, subtitle: "Kelola data daily activity dan pipeline penjualan", permission: { module: "daily-activity", action: "view" } },
@@ -143,7 +141,6 @@ export const MODULE_NAV_MAP: Record<ModuleKey, NavItem[]> = {
     { name: "Voucher / Program", href: "/booking/voucher", icon: TagPrice, subtitle: "Program voucher & discount aktif", permission: { module: "promo", action: "view" } },
   ],
   purchase: [
-    { name: "Overview", href: "/purchase/overview", icon: Widget, subtitle: "Ringkasan pengadaan dan vendor", permission: { module: "procurement", action: "view" } },
     { name: "Purchase Order", href: "/purchase/purchase-order", icon: Bill, subtitle: "Kelola purchase order vendor per booking", permission: { module: "vendor-specialist", action: "view" },
       submenu: [
         { name: "Purchase Order", href: "/purchase/purchase-order" },
@@ -151,17 +148,22 @@ export const MODULE_NAV_MAP: Record<ModuleKey, NavItem[]> = {
         { name: "Analitik", href: "/purchase/vendor-specialist/analytics", icon: ChartSquare, subtitle: "Statistik dan analisis kinerja vendor" },
       ] },
   ],
+  stakeholder: [
+    // HIDDEN sementara — fitur belum di-expose. Hapus `hidden: true` untuk munculin lagi.
+    { name: "Performance Sales", href: "/stakeholder/performance-sales", icon: GraphUp, subtitle: "Monitoring performa penjualan lintas tim", permission: { module: "performance-sales", action: "view" }, hidden: true },
+  ],
 };
 
 /**
  * General items — cross-module menus that show in EVERY module world as
- * top-level sidebar entries (rendered flat, no wrapping group). Home & Settings
- * intentionally excluded: Home is retired (booking Overview is the landing),
- * Settings renders pinned to the sidebar bottom via SETTINGS_NAV_ITEM. Flat here
- * so route-meta walks each leaf with no synthetic parent (breadcrumbs stay
- * per-page).
+ * top-level sidebar entries (rendered flat, no wrapping group). Overview at `/`
+ * is the single general landing (per-module overview pages are retired), open to
+ * any authenticated user. Settings is excluded here — it renders pinned to the
+ * sidebar bottom via SETTINGS_NAV_ITEM. Flat here so route-meta walks each leaf
+ * with no synthetic parent (breadcrumbs stay per-page).
  */
 export const GENERAL_NAV: NavItem[] = [
+  { name: "Overview", href: "/", icon: Widget, subtitle: "Ringkasan aktivitas dan performa" },
   { name: "BITRIX24", href: "/bitrix24", icon: Bolt, subtitle: "Integrasi CRM Bitrix24", permission: { module: "bitrix", action: "view" },
     submenu: [
       { name: "Overview", href: "/bitrix24/overview", icon: PieChart, title: "Overview Bitrix24", subtitle: "Ringkasan perolehan lead & database CRM dari Bitrix24", permission: { module: "bitrix", action: "view" } },

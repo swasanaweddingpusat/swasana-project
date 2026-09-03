@@ -69,29 +69,15 @@ export function SidebarNav() {
   const generalItems = isLoading ? [] : filterNavItems(GENERAL_NAV, can, isGroupMember);
   const settingsVisible = !isLoading && SETTINGS_MODULES.some((mod) => can(mod, "view"));
 
-  // BITRIX24 and Customers are General items but must always sit directly
-  // below the active module's Overview entry (in that order). Pull them out
-  // of General and re-insert them there; when the module has no Overview
-  // entry, leave them in their General position.
-  const PINNED_AFTER_OVERVIEW = ["/bitrix24", "/customers"];
-  const pinnedItems = PINNED_AFTER_OVERVIEW
+  // Overview (general landing at `/`) and BITRIX24 are General items that must
+  // always sit at the very top of the sidebar (in that order), above the active
+  // module's world nav. Pull them out of General; the rest of General stays flat
+  // below the module items.
+  const PINNED_TOP = ["/", "/bitrix24"];
+  const pinnedItems = PINNED_TOP
     .map((href) => generalItems.find((item) => item.href === href))
     .filter((item): item is NavItem => item !== undefined);
-  const overviewIndex = pinnedItems.length > 0
-    ? moduleItems.findIndex((item) => item.href === `/${activeModule}/overview`)
-    : -1;
-  const orderedModuleItems =
-    overviewIndex >= 0
-      ? [
-          ...moduleItems.slice(0, overviewIndex + 1),
-          ...pinnedItems,
-          ...moduleItems.slice(overviewIndex + 1),
-        ]
-      : moduleItems;
-  const remainingGeneralItems =
-    overviewIndex >= 0
-      ? generalItems.filter((item) => !PINNED_AFTER_OVERVIEW.includes(item.href))
-      : generalItems;
+  const remainingGeneralItems = generalItems.filter((item) => !PINNED_TOP.includes(item.href));
 
   return (
     <SidebarGroup>
@@ -103,7 +89,10 @@ export function SidebarNav() {
             ))
           ) : (
             <>
-              {orderedModuleItems.map((item) => (
+              {pinnedItems.map((item) => (
+                <NavItemRow key={item.href} item={item} />
+              ))}
+              {moduleItems.map((item) => (
                 <NavItemRow key={item.href} item={item} />
               ))}
               {remainingGeneralItems.map((item) => (

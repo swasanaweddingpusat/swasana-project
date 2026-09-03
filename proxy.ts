@@ -14,10 +14,10 @@ const PUBLIC_EXACT = new Set<string>([
   "/offline", // PWA offline shell — must never redirect to login (SW precaches it)
 ]);
 
-// Auth pages that are redundant once logged in — redirect to /select-module.
-// /auth/reset-password and /auth/verify are intentionally excluded: AuthGate
-// sends mustChangePassword / unverified users there, so bouncing them back to
-// the app would create an infinite redirect loop.
+// Auth pages that are redundant once logged in — redirect to / (the general
+// overview). /auth/reset-password and /auth/verify are intentionally excluded:
+// AuthGate sends mustChangePassword / unverified users there, so bouncing them
+// back to the app would create an infinite redirect loop.
 const BOUNCE_TO_DASHBOARD = new Set<string>([
   "/auth/login",
   "/auth/forgot-password",
@@ -32,7 +32,10 @@ const PUBLIC_PREFIXES = [
   "/api/recruitment-form/",
   "/api/onboarding-form/",
   "/api/health", // container/Dokploy liveness probe — must bypass auth redirect
-  "/api/client-log", // client-side error sink — public pages report crashes here without a session
+  "/apply/",     // public job application form pages
+  "/api/apply/", // public job application API (no auth required)
+  "/apply-invite/",     // personal candidate invite form pages (access-code auth, not session auth)
+  "/api/apply-invite/", // personal candidate invite API (access-code auth, not session auth)
 ];
 
 function isPublicPath(pathname: string): boolean {
@@ -51,18 +54,19 @@ export function proxy(request: NextRequest) {
   // Server Action POSTs are dispatched to the current page URL (e.g. the login
   // form calls resolveLoginDestination() which posts back to /auth/login). Once
   // signIn() has set the session cookie, the BOUNCE_TO_DASHBOARD rule below would
-  // redirect that POST to /select-module — the action never runs and the client
-  // sees an unparseable response. Let action requests through untouched; they are
+  // redirect that POST to / — the action never runs and the client sees an
+  // unparseable response. Let action requests through untouched; they are
   // identified by the `next-action` header Next.js attaches to every action call.
   const isServerAction =
     request.method === "POST" && request.headers.has("next-action");
 
   if (isPublicPath(pathname)) {
-    // Already-logged-in users don't need login/forgot-password — bounce to /select-module.
-    // reset-password and verify are intentionally allowed through: AuthGate redirects
-    // mustChangePassword / unverified users there, and bouncing them would loop.
+    // Already-logged-in users don't need login/forgot-password — bounce to / (the
+    // general overview). reset-password and verify are intentionally allowed through:
+    // AuthGate redirects mustChangePassword / unverified users there, and bouncing
+    // them would loop.
     if (sessionToken && !isServerAction && BOUNCE_TO_DASHBOARD.has(pathname)) {
-      return NextResponse.redirect(new URL("/select-module", request.url));
+      return NextResponse.redirect(new URL("/", request.url));
     }
     return NextResponse.next();
   }

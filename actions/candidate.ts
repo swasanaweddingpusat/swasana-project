@@ -1,14 +1,15 @@
 "use server";
 
 import { revalidateTag } from "next/cache";
-import crypto from "crypto";
+import crypto, { randomUUID } from "crypto";
 import bcrypt from "bcryptjs";
-import { Resend } from "resend";
 import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/permissions";
 import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
 import { logAudit } from "@/lib/audit";
 import { getBaseUrl } from "@/lib/url";
+import { generateAccessCode } from "@/lib/access-code";
+import { getResendClient } from "@/lib/resend";
 import {
   addCandidateSchema,
   moveCandidateStageSchema,
@@ -17,7 +18,6 @@ import {
   addCandidateNoteSchema,
 } from "@/lib/validations/candidate";
 
-const resend = new Resend(process.env.RESEND_API_KEY);
 const FROM_EMAIL = process.env.RESEND_FROM_EMAIL ?? "noreply@swasana.com";
 
 // ─── Add Candidate ────────────────────────────────────────────────────────────
@@ -39,6 +39,7 @@ export async function addCandidate(
         fullName: parsed.data.fullName,
         email: parsed.data.email,
         phoneNumber: parsed.data.phoneNumber ?? null,
+        expectedSalary: parsed.data.expectedSalary ?? null,
       },
     });
 
@@ -254,7 +255,7 @@ export async function hireCandidate(
     try {
       const baseUrl = await getBaseUrl();
       const verificationLink = `${baseUrl}/auth/verify?token=${token}`;
-      await resend.emails.send({
+      await getResendClient().emails.send({
         from: FROM_EMAIL,
         to: candidate.email,
         subject: "Selamat! Anda Diterima — Swasana",
@@ -357,6 +358,25 @@ export async function addCandidateNote(
   }
 }
 
+// ─── Mark Candidate Viewed ────────────────────────────────────────────────────
+
+export async function markCandidateViewed(
+  id: string
+): Promise<{ success: boolean; error?: string }> {
+  const { session, error } = await requirePermission({ module: "hr-recruitment", action: "view" });
+  if (error) return { success: false, error };
+  if (!mutationLimiter.check(`candidate-view:${session!.user.id}`)) return { success: false, ...rateLimitError() };
+
+  try {
+    await db.candidate.update({ where: { id }, data: { viewed: true } });
+    revalidateTag("candidates", "max");
+    return { success: true };
+  } catch (e) {
+    console.error("[markCandidateViewed]", e);
+    return { success: false, error: "Terjadi kesalahan." };
+  }
+}
+
 // ─── Rate Candidate ───────────────────────────────────────────────────────────
 
 export async function rateCandidate(
@@ -388,5 +408,45 @@ export async function rateCandidate(
   } catch (e) {
     console.error("[rateCandidate]", e);
     return { success: false, error: "Terjadi kesalahan." };
+  }
+}
+
+// ─── Generate Candidate Invite (personal access-code link) ───────────────────
+
+export async function generateCandidateInvite(
+  candidateId: string
+): Promise<{ success: boolean; error?: string; data?: { token: string; accessCode: string } }> {
+  const { session, error } = await requirePermission({ module: "hr-recruitment", action: "edit" });
+  if (error) return { success: false, error };
+  if (!mutationLimiter.check(`candidate-invite:${session!.user.id}`)) return { success: false, ...rateLimitError() };
+
+  const candidate = await db.candidate.findUnique({ where: { id: candidateId }, select: { id: true } });
+  if (!candidate) return { success: false, error: "Kandidat tidak ditemukan." };
+
+  const token = randomUUID();
+  const accessCode = generateAccessCode();
+
+  try {
+    // Regenerating resets status back to Pending — HR is explicitly re-inviting,
+    // so a previously completed/locked link is intentionally reopened.
+    const invite = await db.candidateInvite.upsert({
+      where: { candidateId },
+      create: { candidateId, token, accessCode },
+      update: { token, accessCode, status: "Pending", viewedAt: null, completedAt: null },
+    });
+
+    await logAudit({
+      userId: session!.user.profileId,
+      action: "candidate.invite_generated",
+      entityType: "candidate",
+      entityId: candidateId,
+      description: "Link undangan kandidat di-generate",
+    });
+
+    revalidateTag("candidates", "max");
+    return { success: true, data: { token: invite.token, accessCode: invite.accessCode } };
+  } catch (e) {
+    console.error("[generateCandidateInvite]", e);
+    return { success: false, error: "Gagal generate link undangan." };
   }
 }

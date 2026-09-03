@@ -1,11 +1,13 @@
 "use client";
 
+import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   Wallet,
   UsersGroupRounded,
   TicketSale,
   CartLarge,
+  ChartSquare,
   AltArrowDown,
   Widget,
 } from "@solar-icons/react";
@@ -16,19 +18,29 @@ import {
   DropdownMenuItem,
 } from "@/components/ui/dropdown-menu";
 import { useModules } from "@/hooks/useModules";
-import { useActiveModule } from "./use-active-module";
+import { useActiveModule, setActiveModule } from "./use-active-module";
 
 const ICONS: Record<string, typeof Widget> = {
   Wallet,
   UsersGroupRounded,
   TicketSale,
   CartLarge,
+  ChartSquare,
 };
 
 export function ModuleSwitcher(): React.JSX.Element | null {
   const router = useRouter();
   const activeKey = useActiveModule();
   const { data: modules } = useModules();
+
+  // Single-world roles (e.g. stakeholder) have no switcher to pick from. Persist
+  // their only world so the sidebar renders its nav even while on a general route
+  // like "/" (otherwise useActiveModule falls back to DEFAULT_MODULE "booking",
+  // whose items are all permission-hidden → the menu appears empty).
+  const soleKey = modules && modules.length === 1 ? modules[0].key : null;
+  useEffect(() => {
+    if (soleKey) setActiveModule(soleKey);
+  }, [soleKey]);
 
   if (!modules || modules.length === 0) return null;
 
@@ -62,7 +74,12 @@ export function ModuleSwitcher(): React.JSX.Element | null {
           return (
             <DropdownMenuItem
               key={m.key}
-              onClick={() => router.push(`/${m.key}/overview`)}
+              onClick={() => {
+                // Switching world = mark it active in localStorage, then return
+                // to the general overview (there is no per-world landing page).
+                setActiveModule(m.key);
+                router.push("/");
+              }}
               className="gap-2 rounded-lg"
             >
               <Icon weight="BoldDuotone" className="h-4 w-4" />

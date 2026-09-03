@@ -14,9 +14,12 @@ import { cn } from "@/lib/utils";
 interface Props {
   open: boolean;
   onClose: () => void;
+  /** When set, the export is scoped to a single sales (PIC). Combined with the
+   *  caller's dataScope server-side, so it can only narrow, never widen. */
+  salesId?: string;
 }
 
-export function ExportBookingsModal({ open, onClose }: Props): React.JSX.Element {
+export function ExportBookingsModal({ open, onClose, salesId }: Props): React.JSX.Element {
   const [range, setRange] = useState<DateRange | undefined>(undefined);
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
@@ -33,6 +36,7 @@ export function ExportBookingsModal({ open, onClose }: Props): React.JSX.Element
       const params = new URLSearchParams();
       if (range?.from) params.set("dealingFrom", format(range.from, "yyyy-MM-dd"));
       if (range?.to) params.set("dealingTo", format(range.to, "yyyy-MM-dd"));
+      if (salesId) params.set("salesId", salesId);
 
       const res = await fetch(`/api/booking/export?${params.toString()}`);
       if (!res.ok) {

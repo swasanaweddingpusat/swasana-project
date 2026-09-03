@@ -1,9 +1,8 @@
 import { z } from "zod";
 import { auth } from "@/lib/auth";
-import { db } from "@/lib/db";
 import { apiLimiter, rateLimitResponse } from "@/lib/rate-limit";
-import { isSuperAdmin } from "@/lib/permissions";
 import { getTopSalesByRecentBookingRaw } from "@/lib/queries/salesPerformance";
+import { resolveDealingRange, resolveEventRange } from "@/lib/queries/dashboard";
 
 export async function GET(req: Request): Promise<Response> {
   const session = await auth();
@@ -15,9 +14,13 @@ export async function GET(req: Request): Promise<Response> {
     return rateLimitResponse();
   }
 
+  // Dealing-date (createdAt) range — absent params → no range (all-time), see
+  // resolveDealingRange().
   const querySchema = z.object({
-    year: z.coerce.number().int().min(2000).max(2100).optional(),
-    month: z.coerce.number().int().min(1).max(12).optional(),
+    dealFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+    dealTo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+    eventFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+    eventTo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   });
 
   const qParsed = querySchema.safeParse(
@@ -27,31 +30,12 @@ export async function GET(req: Request): Promise<Response> {
     return Response.json({ error: "Invalid query parameters" }, { status: 400 });
   }
 
-  const now = new Date();
-  const year = qParsed.data.year ?? now.getFullYear();
-  const monthParam = qParsed.data.month ?? now.getMonth() + 1;
-  const month = monthParam - 1;
-  const startDate = new Date(year, month, 1);
-  const endDate = new Date(year, month + 1, 0, 23, 59, 59, 999);
+  const { range } = resolveDealingRange(qParsed.data.dealFrom, qParsed.data.dealTo);
+  const { range: eventRange } = resolveEventRange(qParsed.data.eventFrom, qParsed.data.eventTo);
 
-  const isAdmin = await isSuperAdmin(session.user.roleId);
-
-  let allowedProfileIds: string[] | undefined;
-  if (!isAdmin) {
-    const userGroups = await db.userGroup.findMany({
-      where: {
-        OR: [
-          { leaderId: session.user.profileId },
-          { members: { some: { userId: session.user.profileId } } },
-        ],
-      },
-      select: { members: { select: { userId: true } } },
-      take: 200,
-    });
-    const ids = [...new Set(userGroups.flatMap((g) => g.members.map((m) => m.userId)))];
-    allowedProfileIds = ids.length > 0 ? ids : [];
-  }
-
-  const data = await getTopSalesByRecentBookingRaw(startDate, endDate, allowedProfileIds);
+  // Overview is company-wide: performance always ranks ALL sales, regardless of
+  // the viewer's dataScope. Dashboard-only — other endpoints stay scoped.
+  // `undefined` = no profile filter (every sales).
+  const data = await getTopSalesByRecentBookingRaw(undefined, range, eventRange);
   return Response.json(data);
 }

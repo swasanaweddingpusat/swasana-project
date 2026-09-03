@@ -14,6 +14,7 @@ type CandidateForm = {
   fullName: string;
   email: string;
   phoneNumber: string;
+  expectedSalary: string;
 };
 
 interface CandidateDrawerProps {
@@ -26,28 +27,40 @@ export function CandidateDrawer({ isOpen, onClose, jobPostings }: CandidateDrawe
   const addCandidateMutation = useAddCandidate();
 
   const [form, setForm] = useState<CandidateForm>({
-    jobPostingId: jobPostings[0]?.id ?? "",
+    jobPostingId: "",
     fullName: "",
     email: "",
     phoneNumber: "",
+    expectedSalary: "",
   });
 
+  const [prevIsOpen, setPrevIsOpen] = useState(isOpen);
+  if (isOpen !== prevIsOpen) {
+    setPrevIsOpen(isOpen);
+    if (isOpen) {
+      setForm({ jobPostingId: "", fullName: "", email: "", phoneNumber: "", expectedSalary: "" });
+    }
+  }
+
+  const selectedJobPostingId = form.jobPostingId || jobPostings[0]?.id || "";
+
   async function handleSubmit() {
-    if (!form.jobPostingId) {
+    if (!selectedJobPostingId) {
       toast.error("Lowongan wajib dipilih");
       return;
     }
 
     const result = await addCandidateMutation.mutateAsync({
-      jobPostingId: form.jobPostingId,
+      jobPostingId: selectedJobPostingId,
       fullName: form.fullName.trim(),
       email: form.email.trim(),
       phoneNumber: form.phoneNumber.trim() || undefined,
+      expectedSalary: form.expectedSalary ? Number(form.expectedSalary) : undefined,
     });
 
     if (result.success) {
       toast.success("Kandidat ditambahkan");
-      setForm((current) => ({ ...current, fullName: "", email: "", phoneNumber: "" }));
+      setForm((current) => ({ ...current, fullName: "", email: "", phoneNumber: "", expectedSalary: "" }));
       onClose();
       return;
     }
@@ -62,7 +75,7 @@ export function CandidateDrawer({ isOpen, onClose, jobPostings }: CandidateDrawe
           <Label htmlFor="drawer-candidate-job-posting">Lowongan</Label>
           <select
             id="drawer-candidate-job-posting"
-            value={form.jobPostingId}
+            value={selectedJobPostingId}
             onChange={(event) => setForm((current) => ({ ...current, jobPostingId: event.target.value }))}
             className="h-10 w-full rounded-xl border border-input bg-background px-3 text-sm outline-none"
           >
@@ -103,6 +116,24 @@ export function CandidateDrawer({ isOpen, onClose, jobPostings }: CandidateDrawe
             onChange={(event) => setForm((current) => ({ ...current, phoneNumber: event.target.value }))}
             placeholder="0812xxxx"
           />
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="drawer-candidate-salary">Gaji Diharapkan</Label>
+          <div className="relative">
+            <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
+              Rp
+            </span>
+            <Input
+              id="drawer-candidate-salary"
+              type="number"
+              min={0}
+              value={form.expectedSalary}
+              onChange={(event) => setForm((current) => ({ ...current, expectedSalary: event.target.value }))}
+              placeholder="5000000"
+              className="pl-9"
+            />
+          </div>
         </div>
 
         <Button

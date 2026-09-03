@@ -4,7 +4,7 @@ import { requirePermissionForRoute } from "@/lib/permissions";
 import { apiLimiter, rateLimitResponse } from "@/lib/rate-limit";
 
 export async function GET(req: Request) {
-  const { session, response } = await requirePermissionForRoute({
+  const { response } = await requirePermissionForRoute({
     module: "vendor-specialist",
     action: "view",
   });
@@ -32,11 +32,6 @@ export async function GET(req: Request) {
         viewedAt: true,
         lastEditedAt: true,
         expiresAt: true,
-        weddingIndicator: {
-          select: {
-            createdById: true,
-          },
-        },
       },
     });
 
@@ -44,13 +39,10 @@ export async function GET(req: Request) {
       return NextResponse.json({ share: null });
     }
 
-    // Only expose raw token+accessCode to the user who created the indicator
-    const isOwner = share.weddingIndicator.createdById === session.user.profileId;
-
     return NextResponse.json({
       share: {
-        token: isOwner ? share.token : "****",
-        accessCode: isOwner ? share.accessCode : "****",
+        token: share.token,
+        accessCode: share.accessCode,
         status: share.status,
         viewedAt: share.viewedAt,
         lastEditedAt: share.lastEditedAt,

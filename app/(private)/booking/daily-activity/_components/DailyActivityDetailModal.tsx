@@ -16,8 +16,9 @@ import {
   type IconProps,
 } from "@solar-icons/react";
 import { cn } from "@/lib/utils";
+import { BitrixDealDetail } from "@/components/shared/BitrixDealDetail";
 import type { DailyActivityItem } from "@/lib/queries/daily-activity";
-import type { ContactNumber } from "@/types/daily-activity";
+import { parseContactNumbers } from "@/types/daily-activity";
 
 /* ─── Field styling tokens ─────────────────────────────────────────────────── */
 
@@ -53,23 +54,6 @@ function fmtSession(session: string | null | undefined): string {
     fullday: "Full Day",
   };
   return map[session] ?? session;
-}
-
-/** Parse the stored contactNumbers JSON into a typed list (empty when absent). */
-function parseContacts(raw: unknown): ContactNumber[] {
-  if (!raw) return [];
-  let arr: unknown = raw;
-  if (!Array.isArray(arr)) {
-    try {
-      arr = JSON.parse(String(raw));
-    } catch {
-      return [];
-    }
-  }
-  if (!Array.isArray(arr)) return [];
-  return (arr as ContactNumber[])
-    .filter((e) => e && e.number)
-    .map((e) => ({ label: e.label ?? "", number: e.number }));
 }
 
 /* ─── Presence-aware section ───────────────────────────────────────────────── */
@@ -140,7 +124,7 @@ export function DailyActivityDetailModal({ open, lead, onClose, onEdit }: Props)
     ? (lead.assignedTo.nickName ?? lead.assignedTo.fullName ?? "-")
     : (lead.createdBy.nickName ?? lead.createdBy.fullName ?? "-");
 
-  const contacts = parseContacts(lead.contactNumbers);
+  const contacts = parseContactNumbers(lead.contactNumbers);
   const evidenceLink = lead.bookingFeeEvidenceUrl ? (
     <a
       href={lead.bookingFeeEvidenceUrl}
@@ -273,17 +257,10 @@ export function DailyActivityDetailModal({ open, lead, onClose, onEdit }: Props)
         role="dialog"
         aria-modal="true"
         aria-labelledby="lead-detail-title"
-        className="relative flex h-full w-full flex-col overflow-hidden bg-background sm:h-auto sm:max-h-[90vh] sm:w-full sm:max-w-4xl sm:rounded-2xl sm:shadow-lg"
+        className="flex h-full w-full flex-col overflow-hidden bg-background sm:h-auto sm:max-h-[90vh] sm:w-full sm:max-w-4xl sm:rounded-2xl sm:shadow-lg"
       >
-        {/* Status spine — pipeline color at a glance (signature, matches table cards) */}
-        <span
-          aria-hidden
-          className="absolute inset-y-0 left-0 z-20 w-1.5"
-          style={{ backgroundColor: lead.status.color }}
-        />
-
         {/* ── Header ── */}
-        <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b bg-background px-5 py-4 pl-6 sm:px-8 sm:pl-9">
+        <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b bg-background px-5 py-4 sm:px-8">
           <div className="flex min-w-0 flex-1 flex-col gap-1.5">
             <h2
               id="lead-detail-title"
@@ -320,17 +297,28 @@ export function DailyActivityDetailModal({ open, lead, onClose, onEdit }: Props)
         </div>
 
         {/* ── Body — single presence-aware tree, responsive across all breakpoints ── */}
-        <div className="flex-1 space-y-4 overflow-y-auto bg-muted/20 px-4 py-4 pb-24 pl-5 sm:px-8 sm:pb-6 sm:pl-9">
+        <div className="flex-1 space-y-4 overflow-y-auto bg-muted/20 px-4 py-4 pb-24 sm:px-8 sm:pb-6">
           <InfoSection icon={UserRounded} title="Client" fields={clientFields} />
           <InfoSection icon={CalendarMark} title="Event" fields={eventFields} />
           <InfoSection icon={Buildings} title="Venue" fields={venueFields} />
           <InfoSection icon={Wallet} title="Kunci Tanggal" fields={lockFields} />
           <InfoSection icon={ClockCircle} title="Pipeline" fields={pipelineFields} />
+          {lead.bitrixId && (
+            <section className="rounded-2xl border border-border bg-card p-4 sm:p-5 shadow-sm">
+              <div className="mb-4 flex items-center gap-2">
+                <LinkMinimalistic weight="BoldDuotone" aria-hidden className="h-4 w-4 text-muted-foreground" />
+                <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Bitrix
+                </h3>
+              </div>
+              <BitrixDealDetail key={lead.bitrixId} dealId={lead.bitrixId} />
+            </section>
+          )}
         </div>
 
         {/* ── Footer ── */}
         {onEdit && (
-          <div className="flex shrink-0 items-center justify-end gap-2 border-t bg-background px-5 py-3 pl-6 sm:px-8 sm:pl-9">
+          <div className="flex shrink-0 items-center justify-end gap-2 border-t bg-background px-5 py-3 sm:px-8">
             <Button
               variant="outline"
               className="rounded-full"

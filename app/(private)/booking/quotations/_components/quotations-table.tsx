@@ -5,7 +5,6 @@ import { format } from "date-fns";
 import { toast } from "sonner";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -16,15 +15,11 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-  DropdownMenuSub,
-  DropdownMenuSubTrigger,
-  DropdownMenuSubContent,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import {
@@ -37,19 +32,10 @@ import {
   MenuDots,
   Pen,
   Eye,
-  TrashBinTrash,
   Refresh,
-  Filter,
-  CheckCircle,
-  AltArrowRight,
 } from "@solar-icons/react";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
-import { useQuotations, useDeleteQuotation, useUpdateQuotationStatus } from "@/hooks/use-quotations";
+import { useQuotations } from "@/hooks/use-quotations";
 import type { QuotationListRow } from "@/lib/queries/quotations";
 import { QuotationDrawer } from "./quotation-drawer";
 import { QuotationPreview } from "./quotation-preview";
@@ -95,6 +81,8 @@ export interface QuotationItem {
   category: "weddings" | "mice";
   eventType: string;
   eventDate: string;
+  /** Tanggal akhir event kalau berupa rentang; kosong = single-date. */
+  eventEndDate?: string;
   /** mis. "Venue Only" */
   details?: string;
   /** mis. "Half Day 07.00 - 13.00" */
@@ -107,6 +95,8 @@ export interface QuotationItem {
   pax: number;
   // ── Line items (detail penawaran) ──────────────────────────────
   items?: QuotationLineItem[];
+  // ── Complimentary (bonus gratis, tidak masuk pricing) ───────────
+  complimentaries?: QuotationComplimentaryItem[];
   // ── Pricing ────────────────────────────────────────────────────
   price: number;
   discount: number;
@@ -145,6 +135,7 @@ function mapRowToQuotationItem(row: QuotationListRow): QuotationItem {
     category: row.category.toLowerCase() as "weddings" | "mice",
     eventType: row.eventTypeName ?? row.eventType?.name ?? "",
     eventDate: row.eventDate ? format(new Date(row.eventDate), "yyyy-MM-dd") : "",
+    eventEndDate: row.eventEndDate ? format(new Date(row.eventEndDate), "yyyy-MM-dd") : "",
     time: row.time ?? undefined,
     place: row.place ?? undefined,
     details: row.details ?? undefined,
@@ -157,6 +148,15 @@ function mapRowToQuotationItem(row: QuotationListRow): QuotationItem {
       price: it.price,
       total: it.total,
       manualTotal: it.manualTotal,
+    })),
+    complimentaries: row.complimentaries.map((c) => ({
+      id: c.id,
+      complimentaryId: c.complimentaryId,
+      name: c.name,
+      price: c.price,
+      isShowPrice: c.isShowPrice,
+      description: c.description ?? undefined,
+      qty: c.qty,
     })),
     price: row.subtotal,
     discount: row.discount,
@@ -236,50 +236,6 @@ function SkeletonMobileCards({ rows = ROWS_PER_PAGE }: { rows?: number }) {
   );
 }
 
-type QuotationStatus = QuotationItem["status"];
-
-interface StatusMeta {
-  label: string;
-  dotClass: string;
-  badgeVariant: "outline" | "secondary" | "default" | "destructive";
-}
-
-const STATUS_META: Record<QuotationStatus, StatusMeta> = {
-  draft: {
-    label: "Draft",
-    dotClass: "bg-transparent border border-muted-foreground/60",
-    badgeVariant: "outline",
-  },
-  sent: {
-    label: "Sent",
-    dotClass: "bg-muted-foreground/60 border border-muted-foreground/60",
-    badgeVariant: "outline",
-  },
-  revised: {
-    label: "Revised",
-    dotClass: "bg-foreground/50 border border-foreground/50",
-    badgeVariant: "secondary",
-  },
-  accepted: {
-    label: "Dealing",
-    dotClass: "bg-foreground border border-foreground",
-    badgeVariant: "default",
-  },
-  rejected: {
-    label: "Rejected",
-    dotClass: "bg-destructive border border-destructive",
-    badgeVariant: "destructive",
-  },
-};
-
-const ALL_STATUSES: QuotationStatus[] = [
-  "draft",
-  "sent",
-  "revised",
-  "accepted",
-  "rejected",
-];
-
 function formatRupiah(amount: number): string {
   return amount.toLocaleString("id-ID", {
     style: "currency",
@@ -299,39 +255,16 @@ function formatDate(dateStr: string): string {
   return format(new Date(dateStr), "d MMM yyyy");
 }
 
-function StatusDot({ className }: { className: string }) {
-  return (
-    <span
-      aria-hidden="true"
-      className={cn("inline-block w-2 h-2 rounded-full shrink-0", className)}
-    />
-  );
-}
-
-function StatusBadge({ status }: { status: QuotationStatus }) {
-  const meta = STATUS_META[status];
-  return (
-    <Badge
-      variant={meta.badgeVariant}
-      className="flex items-center gap-1.5 whitespace-nowrap text-xs font-medium"
-    >
-      <StatusDot
-        className={
-          meta.badgeVariant === "default"
-            ? "bg-primary-foreground border border-primary-foreground"
-            : meta.badgeVariant === "destructive"
-              ? "bg-destructive-foreground border border-destructive-foreground"
-              : meta.dotClass
-        }
-      />
-      {meta.label}
-    </Badge>
-  );
+/** Single date or "start – end" range when eventEndDate is set and differs from eventDate. */
+function formatEventDateRange(eventDate: string, eventEndDate?: string): string {
+  if (eventEndDate && eventEndDate !== eventDate) {
+    return `${formatDate(eventDate)} – ${formatDate(eventEndDate)}`;
+  }
+  return formatDate(eventDate);
 }
 
 export function QuotationsTable() {
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<QuotationStatus | "all">("all");
   const [currentPage, setCurrentPage] = useState(1);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editQuotation, setEditQuotation] = useState<QuotationItem | null>(null);
@@ -343,12 +276,7 @@ export function QuotationsTable() {
     page: currentPage,
     pageSize: ROWS_PER_PAGE,
     search,
-    status: statusFilter === "all" ? "" : statusFilter,
   });
-
-  const deleteQuotation = useDeleteQuotation();
-  const updateStatus = useUpdateQuotationStatus();
-  const [updatingStatusId, setUpdatingStatusId] = useState<string | null>(null);
 
   const rawRows = quotationsResult?.data ?? [];
   const total = quotationsResult?.total ?? 0;
@@ -374,101 +302,13 @@ export function QuotationsTable() {
     toast.info(`Convert ke Booking untuk ${q.leadName} — coming soon.`);
   }
 
-  async function handleStatusChange(q: QuotationItem, status: QuotationStatus) {
-    if (q.status === status) return;
-    setUpdatingStatusId(q.id);
-    const result = await updateStatus.mutateAsync({ id: q.id, status });
-    setUpdatingStatusId(null);
-    if (result.success) {
-      toast.success(`Status diubah ke "${STATUS_META[status].label}".`);
-    } else {
-      toast.error(result.error ?? "Gagal mengubah status.");
-    }
-  }
-
-  async function handleDelete(q: QuotationItem) {
-    const confirmed = window.confirm(
-      `Hapus quotation "${deriveQuotationNo(q)}" untuk ${q.leadName}? Tindakan ini tidak bisa dibatalkan.`,
-    );
-    if (!confirmed) return;
-    const result = await deleteQuotation.mutateAsync(q.id);
-    if (result.success) {
-      toast.success("Quotation berhasil dihapus.");
-    } else {
-      toast.error(result.error ?? "Gagal menghapus quotation.");
-    }
-  }
-
-  function handleStatusFilterChange(value: string) {
-    setStatusFilter(value as QuotationStatus | "all");
-    setCurrentPage(1);
-  }
-
-  const statusCounts = ALL_STATUSES.map((s) => ({
-    status: s,
-    label: STATUS_META[s].label,
-    dotClass: STATUS_META[s].dotClass,
-    count: 0, // server doesn't return per-status counts in list query
-  }));
-
-  const hasActiveFilter = statusFilter !== "all";
-
-  const FilterPopoverContent = (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <p className="text-sm font-semibold text-foreground">Filter</p>
-        {hasActiveFilter && (
-          <button
-            type="button"
-            onClick={() => { setStatusFilter("all"); setCurrentPage(1); }}
-            className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-          >
-            Reset
-          </button>
-        )}
-      </div>
-      <div className="space-y-1">
-        <label className="text-xs font-medium text-muted-foreground">Status</label>
-        <SearchableSelect
-          options={[
-            { id: "all", name: "Semua Status" },
-            ...statusCounts.map((s) => ({ id: s.status, name: s.label })),
-          ]}
-          value={statusFilter}
-          onChange={handleStatusFilterChange}
-          placeholder="Semua Status"
-          searchPlaceholder="Cari status..."
-          emptyText="Status tidak ditemukan"
-          className="h-9"
-        />
-      </div>
-    </div>
-  );
-
-  const FilterTriggerIcon = (
-    <Button
-      type="button"
-      variant="outline"
-      size="icon"
-      className={cn("shrink-0 relative", hasActiveFilter && "border-primary/50")}
-      aria-label="Filter quotation"
-    >
-      <Filter weight="BoldDuotone" aria-hidden="true" className="h-4 w-4" />
-      {hasActiveFilter && (
-        <span className="absolute -top-1.5 -right-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[9px] font-bold text-primary-foreground leading-none">
-          1
-        </span>
-      )}
-    </Button>
-  );
-
   return (
     <>
       <Card>
         <CardContent className="p-0">
           {/* ════════════════════════════════════════════════════════════════
               MOBILE TOOLBAR  (visible < sm)
-              Row 1: [count badge] ──── [filter icon] [refresh icon] [add button]
+              Row 1: [count badge] ──── [refresh icon] [add button]
               Row 2: [search full-width]
           ════════════════════════════════════════════════════════════════ */}
           <div className="flex flex-col gap-2 px-4 pb-3 border-b sm:hidden">
@@ -478,13 +318,6 @@ export function QuotationsTable() {
                 {isLoading ? "..." : total}
               </span>
               <div className="flex-1" />
-              {/* Filter popover */}
-              <Popover>
-                <PopoverTrigger render={FilterTriggerIcon} />
-                <PopoverContent align="end" className="w-64 p-3">
-                  {FilterPopoverContent}
-                </PopoverContent>
-              </Popover>
               {/* Refresh */}
               <Button
                 type="button"
@@ -526,7 +359,7 @@ export function QuotationsTable() {
 
           {/* ════════════════════════════════════════════════════════════════
               DESKTOP TOOLBAR  (visible sm+)
-              Single row: [count] | [refresh] [filter] [search] →→ [add]
+              Single row: [count] | [refresh] [search] →→ [add]
           ════════════════════════════════════════════════════════════════ */}
           <div className="hidden sm:flex items-center gap-2 px-6 pb-3 border-b">
             {/* Count badge */}
@@ -554,31 +387,6 @@ export function QuotationsTable() {
                 className={cn("h-4 w-4", isFetching && "animate-spin")}
               />
             </Button>
-
-            {/* Filter popover */}
-            <Popover>
-              <PopoverTrigger
-                render={
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className={cn("h-9 gap-1.5 shrink-0", hasActiveFilter && "border-primary/50")}
-                    aria-label="Filter quotation"
-                  >
-                    <Filter weight="BoldDuotone" aria-hidden="true" className="h-4 w-4" />
-                    Filter
-                    {hasActiveFilter && (
-                      <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-[10px] font-semibold text-primary-foreground">
-                        1
-                      </span>
-                    )}
-                  </Button>
-                }
-              />
-              <PopoverContent align="end" className="w-64 p-3">
-                {FilterPopoverContent}
-              </PopoverContent>
-            </Popover>
 
             {/* Search */}
             <div className="relative">
@@ -651,10 +459,8 @@ export function QuotationsTable() {
                       <TableHead className="w-[11%] hidden md:table-cell">Submit</TableHead>
                       {/* Event Date — 11% — hidden until xl */}
                       <TableHead className="w-[11%] hidden xl:table-cell">Event</TableHead>
-                      {/* Total — 13% — right-aligned */}
-                      <TableHead className="w-[13%] text-right">Total</TableHead>
-                      {/* Status — 10% */}
-                      <TableHead className="w-[10%]">Status</TableHead>
+                      {/* Total — 23% — right-aligned */}
+                      <TableHead className="w-[23%] text-right">Total</TableHead>
                       {/* Actions — 5% */}
                       <TableHead className="w-[5%]" />
                     </TableRow>
@@ -662,7 +468,7 @@ export function QuotationsTable() {
                   <TableBody>
                     {isFetching ? (
                       <TableRow>
-                        <TableCell colSpan={8} className="py-10 text-center text-muted-foreground">
+                        <TableCell colSpan={7} className="py-10 text-center text-muted-foreground">
                           <Refresh weight="BoldDuotone" aria-hidden="true" className="h-6 w-6 opacity-40 animate-spin mx-auto" />
                         </TableCell>
                       </TableRow>
@@ -738,18 +544,13 @@ export function QuotationsTable() {
                           {/* Event Date — hidden until xl */}
                           <TableCell className="min-w-0 hidden xl:table-cell">
                             <span className="block text-sm tabular-nums">
-                              {q.eventDate ? formatDate(q.eventDate) : "—"}
+                              {q.eventDate ? formatEventDateRange(q.eventDate, q.eventEndDate) : "—"}
                             </span>
                           </TableCell>
 
                           {/* Total */}
                           <TableCell className="text-right tabular-nums font-semibold text-sm">
                             {formatRupiah(q.totalPrice)}
-                          </TableCell>
-
-                          {/* Status */}
-                          <TableCell>
-                            <StatusBadge status={q.status} />
                           </TableCell>
 
                           {/* Actions */}
@@ -780,44 +581,10 @@ export function QuotationsTable() {
                                   <Pen weight="BoldDuotone" aria-hidden="true" className="h-4 w-4 mr-2 text-primary" />
                                   Edit
                                 </DropdownMenuItem>
-                                {/* ── Ubah Status sub-menu ── */}
-                                <DropdownMenuSub>
-                                  <DropdownMenuSubTrigger>
-                                    <AltArrowRight weight="BoldDuotone" aria-hidden="true" className="h-4 w-4 mr-2 text-primary" />
-                                    Ubah Status
-                                  </DropdownMenuSubTrigger>
-                                  <DropdownMenuSubContent>
-                                    {ALL_STATUSES.map((s) => (
-                                      <DropdownMenuItem
-                                        key={s}
-                                        disabled={q.status === s || updatingStatusId === q.id}
-                                        onClick={(e) => { e.stopPropagation(); void handleStatusChange(q, s); }}
-                                      >
-                                        <StatusDot className={cn("mr-2", q.status === s ? "bg-foreground border border-foreground" : STATUS_META[s].dotClass)} />
-                                        {STATUS_META[s].label}
-                                        {q.status === s && (
-                                          <CheckCircle weight="BoldDuotone" className="h-3.5 w-3.5 ml-auto text-primary" />
-                                        )}
-                                      </DropdownMenuItem>
-                                    ))}
-                                  </DropdownMenuSubContent>
-                                </DropdownMenuSub>
-                                {q.status === "accepted" && (
-                                  <>
-                                    <DropdownMenuSeparator />
-                                    <DropdownMenuItem onClick={() => handleConvertToBooking(q)}>
-                                      <CalendarMark weight="BoldDuotone" aria-hidden="true" className="h-4 w-4 mr-2 text-primary" />
-                                      Convert ke Booking
-                                    </DropdownMenuItem>
-                                  </>
-                                )}
                                 <DropdownMenuSeparator />
-                                <DropdownMenuItem
-                                  onClick={() => handleDelete(q)}
-                                  className="text-destructive focus:text-destructive"
-                                >
-                                  <TrashBinTrash weight="BoldDuotone" aria-hidden="true" className="h-4 w-4 mr-2" />
-                                  Hapus
+                                <DropdownMenuItem onClick={() => handleConvertToBooking(q)}>
+                                  <CalendarMark weight="BoldDuotone" aria-hidden="true" className="h-4 w-4 mr-2 text-primary" />
+                                  Convert ke Booking
                                 </DropdownMenuItem>
                               </DropdownMenuContent>
                             </DropdownMenu>
@@ -841,25 +608,22 @@ export function QuotationsTable() {
                         key={q.id}
                         className="rounded-lg border bg-card p-3 space-y-2"
                       >
-                        {/* Row 1: nomor + nama customer + nomor quotation + StatusBadge */}
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="flex items-start gap-2 min-w-0">
-                            <span className="text-xs text-muted-foreground tabular-nums shrink-0 mt-0.5">
-                              {rowNumber}.
+                        {/* Row 1: nomor + nama customer + nomor quotation */}
+                        <div className="flex items-start gap-2 min-w-0">
+                          <span className="text-xs text-muted-foreground tabular-nums shrink-0 mt-0.5">
+                            {rowNumber}.
+                          </span>
+                          <div className="min-w-0">
+                            <span className="block font-mono text-[10px] text-muted-foreground truncate">
+                              {deriveQuotationNo(q)}
                             </span>
-                            <div className="min-w-0">
-                              <span className="block font-mono text-[10px] text-muted-foreground truncate">
-                                {deriveQuotationNo(q)}
-                              </span>
-                              <span
-                                title={q.leadName}
-                                className="block font-medium text-sm text-foreground truncate"
-                              >
-                                {q.leadName}
-                              </span>
-                            </div>
+                            <span
+                              title={q.leadName}
+                              className="block font-medium text-sm text-foreground truncate"
+                            >
+                              {q.leadName}
+                            </span>
                           </div>
-                          <StatusBadge status={q.status} />
                         </div>
 
                         {/* Row 2: venue · event type · event date · total */}
@@ -874,7 +638,9 @@ export function QuotationsTable() {
                           {q.eventDate && (
                             <>
                               <span aria-hidden="true">·</span>
-                              <span className="truncate">{formatDate(q.eventDate)}</span>
+                              <span className="truncate">
+                                {formatEventDateRange(q.eventDate, q.eventEndDate)}
+                              </span>
                             </>
                           )}
                           <span aria-hidden="true">·</span>
@@ -911,32 +677,18 @@ export function QuotationsTable() {
                             />
                             Edit
                           </Button>
-                          {q.status === "accepted" && (
-                            <Button
-                              variant="outline"
-                              className="h-9 flex-1 text-xs"
-                              onClick={() => handleConvertToBooking(q)}
-                              aria-label={`Convert ke booking ${deriveQuotationNo(q)}`}
-                            >
-                              <CalendarMark
-                                weight="BoldDuotone"
-                                aria-hidden="true"
-                                className="h-3.5 w-3.5 mr-1 text-muted-foreground"
-                              />
-                              Convert
-                            </Button>
-                          )}
                           <Button
                             variant="outline"
-                            className="h-9 w-9 shrink-0 text-destructive hover:text-destructive hover:bg-destructive/10"
-                            onClick={() => handleDelete(q)}
-                            aria-label={`Hapus ${deriveQuotationNo(q)}`}
+                            className="h-9 flex-1 text-xs"
+                            onClick={() => handleConvertToBooking(q)}
+                            aria-label={`Convert ke booking ${deriveQuotationNo(q)}`}
                           >
-                            <TrashBinTrash
+                            <CalendarMark
                               weight="BoldDuotone"
                               aria-hidden="true"
-                              className="h-3.5 w-3.5"
+                              className="h-3.5 w-3.5 mr-1 text-muted-foreground"
                             />
+                            Convert
                           </Button>
                         </div>
                       </div>
