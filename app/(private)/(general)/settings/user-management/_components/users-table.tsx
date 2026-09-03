@@ -21,8 +21,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { InviteDrawer } from "./invite-drawer";
 import { BulkEditModal } from "./BulkEditModal";
-import { useUsers, useDeleteUser, useReactivateUser } from "@/hooks/use-users";
-import { resendInvitation } from "@/actions/user";
+import { useUsers, useDeleteUser, useReactivateUser, useResendInvitation } from "@/hooks/use-users";
 import type { UsersQueryResult, UserQueryItem } from "@/lib/queries/users";
 import type { RolesQueryResult } from "@/lib/queries/roles";
 import type { UserFilters } from "@/types/user";
@@ -131,6 +130,7 @@ export function UsersTable({ initialData, roles }: UsersTableProps) {
 
   const deleteUserMutation = useDeleteUser();
   const reactivateUserMutation = useReactivateUser();
+  const resendInvitationMutation = useResendInvitation();
 
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editUser, setEditUser] = useState<UserQueryItem | null>(null);
@@ -174,7 +174,7 @@ export function UsersTable({ initialData, roles }: UsersTableProps) {
   const handleResend = async (user: UserQueryItem) => {
     if (!user.profile) return;
     setResendingId(user.profile.id);
-    const result = await resendInvitation(user.profile.id);
+    const result = await resendInvitationMutation.mutateAsync(user.profile.id);
     setResendingId(null);
     if (result.success) {
       toast.success(result.message);
@@ -443,11 +443,9 @@ export function UsersTable({ initialData, roles }: UsersTableProps) {
                                 <DropdownMenuItem onClick={() => handleEdit(user)}>
                                   <PenNewSquare weight="BoldDuotone" className={cn('h-3.5', 'w-3.5', 'mr-2', 'text-primary')} /> Edit
                                 </DropdownMenuItem>
-                                {!isVerified && (
-                                  <DropdownMenuItem onClick={() => handleResend(user)} disabled={resendingId === user.profile?.id}>
-                                    <Letter weight="BoldDuotone" className={cn('h-3.5', 'w-3.5', 'mr-2', 'text-primary')} /> {resendingId === user.profile?.id ? "Sending..." : "Resend Invitation"}
-                                  </DropdownMenuItem>
-                                )}
+                                <DropdownMenuItem onClick={() => handleResend(user)} disabled={resendingId === user.profile?.id}>
+                                  <Letter weight="BoldDuotone" className={cn('h-3.5', 'w-3.5', 'mr-2', 'text-primary')} /> {resendingId === user.profile?.id ? "Sending..." : "Resend Invitation"}
+                                </DropdownMenuItem>
                                 {user.profile?.status === "inactive" ? (
                                   <DropdownMenuItem onClick={() => handleReactivate(user)} disabled={reactivatingId === user.profile?.id}>
                                     <UserCheck weight="BoldDuotone" className={cn('h-3.5', 'w-3.5', 'mr-2', 'text-primary')} /> {reactivatingId === user.profile?.id ? "Mengaktifkan..." : "Aktifkan"}
@@ -531,17 +529,15 @@ export function UsersTable({ initialData, roles }: UsersTableProps) {
                     >
                       <PenNewSquare weight="BoldDuotone" aria-hidden="true" className={cn('h-3.5', 'w-3.5', 'mr-1', 'text-muted-foreground')} /> Edit
                     </Button>
-                    {!isVerified && (
-                      <Button
-                        variant="outline"
-                        className={cn('h-9', 'flex-1', 'text-xs')}
-                        onClick={() => handleResend(user)}
-                        disabled={resendingId === user.profile?.id}
-                        aria-label={`Resend invitation ${user.email}`}
-                      >
-                        <Letter weight="BoldDuotone" aria-hidden="true" className={cn('h-3.5', 'w-3.5', 'mr-1', 'text-muted-foreground')} /> {resendingId === user.profile?.id ? "..." : "Resend"}
-                      </Button>
-                    )}
+                    <Button
+                      variant="outline"
+                      className={cn('h-9', 'flex-1', 'text-xs')}
+                      onClick={() => handleResend(user)}
+                      disabled={resendingId === user.profile?.id}
+                      aria-label={`Resend invitation ${user.email}`}
+                    >
+                      <Letter weight="BoldDuotone" aria-hidden="true" className={cn('h-3.5', 'w-3.5', 'mr-1', 'text-muted-foreground')} /> {resendingId === user.profile?.id ? "..." : "Resend"}
+                    </Button>
                     {user.profile?.status === "inactive" ? (
                       <Button
                         variant="outline"

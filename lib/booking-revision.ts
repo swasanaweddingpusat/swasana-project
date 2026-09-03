@@ -173,11 +173,14 @@ export async function refreshCurrentRevisionSnapshot(bookingId: string): Promise
 /**
  * Targeted patch of administrative-only snapshot fields that do NOT affect pricing,
  * package, or client-agreed terms. Called after a non-material editBooking save so
- * that the frozen revision snapshot stays in sync for the signed PO PDF.
+ * that the frozen revision snapshot stays in sync for the signed PO PDF. Also syncs
+ * the client-signed customer contact (snapCustomer) — customer contact is a
+ * non-trigger field, editable post-signature without re-approval.
  *
  * Unlike refreshCurrentRevisionSnapshot, this helper intentionally writes EVEN when
- * snapshotFrozenAt is set — the whole point is to propagate ops edits (signingLocation)
- * into a signed snapshot without re-opening approval or client agreement.
+ * snapshotFrozenAt is set — the whole point is to propagate ops edits (signingLocation,
+ * notes, customer contact) into a signed snapshot without re-opening approval or
+ * client agreement.
  *
  * No-ops silently when there is no current revision (booking never went through
  * approval). Best-effort: callers treat failure as non-fatal.
@@ -185,7 +188,7 @@ export async function refreshCurrentRevisionSnapshot(bookingId: string): Promise
 export async function patchSnapshotAdminFields(bookingId: string): Promise<boolean> {
   const booking = await db.booking.findUnique({
     where: { id: bookingId },
-    select: { currentRevisionId: true, signingLocation: true, notes: true },
+    select: { currentRevisionId: true, signingLocation: true, notes: true, snapCustomer: true },
   });
   if (!booking?.currentRevisionId) return false;
 
@@ -196,7 +199,7 @@ export async function patchSnapshotAdminFields(bookingId: string): Promise<boole
   if (!revision) return false;
 
   // Merge only the admin/live fields into the existing snapshot JSON, leaving
-  // all pricing/package/customer/TOP data untouched. Note Date Event (notes) is a
+  // all pricing/package/TOP data untouched. Note Date Event (notes) is a
   // free-text field that never triggers a material change, so — like signingLocation —
   // it stays fresh in an already-signed snapshot.
   const existingSnap = (revision.snapshotData ?? {}) as Record<string, unknown>;
@@ -204,6 +207,7 @@ export async function patchSnapshotAdminFields(bookingId: string): Promise<boole
     ...existingSnap,
     signingLocation: booking.signingLocation ?? null,
     notes: booking.notes ?? null,
+    ...(booking.snapCustomer ? { snapCustomer: booking.snapCustomer } : {}),
   };
 
   await db.bookingRevision.update({
@@ -255,6 +259,47 @@ export async function patchSnapshotPackageItems(bookingId: string): Promise<bool
     ...existingSnap,
     snapPackageInternalItems: internalItems,
     snapPackageVendorItems: vendorItems,
+  };
+
+  await db.bookingRevision.update({
+    where: { id: booking.currentRevisionId },
+    data: { snapshotData: patched as Prisma.InputJsonValue },
+  });
+
+  return true;
+}
+
+/**
+ * Targeted patch of the complimentaries snapshot field so a post-signature edit to
+ * complimentaries still propagates into the signed PO PDF. Complimentary is a
+ * non-trigger field — editable after the client signs without re-approval.
+ *
+ * Writes EVEN when snapshotFrozenAt is set (that is the point). Narrow patch: only
+ * snapComplimentaries is overwritten; every other snapshot field is left untouched.
+ * No-ops when there is no current revision. Best-effort.
+ */
+export async function patchSnapshotComplimentaries(bookingId: string): Promise<boolean> {
+  const booking = await db.booking.findUnique({
+    where: { id: bookingId },
+    select: { currentRevisionId: true },
+  });
+  if (!booking?.currentRevisionId) return false;
+
+  const revision = await db.bookingRevision.findUnique({
+    where: { id: booking.currentRevisionId },
+    select: { snapshotData: true },
+  });
+  if (!revision) return false;
+
+  const complimentaries = await db.snapComplimentary.findMany({
+    where: { bookingId },
+    orderBy: { sortOrder: "asc" },
+  });
+
+  const existingSnap = (revision.snapshotData ?? {}) as Record<string, unknown>;
+  const patched: Record<string, unknown> = {
+    ...existingSnap,
+    snapComplimentaries: complimentaries,
   };
 
   await db.bookingRevision.update({
