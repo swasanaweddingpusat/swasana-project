@@ -17,11 +17,13 @@ async function fetchDashboardBookings(
   dealFrom: string,
   dealTo: string,
   filter: string,
+  salesId?: string,
 ): Promise<DashboardBookingItem[]> {
   const qs = new URLSearchParams();
   qs.set("filter", filter);
   if (dealFrom) qs.set("dealFrom", dealFrom);
   if (dealTo) qs.set("dealTo", dealTo);
+  if (salesId) qs.set("salesId", salesId);
   const res = await fetch(`/api/dashboard/bookings?${qs.toString()}`);
   if (!res.ok) throw new Error("Failed to fetch dashboard bookings");
   return res.json() as Promise<DashboardBookingItem[]>;
@@ -31,10 +33,11 @@ export function useDashboardBookings(
   dealFrom: string,
   dealTo: string,
   filter: string | null,
+  salesId?: string,
 ) {
   return useQuery({
-    queryKey: ["dashboard-bookings", dealFrom, dealTo, filter],
-    queryFn: () => fetchDashboardBookings(dealFrom, dealTo, filter!),
+    queryKey: ["dashboard-bookings", dealFrom, dealTo, filter, salesId],
+    queryFn: () => fetchDashboardBookings(dealFrom, dealTo, filter!, salesId),
     enabled: !!filter,
     staleTime: 30_000,
   });
