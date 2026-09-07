@@ -44,6 +44,27 @@ export interface ResponseBySalesRow {
   notResponded: number;
 }
 
+export interface BitrixDealItem {
+  id: string;
+  title: string;
+  sourceLabel: string;
+  venueLabel: string;
+  salesName: string;
+  salesId: string;
+  issueLabel: string;
+  reasonLabel: string;
+  adsUrl: string;
+  dateCreate: string;
+  stageLabel: string;
+  pipeline: string;
+  isKantor: boolean;
+  hasVenue: boolean;
+  isFromAds: boolean;
+  isSpamPrank: boolean;
+  isGetback: boolean;
+  responded: boolean | null;
+}
+
 export interface BitrixOverviewData {
   range: { from: string; to: string };
   total: number;
@@ -61,6 +82,7 @@ export interface BitrixOverviewData {
   responseBySales: ResponseBySalesRow[];
   stageCatalog: StageCatalogItem[];
   issueCatalog: string[];
+  deals: BitrixDealItem[];
   error?: string;
 }
 

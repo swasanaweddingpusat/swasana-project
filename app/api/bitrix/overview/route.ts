@@ -258,6 +258,8 @@ export async function GET(request: Request) {
     let responded = 0;
     let notResponded = 0;
     const responseBySalesMap = new Map<string, { responded: number; notResponded: number }>();
+    // Per-deal response status: true = all sessions ok, false = has pending, null = no sessions
+    const dealResponseMap = new Map<string, boolean>();
     if (dealIds.length > 0) {
       const { items: acts } = await bitrixListAll<{
         ID: string;
@@ -301,6 +303,17 @@ export async function GET(request: Request) {
           if (isPending) salesBucket.notResponded++;
           else salesBucket.responded++;
         }
+
+        // Track per-deal: if any session is pending, the deal is not fully responded.
+        if (dealId) {
+          const isPendingSession = metrics[sessionId]?.hasPending === true;
+          const current = dealResponseMap.get(dealId);
+          if (current === undefined) {
+            dealResponseMap.set(dealId, !isPendingSession);
+          } else if (isPendingSession) {
+            dealResponseMap.set(dealId, false);
+          }
+        }
       }
     }
 
@@ -315,6 +328,44 @@ export async function GET(request: Request) {
         notResponded: counts.notResponded,
       }))
       .sort((a, b) => b.notResponded - a.notResponded);
+
+    // Enriched individual deal items — lets the frontend render detail modals
+    // when users click on any metric card without a second round-trip.
+    const deals = items.map((d) => {
+      const sourceLabel =
+        meta.sources[d.SOURCE_ID ?? "UNKNOWN"] ?? labelFromSourceId(d.SOURCE_ID ?? "UNKNOWN");
+      const venueId = d[UF_VENUE];
+      const rawVenueLabel = venueId ? (venueEnum[venueId] ?? "") : "";
+      const hasVenue = !!rawVenueLabel && !NON_VENUE_LABELS.has(rawVenueLabel);
+      const issueId = d[UF_ISSUE];
+      const issueLabel = issueId ? (issueEnum[issueId] ?? "") : "";
+      const reasonId = d[UF_REASON];
+      const reasonLabel = reasonId ? (reasonEnum[reasonId] ?? "") : "";
+      const adsUrl = (d[UF_ADS_URL] ?? "").trim();
+      const userId = d.ASSIGNED_BY_ID ?? "UNKNOWN";
+
+      return {
+        id: d.ID,
+        title: d.TITLE ?? "",
+        sourceLabel,
+        venueLabel: hasVenue ? rawVenueLabel : "",
+        salesName: userMap[userId] ?? (userId === "UNKNOWN" ? "Tidak ditetapkan" : `#${userId}`),
+        salesId: userId,
+        issueLabel,
+        reasonLabel,
+        adsUrl,
+        dateCreate: d.DATE_CREATE ?? "",
+        stageLabel: meta.stages[d.STAGE_ID ?? ""] ?? d.STAGE_ID ?? "",
+        pipeline: d.CATEGORY_ID ?? "",
+        isKantor: !MANDIRI_SOURCE_LABELS.has(sourceLabel.toLowerCase()),
+        hasVenue,
+        isFromAds: !!adsUrl,
+        isSpamPrank:
+          issueLabel.toLowerCase().includes("spam") || issueLabel.toLowerCase().includes("prank"),
+        isGetback: reasonLabel.toLowerCase() === "getback",
+        responded: dealResponseMap.has(d.ID) ? (dealResponseMap.get(d.ID) ?? null) : null,
+      };
+    });
 
     return Response.json({
       range: { from: fromDay, to: toDay },
@@ -331,6 +382,7 @@ export async function GET(request: Request) {
       venues,
       responseStatus: { responded, notResponded },
       responseBySales,
+      deals,
       // Ordered stage funnel — powers the "Tahap" filter dropdown on the client.
       stageCatalog: meta.stageCatalog,
       // Distinct issue labels — powers the "Issue" filter dropdown on the client.
