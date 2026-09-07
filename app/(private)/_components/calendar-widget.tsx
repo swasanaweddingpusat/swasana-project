@@ -457,6 +457,23 @@ export function CalendarWidget({ events: initialEvents, year: initialYear, month
             </SelectContent>
           </Select>
 
+          <Select value={selectedVenue} onValueChange={handleVenueChange}>
+            <SelectTrigger size="sm" className="w-36 rounded-full">
+              <div className={cn("flex", "items-center", "gap-1.5", "truncate")}>
+                <Buildings2 weight="BoldDuotone" className={cn("h-3.5", "w-3.5", "shrink-0", "text-muted-foreground")} />
+                <SelectValue placeholder="Semua Venue" />
+              </div>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Semua Venue</SelectItem>
+              {venueNames.map((name) => (
+                <SelectItem key={name} value={name}>
+                  {name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
           <Button
             variant="outline"
             size="icon"
