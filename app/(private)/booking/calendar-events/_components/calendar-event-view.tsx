@@ -1,8 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 
-import { Calendar } from '@solar-icons/react';
+import { Buildings2, Calendar } from '@solar-icons/react';
 import { useCalendarEvents } from '@/hooks/use-calendar-events';
 import type { CalendarEventsResult } from '@/lib/queries/calendar-events';
 import { Button } from '@/components/ui/button';
@@ -42,11 +42,30 @@ export function CalendarEventView({
   const [viewMode, setViewMode] = useState<ViewMode>('month');
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
 
+  const [selectedVenue, setSelectedVenue] = useState<string>('all');
+
   const { data: events = [] } = useCalendarEvents(
     year,
     month,
     year === initialYear && month === initialMonth ? initialData : undefined,
   );
+
+  const venueNames = useMemo(() => {
+    const names = new Set<string>();
+    for (const e of events) {
+      if (e.snapVenue?.venueName) names.add(e.snapVenue.venueName);
+    }
+    return [...names].sort();
+  }, [events]);
+
+  const filteredEvents = useMemo(() => {
+    if (selectedVenue === 'all') return events;
+    return events.filter((e) => e.snapVenue?.venueName === selectedVenue);
+  }, [events, selectedVenue]);
+
+  const handleVenueChange = useCallback((val: string) => {
+    setSelectedVenue(val);
+  }, []);
 
   function handleToday() {
     const now = new Date();
@@ -73,7 +92,7 @@ export function CalendarEventView({
   return (
     <div className="space-y-6">
       {/* Top bar */}
-      <div className={cn('flex', 'items-center', 'justify-between')}>
+      <div className={cn('flex', 'flex-wrap', 'items-center', 'justify-between', 'gap-2')}>
         <div className={cn('flex', 'items-center', 'gap-2')}>
           <Calendar weight="BoldDuotone" className={cn('size-5', 'text-muted-foreground')} />
           {/* Year select */}
@@ -119,6 +138,24 @@ export function CalendarEventView({
           <Button variant="outline" size="sm" onClick={handleToday}>
             Hari Ini
           </Button>
+
+          {/* Venue filter */}
+          <Select value={selectedVenue} onValueChange={handleVenueChange}>
+            <SelectTrigger className={cn('w-44', 'h-9')}>
+              <div className={cn('flex', 'items-center', 'gap-1.5', 'truncate')}>
+                <Buildings2 weight="BoldDuotone" className={cn('h-3.5', 'w-3.5', 'shrink-0', 'text-muted-foreground')} />
+                <SelectValue placeholder="Semua Venue" />
+              </div>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Semua Venue</SelectItem>
+              {venueNames.map((name) => (
+                <SelectItem key={name} value={name}>
+                  {name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
 
         <div className={cn('flex', 'items-center', 'gap-1')}>
@@ -136,16 +173,16 @@ export function CalendarEventView({
         </div>
       </div>
 
-      <CalendarStats events={events} />
+      <CalendarStats events={filteredEvents} />
 
       {viewMode === 'month' && (
-        <CalendarMonthView events={events} year={year} month={month} onDateClick={handleDateClick} />
+        <CalendarMonthView events={filteredEvents} year={year} month={month} onDateClick={handleDateClick} />
       )}
       {viewMode === 'week' && (
-        <CalendarWeekView events={events} year={year} month={month} selectedDate={defaultDate} onDateClick={handleDateClick} />
+        <CalendarWeekView events={filteredEvents} year={year} month={month} selectedDate={defaultDate} onDateClick={handleDateClick} />
       )}
       {viewMode === 'day' && (
-        <CalendarDayView events={events} date={defaultDate} />
+        <CalendarDayView events={filteredEvents} date={defaultDate} />
       )}
     </div>
   );
