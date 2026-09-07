@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import {
   startOfMonth,
   endOfMonth,
@@ -12,7 +12,7 @@ import {
   format,
 } from "date-fns";
 import { id as localeId } from "date-fns/locale";
-import { Calendar, AltArrowLeft, AltArrowRight } from "@solar-icons/react";
+import { Buildings2, Calendar, AltArrowLeft, AltArrowRight } from "@solar-icons/react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -338,6 +338,7 @@ function EventDetailDialog({ detail, onClose }: EventDetailDialogProps): React.R
 export function CalendarWidget({ events: initialEvents, year: initialYear, month: initialMonth }: CalendarWidgetProps): React.ReactElement {
   const [viewMode, setViewMode] = useState<ViewMode>("month");
   const [selectedDetail, setSelectedDetail] = useState<DayDetail | null>(null);
+  const [selectedVenue, setSelectedVenue] = useState<string>("all");
 
   // Bulan/tahun aktif — dipilih lewat filter di header. Diinisialisasi dari
   // bulan yang di-render server (initialYear/initialMonth).
@@ -354,6 +355,23 @@ export function CalendarWidget({ events: initialEvents, year: initialYear, month
 
   // anchorDate = awal bulan yang sedang aktif
   const anchorDate = useMemo(() => new Date(year, month - 1, 1), [year, month]);
+
+  const venueNames = useMemo(() => {
+    const names = new Set<string>();
+    for (const e of events) {
+      if (e.venueName) names.add(e.venueName);
+    }
+    return [...names].sort();
+  }, [events]);
+
+  const filteredEvents = useMemo(() => {
+    if (selectedVenue === "all") return events;
+    return events.filter((e) => e.venueName === selectedVenue);
+  }, [events, selectedVenue]);
+
+  const handleVenueChange = useCallback((val: string) => {
+    setSelectedVenue(val);
+  }, []);
 
   function handleViewChange(mode: ViewMode): void {
     setViewMode(mode);
@@ -439,6 +457,23 @@ export function CalendarWidget({ events: initialEvents, year: initialYear, month
             </SelectContent>
           </Select>
 
+          <Select value={selectedVenue} onValueChange={handleVenueChange}>
+            <SelectTrigger size="sm" className="w-36 rounded-full">
+              <div className={cn("flex", "items-center", "gap-1.5", "truncate")}>
+                <Buildings2 weight="BoldDuotone" className={cn("h-3.5", "w-3.5", "shrink-0", "text-muted-foreground")} />
+                <SelectValue placeholder="Semua Venue" />
+              </div>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Semua Venue</SelectItem>
+              {venueNames.map((name) => (
+                <SelectItem key={name} value={name}>
+                  {name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
           <Button
             variant="outline"
             size="icon"
@@ -468,9 +503,9 @@ export function CalendarWidget({ events: initialEvents, year: initialYear, month
 
       {/* ── Calendar View ──────────────────────────────────────────────────── */}
       {viewMode === "month" ? (
-        <MonthView events={events} year={year} month={month} onDayClick={setSelectedDetail} />
+        <MonthView events={filteredEvents} year={year} month={month} onDayClick={setSelectedDetail} />
       ) : (
-        <WeekView events={events} anchorDate={anchorDate} onDayClick={setSelectedDetail} />
+        <WeekView events={filteredEvents} anchorDate={anchorDate} onDayClick={setSelectedDetail} />
       )}
 
       {/* ── Legend ─────────────────────────────────────────────────────────── */}
