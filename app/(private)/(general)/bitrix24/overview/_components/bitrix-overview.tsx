@@ -52,6 +52,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { cn } from "@/lib/utils";
 import { Drawer } from "@/components/shared/drawer";
+import { BitrixDealDetail } from "@/components/shared/BitrixDealDetail";
 import {
   exportBitrixOverviewExcel,
   exportBitrixOverviewPdf,
@@ -59,6 +60,7 @@ import {
 import {
   useBitrixOverview,
   type BitrixOverviewData as OverviewData,
+  type BitrixDealItem,
   type Bucket,
   type AdBucket,
   type OverviewSalesBucket as SalesBucket,
@@ -137,12 +139,38 @@ function initialFilters(): Filters {
   };
 }
 
+type DealFilter =
+  | "all"
+  | "withVenue"
+  | "fromAds"
+  | "organik"
+  | "spamPrank"
+  | "kantor"
+  | "mandiri"
+  | "responded"
+  | "notResponded"
+  | null;
+
+const dealFilterLabels: Record<Exclude<DealFilter, null>, string> = {
+  all: "Total Transaksi",
+  withVenue: "Database Venue",
+  fromAds: "Dari Iklan",
+  organik: "Organik",
+  spamPrank: "Spam/Prank",
+  kantor: "Database Kantor",
+  mandiri: "Database Mandiri",
+  responded: "Sudah Dibalas",
+  notResponded: "Belum Dibalas",
+};
+
 export function BitrixOverview() {
   const [filters, setFilters] = useState<Filters>(initialFilters);
   const [filterOpen, setFilterOpen] = useState(false);
   const [stageCatalog, setStageCatalog] = useState<StageCatalogItem[]>([]);
   const [issueCatalog, setIssueCatalog] = useState<string[]>([]);
   const [exporting, setExporting] = useState(false);
+  const [dealFilter, setDealFilter] = useState<DealFilter>(null);
+  const [selectedDealId, setSelectedDealId] = useState<string | null>(null);
 
   const from = filters.range?.from ? toIsoDay(filters.range.from) : "";
   const to = filters.range?.to ? toIsoDay(filters.range.to) : from;
@@ -191,6 +219,22 @@ export function BitrixOverview() {
   }
 
   const adsPct = data && data.total > 0 ? Math.round((data.fromAds / data.total) * 100) : 0;
+
+  const filteredDeals = useMemo(() => {
+    if (!dealFilter || !data?.deals) return [];
+    switch (dealFilter) {
+      case "all": return data.deals;
+      case "withVenue": return data.deals.filter((d) => d.hasVenue);
+      case "fromAds": return data.deals.filter((d) => d.isFromAds);
+      case "organik": return data.deals.filter((d) => !d.isFromAds);
+      case "spamPrank": return data.deals.filter((d) => d.isSpamPrank);
+      case "kantor": return data.deals.filter((d) => d.isKantor);
+      case "mandiri": return data.deals.filter((d) => !d.isKantor);
+      case "responded": return data.deals.filter((d) => d.responded === true);
+      case "notResponded": return data.deals.filter((d) => d.responded === false);
+      default: return [];
+    }
+  }, [dealFilter, data?.deals]);
 
   // Count of non-default active filters — shown as a badge on the Filter button.
   const activeCount =
@@ -283,36 +327,51 @@ export function BitrixOverview() {
               label="Database Venue"
               value={loading ? null : data?.withVenue ?? 0}
               hint={loading ? undefined : `dari ${data?.total ?? 0} total transaksi`}
+              onClick={data ? () => setDealFilter("withVenue") : undefined}
             />
             <MetricCard
               icon={<ChatRoundLine weight="BoldDuotone" className="h-5 w-5 text-foreground" />}
               label="Total Transaksi"
               value={loading ? null : data?.total ?? 0}
+              onClick={data ? () => setDealFilter("all") : undefined}
             />
             <MetricCard
               icon={<VolumeLoud weight="BoldDuotone" className="h-5 w-5 text-foreground" />}
               label="Dari Iklan"
               value={loading ? null : data?.fromAds ?? 0}
               hint={loading ? undefined : `${adsPct}% dari total`}
+              onClick={data ? () => setDealFilter("fromAds") : undefined}
             />
             <MetricCard
               icon={<Leaf weight="BoldDuotone" className="h-5 w-5 text-foreground" />}
               label="Organik"
               value={loading ? null : data?.organik ?? 0}
+              onClick={data ? () => setDealFilter("organik") : undefined}
             />
             <MetricCard
               icon={<DangerTriangle weight="BoldDuotone" className="h-5 w-5 text-foreground" />}
               label="Spam/Prank"
               value={loading ? null : data?.spamPrank ?? 0}
               hint={loading ? undefined : "dari field issue"}
+              onClick={data ? () => setDealFilter("spamPrank") : undefined}
             />
           </div>
 
           {/* Database Kantor vs Mandiri — mandiri = Live TikTok / Referral */}
-          <KantorMandiriCard data={data} loading={loading} />
+          <KantorMandiriCard
+            data={data}
+            loading={loading}
+            onKantorClick={data ? () => setDealFilter("kantor") : undefined}
+            onMandiriClick={data ? () => setDealFilter("mandiri") : undefined}
+          />
 
           {/* Response Status — sudah dibalas vs belum dibalas, filter-aware */}
-          <ResponseStatusCard data={data} loading={loading} />
+          <ResponseStatusCard
+            data={data}
+            loading={loading}
+            onRespondedClick={data ? () => setDealFilter("responded") : undefined}
+            onNotRespondedClick={data ? () => setDealFilter("notResponded") : undefined}
+          />
 
           {/* Breakdown lists */}
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
@@ -350,6 +409,23 @@ export function BitrixOverview() {
           onApply={applyFilters}
           onReset={resetFilters}
         />
+      </Drawer>
+
+      <DealListDrawer
+        isOpen={dealFilter !== null}
+        onClose={() => setDealFilter(null)}
+        title={dealFilter ? dealFilterLabels[dealFilter] : ""}
+        deals={filteredDeals}
+        onDealClick={(id) => setSelectedDealId(id)}
+      />
+
+      <Drawer
+        isOpen={!!selectedDealId}
+        onClose={() => setSelectedDealId(null)}
+        title="Detail Transaksi"
+        maxWidth="sm:max-w-2xl"
+      >
+        {selectedDealId && <BitrixDealDetail key={selectedDealId} dealId={selectedDealId} />}
       </Drawer>
     </div>
   );
@@ -652,14 +728,22 @@ function MetricCard({
   label,
   value,
   hint,
+  onClick,
 }: {
   icon: React.ReactNode;
   label: string;
   value: number | null;
   hint?: string;
+  onClick?: () => void;
 }) {
   return (
-    <Card className="flex flex-col gap-2 rounded-xl p-5">
+    <Card
+      className={cn(
+        "flex flex-col gap-2 rounded-xl p-5",
+        onClick && "cursor-pointer transition-shadow hover:shadow-md",
+      )}
+      onClick={onClick}
+    >
       <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent">{icon}</div>
       <div>
         <p className="text-xs text-muted-foreground">{label}</p>
@@ -672,7 +756,17 @@ function MetricCard({
   );
 }
 
-function KantorMandiriCard({ data, loading }: { data: OverviewData | null; loading: boolean }) {
+function KantorMandiriCard({
+  data,
+  loading,
+  onKantorClick,
+  onMandiriClick,
+}: {
+  data: OverviewData | null;
+  loading: boolean;
+  onKantorClick?: () => void;
+  onMandiriClick?: () => void;
+}) {
   const kantor = data?.kantor ?? 0;
   const mandiri = data?.mandiri ?? 0;
   const total = kantor + mandiri;
@@ -690,7 +784,13 @@ function KantorMandiriCard({ data, loading }: { data: OverviewData | null; loadi
         <span className="font-medium">Referral</span>; sisanya dihitung sebagai kantor.
       </p>
       <div className="grid grid-cols-2 gap-4">
-        <div className="flex items-start gap-3">
+        <div
+          className={cn(
+            "flex items-start gap-3 rounded-xl p-3 -m-3",
+            onKantorClick && "cursor-pointer transition-colors hover:bg-accent/50",
+          )}
+          onClick={onKantorClick}
+        >
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-accent">
             <Buildings weight="BoldDuotone" className="h-5 w-5 text-foreground" />
           </div>
@@ -705,7 +805,13 @@ function KantorMandiriCard({ data, loading }: { data: OverviewData | null; loadi
             </div>
           </div>
         </div>
-        <div className="flex items-start gap-3">
+        <div
+          className={cn(
+            "flex items-start gap-3 rounded-xl p-3 -m-3",
+            onMandiriClick && "cursor-pointer transition-colors hover:bg-accent/50",
+          )}
+          onClick={onMandiriClick}
+        >
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-accent">
             <UsersGroupRounded weight="BoldDuotone" className="h-5 w-5 text-foreground" />
           </div>
@@ -725,7 +831,17 @@ function KantorMandiriCard({ data, loading }: { data: OverviewData | null; loadi
   );
 }
 
-function ResponseStatusCard({ data, loading }: { data: OverviewData | null; loading: boolean }) {
+function ResponseStatusCard({
+  data,
+  loading,
+  onRespondedClick,
+  onNotRespondedClick,
+}: {
+  data: OverviewData | null;
+  loading: boolean;
+  onRespondedClick?: () => void;
+  onNotRespondedClick?: () => void;
+}) {
   const notResponded = data?.responseStatus.notResponded ?? 0;
 
   return (
@@ -735,7 +851,13 @@ function ResponseStatusCard({ data, loading }: { data: OverviewData | null; load
         <h3 className="font-heading text-sm font-semibold">Response Status</h3>
       </div>
       <div className="grid grid-cols-2 gap-4">
-        <div className="flex items-start gap-3">
+        <div
+          className={cn(
+            "flex items-start gap-3 rounded-xl p-3 -m-3",
+            onRespondedClick && "cursor-pointer transition-colors hover:bg-accent/50",
+          )}
+          onClick={onRespondedClick}
+        >
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-accent">
             <CheckCircle weight="BoldDuotone" className="h-5 w-5 text-foreground" />
           </div>
@@ -746,7 +868,13 @@ function ResponseStatusCard({ data, loading }: { data: OverviewData | null; load
             </p>
           </div>
         </div>
-        <div className="flex items-start gap-3">
+        <div
+          className={cn(
+            "flex items-start gap-3 rounded-xl p-3 -m-3",
+            onNotRespondedClick && "cursor-pointer transition-colors hover:bg-accent/50",
+          )}
+          onClick={onNotRespondedClick}
+        >
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-accent">
             <DangerCircle weight="BoldDuotone" className="h-5 w-5 text-foreground" />
           </div>
@@ -911,6 +1039,66 @@ function VenueCard({ buckets, total, loading }: { buckets: Bucket[] | undefined;
       total={total}
       loading={loading}
     />
+  );
+}
+
+function DealListDrawer({
+  isOpen,
+  onClose,
+  title,
+  deals,
+  onDealClick,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  title: string;
+  deals: BitrixDealItem[];
+  onDealClick?: (dealId: string) => void;
+}) {
+  return (
+    <Drawer isOpen={isOpen} onClose={onClose} title={`${title} (${deals.length})`} maxWidth="sm:max-w-2xl">
+      {deals.length === 0 ? (
+        <p className="py-8 text-center text-sm text-muted-foreground">Tidak ada data.</p>
+      ) : (
+        <div className="overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="min-w-48">Judul</TableHead>
+                <TableHead>Sales</TableHead>
+                <TableHead>Sumber</TableHead>
+                <TableHead>Venue</TableHead>
+                <TableHead>Tanggal</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {deals.map((deal) => (
+                <TableRow
+                  key={deal.id}
+                  className={cn(onDealClick && "cursor-pointer hover:bg-accent transition-colors")}
+                  onClick={() => onDealClick?.(deal.id)}
+                >
+                  <TableCell className="font-medium">
+                    <div className="flex flex-col gap-0.5">
+                      <span className="line-clamp-1">{deal.title || `#${deal.id}`}</span>
+                      {deal.stageLabel && (
+                        <span className="text-xs text-muted-foreground">{deal.stageLabel}</span>
+                      )}
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-sm">{deal.salesName}</TableCell>
+                  <TableCell className="text-sm">{deal.sourceLabel}</TableCell>
+                  <TableCell className="text-sm">{deal.venueLabel || "—"}</TableCell>
+                  <TableCell className="whitespace-nowrap text-sm">
+                    {deal.dateCreate ? format(new Date(deal.dateCreate), "d MMM yyyy") : "—"}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      )}
+    </Drawer>
   );
 }
 

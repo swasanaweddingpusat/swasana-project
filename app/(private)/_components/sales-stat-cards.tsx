@@ -11,6 +11,7 @@ import type { DashboardBookingItem } from "@/hooks/use-dashboard-bookings";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { BookingDetailModal } from "@/app/(private)/booking/booking-weddings/_components/booking-detail-modal";
 
 interface SalesStatCardsProps {
   initialStats: DashboardStats;
@@ -77,6 +78,7 @@ export function SalesStatCards({ initialStats, dealFrom, dealTo, eventFrom, even
   const [activeFilter, setActiveFilter] = useState<string | null>(null);
   const { data: bookings, isLoading } = useDashboardBookings(dealFrom, dealTo, activeFilter);
   const activeCard = cards.find((c) => c.filter === activeFilter);
+  const [selectedBookingId, setSelectedBookingId] = useState<string | null>(null);
 
   return (
     <>
@@ -139,7 +141,8 @@ export function SalesStatCards({ initialStats, dealFrom, dealTo, eventFrom, even
               bookings.map((item: DashboardBookingItem) => (
                 <div
                   key={item.id}
-                  className={cn("flex", "items-center", "justify-between", "py-3", "border-b", "last:border-b-0")}
+                  onClick={() => setSelectedBookingId(item.id)}
+                  className={cn("flex", "items-center", "justify-between", "py-3", "px-2", "border-b", "last:border-b-0", "cursor-pointer", "rounded-lg", "hover:bg-accent", "transition-colors")}
                 >
                   <div className={cn("flex", "flex-col", "gap-0.5")}>
                     <span className={cn("text-sm", "font-medium", "text-foreground")}>
@@ -171,6 +174,11 @@ export function SalesStatCards({ initialStats, dealFrom, dealTo, eventFrom, even
           </div>
         </DialogContent>
       </Dialog>
+      <BookingDetailModal
+        open={!!selectedBookingId}
+        onClose={() => setSelectedBookingId(null)}
+        bookingId={selectedBookingId}
+      />
     </>
   );
 }
