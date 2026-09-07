@@ -87,6 +87,10 @@ export interface EditBookingForm {
   setSourceOfInformationDetail: (v: string) => void;
   salesId: string | null;
   setSalesId: (v: string | null) => void;
+  /** "Dealing date" override (booking.createdAt) — empty string when the caller
+   *  lacks the `booking:dealing-date` permission (field stays hidden in the UI). */
+  dealingDate: string;
+  setDealingDate: (v: string) => void;
 
   // step 2: venue/event state
   venueId: string;
@@ -210,6 +214,7 @@ export function useEditBookingForm(
   const [sourceOfInformationId, setSourceOfInformationId] = useState("");
   const [sourceOfInformationDetail, setSourceOfInformationDetail] = useState("");
   const [salesId, setSalesId] = useState<string | null>(null);
+  const [dealingDate, setDealingDate] = useState("");
 
   // â”€â”€ Step 2: Venue / Package / Event â”€â”€
   const [venueId, setVenueId] = useState("");
@@ -325,6 +330,7 @@ export function useEditBookingForm(
     }
 
     setSalesId(booking.salesId ?? null);
+    setDealingDate(booking.createdAt ? toDateOnly(new Date(booking.createdAt)) : "");
     setSourceOfInformationId(booking.sourceOfInformationId ?? "");
     setSourceOfInformationDetail(booking.sourceOfInformationDetail ?? "");
 
@@ -471,6 +477,7 @@ export function useEditBookingForm(
         salesId: salesId || null,
         sourceOfInformationId: sourceOfInformationId || null,
         sourceOfInformationDetail: sourceOfInformationDetail || null,
+        createdAt: dealingDate || undefined,
       });
       if (!r.success) { toast.error(r.error); return; }
       qc.invalidateQueries({ queryKey: ["bookings"] });
@@ -585,6 +592,8 @@ export function useEditBookingForm(
     setSourceOfInformationDetail,
     salesId,
     setSalesId,
+    dealingDate,
+    setDealingDate,
     venueId,
     setVenueId,
     packageId,

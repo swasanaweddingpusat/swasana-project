@@ -22,7 +22,7 @@ export const roleData = [
 // ── Modules & Actions ────────────────────────────────────────────────
 // Only modules that are ACTUALLY used in code
 export const moduleActions: Record<string, string[]> = {
-  booking: ["view", "create", "edit", "delete", "print", "approve", "mark-lost", "restore", "cancel", "transfer", "transfer-manager", "reject", "comment", "client-agreement", "term-&-condition", "edit-package", "edit-set-harga", "reset-approval"],
+  booking: ["view", "create", "edit", "delete", "print", "approve", "mark-lost", "restore", "cancel", "transfer", "transfer-manager", "reject", "comment", "client-agreement", "term-&-condition", "edit-package", "edit-set-harga", "reset-approval", "dealing-date"],
   customers: ["view", "create", "edit", "delete"],
   "finance-ar": ["view", "create", "edit", "delete"],
   groups: ["view", "view-all", "create", "edit", "delete"],

@@ -1,17 +1,21 @@
 "use client";
 
 import { toast } from "sonner";
-import { CloseCircle } from "@solar-icons/react";
+import { format } from "date-fns";
+import { CloseCircle, Calendar as CalendarIcon } from "@solar-icons/react";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
+import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { ContactEntry, parseStoredPhone } from "@/components/shared/PhoneInput";
 import { LBL } from "./useEditBookingForm";
 import { validateIdNumber } from "@/lib/validations/booking-form";
 import { BitrixIdField } from "@/components/shared/BitrixIdField";
+import { usePermissions } from "@/hooks/use-permissions";
+import { cn, toDateOnly, parseDateOnly } from "@/lib/utils";
 import type { EditBookingForm } from "./useEditBookingForm";
 
 // ─── ClientInfoStep ───────────────────────────────────────────────────────────
@@ -34,6 +38,7 @@ export function ClientInfoStep({ form }: { form: EditBookingForm }) {
     sourceOfInformationId, setSourceOfInformationId,
     sourceOfInformationDetail, setSourceOfInformationDetail,
     salesId, setSalesId,
+    dealingDate, setDealingDate,
     salesUsers,
     sources,
     isSalesPIC,
@@ -43,6 +48,9 @@ export function ClientInfoStep({ form }: { form: EditBookingForm }) {
     clearError,
     validateField,
   } = form;
+
+  const { can } = usePermissions();
+  const canEditDealingDate = can("booking", "dealing-date");
 
   return (
     <div className="space-y-4">
@@ -289,6 +297,44 @@ export function ClientInfoStep({ form }: { form: EditBookingForm }) {
           <Textarea className="mt-1" rows={3} value={contactCpwAddress} onChange={(e) => setContactCpwAddress(e.target.value)} placeholder="Alamat CPW" />
         </div>
       </div>
+
+      {/* Card 5: Dealing Date (super-admin only) */}
+      {canEditDealingDate && (
+        <div className="rounded-2xl border bg-card p-5 space-y-3">
+          <p className="flex items-center gap-1.5 text-sm font-semibold text-foreground mb-1">
+            <CalendarIcon weight="BoldDuotone" className="h-4 w-4 text-muted-foreground" />
+            Dealing Date
+          </p>
+          <div>
+            <label className={LBL}>Tanggal Dealing</label>
+            <Popover>
+              <PopoverTrigger render={
+                <Button
+                  variant="outline"
+                  className={cn("w-full mt-1 justify-start text-left font-normal", !dealingDate && "text-muted-foreground")}
+                >
+                  <CalendarIcon weight="BoldDuotone" className="mr-2 h-4 w-4" />
+                  {dealingDate ? format(parseDateOnly(dealingDate), "PPP") : "Pilih tanggal dealing"}
+                </Button>
+              } />
+              <PopoverContent className="w-auto p-0" align="start">
+                <Calendar
+                  mode="single"
+                  captionLayout="dropdown"
+                  selected={dealingDate ? parseDateOnly(dealingDate) : undefined}
+                  onSelect={(date) => setDealingDate(date ? toDateOnly(date) : "")}
+                  startMonth={new Date(new Date().getFullYear() - 10, 0)}
+                  endMonth={new Date(new Date().getFullYear() + 10, 11)}
+                  defaultMonth={dealingDate ? parseDateOnly(dealingDate) : new Date()}
+                />
+              </PopoverContent>
+            </Popover>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Mengubah tanggal booking dibuat (dealing date). Hanya super-admin yang bisa mengedit field ini.
+            </p>
+          </div>
+        </div>
+      )}
 
     </div>
   );

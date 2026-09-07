@@ -50,6 +50,7 @@ Screenshot*.png
 .superpowers/
 .claude/
 docs/superpowers/
+.scratch/
 
 # external API references (not part of swasana-project)
 /API On Cloud V.1.3/
