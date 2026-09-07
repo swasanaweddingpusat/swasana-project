@@ -486,19 +486,38 @@ export function CalendarWidget({ events: initialEvents, year: initialYear, month
         </div>
       </div>
 
-      {/* ── View toggle ────────────────────────────────────────────────────── */}
-      <div className={cn("flex", "items-center", "gap-1")}>
-        {(["month", "week"] as ViewMode[]).map((mode) => (
-          <Button
-            key={mode}
-            variant={viewMode === mode ? "default" : "outline"}
-            size="sm"
-            className={cn("h-8", "flex-1", "rounded-full", "px-3", "text-xs", "sm:flex-none", viewMode !== mode && "text-muted-foreground")}
-            onClick={() => handleViewChange(mode)}
-          >
-            {mode === "month" ? "Bulan" : "Minggu"}
-          </Button>
-        ))}
+      {/* ── View toggle + Venue filter ─────────────────────────────────── */}
+      <div className={cn("flex", "flex-wrap", "items-center", "justify-between", "gap-2")}>
+        <div className={cn("flex", "items-center", "gap-1")}>
+          {(["month", "week"] as ViewMode[]).map((mode) => (
+            <Button
+              key={mode}
+              variant={viewMode === mode ? "default" : "outline"}
+              size="sm"
+              className={cn("h-8", "rounded-full", "px-3", "text-xs", viewMode !== mode && "text-muted-foreground")}
+              onClick={() => handleViewChange(mode)}
+            >
+              {mode === "month" ? "Bulan" : "Minggu"}
+            </Button>
+          ))}
+        </div>
+
+        <Select value={selectedVenue} onValueChange={handleVenueChange}>
+          <SelectTrigger size="sm" className={cn("w-44", "rounded-full")}>
+            <div className={cn("flex", "items-center", "gap-1.5", "truncate")}>
+              <Buildings2 weight="BoldDuotone" className={cn("h-3.5", "w-3.5", "shrink-0", "text-muted-foreground")} />
+              <SelectValue placeholder="Semua Venue" />
+            </div>
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Semua Venue</SelectItem>
+            {venueNames.map((name) => (
+              <SelectItem key={name} value={name}>
+                {name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
       {/* ── Calendar View ──────────────────────────────────────────────────── */}
