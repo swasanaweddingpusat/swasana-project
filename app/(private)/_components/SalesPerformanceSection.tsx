@@ -1,5 +1,7 @@
 "use client";
 
+import { useState } from "react";
+import { format } from "date-fns";
 import {
   BarChart,
   Bar,
@@ -22,7 +24,13 @@ import {
 } from "@solar-icons/react";
 import { cn } from "@/lib/utils";
 import { useDashboardSalesPerformance } from "@/hooks/useDashboardSalesPerformance";
+import { useDashboardBookings } from "@/hooks/use-dashboard-bookings";
+import type { DashboardBookingItem } from "@/hooks/use-dashboard-bookings";
 import type { SalesPerformanceCardItem } from "@/lib/queries/salesPerformance";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
+import { BookingDetailModal } from "@/app/(private)/booking/booking-weddings/_components/booking-detail-modal";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -120,9 +128,11 @@ function resolveDummyTarget(item: SalesPerformanceCardItem): number {
 function SalesListRow({
   item,
   rank,
+  onClick,
 }: {
   item: SalesPerformanceCardItem;
   rank: number;
+  onClick?: () => void;
 }) {
   const target = resolveDummyTarget(item);
   const collected = item.revenue;
@@ -130,9 +140,11 @@ function SalesListRow({
 
   return (
     <li
+      onClick={onClick}
       className={cn(
         "flex items-center gap-3 px-4 py-3 sm:gap-4 sm:px-5 sm:py-4",
         rank === 0 && "bg-[var(--brand-gold)]/5",
+        onClick && "cursor-pointer hover:bg-accent transition-colors",
       )}
     >
       <span
@@ -164,11 +176,22 @@ function SalesListRow({
   );
 }
 
-function SalesPerformanceTable({ data }: { data: SalesPerformanceCardItem[] }) {
+function SalesPerformanceTable({
+  data,
+  onSalesClick,
+}: {
+  data: SalesPerformanceCardItem[];
+  onSalesClick?: (item: SalesPerformanceCardItem) => void;
+}) {
   return (
     <ol className="flex flex-col divide-y divide-border overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
       {data.map((item, idx) => (
-        <SalesListRow key={item.profileId} item={item} rank={idx} />
+        <SalesListRow
+          key={item.profileId}
+          item={item}
+          rank={idx}
+          onClick={onSalesClick ? () => onSalesClick(item) : undefined}
+        />
       ))}
     </ol>
   );
@@ -264,6 +287,15 @@ interface SalesPerformanceSectionProps {
   eventTo: string;
 }
 
+function statusBadgeVariant(status: string): "default" | "secondary" | "destructive" | "outline" {
+  switch (status) {
+    case "Confirmed": return "default";
+    case "Pending": case "Uploaded": return "secondary";
+    case "Lost": case "Canceled": case "Rejected": return "destructive";
+    default: return "outline";
+  }
+}
+
 export function SalesPerformanceSection({
   initialData,
   dealFrom,
@@ -273,6 +305,15 @@ export function SalesPerformanceSection({
 }: SalesPerformanceSectionProps) {
   const { data: liveData } = useDashboardSalesPerformance(dealFrom, dealTo, eventFrom, eventTo, initialData);
   const data = liveData ?? initialData;
+
+  const [selectedSales, setSelectedSales] = useState<SalesPerformanceCardItem | null>(null);
+  const { data: salesBookings, isLoading: salesBookingsLoading } = useDashboardBookings(
+    dealFrom,
+    dealTo,
+    selectedSales ? "total" : null,
+    selectedSales?.profileId,
+  );
+  const [selectedBookingId, setSelectedBookingId] = useState<string | null>(null);
 
   if (data.length === 0) {
     return (
@@ -286,22 +327,83 @@ export function SalesPerformanceSection({
   }
 
   return (
-    <div className="flex flex-col gap-6">
-      <div className="flex items-center gap-2">
-        <CupStar weight="BoldDuotone" className="h-5 w-5 text-[var(--brand-gold)]" />
-        <h2 className="text-base font-semibold text-foreground">
-          Achievement & Performance Sales
-        </h2>
-        <span className="text-xs text-muted-foreground ml-1">
-          (semua sales, by revenue)
-        </span>
+    <>
+      <div className="flex flex-col gap-6">
+        <div className="flex items-center gap-2">
+          <CupStar weight="BoldDuotone" className="h-5 w-5 text-[var(--brand-gold)]" />
+          <h2 className="text-base font-semibold text-foreground">
+            Achievement & Performance Sales
+          </h2>
+          <span className="text-xs text-muted-foreground ml-1">
+            (semua sales, by revenue)
+          </span>
+        </div>
+
+        {/* Table per sales */}
+        <SalesPerformanceTable data={data} onSalesClick={setSelectedSales} />
+
+        {/* Revenue chart — full width */}
+        <RevenueBarChart data={data} />
       </div>
 
-      {/* Table per sales */}
-      <SalesPerformanceTable data={data} />
+      <Dialog
+        open={!!selectedSales}
+        onOpenChange={(open) => { if (!open) setSelectedSales(null); }}
+      >
+        <DialogContent className={cn("max-w-lg")}>
+          <DialogHeader>
+            <DialogTitle>Booking — {selectedSales?.name}</DialogTitle>
+            <DialogDescription>
+              {selectedSales
+                ? `${selectedSales.bookingCount} booking • ${formatCurrency(selectedSales.revenue)}`
+                : ""}
+            </DialogDescription>
+          </DialogHeader>
+          <div className={cn("max-h-96", "overflow-y-auto")}>
+            {salesBookingsLoading ? (
+              <div className={cn("flex", "flex-col", "gap-3", "py-2")}>
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <Skeleton key={i} className={cn("h-14", "w-full", "rounded-lg")} />
+                ))}
+              </div>
+            ) : salesBookings && salesBookings.length > 0 ? (
+              salesBookings.map((item: DashboardBookingItem) => (
+                <div
+                  key={item.id}
+                  onClick={() => setSelectedBookingId(item.id)}
+                  className={cn("flex", "items-center", "justify-between", "py-3", "px-2", "border-b", "last:border-b-0", "cursor-pointer", "rounded-lg", "hover:bg-accent", "transition-colors")}
+                >
+                  <div className={cn("flex", "flex-col", "gap-0.5")}>
+                    <span className={cn("text-sm", "font-medium", "text-foreground")}>
+                      {item.customerName}
+                    </span>
+                    <span className={cn("text-xs", "text-muted-foreground")}>
+                      {item.venueName} •{" "}
+                      {item.eventDate ? format(new Date(item.eventDate), "dd MMM yyyy") : "-"}
+                    </span>
+                  </div>
+                  <Badge
+                    variant={statusBadgeVariant(item.bookingStatus)}
+                    className={cn("text-xs", "shrink-0")}
+                  >
+                    {item.bookingStatus}
+                  </Badge>
+                </div>
+              ))
+            ) : (
+              <p className={cn("py-8", "text-center", "text-sm", "text-muted-foreground")}>
+                Tidak ada data booking.
+              </p>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
 
-      {/* Revenue chart — full width */}
-      <RevenueBarChart data={data} />
-    </div>
+      <BookingDetailModal
+        open={!!selectedBookingId}
+        onClose={() => setSelectedBookingId(null)}
+        bookingId={selectedBookingId}
+      />
+    </>
   );
 }

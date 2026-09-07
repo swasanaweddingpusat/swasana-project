@@ -15,6 +15,7 @@ const querySchema = z.object({
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/)
     .optional(),
+  salesId: z.string().optional(),
 });
 
 export async function GET(req: Request): Promise<Response> {
@@ -33,10 +34,13 @@ export async function GET(req: Request): Promise<Response> {
     return Response.json({ error: "Invalid query parameters" }, { status: 400 });
   }
 
-  const { filter, dealFrom, dealTo } = qParsed.data;
+  const { filter, dealFrom, dealTo, salesId } = qParsed.data;
   const { range } = resolveDealingRange(dealFrom, dealTo);
 
   const where: Record<string, unknown> = { recordStatus: "saved" };
+  if (salesId) {
+    where.salesId = salesId;
+  }
   if (range) {
     where.createdAt = { gte: range.from, lt: range.to };
   }
