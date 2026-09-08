@@ -3,20 +3,6 @@
 import { useState } from "react";
 import { format } from "date-fns";
 import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Cell,
-} from "recharts";
-import {
-  ChartContainer,
-  ChartTooltip,
-  ChartTooltipContent,
-  type ChartConfig,
-} from "@/components/ui/chart";
-import {
   CupStar,
   Crown,
   Star,
@@ -49,15 +35,6 @@ function getInitials(name: string): string {
     .join("")
     .toUpperCase();
 }
-
-// ─── Chart config ─────────────────────────────────────────────────────────────
-
-const chartConfig: ChartConfig = {
-  revenue: {
-    label: "Revenue",
-    color: "var(--brand-ink)",
-  },
-};
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
@@ -158,6 +135,9 @@ function SalesListRow({
       <AvatarCircle name={item.name} avatarUrl={item.avatarUrl} rank={rank} />
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-semibold text-foreground">{item.name}</p>
+        {item.groupName && (
+          <p className="text-xs text-muted-foreground">{item.groupName}</p>
+        )}
         <p className="text-xs text-muted-foreground">{item.bookingCount} booking</p>
         <div className="mt-1.5 flex items-center gap-2">
           <div className="h-2 min-w-0 flex-1 overflow-hidden rounded-full bg-secondary">
@@ -166,10 +146,9 @@ function SalesListRow({
               style={{ width: `${pct}%` }}
             />
           </div>
-          <span className="shrink-0 text-xs font-semibold text-foreground">{pct}%</span>
         </div>
         <p className="mt-0.5 text-xs text-muted-foreground">
-          {formatCurrency(collected)} dari target {formatCurrency(target)}
+          {formatCurrency(collected)}
         </p>
       </div>
     </li>
@@ -194,84 +173,6 @@ function SalesPerformanceTable({
         />
       ))}
     </ol>
-  );
-}
-
-// ─── Bar chart sub-section ────────────────────────────────────────────────────
-
-function RevenueBarChart({ data }: { data: SalesPerformanceCardItem[] }) {
-  const chartData = data.map((item) => ({
-    name:
-      item.name.split(" ").slice(0, 2).join(" "),
-    revenue: item.revenue,
-    profileId: item.profileId,
-  }));
-
-  const COLORS = [
-    "var(--brand-ink)",
-    "oklch(0.40 0 0)",
-    "oklch(0.55 0 0)",
-    "oklch(0.65 0 0)",
-    "oklch(0.75 0 0)",
-  ];
-
-  // Grow height with the number of sales so bars stay legible (≈40px/row).
-  const chartHeight = Math.max(208, chartData.length * 40 + 32);
-
-  return (
-    <div className="bg-card border rounded-2xl p-5 shadow-sm flex flex-col gap-4">
-      <div className="flex items-center gap-2">
-        <CupStar weight="BoldDuotone" className="h-5 w-5 text-[var(--brand-gold)]" />
-        <h3 className="text-sm font-semibold text-foreground">
-          Revenue per Sales
-        </h3>
-      </div>
-
-      <ChartContainer
-        config={chartConfig}
-        className="aspect-auto w-full"
-        style={{ height: chartHeight }}
-      >
-        <BarChart
-          data={chartData}
-          layout="vertical"
-          margin={{ top: 0, right: 12, bottom: 0, left: 0 }}
-        >
-          <CartesianGrid horizontal={false} stroke="var(--border)" strokeDasharray="3 3" />
-          <YAxis
-            dataKey="name"
-            type="category"
-            width={80}
-            tick={{ fontSize: 11 }}
-            tickLine={false}
-            axisLine={false}
-          />
-          <XAxis
-            type="number"
-            tickFormatter={(v: number) =>
-              v >= 1_000_000 ? `${(v / 1_000_000).toFixed(0)}Jt` : String(v)
-            }
-            tick={{ fontSize: 10 }}
-            tickLine={false}
-            axisLine={false}
-          />
-          <ChartTooltip
-            content={
-              <ChartTooltipContent
-                formatter={(value) =>
-                  typeof value === "number" ? formatCurrency(value) : String(value)
-                }
-              />
-            }
-          />
-          <Bar dataKey="revenue" radius={[0, 6, 6, 0]}>
-            {chartData.map((_, idx) => (
-              <Cell key={idx} fill={COLORS[idx % COLORS.length]} />
-            ))}
-          </Bar>
-        </BarChart>
-      </ChartContainer>
-    </div>
   );
 }
 
@@ -341,9 +242,6 @@ export function SalesPerformanceSection({
 
         {/* Table per sales */}
         <SalesPerformanceTable data={data} onSalesClick={setSelectedSales} />
-
-        {/* Revenue chart — full width */}
-        <RevenueBarChart data={data} />
       </div>
 
       <Dialog

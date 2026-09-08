@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import Image from "next/image";
 import { Drawer } from "@/components/shared/drawer";
 import { Button } from "@/components/ui/button";
@@ -14,7 +14,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { AddCircle, Camera } from "@solar-icons/react";
+import { AddCircle, Camera, Link, CloseCircle, CheckCircle } from "@solar-icons/react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { cn } from "@/lib/utils";
@@ -50,6 +50,8 @@ type GuestbookForm = {
   visitorPhotoPreview: string;
   idPhotoFile: File | null;
   idPhotoPreview: string;
+  bitrixContactId: string;
+  bitrixName: string;
 };
 
 const EMPTY_FORM: GuestbookForm = {
@@ -74,6 +76,8 @@ const EMPTY_FORM: GuestbookForm = {
   visitorPhotoPreview: "",
   idPhotoFile: null,
   idPhotoPreview: "",
+  bitrixContactId: "",
+  bitrixName: "",
 };
 
 const INTERACTION_TYPE_OPTIONS = [
@@ -98,17 +102,68 @@ function SectionLabel({ children }: { children: string }) {
   );
 }
 
+type BitrixContact = {
+  id: string;
+  name: string;
+};
+
 export function GuestbookDrawer({ isOpen, onClose }: GuestbookDrawerProps) {
   const [form, setForm] = useState<GuestbookForm>(EMPTY_FORM);
+  const [bitrixContacts, setBitrixContacts] = useState<BitrixContact[]>([]);
+  const [bitrixLoading, setBitrixLoading] = useState(false);
+  const [bitrixError, setBitrixError] = useState<string | null>(null);
+  const [bitrixSearched, setBitrixSearched] = useState(false);
+  const bitrixAbortRef = useRef<AbortController | null>(null);
+
   const createMutation = useCreateGuestbookEntry();
   const { data: venues = [] } = useVenues();
   const { users: salesUsers } = useSalesUsers();
   const salesOptions = salesUsers.map((u) => ({ id: u.id, name: u.fullName ?? u.id }));
 
+  useEffect(() => {
+    const digits = form.phoneNumber.replace(/\D/g, "");
+    if (digits.length < 8 || form.bitrixContactId) {
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      if (bitrixAbortRef.current) {
+        bitrixAbortRef.current.abort();
+      }
+      const controller = new AbortController();
+      bitrixAbortRef.current = controller;
+
+      setBitrixLoading(true);
+
+      fetch(`/api/guestbook/bitrix-lookup?phone=${encodeURIComponent(form.phoneNumber)}`, {
+        signal: controller.signal,
+      })
+        .then((res) => res.json() as Promise<{ contacts?: BitrixContact[]; error?: string }>)
+        .then((data) => {
+          setBitrixContacts(data.contacts ?? []);
+          setBitrixSearched(true);
+          setBitrixError(null);
+          setBitrixLoading(false);
+        })
+        .catch((err: unknown) => {
+          if (err instanceof Error && err.name === "AbortError") return;
+          setBitrixError("Gagal menghubungi Bitrix");
+          setBitrixLoading(false);
+        });
+    }, 300);
+
+    return () => {
+      clearTimeout(timer);
+    };
+  }, [form.phoneNumber, form.bitrixContactId]);
+
   function handleClose() {
     if (form.visitorPhotoPreview) URL.revokeObjectURL(form.visitorPhotoPreview);
     if (form.idPhotoPreview) URL.revokeObjectURL(form.idPhotoPreview);
     setForm(EMPTY_FORM);
+    setBitrixContacts([]);
+    setBitrixError(null);
+    setBitrixSearched(false);
     onClose();
   }
 
@@ -230,6 +285,8 @@ export function GuestbookDrawer({ isOpen, onClose }: GuestbookDrawerProps) {
       notes: form.notes.trim() || null,
       visitStatus: form.visitStatus || null,
       notJoinReason: form.visitStatus === "not_joined" ? (form.notJoinReason.trim() || null) : null,
+      bitrixContactId: form.bitrixContactId || null,
+      bitrixName: form.bitrixName || null,
     });
 
     if (result.success) {
@@ -341,9 +398,83 @@ export function GuestbookDrawer({ isOpen, onClose }: GuestbookDrawerProps) {
                 id="gb-phone"
                 placeholder="08xx-xxxx-xxxx"
                 value={form.phoneNumber}
-                onChange={(e) => setField("phoneNumber", e.target.value)}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setField("phoneNumber", val);
+                  if (form.bitrixContactId) {
+                    setField("bitrixContactId", "");
+                    setField("bitrixName", "");
+                  }
+                  const digits = val.replace(/\D/g, "");
+                  if (digits.length < 8) {
+                    setBitrixContacts([]);
+                    setBitrixError(null);
+                    setBitrixSearched(false);
+                  }
+                }}
                 className="rounded-xl"
               />
+
+              {/* Bitrix contact binding */}
+              {form.bitrixContactId ? (
+                <div className="flex items-center gap-2 mt-1.5 px-3 py-2 rounded-xl bg-secondary border border-border">
+                  <CheckCircle weight="BoldDuotone" className="h-4 w-4 text-primary shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-medium text-foreground truncate">{form.bitrixName}</p>
+                    <p className="text-[11px] text-muted-foreground">Terhubung ke Bitrix</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setField("bitrixContactId", "");
+                      setField("bitrixName", "");
+                    }}
+                    className="shrink-0 text-muted-foreground hover:text-destructive transition-colors"
+                    aria-label="Hapus binding Bitrix"
+                  >
+                    <CloseCircle weight="BoldDuotone" className="h-4 w-4" />
+                  </button>
+                </div>
+              ) : (
+                <>
+                  {bitrixLoading && (
+                    <p className="text-xs text-muted-foreground mt-1.5 flex items-center gap-1.5">
+                      <span className="inline-block h-3 w-3 rounded-full border-2 border-muted-foreground/40 border-t-primary animate-spin" />
+                      Mencari di Bitrix...
+                    </p>
+                  )}
+                  {bitrixError && !bitrixLoading && (
+                    <p className="text-xs text-muted-foreground mt-1.5">{bitrixError}</p>
+                  )}
+                  {!bitrixLoading && !bitrixError && bitrixSearched && bitrixContacts.length === 0 && (
+                    <p className="text-xs text-muted-foreground mt-1.5">Tidak ditemukan di Bitrix</p>
+                  )}
+                  {!bitrixLoading && !bitrixError && bitrixContacts.length > 0 && (
+                    <div className="mt-1.5 space-y-1.5">
+                      <p className="text-xs text-muted-foreground flex items-center gap-1">
+                        <Link weight="BoldDuotone" className="h-3.5 w-3.5" />
+                        Hubungkan ke kontak Bitrix:
+                      </p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {bitrixContacts.map((contact) => (
+                          <button
+                            key={contact.id}
+                            type="button"
+                            onClick={() => {
+                              setField("bitrixContactId", contact.id);
+                              setField("bitrixName", contact.name);
+                            }}
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-muted text-foreground hover:bg-primary hover:text-primary-foreground transition-colors"
+                          >
+                            {contact.name}
+                            <span className="text-[10px] opacity-60">#{contact.id}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
             </div>
 
             {/* No. KTP */}
