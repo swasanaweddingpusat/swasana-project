@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { format } from "date-fns";
 import type { DateRange } from "react-day-picker";
-import { Tuning2, CalendarMark, CalendarDate, CloseCircle } from "@solar-icons/react";
+import { CalendarDate, CloseCircle } from "@solar-icons/react";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import {
@@ -12,15 +12,6 @@ import {
   PopoverTrigger,
   PopoverContent,
 } from "@/components/ui/popover";
-import {
-  Sheet,
-  SheetTrigger,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetFooter,
-} from "@/components/ui/sheet";
-import { cn } from "@/lib/utils";
 
 // Local calendar day (not UTC) — avoids the off-by-one from toISOString().
 // Duplicated here (not imported from lib/queries/dashboard.ts) because that
@@ -42,104 +33,98 @@ function formatRangeLabel(range: DateRange | undefined): string {
 }
 
 /**
- * "Filter" trigger + Sheet drawer for the general dashboard (`/`). Owns a
+ * Inline Popover+Calendar datepicker for the general dashboard (`/`). Owns a
  * single filter — "Tanggal Dealing" (date range by booking createdAt) — that
  * drives every dealing-date-scoped section on the page via `dealFrom`/`dealTo`
  * search params. Reads the current params to prefill its local selection;
  * starts empty when absent — there is no default window, so the dashboard
  * shows all-time totals until a range is explicitly picked.
+ *
+ * Auto-applies when both `from` and `to` are selected (pushes URL). Waits for
+ * `to` if only `from` is picked. A Reset chip outside the popover clears the
+ * filter. Export name kept as `DashboardFilterDrawer` so page.tsx needs no
+ * changes.
  */
 export function DashboardFilterDrawer(): React.ReactElement {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [open, setOpen] = useState(false);
 
-  const [range, setRange] = useState<DateRange | undefined>(() => {
+  const activeRange: DateRange | undefined = (() => {
     const dealFrom = searchParams.get("dealFrom");
     const dealTo = searchParams.get("dealTo");
-    // No params → no default selection (dashboard shows all-time until picked).
     if (!dealFrom && !dealTo) return undefined;
     const from = dealFrom ? parseIsoDay(dealFrom) : undefined;
     const to = dealTo ? parseIsoDay(dealTo) : from;
     return from ? { from, to } : undefined;
-  });
+  })();
 
-  function handleApply(): void {
-    if (!range?.from) {
-      // Nothing picked → clear any filter, back to all-time.
-      router.push("/");
+  // Pending selection inside the popover — separate from the committed URL state.
+  const [pending, setPending] = useState<DateRange | undefined>(activeRange);
+
+  function handleSelect(range: DateRange | undefined): void {
+    setPending(range);
+    // Auto-apply only when both ends are selected.
+    if (range?.from && range?.to) {
+      router.push(`/?dealFrom=${toIsoDay(range.from)}&dealTo=${toIsoDay(range.to)}`);
       setOpen(false);
-      return;
     }
-    const from = range.from;
-    const to = range.to ?? from;
-    router.push(`/?dealFrom=${toIsoDay(from)}&dealTo=${toIsoDay(to)}`);
-    setOpen(false);
   }
 
   function handleReset(): void {
+    setPending(undefined);
     router.push("/");
-    setOpen(false);
   }
 
-  return (
-    <Sheet open={open} onOpenChange={setOpen}>
-      <SheetTrigger
-        render={
-          <Button variant="default" size="sm" className={cn("h-9", "shrink-0", "rounded-full")} />
-        }
-      >
-        <Tuning2 weight="BoldDuotone" className="h-4 w-4" />
-        Filter
-      </SheetTrigger>
+  function handleOpenChange(next: boolean): void {
+    if (next) {
+      // Sync pending with currently committed range when re-opening.
+      setPending(activeRange);
+    }
+    setOpen(next);
+  }
 
-      <SheetContent side="right" showCloseButton={false}>
-        <SheetHeader>
-          <div className={cn("flex", "items-center", "justify-between")}>
-            <SheetTitle>Filter Dashboard</SheetTitle>
+  const hasActiveFilter = Boolean(activeRange?.from);
+
+  return (
+    <div className="flex items-center gap-2">
+      <Popover open={open} onOpenChange={handleOpenChange}>
+        <PopoverTrigger
+          render={
             <button
               type="button"
-              onClick={() => setOpen(false)}
-              aria-label="Close"
-              className={cn("p-1", "rounded-full", "bg-destructive/10", "hover:bg-destructive/20", "cursor-pointer")}
-            >
-              <CloseCircle weight="BoldDuotone" className={cn("h-6", "w-6", "text-destructive")} />
-            </button>
-          </div>
-        </SheetHeader>
+              className="flex items-center gap-2 h-9 px-4 text-sm rounded-full border border-input bg-background hover:bg-accent transition-colors text-left shrink-0"
+            />
+          }
+        >
+          <CalendarDate weight="BoldDuotone" className="h-4 w-4 shrink-0 text-muted-foreground" />
+          <span className={hasActiveFilter ? "text-foreground font-medium" : "text-muted-foreground"}>
+            {formatRangeLabel(activeRange)}
+          </span>
+        </PopoverTrigger>
 
-        <div className={cn("flex", "flex-col", "gap-3", "px-4")}>
-          <div className={cn("flex", "items-center", "gap-2")}>
-            <CalendarMark weight="BoldDuotone" className={cn("h-4", "w-4", "text-muted-foreground")} />
-            <span className={cn("text-sm", "font-medium", "text-foreground")}>Tanggal Dealing</span>
-          </div>
+        <PopoverContent className="w-auto p-0" align="end">
+          <Calendar
+            mode="range"
+            numberOfMonths={2}
+            selected={pending}
+            onSelect={handleSelect}
+            autoFocus
+          />
+        </PopoverContent>
+      </Popover>
 
-          <Popover>
-            <PopoverTrigger
-              className={cn(
-                "flex h-10 w-full items-center justify-between rounded-full border border-input bg-background px-4 text-sm",
-                "hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                !range?.from && "text-muted-foreground",
-              )}
-            >
-              <span className="truncate">{formatRangeLabel(range)}</span>
-              <CalendarDate weight="BoldDuotone" className="h-4 w-4 shrink-0 text-muted-foreground" />
-            </PopoverTrigger>
-            <PopoverContent className="w-auto p-0" align="start">
-              <Calendar mode="range" numberOfMonths={2} selected={range} onSelect={setRange} autoFocus />
-            </PopoverContent>
-          </Popover>
-        </div>
-
-        <SheetFooter className={cn("grid", "grid-cols-2", "gap-2")}>
-          <Button variant="outline" className="rounded-full" onClick={handleReset}>
-            Reset
-          </Button>
-          <Button variant="default" className="rounded-full" onClick={handleApply}>
-            Terapkan
-          </Button>
-        </SheetFooter>
-      </SheetContent>
-    </Sheet>
+      {hasActiveFilter && (
+        <Button
+          variant="ghost"
+          size="sm"
+          className="rounded-full h-9 px-3 text-muted-foreground hover:text-destructive hover:bg-destructive/10 shrink-0"
+          onClick={handleReset}
+        >
+          <CloseCircle weight="BoldDuotone" className="h-4 w-4" />
+          Reset
+        </Button>
+      )}
+    </div>
   );
 }

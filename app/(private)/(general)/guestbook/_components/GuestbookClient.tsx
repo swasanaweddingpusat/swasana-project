@@ -127,6 +127,7 @@ function SkeletonRows() {
           <TableCell><Skeleton className="h-4 w-24" /></TableCell>
           <TableCell><Skeleton className="h-5 w-24 rounded-full" /></TableCell>
           <TableCell><Skeleton className="h-5 w-24 rounded-full" /></TableCell>
+          <TableCell><Skeleton className="h-4 w-24" /></TableCell>
           <TableCell><Skeleton className="h-8 w-20 rounded-full" /></TableCell>
         </TableRow>
       ))}
@@ -199,6 +200,10 @@ function MobileCard({
         <div>
           <p className="text-muted-foreground">Bertemu</p>
           <p className="text-foreground">{entry.host?.fullName ?? "-"}</p>
+        </div>
+        <div>
+          <p className="text-muted-foreground">Dicatat oleh</p>
+          <p className="text-foreground">{entry.createdBy?.fullName ?? "—"}</p>
         </div>
         <div>
           <p className="text-muted-foreground">Check-in</p>
@@ -397,6 +402,7 @@ export function GuestbookClient() {
                   <TableHead>Guest Code</TableHead>
                   <TableHead>Visit Status</TableHead>
                   <TableHead>Status</TableHead>
+                  <TableHead>Dicatat oleh</TableHead>
                   <TableHead className="text-right">Aksi</TableHead>
                 </TableRow>
               </TableHeader>
@@ -424,6 +430,7 @@ export function GuestbookClient() {
                     <TableHead>Guest Code</TableHead>
                     <TableHead>Visit Status</TableHead>
                     <TableHead>Status</TableHead>
+                    <TableHead>Dicatat oleh</TableHead>
                     <TableHead className="text-right pr-4">Aksi</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -521,6 +528,9 @@ export function GuestbookClient() {
                               Selesai
                             </Badge>
                           )}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground whitespace-nowrap">
+                          {entry.createdBy?.fullName ?? "—"}
                         </TableCell>
                         <TableCell className="text-right pr-4">
                           {isActive && (

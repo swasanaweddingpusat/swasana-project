@@ -14,6 +14,7 @@ export interface SalesPerformanceCardItem {
   profileId: string;
   name: string;
   avatarUrl: string | null;
+  groupName: string | null;
   revenue: number;
   bookingCount: number;
   target: number;
@@ -100,7 +101,15 @@ async function _queryTopSales(
 
     db.profile.findMany({
       where: { id: { in: candidateSalesIds } },
-      select: { id: true, fullName: true, avatarUrl: true },
+      select: {
+        id: true,
+        fullName: true,
+        avatarUrl: true,
+        dataGroupMemberships: {
+          select: { group: { select: { name: true } } },
+          take: 1,
+        },
+      },
     }),
 
     db.userTarget.findMany({
@@ -163,6 +172,7 @@ async function _queryTopSales(
       profileId,
       name: profile?.fullName ?? "—",
       avatarUrl: resolveAvatarUrl(profile?.avatarUrl),
+      groupName: profile?.dataGroupMemberships?.[0]?.group?.name ?? null,
       revenue,
       bookingCount,
       target,
