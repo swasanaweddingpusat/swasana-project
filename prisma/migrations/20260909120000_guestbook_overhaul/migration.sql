@@ -1,8 +1,11 @@
-﻿-- CreateEnum (idempotent)
-DO $$ BEGIN
+-- CreateEnum (idempotent)
+DO $body$
+BEGIN
   CREATE TYPE "GuestbookSource" AS ENUM ('database', 'walk_in', 'referral');
-EXCEPTION WHEN duplicate_object THEN NULL;
-END $$;
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END;
+$body$;
 
 -- AlterTable: Add new columns to guestbook_entries (idempotent)
 ALTER TABLE "guestbook_entries" ADD COLUMN IF NOT EXISTS "source" "GuestbookSource";
@@ -15,7 +18,8 @@ ALTER TABLE "guestbook_entries" ADD COLUMN IF NOT EXISTS "commitPayDate" TIMESTA
 ALTER TABLE "guestbook_entries" ADD COLUMN IF NOT EXISTS "bitrixSourceInfo" TEXT;
 
 -- Recreate GuestVisitStatus enum: add in_progress, pending, lost; remove not_joined (idempotent)
-DO $$ BEGIN
+DO $body$
+BEGIN
   IF EXISTS (SELECT 1 FROM pg_type WHERE typname = 'GuestVisitStatus_new') THEN
     DROP TYPE "GuestVisitStatus_new";
   END IF;
@@ -39,4 +43,5 @@ DO $$ BEGIN
     DROP TYPE "GuestVisitStatus";
     ALTER TYPE "GuestVisitStatus_new" RENAME TO "GuestVisitStatus";
   END IF;
-END $$;
+END;
+$body$;
