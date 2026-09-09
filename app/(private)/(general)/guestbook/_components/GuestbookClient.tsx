@@ -288,15 +288,6 @@ export function GuestbookClient() {
   const checkOutMutation = useCheckOutGuestbookEntry();
   const deleteMutation = useDeleteGuestbookEntry();
 
-  async function handleCheckOut(id: string) {
-    const result = await checkOutMutation.mutateAsync(id);
-    if (result.success) {
-      toast.success("Check-out berhasil");
-    } else {
-      toast.error(result.error ?? "Gagal check-out");
-    }
-  }
-
   function handleCompleteClick(entry: GuestbookEntryItem) {
     setConfirmComplete(entry);
   }

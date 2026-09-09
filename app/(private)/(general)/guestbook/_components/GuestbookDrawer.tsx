@@ -244,8 +244,11 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
 
   useEffect(() => {
     if (form.packageCategory) return;
-    if (canWedding && !canMice) setField("packageCategory", "WEDDINGS");
-    else if (canMice && !canWedding) setField("packageCategory", "MICE");
+    if (canWedding && !canMice) {
+      queueMicrotask(() => setForm((prev) => ({ ...prev, packageCategory: "WEDDINGS" })));
+    } else if (canMice && !canWedding) {
+      queueMicrotask(() => setForm((prev) => ({ ...prev, packageCategory: "MICE" })));
+    }
   }, [canWedding, canMice, form.packageCategory]);
 
   const { data: sourceOptions = [] } = useQuery({
@@ -270,7 +273,8 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
     sourceOptions.find((o) => o.id === form.sourceOfInformationId)?.name.toLowerCase().includes("bitrix") ?? false;
 
   useEffect(() => {
-    if (isEditMode && isOpen) {
+    if (!isEditMode || !isOpen) return;
+    queueMicrotask(() => {
       setForm({
         visitorName: editEntry.visitorName ?? "",
         email: editEntry.email ?? "",
@@ -306,8 +310,8 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
         bitrixName: editEntry.bitrixName ?? "",
         bitrixSourceInfo: editEntry.bitrixSourceInfo ?? "",
       });
-    }
-  }, [isOpen, isEditMode, editEntry]);
+    });
+  }, [isOpen, isEditMode, editEntry, canWedding]);
 
   useEffect(() => {
     const digits = form.phoneNumber.replace(/\D/g, "");
