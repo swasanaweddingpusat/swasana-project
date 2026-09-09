@@ -39,8 +39,18 @@ const guestbookEntrySelect = {
   phoneNumberNorm: true,
   bitrixContactId: true,
   bitrixName: true,
+  bitrixSourceInfo: true,
   visitStatus: true,
   notJoinReason: true,
+  source: true,
+  proofChatUrl: true,
+  proofPhotoUrl: true,
+  proofLostUrl: true,
+  proofRescheduleUrl: true,
+  commitVisitDate: true,
+  commitPayDate: true,
+  sourceOfInformationId: true,
+  packageId: true,
   venueId: true,
   salesId: true,
   createdAt: true,
@@ -48,6 +58,8 @@ const guestbookEntrySelect = {
   createdBy: { select: { id: true, fullName: true } },
   sales: { select: { id: true, fullName: true } },
   venue: { select: { id: true, name: true } },
+  sourceOfInformation: { select: { id: true, name: true } },
+  package: { select: { id: true, packageName: true, pax: true, category: true } },
 } satisfies Prisma.GuestbookEntrySelect;
 
 type GuestbookEntryRow = Prisma.GuestbookEntryGetPayload<{ select: typeof guestbookEntrySelect }>;

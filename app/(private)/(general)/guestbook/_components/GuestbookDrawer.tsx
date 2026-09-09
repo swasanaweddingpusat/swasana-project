@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import Image from "next/image";
+import { useQuery } from "@tanstack/react-query";
 import { Drawer } from "@/components/shared/drawer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,27 +15,59 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { AddCircle, Camera, Link, CloseCircle, CheckCircle } from "@solar-icons/react";
-import { Checkbox } from "@/components/ui/checkbox";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { AddCircle, Camera, Link, CloseCircle, CheckCircle, Pen } from "@solar-icons/react";
 import { SearchableSelect } from "@/components/ui/searchable-select";
+import { BitrixIdField } from "@/components/shared/BitrixIdField";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import { useCreateGuestbookEntry } from "@/hooks/use-guestbook";
+import { useCreateGuestbookEntry, useUpdateGuestbookEntry } from "@/hooks/use-guestbook";
 import { useVenues } from "@/hooks/use-venues";
 import { useSalesUsers } from "@/hooks/use-sales-users";
+import { usePermissions } from "@/hooks/use-permissions";
+import type { GuestbookEntryItem } from "@/lib/queries/guestbookEntries";
+
+async function fetchJson<T>(url: string): Promise<T> {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Fetch error ${res.status}`);
+  return res.json() as Promise<T>;
+}
+
+type SourceOption = { id: string; name: string; createdAt: string };
+type PackageOption = { id: string; packageName: string; pax: number };
 
 interface GuestbookDrawerProps {
   isOpen: boolean;
   onClose: () => void;
+  editEntry?: GuestbookEntryItem | null;
 }
+
+type PhotoFieldKey =
+  | "visitorPhotoFile"
+  | "proofChatFile"
+  | "proofPhotoFile"
+  | "proofLostFile"
+  | "proofRescheduleFile";
+type PreviewFieldKey =
+  | "visitorPhotoPreview"
+  | "proofChatPreview"
+  | "proofPhotoPreview"
+  | "proofLostPreview"
+  | "proofReschedulePreview";
 
 type GuestbookForm = {
   visitorName: string;
-  showCompany: boolean;
-  company: string;
   email: string;
   phoneNumber: string;
-  idNumber: string;
   venueId: string;
   interactionType: string;
   onlineMedium: string;
@@ -42,25 +75,33 @@ type GuestbookForm = {
   meetingLocation: string;
   scheduledAt: string;
   hostId: string;
-  numberOfGuests: number;
   notes: string;
   visitStatus: string;
-  notJoinReason: string;
+  sourceOfInformationId: string;
+  packageId: string;
+  packageCategory: string;
+  checkInAt: string;
+  commitVisitDate: string;
+  commitPayDate: string;
   visitorPhotoFile: File | null;
   visitorPhotoPreview: string;
-  idPhotoFile: File | null;
-  idPhotoPreview: string;
+  proofChatFile: File | null;
+  proofChatPreview: string;
+  proofPhotoFile: File | null;
+  proofPhotoPreview: string;
+  proofLostFile: File | null;
+  proofLostPreview: string;
+  proofRescheduleFile: File | null;
+  proofReschedulePreview: string;
   bitrixContactId: string;
   bitrixName: string;
+  bitrixSourceInfo: string;
 };
 
 const EMPTY_FORM: GuestbookForm = {
   visitorName: "",
-  showCompany: true,
-  company: "",
   email: "",
   phoneNumber: "",
-  idNumber: "",
   venueId: "",
   interactionType: "",
   onlineMedium: "",
@@ -68,16 +109,27 @@ const EMPTY_FORM: GuestbookForm = {
   meetingLocation: "",
   scheduledAt: "",
   hostId: "",
-  numberOfGuests: 1,
   notes: "",
   visitStatus: "",
-  notJoinReason: "",
+  sourceOfInformationId: "",
+  packageId: "",
+  packageCategory: "",
+  checkInAt: "",
+  commitVisitDate: "",
+  commitPayDate: "",
   visitorPhotoFile: null,
   visitorPhotoPreview: "",
-  idPhotoFile: null,
-  idPhotoPreview: "",
+  proofChatFile: null,
+  proofChatPreview: "",
+  proofPhotoFile: null,
+  proofPhotoPreview: "",
+  proofLostFile: null,
+  proofLostPreview: "",
+  proofRescheduleFile: null,
+  proofReschedulePreview: "",
   bitrixContactId: "",
   bitrixName: "",
+  bitrixSourceInfo: "",
 };
 
 const INTERACTION_TYPE_OPTIONS = [
@@ -102,37 +154,173 @@ function SectionLabel({ children }: { children: string }) {
   );
 }
 
-type BitrixContact = {
-  id: string;
-  name: string;
-};
+function resolvePhotoUrl(key: string | null | undefined): string | null {
+  if (!key) return null;
+  if (key.startsWith("http")) return key;
+  const base = process.env.NEXT_PUBLIC_S3_PUBLIC_URL;
+  if (!base) return null;
+  return `${base}/${key}`;
+}
 
-export function GuestbookDrawer({ isOpen, onClose }: GuestbookDrawerProps) {
+type BitrixContact = { id: string; name: string };
+
+function PhotoUpload({
+  label,
+  required,
+  preview,
+  onFileChange,
+  onClear,
+}: {
+  label: string;
+  required?: boolean;
+  preview: string;
+  onFileChange: (file: File) => void;
+  onClear: () => void;
+}) {
+  return (
+    <div className="space-y-1.5">
+      <Label className="text-sm font-medium">
+        {label} {required && <span className="text-destructive">*</span>}
+      </Label>
+      <div className="flex items-center gap-3">
+        {preview ? (
+          <div className="relative">
+            <Image
+              src={preview}
+              alt={label}
+              width={80}
+              height={80}
+              className="h-20 w-20 rounded-xl object-cover border"
+              unoptimized
+            />
+            <button
+              type="button"
+              className="absolute -top-1.5 -right-1.5 h-5 w-5 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center text-xs"
+              onClick={onClear}
+            >
+              ×
+            </button>
+          </div>
+        ) : (
+          <label className="flex flex-col items-center justify-center h-20 w-20 rounded-xl border-2 border-dashed border-border hover:border-primary/50 cursor-pointer transition-colors">
+            <Camera weight="BoldDuotone" className="h-5 w-5 text-muted-foreground" />
+            <span className="text-[10px] text-muted-foreground mt-0.5">Upload</span>
+            <input
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) onFileChange(f);
+              }}
+            />
+          </label>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerProps) {
   const [form, setForm] = useState<GuestbookForm>(EMPTY_FORM);
+  const [showConfirm, setShowConfirm] = useState(false);
   const [bitrixContacts, setBitrixContacts] = useState<BitrixContact[]>([]);
   const [bitrixLoading, setBitrixLoading] = useState(false);
   const [bitrixError, setBitrixError] = useState<string | null>(null);
   const [bitrixSearched, setBitrixSearched] = useState(false);
   const bitrixAbortRef = useRef<AbortController | null>(null);
 
+  const isEditMode = editEntry != null;
   const createMutation = useCreateGuestbookEntry();
+  const updateMutation = useUpdateGuestbookEntry();
+  const isSaving = createMutation.isPending || updateMutation.isPending;
   const { data: venues = [] } = useVenues();
   const { users: salesUsers } = useSalesUsers();
   const salesOptions = salesUsers.map((u) => ({ id: u.id, name: u.fullName ?? u.id }));
+  const { can } = usePermissions();
+
+  const canWedding = can("booking", "view");
+  const canMice = can("booking-mice", "view");
+
+  useEffect(() => {
+    if (form.packageCategory) return;
+    if (canWedding && !canMice) {
+      queueMicrotask(() => setForm((prev) => ({ ...prev, packageCategory: "WEDDINGS" })));
+    } else if (canMice && !canWedding) {
+      queueMicrotask(() => setForm((prev) => ({ ...prev, packageCategory: "MICE" })));
+    }
+  }, [canWedding, canMice, form.packageCategory]);
+
+  const { data: sourceOptions = [] } = useQuery({
+    queryKey: ["source-of-informations"],
+    queryFn: () => fetchJson<SourceOption[]>("/api/source-of-informations"),
+    staleTime: 5 * 60_000,
+  });
+
+  const selectedVenueId = form.venueId;
+  const selectedCategory = form.packageCategory || "WEDDINGS";
+  const { data: packages = [] } = useQuery({
+    queryKey: ["packages", selectedVenueId, selectedCategory],
+    queryFn: () =>
+      fetchJson<PackageOption[]>(
+        `/api/packages?venueId=${selectedVenueId}&forBooking=true&category=${selectedCategory}`
+      ),
+    enabled: !!selectedVenueId && !!form.packageCategory,
+    staleTime: 5 * 60_000,
+  });
+
+  const isBitrixSource =
+    sourceOptions.find((o) => o.id === form.sourceOfInformationId)?.name.toLowerCase().includes("bitrix") ?? false;
+
+  useEffect(() => {
+    if (!isEditMode || !isOpen) return;
+    queueMicrotask(() => {
+      setForm({
+        visitorName: editEntry.visitorName ?? "",
+        email: editEntry.email ?? "",
+        phoneNumber: editEntry.phoneNumber ?? "",
+        venueId: editEntry.venueId ?? "",
+        interactionType: editEntry.interactionType ?? "",
+        onlineMedium: editEntry.onlineMedium ?? "",
+        meetingUrl: editEntry.meetingUrl ?? "",
+        meetingLocation: editEntry.meetingLocation ?? "",
+        scheduledAt: editEntry.scheduledAt ? new Date(editEntry.scheduledAt).toISOString().slice(0, 16) : "",
+        hostId: editEntry.host?.id ?? "",
+        notes: editEntry.notes ?? "",
+        visitStatus: editEntry.visitStatus ?? "",
+        sourceOfInformationId: editEntry.sourceOfInformationId ?? "",
+        packageId: editEntry.packageId ?? "",
+        packageCategory: editEntry.package?.category ?? (canWedding ? "WEDDINGS" : "MICE"),
+        checkInAt: editEntry.checkInAt ? new Date(editEntry.checkInAt).toISOString().slice(0, 16) : "",
+        commitVisitDate: editEntry.commitVisitDate
+          ? new Date(editEntry.commitVisitDate).toISOString().slice(0, 10) : "",
+        commitPayDate: editEntry.commitPayDate
+          ? new Date(editEntry.commitPayDate).toISOString().slice(0, 10) : "",
+        visitorPhotoFile: null,
+        visitorPhotoPreview: resolvePhotoUrl(editEntry.visitorPhotoUrl) ?? "",
+        proofChatFile: null,
+        proofChatPreview: resolvePhotoUrl(editEntry.proofChatUrl) ?? "",
+        proofPhotoFile: null,
+        proofPhotoPreview: resolvePhotoUrl(editEntry.proofPhotoUrl) ?? "",
+        proofLostFile: null,
+        proofLostPreview: resolvePhotoUrl(editEntry.proofLostUrl) ?? "",
+        proofRescheduleFile: null,
+        proofReschedulePreview: resolvePhotoUrl(editEntry.proofRescheduleUrl) ?? "",
+        bitrixContactId: editEntry.bitrixContactId ?? "",
+        bitrixName: editEntry.bitrixName ?? "",
+        bitrixSourceInfo: editEntry.bitrixSourceInfo ?? "",
+      });
+    });
+  }, [isOpen, isEditMode, editEntry, canWedding]);
 
   useEffect(() => {
     const digits = form.phoneNumber.replace(/\D/g, "");
-    if (digits.length < 8 || form.bitrixContactId) {
-      return;
-    }
+    if (digits.length < 8 || form.bitrixContactId) return;
 
     const timer = setTimeout(() => {
-      if (bitrixAbortRef.current) {
-        bitrixAbortRef.current.abort();
-      }
+      if (bitrixAbortRef.current) bitrixAbortRef.current.abort();
       const controller = new AbortController();
       bitrixAbortRef.current = controller;
-
       setBitrixLoading(true);
 
       fetch(`/api/guestbook/bitrix-lookup?phone=${encodeURIComponent(form.phoneNumber)}`, {
@@ -152,18 +340,15 @@ export function GuestbookDrawer({ isOpen, onClose }: GuestbookDrawerProps) {
         });
     }, 300);
 
-    return () => {
-      clearTimeout(timer);
-    };
+    return () => clearTimeout(timer);
   }, [form.phoneNumber, form.bitrixContactId]);
 
   function handleClose() {
-    if (form.visitorPhotoPreview) URL.revokeObjectURL(form.visitorPhotoPreview);
-    if (form.idPhotoPreview) URL.revokeObjectURL(form.idPhotoPreview);
     setForm(EMPTY_FORM);
     setBitrixContacts([]);
     setBitrixError(null);
     setBitrixSearched(false);
+    setShowConfirm(false);
     onClose();
   }
 
@@ -182,37 +367,7 @@ export function GuestbookDrawer({ isOpen, onClose }: GuestbookDrawerProps) {
     }));
   }
 
-  async function uploadPhoto(file: File): Promise<string | null> {
-    const fd = new FormData();
-    fd.append("file", file);
-
-    try {
-      const res = await fetch("/api/guestbook/upload", { method: "POST", body: fd });
-      const data = (await res.json().catch(() => null)) as { key?: string; error?: string } | null;
-
-      if (!res.ok) {
-        const message = data?.error ?? "Gagal mengupload foto.";
-        toast.error(message);
-        return null;
-      }
-
-      if (!data?.key) {
-        toast.error("Respons upload tidak valid.");
-        return null;
-      }
-
-      return data.key;
-    } catch {
-      toast.error("Gagal mengupload foto tamu.");
-      return null;
-    }
-  }
-
-  function handlePhotoChange(
-    field: "visitorPhotoFile" | "idPhotoFile",
-    previewField: "visitorPhotoPreview" | "idPhotoPreview",
-    file: File | null
-  ) {
+  function handlePhotoChange(field: PhotoFieldKey, previewField: PreviewFieldKey, file: File | null) {
     if (!file) {
       setForm((prev) => ({ ...prev, [field]: null, [previewField]: "" }));
       return;
@@ -221,59 +376,99 @@ export function GuestbookDrawer({ isOpen, onClose }: GuestbookDrawerProps) {
     setForm((prev) => ({ ...prev, [field]: file, [previewField]: url }));
   }
 
-  async function handleSubmit() {
+  async function uploadPhoto(file: File): Promise<string | null> {
+    const fd = new FormData();
+    fd.append("file", file);
+    try {
+      const res = await fetch("/api/guestbook/upload", { method: "POST", body: fd });
+      const data = (await res.json().catch(() => null)) as { key?: string; error?: string } | null;
+      if (!res.ok) {
+        const msg = data?.error ?? `Upload gagal (HTTP ${res.status})`;
+        toast.error(msg);
+        console.error("[uploadPhoto]", res.status, data);
+        return null;
+      }
+      if (!data?.key) {
+        toast.error("Respons upload tidak valid.");
+        return null;
+      }
+      return data.key;
+    } catch (err) {
+      console.error("[uploadPhoto] network error", err);
+      toast.error("Gagal mengupload foto. Periksa koneksi atau konfigurasi storage.");
+      return null;
+    }
+  }
+
+  async function handleBindBitrix(contact: BitrixContact) {
+    setField("bitrixContactId", contact.id);
+    setField("bitrixName", contact.name);
+    fetch(`/api/guestbook/bitrix-source?contactId=${encodeURIComponent(contact.id)}`)
+      .then((res) => res.json() as Promise<{ sourceInfo?: string | null }>)
+      .then((data) => {
+        if (data.sourceInfo) setField("bitrixSourceInfo", data.sourceInfo);
+      })
+      .catch(() => {});
+  }
+
+  function validateForm(): boolean {
     if (!form.visitorName.trim()) {
       toast.error("Nama tamu wajib diisi");
-      return;
+      return false;
     }
-
     if (!form.interactionType) {
       toast.error("Pilih tipe interaksi");
-      return;
+      return false;
     }
-
     if (form.interactionType === "online_meeting") {
-      if (!form.onlineMedium) {
-        toast.error("Pilih medium online meeting");
-        return;
-      }
-      if (form.onlineMedium !== "whatsapp_call" && !form.meetingUrl.trim()) {
-        toast.error("Link meeting wajib diisi");
-        return;
-      }
+      if (!form.onlineMedium) { toast.error("Pilih medium online meeting"); return false; }
+      if (form.onlineMedium !== "whatsapp_call" && !form.meetingUrl.trim()) { toast.error("Link meeting wajib diisi"); return false; }
     }
-
     if (form.interactionType === "jemput_bola" && !form.meetingLocation.trim()) {
       toast.error("Lokasi kunjungan wajib diisi");
-      return;
+      return false;
     }
-
     if (form.interactionType === "client_visit" && !form.venueId && !form.meetingLocation.trim()) {
       toast.error("Pilih venue atau isi lokasi kunjungan");
-      return;
+      return false;
+    }
+    if (!isEditMode && !form.proofPhotoFile && !form.proofPhotoPreview) {
+      toast.error("Bukti foto visit wajib diupload");
+      return false;
+    }
+    return true;
+  }
+
+  async function handleSubmit() {
+    setShowConfirm(false);
+
+    async function resolveUrl(
+      file: File | null,
+      existingPreview: string,
+      existingKey: string | null | undefined
+    ): Promise<string | null> {
+      if (file) return uploadPhoto(file);
+      if (isEditMode && existingPreview) return existingKey ?? null;
+      return null;
     }
 
-    let visitorPhotoUrl: string | null = null;
-    let idPhotoUrl: string | null = null;
+    const visitorPhotoUrl = await resolveUrl(form.visitorPhotoFile, form.visitorPhotoPreview, editEntry?.visitorPhotoUrl);
+    if (form.visitorPhotoFile && !visitorPhotoUrl) return;
 
-    if (form.visitorPhotoFile) {
-      visitorPhotoUrl = await uploadPhoto(form.visitorPhotoFile);
-      if (!visitorPhotoUrl) return;
-    }
+    const proofChatUrl = await resolveUrl(form.proofChatFile, form.proofChatPreview, editEntry?.proofChatUrl);
+    if (form.proofChatFile && !proofChatUrl) return;
+    const proofPhotoUrl = await resolveUrl(form.proofPhotoFile, form.proofPhotoPreview, editEntry?.proofPhotoUrl);
+    if (form.proofPhotoFile && !proofPhotoUrl) return;
+    const proofLostUrl = await resolveUrl(form.proofLostFile, form.proofLostPreview, editEntry?.proofLostUrl);
+    if (form.proofLostFile && !proofLostUrl) return;
+    const proofRescheduleUrl = await resolveUrl(form.proofRescheduleFile, form.proofReschedulePreview, editEntry?.proofRescheduleUrl);
+    if (form.proofRescheduleFile && !proofRescheduleUrl) return;
 
-    if (form.idPhotoFile) {
-      idPhotoUrl = await uploadPhoto(form.idPhotoFile);
-      if (!idPhotoUrl) return;
-    }
-
-    const result = await createMutation.mutateAsync({
+    const payload = {
       visitorName: form.visitorName.trim(),
-      company: form.showCompany ? (form.company.trim() || null) : null,
       email: form.email.trim() || null,
       phoneNumber: form.phoneNumber.trim() || null,
-      idNumber: form.idNumber.trim() || null,
       visitorPhotoUrl,
-      idPhotoUrl,
       venueId: form.venueId || null,
       interactionType: form.interactionType,
       onlineMedium: form.onlineMedium || null,
@@ -281,27 +476,51 @@ export function GuestbookDrawer({ isOpen, onClose }: GuestbookDrawerProps) {
       meetingLocation: form.meetingLocation.trim() || null,
       scheduledAt: form.scheduledAt || null,
       hostId: form.hostId || null,
-      numberOfGuests: form.numberOfGuests,
       notes: form.notes.trim() || null,
       visitStatus: form.visitStatus || null,
-      notJoinReason: form.visitStatus === "not_joined" ? (form.notJoinReason.trim() || null) : null,
+      sourceOfInformationId: form.sourceOfInformationId || null,
+      packageId: form.packageId || null,
+      checkInAt: form.checkInAt || null,
+      proofChatUrl,
+      proofPhotoUrl,
+      proofLostUrl,
+      proofRescheduleUrl,
+      commitVisitDate: form.commitVisitDate || null,
+      commitPayDate: form.commitPayDate || null,
       bitrixContactId: form.bitrixContactId || null,
       bitrixName: form.bitrixName || null,
-    });
+      bitrixSourceInfo: form.bitrixSourceInfo || null,
+    };
 
-    if (result.success) {
-      toast.success("Tamu berhasil dicatat");
-      handleClose();
+    if (isEditMode) {
+      const result = await updateMutation.mutateAsync({ id: editEntry!.id, data: payload });
+      if (result.success) {
+        toast.success("Data berhasil diperbarui");
+        handleClose();
+      } else {
+        toast.error(result.error ?? "Gagal memperbarui data");
+      }
     } else {
-      toast.error(result.error ?? "Gagal mencatat tamu");
+      const result = await createMutation.mutateAsync(payload);
+      if (result.success) {
+        toast.success("Tamu berhasil dicatat");
+        handleClose();
+      } else {
+        toast.error(result.error ?? "Gagal mencatat tamu");
+      }
     }
+  }
+
+  function handleSubmitClick() {
+    if (!validateForm()) return;
+    setShowConfirm(true);
   }
 
   return (
     <Drawer
       isOpen={isOpen}
       onClose={handleClose}
-      title="Tambah Tamu"
+      title={isEditMode ? "Edit Data Tamu" : "Tambah Tamu"}
       maxWidth="sm:max-w-lg"
     >
       <div className="flex flex-col h-full">
@@ -332,7 +551,6 @@ export function GuestbookDrawer({ isOpen, onClose }: GuestbookDrawerProps) {
           <div className="space-y-4">
             <SectionLabel>Data Tamu</SectionLabel>
 
-            {/* Nama Tamu */}
             <div className="space-y-1.5">
               <Label htmlFor="gb-visitorName" className="text-sm font-medium">
                 Nama Tamu <span className="text-destructive">*</span>
@@ -346,39 +564,46 @@ export function GuestbookDrawer({ isOpen, onClose }: GuestbookDrawerProps) {
               />
             </div>
 
-            {/* Perusahaan toggle + input */}
-            <div className="space-y-2">
-              <div className="flex items-center gap-2">
-                <Checkbox
-                  id="gb-showCompany"
-                  checked={form.showCompany}
-                  onCheckedChange={(checked) => {
-                    setField("showCompany", checked === true);
-                    if (!checked) {
-                      setField("company", "");
-                    }
-                  }}
-                />
-                <Label htmlFor="gb-showCompany" className="text-sm font-medium cursor-pointer">
-                  Dari Perusahaan / Instansi
-                </Label>
-              </div>
-              {form.showCompany && (
-                <Input
-                  id="gb-company"
-                  placeholder="Nama perusahaan atau instansi"
-                  value={form.company}
-                  onChange={(e) => setField("company", e.target.value)}
-                  className="rounded-xl"
-                />
-              )}
+            <div className="space-y-1.5">
+              <Label htmlFor="gb-checkInAt" className="text-sm font-medium">
+                Tanggal & Waktu
+              </Label>
+              <Input
+                id="gb-checkInAt"
+                type="datetime-local"
+                value={form.checkInAt}
+                onChange={(e) => setField("checkInAt", e.target.value)}
+                className="rounded-xl"
+              />
+              <p className="text-xs text-muted-foreground">Kosongkan untuk waktu sekarang</p>
             </div>
 
-            {/* Email */}
             <div className="space-y-1.5">
-              <Label htmlFor="gb-email" className="text-sm font-medium">
-                Email
-              </Label>
+              <Label className="text-sm font-medium">Sumber</Label>
+              <SearchableSelect
+                options={sourceOptions.map((o) => ({ id: o.id, name: o.name }))}
+                value={form.sourceOfInformationId}
+                onChange={(v) => {
+                  setField("sourceOfInformationId", v);
+                }}
+                placeholder="Pilih sumber informasi"
+                searchPlaceholder="Cari sumber..."
+                emptyText="Tidak ada sumber"
+              />
+            </div>
+
+            {isBitrixSource && (
+              <div className="space-y-1.5">
+                <Label className="text-sm font-medium">Bitrix ID</Label>
+                <BitrixIdField
+                  value={form.bitrixContactId}
+                  onChange={(v) => setField("bitrixContactId", v)}
+                />
+              </div>
+            )}
+
+            <div className="space-y-1.5">
+              <Label htmlFor="gb-email" className="text-sm font-medium">Email</Label>
               <Input
                 id="gb-email"
                 type="email"
@@ -389,11 +614,8 @@ export function GuestbookDrawer({ isOpen, onClose }: GuestbookDrawerProps) {
               />
             </div>
 
-            {/* No. Telepon */}
             <div className="space-y-1.5">
-              <Label htmlFor="gb-phone" className="text-sm font-medium">
-                No. Telepon
-              </Label>
+              <Label htmlFor="gb-phone" className="text-sm font-medium">No. Telepon</Label>
               <Input
                 id="gb-phone"
                 placeholder="08xx-xxxx-xxxx"
@@ -404,6 +626,7 @@ export function GuestbookDrawer({ isOpen, onClose }: GuestbookDrawerProps) {
                   if (form.bitrixContactId) {
                     setField("bitrixContactId", "");
                     setField("bitrixName", "");
+                    setField("bitrixSourceInfo", "");
                   }
                   const digits = val.replace(/\D/g, "");
                   if (digits.length < 8) {
@@ -415,19 +638,22 @@ export function GuestbookDrawer({ isOpen, onClose }: GuestbookDrawerProps) {
                 className="rounded-xl"
               />
 
-              {/* Bitrix contact binding */}
               {form.bitrixContactId ? (
                 <div className="flex items-center gap-2 mt-1.5 px-3 py-2 rounded-xl bg-secondary border border-border">
                   <CheckCircle weight="BoldDuotone" className="h-4 w-4 text-primary shrink-0" />
                   <div className="flex-1 min-w-0">
                     <p className="text-xs font-medium text-foreground truncate">{form.bitrixName}</p>
                     <p className="text-[11px] text-muted-foreground">Terhubung ke Bitrix</p>
+                    {form.bitrixSourceInfo && (
+                      <p className="text-[11px] text-muted-foreground">Sumber: {form.bitrixSourceInfo}</p>
+                    )}
                   </div>
                   <button
                     type="button"
                     onClick={() => {
                       setField("bitrixContactId", "");
                       setField("bitrixName", "");
+                      setField("bitrixSourceInfo", "");
                     }}
                     className="shrink-0 text-muted-foreground hover:text-destructive transition-colors"
                     aria-label="Hapus binding Bitrix"
@@ -460,10 +686,7 @@ export function GuestbookDrawer({ isOpen, onClose }: GuestbookDrawerProps) {
                           <button
                             key={contact.id}
                             type="button"
-                            onClick={() => {
-                              setField("bitrixContactId", contact.id);
-                              setField("bitrixName", contact.name);
-                            }}
+                            onClick={() => handleBindBitrix(contact)}
                             className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-muted text-foreground hover:bg-primary hover:text-primary-foreground transition-colors"
                           >
                             {contact.name}
@@ -477,163 +700,106 @@ export function GuestbookDrawer({ isOpen, onClose }: GuestbookDrawerProps) {
               )}
             </div>
 
-            {/* No. KTP */}
-            <div className="space-y-1.5">
-              <Label htmlFor="gb-idNumber" className="text-sm font-medium">
-                No. KTP / ID
-              </Label>
-              <Input
-                id="gb-idNumber"
-                placeholder="Nomor identitas"
-                value={form.idNumber}
-                onChange={(e) => setField("idNumber", e.target.value)}
-                className="rounded-xl"
-              />
-            </div>
-
-            {/* Foto Tamu */}
-            <div className="space-y-1.5">
-              <Label className="text-sm font-medium">Foto Tamu</Label>
-              <div className="flex items-center gap-3">
-                {form.visitorPhotoPreview ? (
-                  <div className="relative">
-                    <Image
-                      src={form.visitorPhotoPreview}
-                      alt="Preview foto tamu"
-                      width={80}
-                      height={80}
-                      className="h-20 w-20 rounded-xl object-cover border"
-                      unoptimized
-                    />
-                    <button
-                      type="button"
-                      className="absolute -top-1.5 -right-1.5 h-5 w-5 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center text-xs"
-                      onClick={() => handlePhotoChange("visitorPhotoFile", "visitorPhotoPreview", null)}
-                    >
-                      ×
-                    </button>
-                  </div>
-                ) : (
-                  <label className="flex flex-col items-center justify-center h-20 w-20 rounded-xl border-2 border-dashed border-border hover:border-primary/50 cursor-pointer transition-colors">
-                    <Camera weight="BoldDuotone" className="h-5 w-5 text-muted-foreground" />
-                    <span className="text-[10px] text-muted-foreground mt-0.5">Upload</span>
-                    <input
-                      type="file"
-                      accept="image/jpeg,image/png,image/webp"
-                      className="hidden"
-                      onChange={(e) => {
-                        const f = e.target.files?.[0] ?? null;
-                        handlePhotoChange("visitorPhotoFile", "visitorPhotoPreview", f);
-                      }}
-                    />
-                  </label>
-                )}
-                <p className="text-xs text-muted-foreground">Foto selfie tamu (opsional)</p>
-              </div>
-            </div>
-
-            {/* Foto KTP */}
-            <div className="space-y-1.5">
-              <Label className="text-sm font-medium">Foto KTP</Label>
-              <div className="flex items-center gap-3">
-                {form.idPhotoPreview ? (
-                  <div className="relative">
-                    <Image
-                      src={form.idPhotoPreview}
-                      alt="Preview foto KTP"
-                      width={80}
-                      height={80}
-                      className="h-20 w-20 rounded-xl object-cover border"
-                      unoptimized
-                    />
-                    <button
-                      type="button"
-                      className="absolute -top-1.5 -right-1.5 h-5 w-5 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center text-xs"
-                      onClick={() => handlePhotoChange("idPhotoFile", "idPhotoPreview", null)}
-                    >
-                      ×
-                    </button>
-                  </div>
-                ) : (
-                  <label className="flex flex-col items-center justify-center h-20 w-20 rounded-xl border-2 border-dashed border-border hover:border-primary/50 cursor-pointer transition-colors">
-                    <Camera weight="BoldDuotone" className="h-5 w-5 text-muted-foreground" />
-                    <span className="text-[10px] text-muted-foreground mt-0.5">Upload</span>
-                    <input
-                      type="file"
-                      accept="image/jpeg,image/png,image/webp"
-                      className="hidden"
-                      onChange={(e) => {
-                        const f = e.target.files?.[0] ?? null;
-                        handlePhotoChange("idPhotoFile", "idPhotoPreview", f);
-                      }}
-                    />
-                  </label>
-                )}
-                <p className="text-xs text-muted-foreground">Foto kartu identitas tamu (opsional)</p>
-              </div>
-            </div>
-
-            {/* Jumlah Tamu */}
-            <div className="space-y-1.5">
-              <Label htmlFor="gb-numberOfGuests" className="text-sm font-medium">
-                Jumlah Tamu
-              </Label>
-              <Input
-                id="gb-numberOfGuests"
-                type="number"
-                min={1}
-                value={form.numberOfGuests}
-                onChange={(e) =>
-                  setField("numberOfGuests", Math.max(1, parseInt(e.target.value, 10) || 1))
-                }
-                className="rounded-xl"
-              />
-            </div>
+            <PhotoUpload
+              label="Foto Tamu"
+              preview={form.visitorPhotoPreview}
+              onFileChange={(f) => handlePhotoChange("visitorPhotoFile", "visitorPhotoPreview", f)}
+              onClear={() => handlePhotoChange("visitorPhotoFile", "visitorPhotoPreview", null)}
+            />
           </div>
 
-          {/* Section: Detail — conditional on interactionType */}
+          {/* Section: Detail */}
           {form.interactionType && (
             <div className="space-y-4">
               <SectionLabel>Detail</SectionLabel>
 
+              {/* Venue — semua tipe interaksi */}
+              <div className="space-y-1.5">
+                <Label htmlFor="gb-venue" className="text-sm font-medium">Venue</Label>
+                <Select
+                  value={form.venueId}
+                  onValueChange={(v) => {
+                    setField("venueId", v);
+                    setField("packageId", "");
+                  }}
+                >
+                  <SelectTrigger id="gb-venue" className="rounded-xl w-full">
+                    <SelectValue placeholder="Pilih venue" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {venues.map((v) => (
+                      <SelectItem key={v.id} value={v.id}>{v.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Kategori Paket — muncul kalau user punya akses wedding & mice */}
+              {canWedding && canMice && (
+                <div className="space-y-1.5">
+                  <Label className="text-sm font-medium">Kategori Paket</Label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {[
+                      { value: "WEDDINGS", label: "Wedding" },
+                      { value: "MICE", label: "MICE" },
+                    ].map((opt) => (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => {
+                          setField("packageCategory", opt.value);
+                          setField("packageId", "");
+                        }}
+                        className={cn(
+                          "min-h-9 rounded-full px-3 py-2 text-xs font-medium text-center transition-colors",
+                          form.packageCategory === opt.value
+                            ? "bg-primary text-primary-foreground"
+                            : "bg-muted text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                        )}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Paket — semua tipe interaksi, tergantung venue */}
+              <div className="space-y-1.5">
+                <Label className="text-sm font-medium">Paket</Label>
+                <SearchableSelect
+                  options={packages.map((p) => ({
+                    id: p.id,
+                    name: `${p.packageName}${p.pax ? ` — ${p.pax} pax` : ""}`,
+                  }))}
+                  value={form.packageId}
+                  onChange={(v) => setField("packageId", v)}
+                  placeholder={
+                    !form.venueId
+                      ? "Pilih venue terlebih dahulu"
+                      : !form.packageCategory
+                        ? "Pilih kategori paket"
+                        : "Pilih paket"
+                  }
+                  searchPlaceholder="Cari paket..."
+                  emptyText="Tidak ada paket"
+                  disabled={!form.venueId || !form.packageCategory}
+                />
+              </div>
+
+              {/* Detail per tipe interaksi */}
               {form.interactionType === "client_visit" && (
-                <>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="gb-venue" className="text-sm font-medium">
-                      Venue
-                    </Label>
-                    <Select
-                      value={form.venueId}
-                      onValueChange={(v) => setField("venueId", v)}
-                    >
-                      <SelectTrigger id="gb-venue" className="rounded-xl w-full">
-                        <SelectValue placeholder="Pilih venue" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {venues.map((v) => (
-                          <SelectItem key={v.id} value={v.id}>
-                            {v.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="gb-meetingLocation-visit" className="text-sm font-medium">
-                      Lokasi
-                    </Label>
-                    <Input
-                      id="gb-meetingLocation-visit"
-                      placeholder="Isi lokasi bila di luar venue"
-                      value={form.meetingLocation}
-                      onChange={(e) => setField("meetingLocation", e.target.value)}
-                      className="rounded-xl"
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      Opsional bila venue sudah dipilih
-                    </p>
-                  </div>
-                </>
+                <div className="space-y-1.5">
+                  <Label htmlFor="gb-meetingLocation-visit" className="text-sm font-medium">Lokasi</Label>
+                  <Input
+                    id="gb-meetingLocation-visit"
+                    placeholder="Isi lokasi bila di luar venue"
+                    value={form.meetingLocation}
+                    onChange={(e) => setField("meetingLocation", e.target.value)}
+                    className="rounded-xl"
+                  />
+                  <p className="text-xs text-muted-foreground">Opsional bila venue sudah dipilih</p>
+                </div>
               )}
 
               {form.interactionType === "online_meeting" && (
@@ -642,18 +808,13 @@ export function GuestbookDrawer({ isOpen, onClose }: GuestbookDrawerProps) {
                     <Label htmlFor="gb-onlineMedium" className="text-sm font-medium">
                       Medium <span className="text-destructive">*</span>
                     </Label>
-                    <Select
-                      value={form.onlineMedium}
-                      onValueChange={(v) => setField("onlineMedium", v)}
-                    >
+                    <Select value={form.onlineMedium} onValueChange={(v) => setField("onlineMedium", v)}>
                       <SelectTrigger id="gb-onlineMedium" className="rounded-xl w-full">
                         <SelectValue placeholder="Pilih medium meeting" />
                       </SelectTrigger>
                       <SelectContent>
                         {ONLINE_MEDIUM_OPTIONS.map((opt) => (
-                          <SelectItem key={opt.value} value={opt.value}>
-                            {opt.label}
-                          </SelectItem>
+                          <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
@@ -661,32 +822,13 @@ export function GuestbookDrawer({ isOpen, onClose }: GuestbookDrawerProps) {
                   <div className="space-y-1.5">
                     <Label htmlFor="gb-meetingUrl" className="text-sm font-medium">
                       Link Meeting{" "}
-                      {form.onlineMedium !== "whatsapp_call" && (
-                        <span className="text-destructive">*</span>
-                      )}
+                      {form.onlineMedium !== "whatsapp_call" && <span className="text-destructive">*</span>}
                     </Label>
-                    <Input
-                      id="gb-meetingUrl"
-                      placeholder="https://..."
-                      value={form.meetingUrl}
-                      onChange={(e) => setField("meetingUrl", e.target.value)}
-                      className="rounded-xl"
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      Kecuali WA Call
-                    </p>
+                    <Input id="gb-meetingUrl" placeholder="https://..." value={form.meetingUrl} onChange={(e) => setField("meetingUrl", e.target.value)} className="rounded-xl" />
                   </div>
                   <div className="space-y-1.5">
-                    <Label htmlFor="gb-scheduledAt-online" className="text-sm font-medium">
-                      Jadwal
-                    </Label>
-                    <Input
-                      id="gb-scheduledAt-online"
-                      type="datetime-local"
-                      value={form.scheduledAt}
-                      onChange={(e) => setField("scheduledAt", e.target.value)}
-                      className="rounded-xl"
-                    />
+                    <Label htmlFor="gb-scheduledAt-online" className="text-sm font-medium">Jadwal</Label>
+                    <Input id="gb-scheduledAt-online" type="datetime-local" value={form.scheduledAt} onChange={(e) => setField("scheduledAt", e.target.value)} className="rounded-xl" />
                   </div>
                 </>
               )}
@@ -697,32 +839,18 @@ export function GuestbookDrawer({ isOpen, onClose }: GuestbookDrawerProps) {
                     <Label htmlFor="gb-meetingLocation-jemput" className="text-sm font-medium">
                       Lokasi <span className="text-destructive">*</span>
                     </Label>
-                    <Input
-                      id="gb-meetingLocation-jemput"
-                      placeholder="Lokasi kunjungan"
-                      value={form.meetingLocation}
-                      onChange={(e) => setField("meetingLocation", e.target.value)}
-                      className="rounded-xl"
-                    />
+                    <Input id="gb-meetingLocation-jemput" placeholder="Lokasi kunjungan" value={form.meetingLocation} onChange={(e) => setField("meetingLocation", e.target.value)} className="rounded-xl" />
                   </div>
                   <div className="space-y-1.5">
-                    <Label htmlFor="gb-scheduledAt-jemput" className="text-sm font-medium">
-                      Jadwal
-                    </Label>
-                    <Input
-                      id="gb-scheduledAt-jemput"
-                      type="datetime-local"
-                      value={form.scheduledAt}
-                      onChange={(e) => setField("scheduledAt", e.target.value)}
-                      className="rounded-xl"
-                    />
+                    <Label htmlFor="gb-scheduledAt-jemput" className="text-sm font-medium">Jadwal</Label>
+                    <Input id="gb-scheduledAt-jemput" type="datetime-local" value={form.scheduledAt} onChange={(e) => setField("scheduledAt", e.target.value)} className="rounded-xl" />
                   </div>
                 </>
               )}
             </div>
           )}
 
-          {/* Bertemu Dengan — Sales PIC picker (atribusi) */}
+          {/* Bertemu Dengan */}
           <div className="space-y-1.5">
             <Label className="text-sm font-medium">Bertemu Dengan</Label>
             <SearchableSelect
@@ -733,16 +861,12 @@ export function GuestbookDrawer({ isOpen, onClose }: GuestbookDrawerProps) {
               searchPlaceholder="Cari sales..."
               emptyText="Tidak ada sales"
             />
-            <p className="text-xs text-muted-foreground">
-              Sales PIC yang ditemui — dipakai untuk atribusi
-            </p>
+            <p className="text-xs text-muted-foreground">Sales PIC yang ditemui — dipakai untuk atribusi</p>
           </div>
 
           {/* Catatan */}
           <div className="space-y-1.5">
-            <Label htmlFor="gb-notes" className="text-sm font-medium">
-              Catatan
-            </Label>
+            <Label htmlFor="gb-notes" className="text-sm font-medium">Catatan</Label>
             <Textarea
               id="gb-notes"
               placeholder="Catatan tambahan..."
@@ -752,43 +876,79 @@ export function GuestbookDrawer({ isOpen, onClose }: GuestbookDrawerProps) {
             />
           </div>
 
+          {/* Section: Bukti */}
+          <div className="space-y-4">
+            <SectionLabel>Bukti</SectionLabel>
+            <PhotoUpload
+              label="Bukti Foto Visit"
+              required
+              preview={form.proofPhotoPreview}
+              onFileChange={(f) => handlePhotoChange("proofPhotoFile", "proofPhotoPreview", f)}
+              onClear={() => handlePhotoChange("proofPhotoFile", "proofPhotoPreview", null)}
+            />
+            <PhotoUpload
+              label="Bukti Chat"
+              preview={form.proofChatPreview}
+              onFileChange={(f) => handlePhotoChange("proofChatFile", "proofChatPreview", f)}
+              onClear={() => handlePhotoChange("proofChatFile", "proofChatPreview", null)}
+            />
+            <PhotoUpload
+              label="Bukti Lost"
+              preview={form.proofLostPreview}
+              onFileChange={(f) => handlePhotoChange("proofLostFile", "proofLostPreview", f)}
+              onClear={() => handlePhotoChange("proofLostFile", "proofLostPreview", null)}
+            />
+            <PhotoUpload
+              label="Bukti Reschedule"
+              preview={form.proofReschedulePreview}
+              onFileChange={(f) => handlePhotoChange("proofRescheduleFile", "proofReschedulePreview", f)}
+              onClear={() => handlePhotoChange("proofRescheduleFile", "proofReschedulePreview", null)}
+            />
+          </div>
+
           {/* Section: Hasil */}
           <div className="space-y-4">
             <SectionLabel>Hasil</SectionLabel>
-
             <div className="space-y-1.5">
-              <Label htmlFor="gb-visitStatus" className="text-sm font-medium">
-                Visit Status
-              </Label>
-              <Select
-                value={form.visitStatus}
-                onValueChange={(v) => setField("visitStatus", v)}
-              >
+              <Label htmlFor="gb-visitStatus" className="text-sm font-medium">Status</Label>
+              <Select value={form.visitStatus} onValueChange={(v) => setField("visitStatus", v)}>
                 <SelectTrigger id="gb-visitStatus" className="rounded-xl w-full">
-                  <SelectValue placeholder="Pilih status kunjungan" />
+                  <SelectValue placeholder="Pilih status" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="deal">Deal</SelectItem>
+                  <SelectItem value="in_progress">In Progress</SelectItem>
+                  <SelectItem value="pending">Pending</SelectItem>
                   <SelectItem value="to_be_discuss">To Be Discuss</SelectItem>
-                  <SelectItem value="not_joined">Not Joined</SelectItem>
+                  <SelectItem value="lost">Lost</SelectItem>
                 </SelectContent>
               </Select>
             </div>
+          </div>
 
-            {form.visitStatus === "not_joined" && (
-              <div className="space-y-1.5">
-                <Label htmlFor="gb-notJoinReason" className="text-sm font-medium">
-                  Alasan Tidak Bergabung
-                </Label>
-                <Textarea
-                  id="gb-notJoinReason"
-                  placeholder="Jelaskan alasan..."
-                  value={form.notJoinReason}
-                  onChange={(e) => setField("notJoinReason", e.target.value)}
-                  className="rounded-xl min-h-16 resize-y"
-                />
-              </div>
-            )}
+          {/* Section: Komitmen */}
+          <div className="space-y-4">
+            <SectionLabel>Komitmen</SectionLabel>
+            <div className="space-y-1.5">
+              <Label htmlFor="gb-commitVisitDate" className="text-sm font-medium">Tanggal Commit Visit</Label>
+              <Input
+                id="gb-commitVisitDate"
+                type="date"
+                value={form.commitVisitDate}
+                onChange={(e) => setField("commitVisitDate", e.target.value)}
+                className="rounded-xl"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="gb-commitPayDate" className="text-sm font-medium">Tanggal Commit Bayar</Label>
+              <Input
+                id="gb-commitPayDate"
+                type="date"
+                value={form.commitPayDate}
+                onChange={(e) => setField("commitPayDate", e.target.value)}
+                className="rounded-xl"
+              />
+            </div>
           </div>
         </div>
 
@@ -799,21 +959,43 @@ export function GuestbookDrawer({ isOpen, onClose }: GuestbookDrawerProps) {
             variant="outline"
             className="flex-1 rounded-full"
             onClick={handleClose}
-            disabled={createMutation.isPending}
+            disabled={isSaving}
           >
             Batal
           </Button>
           <Button
             type="button"
             className="flex-1 rounded-full gap-1.5"
-            onClick={handleSubmit}
-            disabled={createMutation.isPending || !form.visitorName.trim() || !form.interactionType}
+            onClick={handleSubmitClick}
+            disabled={isSaving || !form.visitorName.trim() || !form.interactionType}
           >
-            <AddCircle weight="BoldDuotone" className="h-4 w-4" />
-            {createMutation.isPending ? "Menyimpan..." : "Catat Tamu"}
+            {isEditMode ? (
+              <><Pen weight="BoldDuotone" className="h-4 w-4" />{isSaving ? "Menyimpan..." : "Simpan"}</>
+            ) : (
+              <><AddCircle weight="BoldDuotone" className="h-4 w-4" />{isSaving ? "Menyimpan..." : "Catat Tamu"}</>
+            )}
           </Button>
         </div>
       </div>
+
+      <AlertDialog open={showConfirm} onOpenChange={setShowConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{isEditMode ? "Konfirmasi Ubah Data" : "Konfirmasi Tambah Data"}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {isEditMode
+                ? "Yakin ingin menyimpan perubahan data tamu ini?"
+                : "Yakin ingin menambahkan data tamu baru?"}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="rounded-full">Batal</AlertDialogCancel>
+            <AlertDialogAction className="rounded-full" onClick={handleSubmit}>
+              {isEditMode ? "Ya, Simpan" : "Ya, Tambah"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Drawer>
   );
 }

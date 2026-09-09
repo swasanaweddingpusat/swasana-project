@@ -18,6 +18,8 @@ import {
   CloseCircle,
   Videocamera,
   MapPoint,
+  Database,
+  Gift,
 } from "@solar-icons/react";
 import type { GuestbookEntryItem } from "@/lib/queries/guestbookEntries";
 
@@ -30,16 +32,10 @@ interface GuestbookDetailDrawerProps {
 
 const VISIT_STATUS_LABELS: Record<string, { label: string; className: string }> = {
   deal: { label: "Deal", className: "bg-green-100 text-green-700 border-0" },
+  in_progress: { label: "In Progress", className: "bg-blue-100 text-blue-700 border-0" },
+  pending: { label: "Pending", className: "bg-gray-100 text-gray-700 border-0" },
   to_be_discuss: { label: "To Be Discuss", className: "bg-yellow-100 text-yellow-700 border-0" },
-  not_joined: { label: "Not Joined", className: "bg-red-100 text-red-700 border-0" },
-};
-
-const PURPOSE_LABELS: Record<string, string> = {
-  client_visit: "Kunjungan Client",
-  vendor_meeting: "Meeting Vendor",
-  interview: "Interview",
-  delivery: "Pengiriman",
-  other: "Lainnya",
+  lost: { label: "Lost", className: "bg-red-100 text-red-700 border-0" },
 };
 
 const INTERACTION_TYPE_LABELS: Record<string, string> = {
@@ -76,6 +72,16 @@ function formatDateTime(date: Date | string | null | undefined): string {
   });
 }
 
+function formatDate(date: Date | string | null | undefined): string {
+  if (!date) return "—";
+  const d = new Date(date);
+  return d.toLocaleDateString("id-ID", {
+    day: "2-digit",
+    month: "long",
+    year: "numeric",
+  });
+}
+
 function InfoRow({
   icon,
   label,
@@ -108,7 +114,6 @@ export function GuestbookDetailDrawer({
   const [overlayImage, setOverlayImage] = useState<string | null>(null);
 
   if (!entry) return null;
-
   const isActive = entry.checkOutAt === null;
 
   const matchingEntries = allEntries.filter(
@@ -122,6 +127,10 @@ export function GuestbookDetailDrawer({
   const totalVisit = matchingEntries.length + 1;
   const visitorPhoto = resolvePhotoUrl(entry.visitorPhotoUrl);
   const idPhoto = resolvePhotoUrl(entry.idPhotoUrl);
+  const proofChat = resolvePhotoUrl(entry.proofChatUrl);
+  const proofPhoto = resolvePhotoUrl(entry.proofPhotoUrl);
+  const proofLost = resolvePhotoUrl(entry.proofLostUrl);
+  const proofReschedule = resolvePhotoUrl(entry.proofRescheduleUrl);
 
   return (
     <Drawer
@@ -145,10 +154,7 @@ export function GuestbookDetailDrawer({
             />
           ) : (
             <div className="h-16 w-16 rounded-2xl bg-secondary flex items-center justify-center shrink-0">
-              <User
-                weight="BoldDuotone"
-                className="h-7 w-7 text-muted-foreground"
-              />
+              <User weight="BoldDuotone" className="h-7 w-7 text-muted-foreground" />
             </div>
           )}
           <div className="min-w-0">
@@ -158,20 +164,19 @@ export function GuestbookDetailDrawer({
             {entry.guestCode && (
               <p className="text-xs text-muted-foreground font-mono">{entry.guestCode}</p>
             )}
-            {entry.company && (
-              <p className="text-sm text-muted-foreground">{entry.company}</p>
-            )}
-            <div className="mt-1.5">
+            <div className="mt-1.5 flex flex-wrap gap-1.5">
               {isActive ? (
                 <Badge className="rounded-full text-xs bg-green-100 text-green-700 border-0">
                   Masih di Lokasi
                 </Badge>
               ) : (
-                <Badge
-                  variant="secondary"
-                  className="rounded-full text-xs"
-                >
+                <Badge variant="secondary" className="rounded-full text-xs">
                   Selesai
+                </Badge>
+              )}
+              {entry.sourceOfInformation?.name && (
+                <Badge variant="secondary" className="rounded-full text-xs">
+                  {entry.sourceOfInformation.name}
                 </Badge>
               )}
             </div>
@@ -183,43 +188,22 @@ export function GuestbookDetailDrawer({
         {/* Photos section */}
         {(visitorPhoto || idPhoto) && (
           <div className="bg-muted/30 rounded-2xl p-4 space-y-3">
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-              Foto
-            </p>
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Foto</p>
             <div className="grid grid-cols-2 gap-3">
-              {/* Foto Tamu */}
               <div className="space-y-1.5">
                 <p className="text-xs text-muted-foreground">Foto Tamu</p>
                 {visitorPhoto ? (
-                  <Image
-                    src={visitorPhoto}
-                    alt="Foto tamu"
-                    width={300}
-                    height={200}
-                    className="rounded-xl object-cover w-full aspect-[4/3] cursor-pointer hover:opacity-80 transition-opacity"
-                    unoptimized
-                    onClick={() => setOverlayImage(visitorPhoto)}
-                  />
+                  <Image src={visitorPhoto} alt="Foto tamu" width={300} height={200} className="rounded-xl object-cover w-full aspect-[4/3] cursor-pointer hover:opacity-80 transition-opacity" unoptimized onClick={() => setOverlayImage(visitorPhoto)} />
                 ) : (
                   <div className="rounded-xl bg-secondary flex items-center justify-center w-full aspect-[4/3]">
                     <User weight="BoldDuotone" className="h-8 w-8 text-muted-foreground/40" />
                   </div>
                 )}
               </div>
-
-              {/* Foto KTP */}
               <div className="space-y-1.5">
                 <p className="text-xs text-muted-foreground">Foto KTP</p>
                 {idPhoto ? (
-                  <Image
-                    src={idPhoto}
-                    alt="Foto KTP"
-                    width={300}
-                    height={200}
-                    className="rounded-xl object-cover w-full aspect-[4/3] cursor-pointer hover:opacity-80 transition-opacity"
-                    unoptimized
-                    onClick={() => setOverlayImage(idPhoto)}
-                  />
+                  <Image src={idPhoto} alt="Foto KTP" width={300} height={200} className="rounded-xl object-cover w-full aspect-[4/3] cursor-pointer hover:opacity-80 transition-opacity" unoptimized onClick={() => setOverlayImage(idPhoto)} />
                 ) : (
                   <div className="rounded-xl bg-secondary flex items-center justify-center w-full aspect-[4/3]">
                     <Card2 weight="BoldDuotone" className="h-8 w-8 text-muted-foreground/40" />
@@ -230,19 +214,45 @@ export function GuestbookDetailDrawer({
           </div>
         )}
 
+        {/* Proof photos */}
+        {(proofPhoto || proofChat || proofLost || proofReschedule) && (
+          <div className="bg-muted/30 rounded-2xl p-4 space-y-3">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Bukti</p>
+            <div className="grid grid-cols-2 gap-3">
+              {proofPhoto && (
+                <div className="space-y-1.5">
+                  <p className="text-xs text-muted-foreground">Bukti Visit</p>
+                  <Image src={proofPhoto} alt="Bukti Visit" width={300} height={200} className="rounded-xl object-cover w-full aspect-[4/3] cursor-pointer hover:opacity-80 transition-opacity" unoptimized onClick={() => setOverlayImage(proofPhoto)} />
+                </div>
+              )}
+              {proofChat && (
+                <div className="space-y-1.5">
+                  <p className="text-xs text-muted-foreground">Bukti Chat</p>
+                  <Image src={proofChat} alt="Bukti Chat" width={300} height={200} className="rounded-xl object-cover w-full aspect-[4/3] cursor-pointer hover:opacity-80 transition-opacity" unoptimized onClick={() => setOverlayImage(proofChat)} />
+                </div>
+              )}
+              {proofLost && (
+                <div className="space-y-1.5">
+                  <p className="text-xs text-muted-foreground">Bukti Lost</p>
+                  <Image src={proofLost} alt="Bukti Lost" width={300} height={200} className="rounded-xl object-cover w-full aspect-[4/3] cursor-pointer hover:opacity-80 transition-opacity" unoptimized onClick={() => setOverlayImage(proofLost)} />
+                </div>
+              )}
+              {proofReschedule && (
+                <div className="space-y-1.5">
+                  <p className="text-xs text-muted-foreground">Bukti Reschedule</p>
+                  <Image src={proofReschedule} alt="Bukti Reschedule" width={300} height={200} className="rounded-xl object-cover w-full aspect-[4/3] cursor-pointer hover:opacity-80 transition-opacity" unoptimized onClick={() => setOverlayImage(proofReschedule)} />
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Visit info */}
         <div className="bg-muted/30 rounded-2xl p-4 space-y-4">
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-            Informasi Kunjungan
-          </p>
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Informasi Kunjungan</p>
           {entry.interactionType && (
             <InfoRow
-              icon={
-                <ClipboardText
-                  weight="BoldDuotone"
-                  className="h-4 w-4 text-muted-foreground"
-                />
-              }
+              icon={<ClipboardText weight="BoldDuotone" className="h-4 w-4 text-muted-foreground" />}
               label="Tipe Interaksi"
               value={
                 <Badge variant="secondary" className="rounded-full text-xs font-medium">
@@ -251,200 +261,91 @@ export function GuestbookDetailDrawer({
               }
             />
           )}
-          {!entry.interactionType && (
+          {entry.sourceOfInformation?.name && (
             <InfoRow
-              icon={
-                <ClipboardText
-                  weight="BoldDuotone"
-                  className="h-4 w-4 text-muted-foreground"
-                />
-              }
-              label="Tujuan"
-              value={
-                <div className="flex items-center gap-2">
-                  <Badge
-                    variant="secondary"
-                    className="rounded-full text-xs font-medium"
-                  >
-                    {PURPOSE_LABELS[entry.purpose] ?? entry.purpose}
-                  </Badge>
-                  {entry.purposeNote && (
-                    <span className="text-xs text-muted-foreground italic">
-                      {entry.purposeNote}
-                    </span>
-                  )}
-                </div>
-              }
+              icon={<Database weight="BoldDuotone" className="h-4 w-4 text-muted-foreground" />}
+              label="Sumber"
+              value={entry.sourceOfInformation.name}
             />
           )}
           <InfoRow
-            icon={
-              <Videocamera
-                weight="BoldDuotone"
-                className="h-4 w-4 text-muted-foreground"
-              />
-            }
+            icon={<Videocamera weight="BoldDuotone" className="h-4 w-4 text-muted-foreground" />}
             label="Medium"
             value={entry.onlineMedium ? (ONLINE_MEDIUM_LABELS[entry.onlineMedium] ?? entry.onlineMedium) : null}
           />
           <InfoRow
-            icon={
-              <Videocamera
-                weight="BoldDuotone"
-                className="h-4 w-4 text-muted-foreground"
-              />
-            }
+            icon={<Videocamera weight="BoldDuotone" className="h-4 w-4 text-muted-foreground" />}
             label="Link Meeting"
             value={
               entry.meetingUrl ? (
-                <a
-                  href={entry.meetingUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-primary underline break-all"
-                >
+                <a href={entry.meetingUrl} target="_blank" rel="noopener noreferrer" className="text-primary underline break-all">
                   {entry.meetingUrl}
                 </a>
               ) : null
             }
           />
-          <InfoRow
-            icon={
-              <Buildings3
-                weight="BoldDuotone"
-                className="h-4 w-4 text-muted-foreground"
-              />
-            }
-            label="Venue"
-            value={entry.venue?.name}
-          />
-          <InfoRow
-            icon={
-              <MapPoint
-                weight="BoldDuotone"
-                className="h-4 w-4 text-muted-foreground"
-              />
-            }
-            label="Lokasi"
-            value={entry.meetingLocation}
-          />
-          <InfoRow
-            icon={
-              <Calendar
-                weight="BoldDuotone"
-                className="h-4 w-4 text-muted-foreground"
-              />
-            }
-            label="Jadwal"
-            value={entry.scheduledAt ? formatDateTime(entry.scheduledAt) : null}
-          />
-          <InfoRow
-            icon={
-              <User
-                weight="BoldDuotone"
-                className="h-4 w-4 text-muted-foreground"
-              />
-            }
-            label="Bertemu"
-            value={entry.host?.fullName}
-          />
-          <InfoRow
-            icon={
-              <UsersGroupRounded
-                weight="BoldDuotone"
-                className="h-4 w-4 text-muted-foreground"
-              />
-            }
-            label="Jumlah Tamu"
-            value={`${entry.numberOfGuests} orang`}
-          />
+          <InfoRow icon={<Buildings3 weight="BoldDuotone" className="h-4 w-4 text-muted-foreground" />} label="Venue" value={entry.venue?.name} />
+          {entry.package && (
+            <InfoRow
+              icon={<Gift weight="BoldDuotone" className="h-4 w-4 text-muted-foreground" />}
+              label="Paket"
+              value={`${entry.package.packageName}${entry.package.pax ? ` (${entry.package.pax} pax)` : ""}`}
+            />
+          )}
+          <InfoRow icon={<MapPoint weight="BoldDuotone" className="h-4 w-4 text-muted-foreground" />} label="Lokasi" value={entry.meetingLocation} />
+          <InfoRow icon={<Calendar weight="BoldDuotone" className="h-4 w-4 text-muted-foreground" />} label="Jadwal" value={entry.scheduledAt ? formatDateTime(entry.scheduledAt) : null} />
+          <InfoRow icon={<User weight="BoldDuotone" className="h-4 w-4 text-muted-foreground" />} label="Bertemu" value={entry.host?.fullName} />
+          <InfoRow icon={<UsersGroupRounded weight="BoldDuotone" className="h-4 w-4 text-muted-foreground" />} label="Jumlah Tamu" value={`${entry.numberOfGuests} orang`} />
+          {entry.bitrixSourceInfo && (
+            <InfoRow icon={<Database weight="BoldDuotone" className="h-4 w-4 text-muted-foreground" />} label="Sumber Bitrix" value={entry.bitrixSourceInfo} />
+          )}
         </div>
 
         {/* Time info */}
         <div className="bg-muted/30 rounded-2xl p-4 space-y-4">
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-            Waktu
-          </p>
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Waktu</p>
+          <InfoRow icon={<Calendar weight="BoldDuotone" className="h-4 w-4 text-muted-foreground" />} label="Check-in" value={formatDateTime(entry.checkInAt)} />
           <InfoRow
-            icon={
-              <Calendar
-                weight="BoldDuotone"
-                className="h-4 w-4 text-muted-foreground"
-              />
-            }
-            label="Check-in"
-            value={formatDateTime(entry.checkInAt)}
-          />
-          <InfoRow
-            icon={
-              <Calendar
-                weight="BoldDuotone"
-                className="h-4 w-4 text-muted-foreground"
-              />
-            }
+            icon={<Calendar weight="BoldDuotone" className="h-4 w-4 text-muted-foreground" />}
             label="Check-out"
-            value={
-              entry.checkOutAt ? formatDateTime(entry.checkOutAt) : "Belum check-out"
-            }
+            value={entry.checkOutAt ? formatDateTime(entry.checkOutAt) : "Belum check-out"}
           />
         </div>
+
+        {/* Komitmen */}
+        {(entry.commitVisitDate || entry.commitPayDate) && (
+          <div className="bg-muted/30 rounded-2xl p-4 space-y-4">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Komitmen</p>
+            {entry.commitVisitDate && (
+              <InfoRow icon={<Calendar weight="BoldDuotone" className="h-4 w-4 text-muted-foreground" />} label="Tanggal Commit Visit" value={formatDate(entry.commitVisitDate)} />
+            )}
+            {entry.commitPayDate && (
+              <InfoRow icon={<Calendar weight="BoldDuotone" className="h-4 w-4 text-muted-foreground" />} label="Tanggal Commit Bayar" value={formatDate(entry.commitPayDate)} />
+            )}
+          </div>
+        )}
 
         {/* Contact info */}
         {(entry.email || entry.phoneNumber || entry.idNumber) && (
           <div className="bg-muted/30 rounded-2xl p-4 space-y-4">
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-              Kontak
-            </p>
-            <InfoRow
-              icon={
-                <Letter
-                  weight="BoldDuotone"
-                  className="h-4 w-4 text-muted-foreground"
-                />
-              }
-              label="Email"
-              value={entry.email}
-            />
-            <InfoRow
-              icon={
-                <Phone
-                  weight="BoldDuotone"
-                  className="h-4 w-4 text-muted-foreground"
-                />
-              }
-              label="Telepon"
-              value={entry.phoneNumber}
-            />
-            <InfoRow
-              icon={
-                <Card2
-                  weight="BoldDuotone"
-                  className="h-4 w-4 text-muted-foreground"
-                />
-              }
-              label="No. Identitas"
-              value={entry.idNumber}
-            />
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Kontak</p>
+            <InfoRow icon={<Letter weight="BoldDuotone" className="h-4 w-4 text-muted-foreground" />} label="Email" value={entry.email} />
+            <InfoRow icon={<Phone weight="BoldDuotone" className="h-4 w-4 text-muted-foreground" />} label="Telepon" value={entry.phoneNumber} />
+            <InfoRow icon={<Card2 weight="BoldDuotone" className="h-4 w-4 text-muted-foreground" />} label="No. Identitas" value={entry.idNumber} />
           </div>
         )}
 
         {/* Notes */}
         {entry.notes && (
           <div className="bg-muted/30 rounded-2xl p-4 space-y-2">
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-              Catatan
-            </p>
-            <p className="text-sm text-foreground whitespace-pre-wrap">
-              {entry.notes}
-            </p>
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Catatan</p>
+            <p className="text-sm text-foreground whitespace-pre-wrap">{entry.notes}</p>
           </div>
         )}
 
-        {/* Visit details */}
+        {/* Visit status */}
         <div className="bg-muted/30 rounded-2xl p-4 space-y-4">
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-            Status Kunjungan
-          </p>
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Status</p>
           {entry.visitStatus && (() => {
             const statusInfo = VISIT_STATUS_LABELS[entry.visitStatus];
             if (!statusInfo) return null;
@@ -456,12 +357,6 @@ export function GuestbookDetailDrawer({
               </div>
             );
           })()}
-          {entry.visitStatus === "not_joined" && entry.notJoinReason && (
-            <div className="space-y-1">
-              <p className="text-xs text-muted-foreground">Alasan</p>
-              <p className="text-sm text-foreground">{entry.notJoinReason}</p>
-            </div>
-          )}
           <div className="space-y-1">
             <p className="text-xs text-muted-foreground">Total Kunjungan</p>
             <p className="text-sm font-medium text-foreground">{totalVisit}x</p>
@@ -500,12 +395,11 @@ export function GuestbookDetailDrawer({
 
         {/* Meta */}
         <div className="text-xs text-muted-foreground space-y-1 border-t border-border pt-3">
-          {entry.createdBy && (
-            <p>Dicatat oleh: {entry.createdBy.fullName ?? "—"}</p>
-          )}
+          {entry.createdBy && <p>Dicatat oleh: {entry.createdBy.fullName ?? "—"}</p>}
           <p>Tanggal dibuat: {formatDateTime(entry.createdAt)}</p>
         </div>
       </div>
+
       {overlayImage && (
         <div
           className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm"

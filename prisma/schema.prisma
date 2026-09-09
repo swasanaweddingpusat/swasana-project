@@ -552,6 +552,7 @@ model Package {
   categoryPrices   PackageCategoryPrice[]
   bookings         Booking[]
   leads            DailyActivity[]
+  guestbookEntries GuestbookEntry[]
 
   @@index([venueId])
   @@index([category])
@@ -686,9 +687,10 @@ model SourceOfInformation {
   id        String     @id @default(uuid())
   name      String     @unique
   createdAt DateTime   @default(now())
-  bookings  Booking[]
-  customers Customer[]
-  leads     DailyActivity[]
+  bookings         Booking[]
+  customers        Customer[]
+  leads            DailyActivity[]
+  guestbookEntries GuestbookEntry[]
 
   @@map("source_of_informations")
 }
@@ -874,10 +876,18 @@ enum GuestVisitPurpose {
   other
 }
 
+enum GuestbookSource {
+  database
+  walk_in
+  referral
+}
+
 enum GuestVisitStatus {
   deal
+  in_progress
+  pending
   to_be_discuss
-  not_joined
+  lost
 }
 
 enum GuestInteractionType {
@@ -3607,21 +3617,33 @@ model GuestbookEntry {
   checkInAt       DateTime          @default(now())
   checkOutAt      DateTime?
   notes           String?
-  guestCode       String?           @unique
-  visitStatus     GuestVisitStatus?
-  notJoinReason   String?
-  createdById     String?
-  salesId         String?
-  phoneNumberNorm String?
-  bitrixContactId String?
-  bitrixName      String?
-  createdAt       DateTime          @default(now())
-  updatedAt       DateTime          @updatedAt
+  guestCode          String?           @unique
+  visitStatus        GuestVisitStatus?
+  notJoinReason      String?
+  createdById        String?
+  salesId            String?
+  phoneNumberNorm    String?
+  bitrixContactId    String?
+  bitrixName         String?
+  source             GuestbookSource?
+  proofChatUrl       String?
+  proofPhotoUrl      String?
+  proofLostUrl       String?
+  proofRescheduleUrl String?
+  commitVisitDate    DateTime?
+  commitPayDate      DateTime?
+  bitrixSourceInfo      String?
+  sourceOfInformationId String?
+  packageId             String?
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
 
-  host            Profile?          @relation("GuestbookHost", fields: [hostId], references: [id], onDelete: SetNull)
-  createdBy       Profile?          @relation("GuestbookCreator", fields: [createdById], references: [id], onDelete: SetNull)
-  sales           Profile?          @relation("GuestbookSales", fields: [salesId], references: [id], onDelete: SetNull)
-  venue           Venue?            @relation(fields: [venueId], references: [id], onDelete: SetNull)
+  host                Profile?              @relation("GuestbookHost", fields: [hostId], references: [id], onDelete: SetNull)
+  createdBy           Profile?              @relation("GuestbookCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  sales               Profile?              @relation("GuestbookSales", fields: [salesId], references: [id], onDelete: SetNull)
+  venue               Venue?                @relation(fields: [venueId], references: [id], onDelete: SetNull)
+  sourceOfInformation SourceOfInformation?  @relation(fields: [sourceOfInformationId], references: [id], onDelete: SetNull)
+  package             Package?              @relation(fields: [packageId], references: [id], onDelete: SetNull)
 
   @@index([checkInAt])
   @@index([hostId])
@@ -3629,6 +3651,8 @@ model GuestbookEntry {
   @@index([salesId])
   @@index([interactionType])
   @@index([phoneNumberNorm])
+  @@index([sourceOfInformationId])
+  @@index([packageId])
   @@map("guestbook_entries")
 }
 
