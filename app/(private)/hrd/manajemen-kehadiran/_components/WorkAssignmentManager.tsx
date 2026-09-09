@@ -69,6 +69,9 @@ interface AssignmentFormState {
   effectiveDate: string;
   endDate: string;
   offdayDays: number[];
+  isMobileAttendance: boolean;
+  clockInLocationId: string;
+  clockOutLocationId: string;
 }
 
 const EMPTY_FORM: AssignmentFormState = {
@@ -79,6 +82,9 @@ const EMPTY_FORM: AssignmentFormState = {
   effectiveDate: new Date().toISOString().slice(0, 10),
   endDate: "",
   offdayDays: [],
+  isMobileAttendance: false,
+  clockInLocationId: "",
+  clockOutLocationId: "",
 };
 
 interface BulkFormState {
@@ -89,6 +95,9 @@ interface BulkFormState {
   effectiveDate: string;
   endDate: string;
   offdayDays: number[];
+  isMobileAttendance: boolean;
+  clockInLocationId: string;
+  clockOutLocationId: string;
 }
 
 const EMPTY_BULK: BulkFormState = {
@@ -99,6 +108,9 @@ const EMPTY_BULK: BulkFormState = {
   effectiveDate: new Date().toISOString().slice(0, 10),
   endDate: "",
   offdayDays: [],
+  isMobileAttendance: false,
+  clockInLocationId: "",
+  clockOutLocationId: "",
 };
 
 function formatDateShort(date: string | Date | null): string {
@@ -173,6 +185,9 @@ export function WorkAssignmentManager() {
         ? new Date(item.endDate).toISOString().slice(0, 10)
         : "",
       offdayDays: (item.offdayDays as number[]) ?? [],
+      isMobileAttendance: item.isMobileAttendance ?? false,
+      clockInLocationId: item.clockInLocationId ?? "",
+      clockOutLocationId: item.clockOutLocationId ?? "",
     });
     setEmpLabel(item.profile.fullName ?? "");
     setEmpSearch("");
@@ -201,6 +216,9 @@ export function WorkAssignmentManager() {
       effectiveDate: form.effectiveDate || undefined,
       endDate: form.endDate || undefined,
       offdayDays: form.offdayDays,
+      isMobileAttendance: form.isMobileAttendance,
+      clockInLocationId: form.isMobileAttendance ? (form.clockInLocationId || undefined) : undefined,
+      clockOutLocationId: form.isMobileAttendance ? (form.clockOutLocationId || undefined) : undefined,
     };
 
     if (editingItem) {
@@ -278,6 +296,9 @@ export function WorkAssignmentManager() {
         effectiveDate: bulkForm.effectiveDate || undefined,
         endDate: bulkForm.endDate || undefined,
         offdayDays: bulkForm.offdayDays,
+        isMobileAttendance: bulkForm.isMobileAttendance,
+        clockInLocationId: bulkForm.isMobileAttendance ? (bulkForm.clockInLocationId || undefined) : undefined,
+        clockOutLocationId: bulkForm.isMobileAttendance ? (bulkForm.clockOutLocationId || undefined) : undefined,
       },
       {
         onSuccess: (result) => {
@@ -398,6 +419,7 @@ export function WorkAssignmentManager() {
                   <TableRow>
                     <TableHead>Karyawan</TableHead>
                     <TableHead>Lokasi</TableHead>
+                    <TableHead>Tipe</TableHead>
                     <TableHead>Shift</TableHead>
                     <TableHead>Default</TableHead>
                     <TableHead>Hari Libur</TableHead>
@@ -421,6 +443,21 @@ export function WorkAssignmentManager() {
                         </div>
                       </TableCell>
                       <TableCell>{asgn.workLocation.name}</TableCell>
+                      <TableCell>
+                        {asgn.isMobileAttendance ? (
+                          <div>
+                            <Badge variant="secondary" className="rounded-full text-xs">Mobile</Badge>
+                            {asgn.clockInLocation && (
+                              <p className="text-xs text-muted-foreground mt-1">Masuk: {asgn.clockInLocation.name}</p>
+                            )}
+                            {asgn.clockOutLocation && (
+                              <p className="text-xs text-muted-foreground">Pulang: {asgn.clockOutLocation.name}</p>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-sm text-muted-foreground">Tetap</span>
+                        )}
+                      </TableCell>
                       <TableCell>
                         <div>
                           <p className="text-sm">{asgn.workShift.name}</p>
@@ -545,6 +582,55 @@ export function WorkAssignmentManager() {
                 </SelectContent>
               </Select>
             </div>
+
+            <div className="flex items-center gap-3">
+              <Checkbox
+                id="assign-mobile"
+                checked={form.isMobileAttendance}
+                onCheckedChange={(checked) => setForm((f) => ({ ...f, isMobileAttendance: checked === true }))}
+              />
+              <Label htmlFor="assign-mobile">Absensi Mobile (Lokasi Berbeda)</Label>
+            </div>
+
+            {form.isMobileAttendance && (
+              <div className="grid gap-3 rounded-xl border border-border p-4 bg-muted/30">
+                <p className="text-xs text-muted-foreground">Karyawan bisa absen masuk dan pulang di lokasi berbeda.</p>
+                <div className="grid gap-2">
+                  <Label>Lokasi Absen Masuk</Label>
+                  <Select
+                    value={form.clockInLocationId || "none"}
+                    onValueChange={(val) => setForm((f) => ({ ...f, clockInLocationId: val === "none" ? "" : val }))}
+                  >
+                    <SelectTrigger className="rounded-xl">
+                      <SelectValue placeholder="Sama dengan lokasi kerja" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Sama dengan lokasi kerja</SelectItem>
+                      {locations?.map((loc) => (
+                        <SelectItem key={loc.id} value={loc.id}>{loc.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="grid gap-2">
+                  <Label>Lokasi Absen Pulang</Label>
+                  <Select
+                    value={form.clockOutLocationId || "none"}
+                    onValueChange={(val) => setForm((f) => ({ ...f, clockOutLocationId: val === "none" ? "" : val }))}
+                  >
+                    <SelectTrigger className="rounded-xl">
+                      <SelectValue placeholder="Sama dengan lokasi kerja" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Sama dengan lokasi kerja</SelectItem>
+                      {locations?.map((loc) => (
+                        <SelectItem key={loc.id} value={loc.id}>{loc.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            )}
 
             <div className="grid gap-2">
               <Label>Shift Kerja *</Label>
@@ -698,6 +784,55 @@ export function WorkAssignmentManager() {
                 </SelectContent>
               </Select>
             </div>
+
+            <div className="flex items-center gap-3">
+              <Checkbox
+                id="bulk-mobile"
+                checked={bulkForm.isMobileAttendance}
+                onCheckedChange={(checked) => setBulkForm((f) => ({ ...f, isMobileAttendance: checked === true }))}
+              />
+              <Label htmlFor="bulk-mobile">Absensi Mobile (Lokasi Berbeda)</Label>
+            </div>
+
+            {bulkForm.isMobileAttendance && (
+              <div className="grid gap-3 rounded-xl border border-border p-4 bg-muted/30">
+                <p className="text-xs text-muted-foreground">Karyawan bisa absen masuk dan pulang di lokasi berbeda.</p>
+                <div className="grid gap-2">
+                  <Label>Lokasi Absen Masuk</Label>
+                  <Select
+                    value={bulkForm.clockInLocationId || "none"}
+                    onValueChange={(val) => setBulkForm((f) => ({ ...f, clockInLocationId: val === "none" ? "" : val }))}
+                  >
+                    <SelectTrigger className="rounded-xl">
+                      <SelectValue placeholder="Sama dengan lokasi kerja" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Sama dengan lokasi kerja</SelectItem>
+                      {locations?.map((loc) => (
+                        <SelectItem key={loc.id} value={loc.id}>{loc.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="grid gap-2">
+                  <Label>Lokasi Absen Pulang</Label>
+                  <Select
+                    value={bulkForm.clockOutLocationId || "none"}
+                    onValueChange={(val) => setBulkForm((f) => ({ ...f, clockOutLocationId: val === "none" ? "" : val }))}
+                  >
+                    <SelectTrigger className="rounded-xl">
+                      <SelectValue placeholder="Sama dengan lokasi kerja" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Sama dengan lokasi kerja</SelectItem>
+                      {locations?.map((loc) => (
+                        <SelectItem key={loc.id} value={loc.id}>{loc.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            )}
 
             <div className="grid gap-2">
               <Label>Shift Kerja *</Label>

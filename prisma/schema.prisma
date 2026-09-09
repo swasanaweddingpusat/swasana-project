@@ -2348,6 +2348,9 @@ model WorkLocation {
   overrides   ShiftOverride[]
   attendances Attendance[]
 
+  clockInAssignments  EmployeeWorkAssignment[] @relation("ClockInLocation")
+  clockOutAssignments EmployeeWorkAssignment[] @relation("ClockOutLocation")
+
   @@index([venueId])
   @@map("work_locations")
 }
@@ -2372,25 +2375,32 @@ model WorkShift {
 }
 
 model EmployeeWorkAssignment {
-  id             String    @id @default(uuid())
-  profileId      String
-  workLocationId String
-  workShiftId    String
-  isDefault      Boolean   @default(false)
-  offdayDays     Int[]     @default([])
-  effectiveDate  DateTime
-  endDate        DateTime?
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  id                  String    @id @default(uuid())
+  profileId           String
+  workLocationId      String
+  workShiftId         String
+  isDefault           Boolean   @default(false)
+  offdayDays          Int[]     @default([])
+  effectiveDate       DateTime
+  endDate             DateTime?
+  isMobileAttendance  Boolean   @default(false)
+  clockInLocationId   String?
+  clockOutLocationId  String?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
 
-  profile      Profile      @relation(fields: [profileId], references: [id], onDelete: Cascade)
-  workLocation WorkLocation @relation(fields: [workLocationId], references: [id], onDelete: Cascade)
-  workShift    WorkShift    @relation(fields: [workShiftId], references: [id], onDelete: Cascade)
+  profile          Profile       @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  workLocation     WorkLocation  @relation(fields: [workLocationId], references: [id], onDelete: Cascade)
+  workShift        WorkShift     @relation(fields: [workShiftId], references: [id], onDelete: Cascade)
+  clockInLocation  WorkLocation? @relation("ClockInLocation", fields: [clockInLocationId], references: [id], onDelete: SetNull)
+  clockOutLocation WorkLocation? @relation("ClockOutLocation", fields: [clockOutLocationId], references: [id], onDelete: SetNull)
 
   @@unique([profileId, workLocationId, workShiftId])
   @@index([profileId])
   @@index([workLocationId])
   @@index([workShiftId])
+  @@index([clockInLocationId])
+  @@index([clockOutLocationId])
   @@map("employee_work_assignments")
 }
 
