@@ -40,6 +40,7 @@ export async function POST(req: Request): Promise<Response> {
     return Response.json({ key });
   } catch (err) {
     console.error("[POST /api/guestbook/upload]", err);
-    return Response.json({ error: "Gagal upload foto." }, { status: 500 });
+    const detail = err instanceof Error ? err.message : "Unknown error";
+    return Response.json({ error: `Gagal upload foto: ${detail}` }, { status: 500 });
   }
 }

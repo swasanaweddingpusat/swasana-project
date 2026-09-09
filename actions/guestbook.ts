@@ -28,11 +28,7 @@ export async function createGuestbookEntry(data: unknown): Promise<{ success: bo
   const parsed = createGuestbookEntrySchema.safeParse(data);
   if (!parsed.success) return { success: false, error: parsed.error.issues[0].message };
 
-  const { checkInAt, scheduledAt, ...rest } = parsed.data;
-  // Fase 3 attribution: the "Bertemu Dengan" picker feeds the sales met
-  // (client_visit walk-in). Fall back to the creator (front-desk / self-log)
-  // when no host is chosen — keeps online_meeting / jemput_bola attributed to
-  // whoever logged it, matching the Fase 1 default.
+  const { checkInAt, scheduledAt, commitVisitDate, commitPayDate, ...rest } = parsed.data;
   const salesId = rest.hostId ?? session!.user.profileId;
   const phoneNumberNorm = normalizePhoneId(rest.phoneNumber);
 
@@ -50,6 +46,8 @@ export async function createGuestbookEntry(data: unknown): Promise<{ success: bo
               guestCode,
               checkInAt: checkInAt ? new Date(checkInAt) : undefined,
               scheduledAt: scheduledAt ? new Date(scheduledAt) : undefined,
+              commitVisitDate: commitVisitDate ? new Date(commitVisitDate) : undefined,
+              commitPayDate: commitPayDate ? new Date(commitPayDate) : undefined,
               createdById: session!.user.profileId,
               salesId,
               phoneNumberNorm,
@@ -152,13 +150,17 @@ export async function updateGuestbookEntry(
     });
     if (!existing) return { success: false, error: "Data tidak ditemukan." };
 
+    const { checkInAt, scheduledAt, commitVisitDate, commitPayDate, ...rest } = parsed.data;
+
     await db.$transaction([
       db.guestbookEntry.update({
         where: { id },
         data: {
-          visitStatus: parsed.data.visitStatus ?? undefined,
-          notJoinReason: parsed.data.notJoinReason ?? undefined,
-          notes: parsed.data.notes ?? undefined,
+          ...rest,
+          checkInAt: checkInAt ? new Date(checkInAt) : undefined,
+          scheduledAt: scheduledAt ? new Date(scheduledAt) : undefined,
+          commitVisitDate: commitVisitDate ? new Date(commitVisitDate) : undefined,
+          commitPayDate: commitPayDate ? new Date(commitPayDate) : undefined,
         },
       }),
     ]);
@@ -175,6 +177,44 @@ export async function updateGuestbookEntry(
     return { success: true };
   } catch (e) {
     console.error("[updateGuestbookEntry]", e);
+    return { success: false, error: "Terjadi kesalahan." };
+  }
+}
+
+export async function deleteGuestbookEntry(id: string): Promise<{ success: boolean; error?: string }> {
+  const { session, error } = await requirePermission({ module: "guestbook", action: "edit" });
+  if (error) return { success: false, error };
+  if (!mutationLimiter.check(`guestbook-delete:${session!.user.id}`)) return { success: false, ...rateLimitError() };
+
+  if (!session!.user.profileId) return { success: false, error: "Sesi tidak valid, silakan login ulang." };
+  const scope = session!.user.dataScope ?? "own";
+  if (!(await canAccessGuestbookEntry(session!.user.profileId, scope, id))) {
+    return { success: false, error: "Anda tidak memiliki akses ke data ini." };
+  }
+
+  try {
+    const existing = await db.guestbookEntry.findUnique({
+      where: { id },
+      select: { id: true, visitorName: true },
+    });
+    if (!existing) return { success: false, error: "Data tidak ditemukan." };
+
+    await db.$transaction([
+      db.guestbookEntry.delete({ where: { id } }),
+    ]);
+
+    await logAudit({
+      userId: session!.user.profileId,
+      action: "guestbook_entry.delete",
+      entityType: "GuestbookEntry",
+      entityId: id,
+      description: `Deleted guestbook entry for "${existing.visitorName}"`,
+    });
+
+    revalidateTag("guestbook-entries", "max");
+    return { success: true };
+  } catch (e) {
+    console.error("[deleteGuestbookEntry]", e);
     return { success: false, error: "Terjadi kesalahan." };
   }
 }
