@@ -45,7 +45,6 @@ import { Input } from "@/components/ui/input";
 import {
   AddCircle,
   UsersGroupRounded,
-  CheckCircle,
   CalendarMinimalistic,
   Download,
   Eye,
@@ -59,7 +58,7 @@ import {
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
-import { useGuestbookEntries, useCheckOutGuestbookEntry, useDeleteGuestbookEntry } from "@/hooks/use-guestbook";
+import { useGuestbookEntries, useDeleteGuestbookEntry } from "@/hooks/use-guestbook";
 import { useVenues } from "@/hooks/use-venues";
 import type { GuestbookEntryItem } from "@/lib/queries/guestbookEntries";
 import { GuestbookDrawer } from "./GuestbookDrawer";
@@ -141,16 +140,12 @@ function SkeletonRows() {
 
 function MobileCard({
   entry,
-  onCompleteClick,
   onViewClick,
   onEditClick,
-  isCheckingOut,
 }: {
   entry: GuestbookEntryItem;
-  onCompleteClick: (entry: GuestbookEntryItem) => void;
   onViewClick: (entry: GuestbookEntryItem) => void;
   onEditClick: (entry: GuestbookEntryItem) => void;
-  isCheckingOut: boolean;
 }) {
   const sourceLabel = entry.sourceOfInformation?.name ?? null;
   const statusInfo = entry.visitStatus ? STATUS_LABELS[entry.visitStatus] : null;
@@ -235,17 +230,6 @@ function MobileCard({
         className="flex items-center justify-center gap-1 pt-1 border-t border-border"
         onClick={(e) => e.stopPropagation()}
       >
-        {entry.checkOutAt === null && (
-          <button
-            type="button"
-            className="flex flex-col items-center justify-center gap-0.5 w-14 rounded-xl py-1.5 px-1 cursor-pointer transition-colors hover:bg-accent disabled:opacity-50 disabled:pointer-events-none"
-            onClick={() => onCompleteClick(entry)}
-            disabled={isCheckingOut}
-          >
-            <CheckCircle weight="BoldDuotone" className="h-5 w-5 text-primary" />
-            <span className="text-[10px] font-medium text-muted-foreground leading-none">Selesai</span>
-          </button>
-        )}
         <button
           type="button"
           className="flex flex-col items-center justify-center gap-0.5 w-14 rounded-xl py-1.5 px-1 cursor-pointer transition-colors hover:bg-accent"
@@ -278,7 +262,6 @@ export function GuestbookClient() {
 function GuestbookClientInner() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [selectedEntry, setSelectedEntry] = useState<GuestbookEntryItem | null>(null);
-  const [confirmComplete, setConfirmComplete] = useState<GuestbookEntryItem | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<GuestbookEntryItem | null>(null);
   const [confirmEdit, setConfirmEdit] = useState<GuestbookEntryItem | null>(null);
   const [editEntry, setEditEntry] = useState<GuestbookEntryItem | null>(null);
@@ -306,12 +289,7 @@ function GuestbookClientInner() {
   const { data: guestbookData, isLoading } = useGuestbookEntries();
   const entries = guestbookData?.data ?? [];
   const { data: venues = [] } = useVenues();
-  const checkOutMutation = useCheckOutGuestbookEntry();
   const deleteMutation = useDeleteGuestbookEntry();
-
-  function handleCompleteClick(entry: GuestbookEntryItem) {
-    setConfirmComplete(entry);
-  }
 
   function handleEditClick(entry: GuestbookEntryItem) {
     setConfirmEdit(entry);
@@ -321,17 +299,6 @@ function GuestbookClientInner() {
     if (!confirmEdit) return;
     setEditEntry(confirmEdit);
     setConfirmEdit(null);
-  }
-
-  async function handleConfirmComplete() {
-    if (!confirmComplete) return;
-    const result = await checkOutMutation.mutateAsync(confirmComplete.id);
-    if (result.success) {
-      toast.success("Check-out berhasil");
-    } else {
-      toast.error(result.error ?? "Gagal check-out");
-    }
-    setConfirmComplete(null);
   }
 
   async function handleConfirmDelete() {
@@ -646,17 +613,6 @@ function GuestbookClientInner() {
                         </TableCell>
                         <TableCell className="text-right pr-4">
                           <div className="flex items-center justify-end gap-1" onClick={(e) => e.stopPropagation()}>
-                            {entry.checkOutAt === null && (
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-8 w-8 rounded-full text-green-600 hover:bg-green-50"
-                                onClick={() => handleCompleteClick(entry)}
-                                disabled={checkOutMutation.isPending}
-                              >
-                                <CheckCircle weight="BoldDuotone" className="h-4 w-4" />
-                              </Button>
-                            )}
                             <Button
                               variant="ghost"
                               size="icon"
@@ -845,10 +801,8 @@ function GuestbookClientInner() {
             <MobileCard
               key={entry.id}
               entry={entry}
-              onCompleteClick={handleCompleteClick}
               onViewClick={setSelectedEntry}
               onEditClick={handleEditClick}
-              isCheckingOut={checkOutMutation.isPending}
             />
           ))}
       </div>
@@ -872,29 +826,6 @@ function GuestbookClientInner() {
         entry={selectedEntry}
         allEntries={entries}
       />
-
-      {/* Complete confirmation */}
-      <AlertDialog
-        open={confirmComplete !== null}
-        onOpenChange={(open) => {
-          if (!open) setConfirmComplete(null);
-        }}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Konfirmasi Check-out</AlertDialogTitle>
-            <AlertDialogDescription>
-              Tandai &quot;{confirmComplete?.visitorName}&quot; sudah selesai kunjungan?
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel className="rounded-full">Batal</AlertDialogCancel>
-            <AlertDialogAction className="rounded-full" onClick={handleConfirmComplete}>
-              Ya, Check-out
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
 
       {/* Delete confirmation */}
       <AlertDialog

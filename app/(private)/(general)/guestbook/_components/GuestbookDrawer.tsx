@@ -833,23 +833,6 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
               />
             </div>
 
-            {/* Tanggal Checkout — cuma di mode edit; terisi otomatis saat sales complete */}
-            {isEditMode && (
-              <div className="space-y-1.5">
-                <Label htmlFor="gb-checkOutAt" className="text-sm font-medium">
-                  Tanggal Checkout
-                </Label>
-                <Input
-                  id="gb-checkOutAt"
-                  type="datetime-local"
-                  value={form.checkOutAt}
-                  onChange={(e) => setField("checkOutAt", e.target.value)}
-                  className="rounded-xl"
-                />
-                <p className="text-xs text-muted-foreground">Terisi otomatis saat visit di-complete</p>
-              </div>
-            )}
-
             <div className="space-y-1.5">
               <Label className="text-sm font-medium">
                 Sumber <span className="text-destructive">*</span>
@@ -927,6 +910,35 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
           {/* Section: Detail — selalu tampil, gak nunggu jenis interaksi dipilih */}
           <div className="rounded-2xl border bg-card p-5 flex flex-col gap-4">
             <SectionHeader icon={MapPoint} title="Detail Kunjungan" />
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1.5 sm:col-span-2">
+                  <Label htmlFor="gb-checkInAt" className="text-sm font-medium">
+                    Tanggal Berkunjung
+                  </Label>
+                  <Input
+                    id="gb-checkInAt"
+                    type="datetime-local"
+                    value={form.checkInAt}
+                    onChange={(e) => setField("checkInAt", e.target.value)}
+                    className="rounded-xl"
+                  />
+                </div>
+                {isEditMode && (
+                  <div className="space-y-1.5">
+                    <Label htmlFor="gb-checkOutAt" className="text-sm font-medium">
+                      Tanggal Checkout
+                    </Label>
+                    <Input
+                      id="gb-checkOutAt"
+                      type="datetime-local"
+                      value={form.checkOutAt}
+                      onChange={(e) => setField("checkOutAt", e.target.value)}
+                      className="rounded-xl"
+                    />
+                  </div>
+                )}
+              </div>
 
               {/* Venue — semua tipe interaksi */}
               <div className="space-y-1.5">
