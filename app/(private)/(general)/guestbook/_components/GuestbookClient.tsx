@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import Image from "next/image";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { format } from "date-fns";
-import { id as idLocale } from "date-fns/locale";
 import type { DateRange } from "react-day-picker";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -18,18 +18,6 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -39,32 +27,30 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Calendar } from "@/components/ui/calendar";
 import {
   AddCircle,
   UsersGroupRounded,
-  CheckCircle,
   CalendarMinimalistic,
+  Download,
   Eye,
+  Filter,
   Pen,
   Refresh,
   TrashBinTrash,
+  UserCircle,
 } from "@solar-icons/react";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
-import { useGuestbookEntries, useCheckOutGuestbookEntry, useDeleteGuestbookEntry } from "@/hooks/use-guestbook";
+import { cn, formatRupiah } from "@/lib/utils";
+import { computeFullPrice } from "@/lib/package-prices";
+import { useGuestbookEntries, useDeleteGuestbookEntry } from "@/hooks/use-guestbook";
 import { useVenues } from "@/hooks/use-venues";
+import { useSalesUsers } from "@/hooks/use-sales-users";
 import type { GuestbookEntryItem } from "@/lib/queries/guestbookEntries";
 import { GuestbookDrawer } from "./GuestbookDrawer";
 import { GuestbookDetailDrawer } from "./GuestbookDetailDrawer";
-
-function resolvePhotoUrl(key: string | null | undefined): string | null {
-  if (!key) return null;
-  if (key.startsWith("http")) return key;
-  const base = process.env.NEXT_PUBLIC_S3_PUBLIC_URL;
-  if (!base) return null;
-  return `${base}/${key}`;
-}
+import { GuestbookFilterDrawer } from "./GuestbookFilterDrawer";
+import { resolveGuestbookPhotoUrl } from "./photo-url";
 
 const STATUS_LABELS: Record<string, { label: string; className: string }> = {
   deal: { label: "Deal", className: "bg-green-100 text-green-700 border-0" },
@@ -72,6 +58,11 @@ const STATUS_LABELS: Record<string, { label: string; className: string }> = {
   pending: { label: "Pending", className: "bg-gray-100 text-gray-700 border-0" },
   to_be_discuss: { label: "To Be Discuss", className: "bg-yellow-100 text-yellow-700 border-0" },
   lost: { label: "Lost", className: "bg-red-100 text-red-700 border-0" },
+};
+
+const EVENT_CATEGORY_LABELS: Record<string, string> = {
+  WEDDINGS: "Wedding",
+  MICE: "MICE",
 };
 
 function formatDate(dateStr: string | Date): string {
@@ -89,40 +80,15 @@ function formatTime(dateStr: string | Date): string {
   });
 }
 
-function isToday(dateStr: string | Date): boolean {
-  const d = new Date(dateStr);
-  const now = new Date();
-  return (
-    d.getFullYear() === now.getFullYear() &&
-    d.getMonth() === now.getMonth() &&
-    d.getDate() === now.getDate()
-  );
+function todayRange(): DateRange {
+  const today = new Date();
+  return { from: today, to: today };
 }
 
-function StatCard({
-  icon,
-  label,
-  value,
-  iconClass,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: number;
-  iconClass?: string;
-}) {
-  return (
-    <Card className="rounded-2xl shadow-sm">
-      <CardContent className="p-5 flex items-center gap-4">
-        <div className={`p-3 rounded-full bg-secondary ${iconClass ?? ""}`}>
-          {icon}
-        </div>
-        <div>
-          <p className="text-xs text-muted-foreground font-medium">{label}</p>
-          <p className="text-2xl font-heading font-bold text-foreground">{value}</p>
-        </div>
-      </CardContent>
-    </Card>
-  );
+function getPackagePrice(pkg: NonNullable<GuestbookEntryItem["package"]>): number {
+  if (pkg.sellingPrice > 0) return pkg.sellingPrice;
+  const base = (pkg.categoryPrices ?? []).reduce((sum, c) => sum + c.basePrice, 0);
+  return computeFullPrice([{ basePrice: base }], pkg.margin ?? 0);
 }
 
 function SkeletonRows() {
@@ -133,8 +99,7 @@ function SkeletonRows() {
           <TableCell><Skeleton className="h-4 w-32" /></TableCell>
           <TableCell><Skeleton className="h-4 w-24" /></TableCell>
           <TableCell><Skeleton className="h-4 w-24" /></TableCell>
-          <TableCell><Skeleton className="h-4 w-28" /></TableCell>
-          <TableCell><Skeleton className="h-4 w-28" /></TableCell>
+          <TableCell><Skeleton className="h-8 w-28" /></TableCell>
           <TableCell><Skeleton className="h-5 w-20 rounded-full" /></TableCell>
           <TableCell><Skeleton className="h-4 w-24" /></TableCell>
           <TableCell><Skeleton className="h-5 w-24 rounded-full" /></TableCell>
@@ -148,163 +113,170 @@ function SkeletonRows() {
 
 function MobileCard({
   entry,
-  onCompleteClick,
   onViewClick,
   onEditClick,
-  isCheckingOut,
 }: {
   entry: GuestbookEntryItem;
-  onCompleteClick: (entry: GuestbookEntryItem) => void;
   onViewClick: (entry: GuestbookEntryItem) => void;
   onEditClick: (entry: GuestbookEntryItem) => void;
-  isCheckingOut: boolean;
 }) {
   const sourceLabel = entry.sourceOfInformation?.name ?? null;
   const statusInfo = entry.visitStatus ? STATUS_LABELS[entry.visitStatus] : null;
+  const photoSrc = resolveGuestbookPhotoUrl(entry.visitorPhoto);
 
   return (
     <div
-      className="rounded-2xl border bg-card p-4 space-y-3 shadow-sm cursor-pointer transition-shadow hover:shadow-md"
+      className="rounded-lg border bg-card p-3 space-y-2 cursor-pointer"
       onClick={() => onViewClick(entry)}
     >
+      {/* Row 1: avatar + name + status badge */}
       <div className="flex items-start justify-between gap-2">
-        <div className="flex items-center gap-2.5">
-          {(() => {
-            const photoSrc = resolvePhotoUrl(entry.visitorPhotoUrl);
-            if (photoSrc) {
-              return <Image src={photoSrc} alt="" width={40} height={40} className="h-10 w-10 rounded-xl object-cover shrink-0" unoptimized />;
-            }
-            return null;
-          })()}
-          <div>
-            <p className="font-semibold text-foreground text-sm">{entry.visitorName}</p>
-            {entry.company && (
-              <p className="text-xs text-muted-foreground">{entry.company}</p>
-            )}
+        <div className="flex items-center gap-2.5 min-w-0">
+          {photoSrc ? (
+            <Image src={photoSrc} alt="" width={36} height={36} className="h-9 w-9 rounded-lg object-cover shrink-0" unoptimized />
+          ) : (
+            <div className="h-9 w-9 rounded-lg bg-muted shrink-0 flex items-center justify-center">
+              <UsersGroupRounded weight="BoldDuotone" className="h-4 w-4 text-muted-foreground" />
+            </div>
+          )}
+          <div className="min-w-0">
+            <p className="font-medium text-foreground text-sm truncate">{entry.visitorName}</p>
             {entry.guestCode && (
-              <p className="text-[10px] font-mono text-muted-foreground/70 mt-0.5">{entry.guestCode}</p>
+              <p className="text-[10px] font-mono text-muted-foreground/70">{entry.guestCode}</p>
             )}
           </div>
         </div>
         {statusInfo ? (
-          <Badge className={`rounded-full text-[11px] shrink-0 ${statusInfo.className}`}>
+          <Badge className={`rounded-full text-[10px] shrink-0 ${statusInfo.className}`}>
             {statusInfo.label}
           </Badge>
         ) : (
-          <Badge variant="secondary" className="rounded-full text-[11px] shrink-0">
+          <Badge variant="secondary" className="rounded-full text-[10px] shrink-0">
             —
           </Badge>
         )}
       </div>
 
-      <div className="grid grid-cols-2 gap-2 text-xs">
-        <div>
-          <p className="text-muted-foreground">Venue</p>
-          <p className="text-foreground">{entry.venue?.name ?? "-"}</p>
-        </div>
+      {/* Row 2: venue + package + sumber */}
+      <div className="flex items-center gap-1.5 flex-wrap text-xs text-muted-foreground">
+        <span className="truncate">{entry.venue?.name ?? "Venue —"}</span>
+        {entry.package?.packageName && (
+          <>
+            <span aria-hidden="true">·</span>
+            <span className="text-foreground/70 truncate">
+              {entry.package.packageName} ({entry.package.pax} pax, {formatRupiah(getPackagePrice(entry.package))})
+            </span>
+          </>
+        )}
         {sourceLabel && (
-          <div>
-            <p className="text-muted-foreground">Sumber</p>
-            <p className="text-foreground">{sourceLabel}</p>
-          </div>
-        )}
-        {entry.package && (
-          <div>
-            <p className="text-muted-foreground">Paket</p>
-            <p className="text-foreground">{entry.package.packageName}</p>
-          </div>
-        )}
-        <div>
-          <p className="text-muted-foreground">Bertemu</p>
-          <p className="text-foreground">{entry.host?.fullName ?? "-"}</p>
-        </div>
-        <div>
-          <p className="text-muted-foreground">Dicatat oleh</p>
-          <p className="text-foreground">{entry.createdBy?.fullName ?? "—"}</p>
-        </div>
-        <div>
-          <p className="text-muted-foreground">Check-in</p>
-          <p className="text-foreground">
-            {formatDate(entry.checkInAt)} {formatTime(entry.checkInAt)}
-          </p>
-        </div>
-        {entry.checkOutAt && (
-          <div>
-            <p className="text-muted-foreground">Check-out</p>
-            <p className="text-foreground">
-              {formatDate(entry.checkOutAt)} {formatTime(entry.checkOutAt)}
-            </p>
-          </div>
+          <>
+            <span aria-hidden="true">·</span>
+            <span className="truncate">{sourceLabel}</span>
+          </>
         )}
       </div>
 
-      <div className="flex items-center gap-1 pt-1" onClick={(e) => e.stopPropagation()}>
-        {entry.checkOutAt === null && (
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8 rounded-full text-green-600 hover:bg-green-50"
-            onClick={() => onCompleteClick(entry)}
-            disabled={isCheckingOut}
-          >
-            <CheckCircle weight="BoldDuotone" className="h-4 w-4" />
-          </Button>
+      {/* Row 3: bertemu + dicatat oleh */}
+      <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
+        <UserCircle weight="BoldDuotone" className="h-3 w-3 shrink-0" />
+        <span className="truncate">
+          PIC {entry.host?.fullName ?? "-"}
+          {entry.createdBy?.fullName && ` · Dicatat ${entry.createdBy.fullName}`}
+        </span>
+      </div>
+
+      {/* Row 4: check-in / check-out */}
+      <div className="flex items-center gap-2 flex-wrap text-[11px] text-muted-foreground">
+        <span className="flex items-center gap-1">
+          <CalendarMinimalistic weight="BoldDuotone" className="h-3.5 w-3.5 shrink-0" />
+          <span className="text-muted-foreground/60">in</span>
+          <span className="text-foreground">{formatDate(entry.checkInAt)} {formatTime(entry.checkInAt)}</span>
+        </span>
+        {entry.checkOutAt && (
+          <span className="flex items-center gap-1">
+            <span className="text-muted-foreground/60">out</span>
+            <span className="text-foreground">{formatDate(entry.checkOutAt)} {formatTime(entry.checkOutAt)}</span>
+          </span>
         )}
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-8 w-8 rounded-full"
+      </div>
+
+      {/* Footer: action tile bar */}
+      <div
+        className="flex items-center justify-center gap-1 pt-1 border-t border-border"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <button
+          type="button"
+          className="flex flex-col items-center justify-center gap-0.5 w-14 rounded-xl py-1.5 px-1 cursor-pointer transition-colors hover:bg-accent"
           onClick={() => onViewClick(entry)}
         >
-          <Eye weight="BoldDuotone" className="h-4 w-4" />
-        </Button>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-8 w-8 rounded-full"
+          <Eye weight="BoldDuotone" className="h-5 w-5 text-primary" />
+          <span className="text-[10px] font-medium text-muted-foreground leading-none">Detail</span>
+        </button>
+        <button
+          type="button"
+          className="flex flex-col items-center justify-center gap-0.5 w-14 rounded-xl py-1.5 px-1 cursor-pointer transition-colors hover:bg-accent"
           onClick={() => onEditClick(entry)}
         >
-          <Pen weight="BoldDuotone" className="h-4 w-4" />
-        </Button>
+          <Pen weight="BoldDuotone" className="h-5 w-5 text-primary" />
+          <span className="text-[10px] font-medium text-muted-foreground leading-none">Edit</span>
+        </button>
       </div>
     </div>
   );
 }
 
 export function GuestbookClient() {
+  return (
+    <Suspense>
+      <GuestbookClientInner />
+    </Suspense>
+  );
+}
+
+function GuestbookClientInner() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [selectedEntry, setSelectedEntry] = useState<GuestbookEntryItem | null>(null);
-  const [confirmComplete, setConfirmComplete] = useState<GuestbookEntryItem | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<GuestbookEntryItem | null>(null);
+  const [confirmEdit, setConfirmEdit] = useState<GuestbookEntryItem | null>(null);
   const [editEntry, setEditEntry] = useState<GuestbookEntryItem | null>(null);
 
-  const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
+  const [dateRange, setDateRange] = useState<DateRange | undefined>(todayRange);
   const [filterVenueId, setFilterVenueId] = useState<string>("all");
+  const [filterHostId, setFilterHostId] = useState<string>("all");
+  const [search, setSearch] = useState("");
+  const [isExporting, setIsExporting] = useState(false);
+  const [filterOpen, setFilterOpen] = useState(false);
+
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const autoOpenHandled = useRef(false);
+
+  useEffect(() => {
+    if (autoOpenHandled.current) return;
+    if (searchParams.get("create") !== "1") return;
+    autoOpenHandled.current = true;
+    setDrawerOpen(true);
+    router.replace(pathname, { scroll: false });
+  }, [searchParams, router, pathname]);
 
   const queryClient = useQueryClient();
   const { data: guestbookData, isLoading } = useGuestbookEntries();
   const entries = guestbookData?.data ?? [];
   const { data: venues = [] } = useVenues();
-  const checkOutMutation = useCheckOutGuestbookEntry();
+  const { users: salesUsers } = useSalesUsers();
+  const salesOptions = salesUsers.map((u) => ({ id: u.id, name: u.fullName ?? u.id }));
   const deleteMutation = useDeleteGuestbookEntry();
 
-  function handleCompleteClick(entry: GuestbookEntryItem) {
-    setConfirmComplete(entry);
-  }
-
   function handleEditClick(entry: GuestbookEntryItem) {
-    setEditEntry(entry);
+    setConfirmEdit(entry);
   }
 
-  async function handleConfirmComplete() {
-    if (!confirmComplete) return;
-    const result = await checkOutMutation.mutateAsync(confirmComplete.id);
-    if (result.success) {
-      toast.success("Check-out berhasil");
-    } else {
-      toast.error(result.error ?? "Gagal check-out");
-    }
-    setConfirmComplete(null);
+  function handleConfirmEdit() {
+    if (!confirmEdit) return;
+    setEditEntry(confirmEdit);
+    setConfirmEdit(null);
   }
 
   async function handleConfirmDelete() {
@@ -318,8 +290,38 @@ export function GuestbookClient() {
     setConfirmDelete(null);
   }
 
-  const todayEntries = entries.filter((e) => isToday(e.checkInAt));
-  const totalToday = todayEntries.length;
+  async function handleExport(): Promise<void> {
+    setIsExporting(true);
+    try {
+      const params = new URLSearchParams();
+      if (dateRange?.from) params.set("from", format(dateRange.from, "yyyy-MM-dd"));
+      if (dateRange?.to) params.set("to", format(dateRange.to, "yyyy-MM-dd"));
+
+      const res = await fetch(`/api/guestbook/export?${params.toString()}`);
+      if (!res.ok) {
+        const msg =
+          res.status === 429
+            ? "Terlalu banyak permintaan, coba lagi sebentar."
+            : "Gagal mengekspor data guestbook.";
+        toast.error(msg);
+        return;
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `Guestbook_${format(new Date(), "yyyy-MM-dd")}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      toast.success("Export berhasil diunduh.");
+    } catch {
+      toast.error("Gagal mengekspor data guestbook.");
+    } finally {
+      setIsExporting(false);
+    }
+  }
 
   const filteredEntries = entries.filter((e) => {
     const d = new Date(e.checkInAt);
@@ -334,101 +336,58 @@ export function GuestbookClient() {
       if (d > to) return false;
     }
     if (filterVenueId !== "all" && e.venueId !== filterVenueId) return false;
+    if (filterHostId !== "all" && e.host?.id !== filterHostId) return false;
+    const q = search.trim().toLowerCase();
+    if (q) {
+      const haystack = [e.visitorName, e.guestCode, e.host?.fullName]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      if (!haystack.includes(q)) return false;
+    }
     return true;
   });
 
+  const activeFilterCount =
+    (dateRange?.from ? 1 : 0) +
+    (filterVenueId !== "all" ? 1 : 0) +
+    (filterHostId !== "all" ? 1 : 0) +
+    (search.trim() !== "" ? 1 : 0);
+
+  function resetFilters() {
+    setDateRange(todayRange());
+    setFilterVenueId("all");
+    setFilterHostId("all");
+    setSearch("");
+  }
+
   return (
-    <div className="flex flex-col gap-6">
-      {/* Page header */}
-      <div className="flex items-center justify-between gap-4">
-        <div>
-          <h1 className="text-xl font-heading font-bold text-foreground">Guestbook</h1>
-          <p className="text-sm text-muted-foreground">Kelola data kunjungan tamu</p>
-        </div>
-        <Button
-          className="rounded-full gap-2 shrink-0"
-          onClick={() => setDrawerOpen(true)}
-        >
-          <AddCircle weight="BoldDuotone" className="h-4 w-4" />
-          Tambah Tamu
-        </Button>
-      </div>
-
-      {/* Stats — single card */}
-      <div className="grid grid-cols-1">
-        <StatCard
-          icon={<UsersGroupRounded weight="BoldDuotone" className="h-5 w-5 text-primary" />}
-          label="Total Pengunjung Hari Ini"
-          value={totalToday}
-        />
-      </div>
-
+    <div className="flex flex-col gap-3">
       {/* Table — desktop */}
-      <Card className="rounded-2xl shadow-sm hidden sm:block">
+      <Card className="rounded-2xl shadow-sm hidden sm:block py-0">
         <CardContent className="p-0">
-          <div className="flex flex-col gap-3 px-6 py-4 border-b">
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2">
-                <h2 className="text-sm font-bold text-foreground">Riwayat Kunjungan</h2>
-                <span className="text-xs font-medium bg-secondary text-secondary-foreground px-3 py-1 rounded-full">
-                  {filteredEntries.length} tamu
-                </span>
-              </div>
-              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                <CalendarMinimalistic weight="BoldDuotone" className="h-3.5 w-3.5" />
-                <span>Filter</span>
-              </div>
+          <div className="flex flex-wrap items-center justify-between gap-3 px-6 py-4 border-b">
+            <div className="flex items-center gap-2">
+              <h2 className="text-sm font-bold text-foreground">Riwayat Kunjungan</h2>
+              <span className="text-xs font-medium bg-secondary text-secondary-foreground px-3 py-1 rounded-full">
+                {filteredEntries.length} tamu
+              </span>
             </div>
-            <div className="flex flex-wrap gap-2">
-              <Popover>
-                <PopoverTrigger render={
-                  <button
-                    type="button"
-                    className="flex items-center gap-2 h-8 px-3 text-xs rounded-full border border-input bg-background hover:bg-accent transition-colors text-left"
-                  >
-                    <CalendarMinimalistic weight="BoldDuotone" className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                    <span className={dateRange?.from ? "text-foreground" : "text-muted-foreground"}>
-                      {dateRange?.from && dateRange?.to
-                        ? `${format(dateRange.from, "dd MMM yyyy", { locale: idLocale })} — ${format(dateRange.to, "dd MMM yyyy", { locale: idLocale })}`
-                        : dateRange?.from
-                          ? format(dateRange.from, "dd MMM yyyy", { locale: idLocale })
-                          : "Pilih rentang tanggal"}
-                    </span>
-                  </button>
-                } />
-                <PopoverContent className="w-auto p-0" align="start">
-                  <Calendar
-                    mode="range"
-                    numberOfMonths={2}
-                    selected={dateRange}
-                    onSelect={setDateRange}
-                    locale={idLocale}
-                  />
-                </PopoverContent>
-              </Popover>
-
-              {dateRange?.from && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="rounded-full text-xs h-8 text-muted-foreground"
-                  onClick={() => setDateRange(undefined)}
-                >
-                  Reset
-                </Button>
-              )}
-
-              <Select value={filterVenueId} onValueChange={setFilterVenueId}>
-                <SelectTrigger className="rounded-full text-xs h-8 w-44">
-                  <SelectValue placeholder="Semua Venue" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Semua Venue</SelectItem>
-                  {venues.map((v) => (
-                    <SelectItem key={v.id} value={v.id}>{v.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="rounded-full text-xs h-8 gap-1.5 relative"
+                onClick={() => setFilterOpen(true)}
+              >
+                <Filter weight="BoldDuotone" className="h-3.5 w-3.5" />
+                Filter
+                {activeFilterCount > 0 && (
+                  <span className="absolute -top-1.5 -right-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[9px] font-bold text-primary-foreground leading-none">
+                    {activeFilterCount}
+                  </span>
+                )}
+              </Button>
 
               <Button
                 variant="outline"
@@ -439,6 +398,26 @@ export function GuestbookClient() {
                 <Refresh weight="BoldDuotone" className="h-3.5 w-3.5" />
                 Refresh
               </Button>
+
+              <Button
+                variant="outline"
+                size="sm"
+                className="rounded-full text-xs h-8 gap-1.5"
+                onClick={() => { void handleExport(); }}
+                disabled={isExporting}
+              >
+                <Download weight="BoldDuotone" className="h-3.5 w-3.5" />
+                {isExporting ? "Mengekspor..." : "Export"}
+              </Button>
+
+              <Button
+                size="sm"
+                className="rounded-full text-xs h-8 gap-1.5"
+                onClick={() => setDrawerOpen(true)}
+              >
+                <AddCircle weight="BoldDuotone" className="h-3.5 w-3.5" />
+                Tambah Tamu
+              </Button>
             </div>
           </div>
 
@@ -447,12 +426,11 @@ export function GuestbookClient() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Nama Tamu</TableHead>
+                  <TableHead>Event</TableHead>
                   <TableHead>Venue</TableHead>
-                  <TableHead>Bertemu</TableHead>
-                  <TableHead>Check-in</TableHead>
-                  <TableHead>Check-out</TableHead>
+                  <TableHead>PIC</TableHead>
+                  <TableHead>In / Out</TableHead>
                   <TableHead>Sumber</TableHead>
-                  <TableHead>Paket</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Dicatat oleh</TableHead>
                   <TableHead className="text-right">Aksi</TableHead>
@@ -473,12 +451,11 @@ export function GuestbookClient() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Nama Tamu</TableHead>
+                    <TableHead>Event</TableHead>
                     <TableHead>Venue</TableHead>
-                    <TableHead>Bertemu</TableHead>
-                    <TableHead>Check-in</TableHead>
-                    <TableHead>Check-out</TableHead>
+                    <TableHead>PIC</TableHead>
+                    <TableHead>In / Out</TableHead>
                     <TableHead>Sumber</TableHead>
-                    <TableHead>Paket</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Dicatat oleh</TableHead>
                     <TableHead className="text-right pr-4">Aksi</TableHead>
@@ -498,7 +475,7 @@ export function GuestbookClient() {
                         <TableCell>
                           <div className="flex items-center gap-2.5">
                             {(() => {
-                              const photoSrc = resolvePhotoUrl(entry.visitorPhotoUrl);
+                              const photoSrc = resolveGuestbookPhotoUrl(entry.visitorPhoto);
                               if (photoSrc) {
                                 return <Image src={photoSrc} alt="" width={32} height={32} className="h-8 w-8 rounded-lg object-cover shrink-0" unoptimized />;
                               }
@@ -506,11 +483,6 @@ export function GuestbookClient() {
                             })()}
                             <div className="leading-tight">
                               <p className="font-medium text-foreground">{entry.visitorName}</p>
-                              {entry.company && (
-                                <p className="text-xs text-muted-foreground mt-0.5">
-                                  {entry.company}
-                                </p>
-                              )}
                               {entry.guestCode && (
                                 <p className="text-[10px] font-mono text-muted-foreground/60 mt-0.5">
                                   {entry.guestCode}
@@ -520,34 +492,53 @@ export function GuestbookClient() {
                           </div>
                         </TableCell>
                         <TableCell className="text-muted-foreground whitespace-nowrap">
-                          {entry.venue?.name ?? "-"}
-                        </TableCell>
-                        <TableCell className="text-muted-foreground">
-                          {entry.host?.fullName ?? "-"}
-                        </TableCell>
-                        <TableCell className="text-muted-foreground whitespace-nowrap">
-                          {formatDate(entry.checkInAt)}{" "}
-                          <span className="text-foreground font-medium">
-                            {formatTime(entry.checkInAt)}
-                          </span>
-                        </TableCell>
-                        <TableCell className="text-muted-foreground whitespace-nowrap">
-                          {entry.checkOutAt ? (
-                            <>
-                              {formatDate(entry.checkOutAt)}{" "}
-                              <span className="text-foreground font-medium">
-                                {formatTime(entry.checkOutAt)}
-                              </span>
-                            </>
+                          {entry.package?.category ? (
+                            EVENT_CATEGORY_LABELS[entry.package.category] ?? entry.package.category
                           ) : (
                             <span className="text-muted-foreground/50">—</span>
                           )}
                         </TableCell>
                         <TableCell className="text-muted-foreground whitespace-nowrap">
-                          {sourceLabel ?? <span className="text-muted-foreground/50">—</span>}
+                          <div className="flex flex-col gap-1 items-start">
+                            <span>{entry.venue?.name ?? "-"}</span>
+                            {entry.package?.packageName && (
+                              <Badge variant="secondary" className="rounded-full text-[10px] font-normal">
+                                {entry.package.packageName} · {entry.package.pax} pax · {formatRupiah(getPackagePrice(entry.package))}
+                              </Badge>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {entry.host?.fullName ?? "-"}
                         </TableCell>
                         <TableCell className="text-muted-foreground whitespace-nowrap">
-                          {entry.package?.packageName ?? <span className="text-muted-foreground/50">—</span>}
+                          <div className="flex flex-col gap-1">
+                            <span className="flex items-baseline gap-1.5">
+                              <span className="w-6 shrink-0 text-[10px] font-medium text-muted-foreground/60">in</span>
+                              <span>
+                                {formatDate(entry.checkInAt)}{" "}
+                                <span className="text-foreground font-medium">
+                                  {formatTime(entry.checkInAt)}
+                                </span>
+                              </span>
+                            </span>
+                            <span className="flex items-baseline gap-1.5">
+                              <span className="w-6 shrink-0 text-[10px] font-medium text-muted-foreground/60">out</span>
+                              {entry.checkOutAt ? (
+                                <span>
+                                  {formatDate(entry.checkOutAt)}{" "}
+                                  <span className="text-foreground font-medium">
+                                    {formatTime(entry.checkOutAt)}
+                                  </span>
+                                </span>
+                              ) : (
+                                <span className="text-muted-foreground/50">—</span>
+                              )}
+                            </span>
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-muted-foreground whitespace-nowrap">
+                          {sourceLabel ?? <span className="text-muted-foreground/50">—</span>}
                         </TableCell>
                         <TableCell>
                           {statusInfo ? (
@@ -563,17 +554,6 @@ export function GuestbookClient() {
                         </TableCell>
                         <TableCell className="text-right pr-4">
                           <div className="flex items-center justify-end gap-1" onClick={(e) => e.stopPropagation()}>
-                            {entry.checkOutAt === null && (
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-8 w-8 rounded-full text-green-600 hover:bg-green-50"
-                                onClick={() => handleCompleteClick(entry)}
-                                disabled={checkOutMutation.isPending}
-                              >
-                                <CheckCircle weight="BoldDuotone" className="h-4 w-4" />
-                              </Button>
-                            )}
                             <Button
                               variant="ghost"
                               size="icon"
@@ -612,80 +592,82 @@ export function GuestbookClient() {
 
       {/* Mobile card list */}
       <div className="flex flex-col gap-3 sm:hidden">
-        {/* Mobile filter bar */}
-        <div className="flex flex-col gap-2">
-          <Popover>
-            <PopoverTrigger render={
-              <button
-                type="button"
-                className="flex items-center gap-2 h-8 px-3 text-xs rounded-full border border-input bg-background hover:bg-accent transition-colors text-left w-full"
-              >
-                <CalendarMinimalistic weight="BoldDuotone" className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                <span className={dateRange?.from ? "text-foreground" : "text-muted-foreground"}>
-                  {dateRange?.from && dateRange?.to
-                    ? `${format(dateRange.from, "dd MMM yyyy", { locale: idLocale })} — ${format(dateRange.to, "dd MMM yyyy", { locale: idLocale })}`
-                    : dateRange?.from
-                      ? format(dateRange.from, "dd MMM yyyy", { locale: idLocale })
-                      : "Pilih rentang tanggal"}
-                </span>
-              </button>
-            } />
-            <PopoverContent className="w-auto p-0" align="start">
-              <Calendar
-                mode="range"
-                selected={dateRange}
-                onSelect={setDateRange}
-                locale={idLocale}
-              />
-            </PopoverContent>
-          </Popover>
+        {/* Mobile toolbar: count · filter popover · export · refresh · add */}
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-medium bg-muted text-muted-foreground px-2.5 py-1 border border-border rounded-full shrink-0">
+            {filteredEntries.length} tamu
+          </span>
+          <div className="flex-1" />
 
-          <div className="flex gap-2">
-            {dateRange?.from && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="rounded-full text-xs h-8 text-muted-foreground"
-                onClick={() => setDateRange(undefined)}
-              >
-                Reset
-              </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            className={cn("shrink-0 relative", activeFilterCount > 0 && "border-primary/50")}
+            onClick={() => setFilterOpen(true)}
+            aria-label="Filter guestbook"
+          >
+            <Filter weight="BoldDuotone" className="h-4 w-4" />
+            {activeFilterCount > 0 && (
+              <span className="absolute -top-1.5 -right-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[9px] font-bold text-primary-foreground leading-none">
+                {activeFilterCount}
+              </span>
             )}
+          </Button>
 
-            <Select value={filterVenueId} onValueChange={setFilterVenueId}>
-              <SelectTrigger className="rounded-full text-xs h-8 flex-1">
-                <SelectValue placeholder="Semua Venue" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Semua Venue</SelectItem>
-                {venues.map((v) => (
-                  <SelectItem key={v.id} value={v.id}>{v.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            className="shrink-0"
+            onClick={() => { void handleExport(); }}
+            disabled={isExporting}
+            aria-label="Export guestbook"
+          >
+            <Download weight="BoldDuotone" className="h-4 w-4" />
+          </Button>
 
-            <Button
-              variant="outline"
-              size="sm"
-              className="rounded-full text-xs h-8 gap-1.5"
-              onClick={() => queryClient.invalidateQueries({ queryKey: ["guestbook-entries"] })}
-            >
-              <Refresh weight="BoldDuotone" className="h-3.5 w-3.5" />
-              Refresh
-            </Button>
-          </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            className="shrink-0"
+            onClick={() => queryClient.invalidateQueries({ queryKey: ["guestbook-entries"] })}
+            aria-label="Refresh data guestbook"
+          >
+            <Refresh weight="BoldDuotone" className="h-4 w-4" />
+          </Button>
+
+          <Button
+            type="button"
+            size="icon"
+            className="shrink-0"
+            onClick={() => setDrawerOpen(true)}
+            aria-label="Tambah Tamu"
+          >
+            <AddCircle weight="BoldDuotone" className="h-4 w-4" />
+          </Button>
         </div>
 
         {isLoading && (
           <div className="space-y-3">
             {Array.from({ length: 4 }).map((_, i) => (
-              <Card key={i} className="rounded-2xl shadow-sm">
-                <CardContent className="p-4 space-y-3">
-                  <Skeleton className="h-4 w-36" />
-                  <Skeleton className="h-3 w-24" />
-                  <Skeleton className="h-3 w-full" />
-                </CardContent>
-              </Card>
+              <div key={i} className="rounded-lg border bg-card p-3 space-y-2">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-center gap-2.5">
+                    <Skeleton className="h-9 w-9 rounded-lg" />
+                    <Skeleton className="h-4 w-32" />
+                  </div>
+                  <Skeleton className="h-5 w-14 rounded-full" />
+                </div>
+                <Skeleton className="h-3 w-28" />
+                <Skeleton className="h-3 w-40" />
+                <div className="flex items-center justify-center gap-1 pt-1 border-t border-border">
+                  <Skeleton className="h-11 w-14 rounded-xl" />
+                  <Skeleton className="h-11 w-14 rounded-xl" />
+                  <Skeleton className="h-11 w-14 rounded-xl" />
+                </div>
+              </div>
             ))}
           </div>
         )}
@@ -700,10 +682,8 @@ export function GuestbookClient() {
             <MobileCard
               key={entry.id}
               entry={entry}
-              onCompleteClick={handleCompleteClick}
               onViewClick={setSelectedEntry}
               onEditClick={handleEditClick}
-              isCheckingOut={checkOutMutation.isPending}
             />
           ))}
       </div>
@@ -728,28 +708,21 @@ export function GuestbookClient() {
         allEntries={entries}
       />
 
-      {/* Complete confirmation */}
-      <AlertDialog
-        open={confirmComplete !== null}
-        onOpenChange={(open) => {
-          if (!open) setConfirmComplete(null);
-        }}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Konfirmasi Check-out</AlertDialogTitle>
-            <AlertDialogDescription>
-              Tandai &quot;{confirmComplete?.visitorName}&quot; sudah selesai kunjungan?
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel className="rounded-full">Batal</AlertDialogCancel>
-            <AlertDialogAction className="rounded-full" onClick={handleConfirmComplete}>
-              Ya, Check-out
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <GuestbookFilterDrawer
+        open={filterOpen}
+        onClose={() => setFilterOpen(false)}
+        search={search}
+        onSearchChange={setSearch}
+        dateRange={dateRange}
+        onDateRangeChange={setDateRange}
+        venueId={filterVenueId}
+        onVenueIdChange={setFilterVenueId}
+        hostId={filterHostId}
+        onHostIdChange={setFilterHostId}
+        venues={venues}
+        salesOptions={salesOptions}
+        onReset={resetFilters}
+      />
 
       {/* Delete confirmation */}
       <AlertDialog
@@ -772,6 +745,29 @@ export function GuestbookClient() {
               onClick={handleConfirmDelete}
             >
               Ya, Hapus
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Edit confirmation */}
+      <AlertDialog
+        open={confirmEdit !== null}
+        onOpenChange={(open) => {
+          if (!open) setConfirmEdit(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Edit data tamu?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Kamu akan mengubah data kunjungan tamu ini.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="rounded-full">Batal</AlertDialogCancel>
+            <AlertDialogAction className="rounded-full" onClick={handleConfirmEdit}>
+              Edit
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

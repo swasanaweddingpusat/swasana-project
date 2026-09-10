@@ -28,7 +28,7 @@ export async function createGuestbookEntry(data: unknown): Promise<{ success: bo
   const parsed = createGuestbookEntrySchema.safeParse(data);
   if (!parsed.success) return { success: false, error: parsed.error.issues[0].message };
 
-  const { checkInAt, scheduledAt, commitVisitDate, commitPayDate, ...rest } = parsed.data;
+  const { checkInAt, scheduledAt, commitVisitDate, commitPayDate, proofFiles, ...rest } = parsed.data;
   const salesId = rest.hostId ?? session!.user.profileId;
   const phoneNumberNorm = normalizePhoneId(rest.phoneNumber);
 
@@ -43,6 +43,7 @@ export async function createGuestbookEntry(data: unknown): Promise<{ success: bo
           db.guestbookEntry.create({
             data: {
               ...rest,
+              proofFiles: (proofFiles ?? undefined) as Prisma.InputJsonValue | undefined,
               guestCode,
               checkInAt: checkInAt ? new Date(checkInAt) : undefined,
               scheduledAt: scheduledAt ? new Date(scheduledAt) : undefined,
@@ -106,7 +107,7 @@ export async function checkOutGuestbookEntry(id: string): Promise<{ success: boo
     await db.$transaction([
       db.guestbookEntry.update({
         where: { id },
-        data: { checkOutAt: new Date() },
+        data: { checkOutAt: new Date(), visitStatus: "deal" },
       }),
     ]);
 
@@ -150,14 +151,21 @@ export async function updateGuestbookEntry(
     });
     if (!existing) return { success: false, error: "Data tidak ditemukan." };
 
-    const { checkInAt, scheduledAt, commitVisitDate, commitPayDate, ...rest } = parsed.data;
+    const { checkInAt, checkOutAt, scheduledAt, commitVisitDate, commitPayDate, phoneNumber, proofFiles, ...rest } = parsed.data;
+    // Recompute the normalized index whenever phoneNumber is part of the payload —
+    // otherwise phoneNumberNorm goes stale after an edit (bitrix/duplicate matching).
+    const phoneNumberNorm = phoneNumber !== undefined ? normalizePhoneId(phoneNumber) : undefined;
 
     await db.$transaction([
       db.guestbookEntry.update({
         where: { id },
         data: {
           ...rest,
+          proofFiles: (proofFiles ?? undefined) as Prisma.InputJsonValue | undefined,
+          phoneNumber,
+          phoneNumberNorm,
           checkInAt: checkInAt ? new Date(checkInAt) : undefined,
+          checkOutAt: checkOutAt ? new Date(checkOutAt) : undefined,
           scheduledAt: scheduledAt ? new Date(scheduledAt) : undefined,
           commitVisitDate: commitVisitDate ? new Date(commitVisitDate) : undefined,
           commitPayDate: commitPayDate ? new Date(commitPayDate) : undefined,

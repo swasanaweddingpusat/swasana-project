@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { format } from "date-fns";
+import { format, startOfMonth, endOfMonth } from "date-fns";
 import type { DateRange } from "react-day-picker";
 import { CalendarDate, CloseCircle } from "@solar-icons/react";
 import { Button } from "@/components/ui/button";
@@ -32,17 +32,28 @@ function formatRangeLabel(range: DateRange | undefined): string {
   return from === to ? from : `${from} – ${to}`;
 }
 
+/** Current calendar month as a range — the default window when no explicit
+ * `dealFrom`/`dealTo` is picked. Must mirror the default computed server-side
+ * in `app/(private)/page.tsx` so the initial render and this component agree. */
+function getDefaultMonthRange(): DateRange {
+  const now = new Date();
+  return { from: startOfMonth(now), to: endOfMonth(now) };
+}
+
 /**
  * Inline Popover+Calendar datepicker for the general dashboard (`/`). Owns a
  * single filter — "Tanggal Dealing" (date range by booking createdAt) — that
  * drives every dealing-date-scoped section on the page via `dealFrom`/`dealTo`
  * search params. Reads the current params to prefill its local selection;
- * starts empty when absent — there is no default window, so the dashboard
- * shows all-time totals until a range is explicitly picked.
+ * defaults to the CURRENT calendar month when absent (page.tsx applies the
+ * same default server-side), so the dashboard always shows one month of data
+ * out of the box instead of the whole database.
  *
  * Auto-applies when both `from` and `to` are selected (pushes URL). Waits for
- * `to` if only `from` is picked. A Reset chip outside the popover clears the
- * filter. Export name kept as `DashboardFilterDrawer` so page.tsx needs no
+ * `to` if only `from` is picked. A gold dot on the chip + a Reset button only
+ * appear once the user picks a range that differs from the current-month
+ * default — signaling "you're looking at a custom filter, not the default
+ * view". Export name kept as `DashboardFilterDrawer` so page.tsx needs no
  * changes.
  */
 export function DashboardFilterDrawer(): React.ReactElement {
@@ -50,7 +61,9 @@ export function DashboardFilterDrawer(): React.ReactElement {
   const searchParams = useSearchParams();
   const [open, setOpen] = useState(false);
 
-  const activeRange: DateRange | undefined = (() => {
+  // Explicit range picked by the user via `dealFrom`/`dealTo` in the URL —
+  // `undefined` means "no custom pick, fall back to the current-month default".
+  const explicitRange: DateRange | undefined = (() => {
     const dealFrom = searchParams.get("dealFrom");
     const dealTo = searchParams.get("dealTo");
     if (!dealFrom && !dealTo) return undefined;
@@ -58,6 +71,9 @@ export function DashboardFilterDrawer(): React.ReactElement {
     const to = dealTo ? parseIsoDay(dealTo) : from;
     return from ? { from, to } : undefined;
   })();
+
+  const isCustomFilter = Boolean(explicitRange?.from);
+  const activeRange: DateRange = explicitRange ?? getDefaultMonthRange();
 
   // Pending selection inside the popover — separate from the committed URL state.
   const [pending, setPending] = useState<DateRange | undefined>(activeRange);
@@ -72,7 +88,9 @@ export function DashboardFilterDrawer(): React.ReactElement {
   }
 
   function handleReset(): void {
-    setPending(undefined);
+    // Reset means "back to the current-month default", not "no filter" —
+    // the dashboard no longer has an all-time view.
+    setPending(getDefaultMonthRange());
     router.push("/");
   }
 
@@ -84,8 +102,6 @@ export function DashboardFilterDrawer(): React.ReactElement {
     setOpen(next);
   }
 
-  const hasActiveFilter = Boolean(activeRange?.from);
-
   return (
     <div className="flex items-center gap-2">
       <Popover open={open} onOpenChange={handleOpenChange}>
@@ -93,14 +109,18 @@ export function DashboardFilterDrawer(): React.ReactElement {
           render={
             <button
               type="button"
-              className="flex items-center gap-2 h-9 px-4 text-sm rounded-full border border-input bg-background hover:bg-accent transition-colors text-left shrink-0"
+              className="relative flex items-center gap-2 h-9 px-4 text-sm rounded-full border border-input bg-background hover:bg-accent transition-colors text-left shrink-0"
             />
           }
         >
           <CalendarDate weight="BoldDuotone" className="h-4 w-4 shrink-0 text-muted-foreground" />
-          <span className={hasActiveFilter ? "text-foreground font-medium" : "text-muted-foreground"}>
-            {formatRangeLabel(activeRange)}
-          </span>
+          <span className="text-foreground font-medium">{formatRangeLabel(activeRange)}</span>
+          {isCustomFilter && (
+            <span
+              aria-label="Filter aktif"
+              className="absolute -top-1 -right-1 h-3 w-3 rounded-full bg-[var(--brand-gold)] ring-2 ring-background"
+            />
+          )}
         </PopoverTrigger>
 
         <PopoverContent className="w-auto p-0" align="end">
@@ -114,7 +134,7 @@ export function DashboardFilterDrawer(): React.ReactElement {
         </PopoverContent>
       </Popover>
 
-      {hasActiveFilter && (
+      {isCustomFilter && (
         <Button
           variant="ghost"
           size="sm"

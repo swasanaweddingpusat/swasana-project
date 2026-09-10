@@ -98,9 +98,8 @@ function CardHeading({ icon, title }: { icon: React.ReactNode; title: string }):
 export function CrmOverviewMetrics(): React.ReactElement | null {
   const [range, setRange] = useState<DateRange | undefined>(() => {
     const to = new Date();
-    // Last 7 days (today + previous 6). Narrow window keeps the Bitrix deal
-    // fetch under the pagination cap so the newest deals aren't dropped.
-    const from = new Date(to.getFullYear(), to.getMonth(), to.getDate() - 6);
+    // Default to the current date only (from === to).
+    const from = new Date(to.getFullYear(), to.getMonth(), to.getDate());
     return { from, to };
   });
   const [open, setOpen] = useState(false);
