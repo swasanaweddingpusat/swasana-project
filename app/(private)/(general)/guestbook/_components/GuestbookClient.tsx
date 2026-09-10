@@ -178,9 +178,6 @@ function MobileCard({
           })()}
           <div>
             <p className="font-semibold text-foreground text-sm">{entry.visitorName}</p>
-            {entry.company && (
-              <p className="text-xs text-muted-foreground">{entry.company}</p>
-            )}
             {entry.guestCode && (
               <p className="text-[10px] font-mono text-muted-foreground/70 mt-0.5">{entry.guestCode}</p>
             )}
@@ -506,11 +503,6 @@ export function GuestbookClient() {
                             })()}
                             <div className="leading-tight">
                               <p className="font-medium text-foreground">{entry.visitorName}</p>
-                              {entry.company && (
-                                <p className="text-xs text-muted-foreground mt-0.5">
-                                  {entry.company}
-                                </p>
-                              )}
                               {entry.guestCode && (
                                 <p className="text-[10px] font-mono text-muted-foreground/60 mt-0.5">
                                   {entry.guestCode}

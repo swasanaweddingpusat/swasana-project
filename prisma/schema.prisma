@@ -141,104 +141,104 @@ model Profile {
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
 
-  emailVerificationTokens    EmailVerificationToken[]
-  passwordResetTokens        PasswordResetToken[]
-  activityLogs               ActivityLog[]
-  role                       Role?                      @relation(fields: [roleId], references: [id], onDelete: SetNull)
-  user                       User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  manager                    Profile?                   @relation("ProfileManager", fields: [managerId], references: [id], onDelete: SetNull)
-  subordinates               Profile[]                  @relation("ProfileManager")
-  dataGroupMemberships       UserGroupMember[]
-  ledGroups                  UserGroup[]                @relation("GroupLeader")
-  bookingsAsSales            Booking[]                  @relation("BookingSales")
-  bookingsAsManager          Booking[]                  @relation("BookingManager")
-  uploadedDocuments          BookingDocument[]
-  createdSettlements         BookingPaymentSettlement[]
-  notifications              Notification[]
-  bookingComments            BookingComment[]
-  bookingCommentReads        BookingCommentRead[]
-  commentReactions           BookingCommentReaction[]
-  approvalRecordsCreated     ApprovalRecord[]           @relation("ApprovalRecordCreator")
-  approvalRecordsUpdated     ApprovalRecord[]           @relation("ApprovalRecordUpdater")
-  approvalStepApprovals      ApprovalRecordStep[]       @relation("ApprovalRecordStepApprover")
-  approvalStepDecisions      ApprovalRecordStep[]       @relation("ApprovalRecordStepDecider")
-  bookingRevisions           BookingRevision[]
-  userTargets                UserTarget[]               @relation("UserTargets")
-  userTargetsSet             UserTarget[]               @relation("UserTargetsSetBy")
-  leadsCreated               DailyActivity[]
-  leadsAssigned              DailyActivity[]            @relation("LeadAssignee")
-  quotations                 Quotation[]
-  ledgersCreated             Ledger[]                   @relation("LedgerCreator")
-  ledgersAcknowledged        Ledger[]                   @relation("LedgerAcknowledger")
-  ledgersVoided              Ledger[]                   @relation("LedgerVoider")
-  invoicesIssued             Invoice[]                  @relation("InvoiceIssuer")
-  invoicesVoided             Invoice[]                  @relation("InvoiceVoider")
-  paymentActivities          PaymentActivity[]          @relation("PaymentActivityActor")
-  bookingsRecognized         Booking[]                  @relation("BookingRecognizer")
-  maintenanceTicketsAssigned MaintenanceTicket[]        @relation("MaintenanceAssignee")
-  maintenanceTicketsCreated  MaintenanceTicket[]        @relation("MaintenanceCreator")
-  bookingEditDrafts          BookingEditDraft[]
-  attendances                Attendance[]
-  department                 Department?                @relation(fields: [departmentId], references: [id], onDelete: SetNull)
-  position                   Position?                  @relation(fields: [positionId], references: [id], onDelete: SetNull)
-  departmentsHeaded          Department[]               @relation("DepartmentHead")
-  employeeDocuments          EmployeeDocument[]
-  uploadedEmployeeDocs       EmployeeDocument[]         @relation("DocumentUploader")
-  employmentHistories        EmploymentHistory[]
-  createdHistoryEntries      EmploymentHistory[]        @relation("HistoryCreator")
-  workAssignments            EmployeeWorkAssignment[]
-  shiftOverrides             ShiftOverride[]
-  shiftOverridesCreated      ShiftOverride[]            @relation("ShiftOverrideCreator")
-  leaveBalances              LeaveBalance[]
-  leaveRequests              LeaveRequest[]
-  leaveManagerApprovals      LeaveRequest[]             @relation("LeaveManagerApprover")
-  leaveHrApprovals           LeaveRequest[]             @relation("LeaveHrApprover")
-  leaveRejections            LeaveRequest[]             @relation("LeaveRejector")
-  employeeSalaries           EmployeeSalary[]
-  payslips                   Payslip[]
-  payrollsGenerated          PayrollPeriod[]            @relation("PayrollGenerator")
-  payrollsFinalized          PayrollPeriod[]            @relation("PayrollFinalizer")
-  jobPostingsCreated         JobPosting[]               @relation("JobPostingCreator")
-  jobPostingApprovals        JobPosting[]               @relation("JobPostingApprover")
-  jobPostingsApproved        JobPosting[]               @relation("JobPostingApprovedBy")
-  jobPostingApprovals2       JobPosting[]               @relation("JobPostingApprover2")
-  jobPostingsApproved2       JobPosting[]               @relation("JobPostingApprovedBy2")
-  hiredFromCandidate         Candidate[]                @relation("HiredCandidate")
-  candidateNotesCreated      CandidateNote[]            @relation("CandidateNoteCreator")
-  onboardingAssignments      OnboardingAssignment[]
-  onboardingTasksCompleted   OnboardingTask[]           @relation("OnboardingTaskCompleter")
-  procurementItemsCreated    ProcurementItem[]          @relation("ProcurementCreator")
-  procurementItemsApproved   ProcurementItem[]          @relation("ProcurementApprover")
-  procurementAnnouncements   ProcurementAnnouncement[]  @relation("ProcurementAnnouncementCreator")
-  procurementVenueBudgets    ProcurementVenueBudget[]   @relation("ProcurementBudgetUpdater")
-  pushSubscriptions          PushSubscription[]
-  evaluationsAsSpecialist    EventEvaluation[]          @relation("EvaluationSpecialist")
-  weddingIndicators          WeddingIndicator[]         @relation("WeddingIndicatorCreator")
-  employeeDevelopments       EmployeeDevelopment[]
-  employeeCertifications     EmployeeCertification[]
-  performanceReviews         PerformanceReview[]
-  payablesSettled            BookingPayable[]           @relation("PayableSettler")
-  payablesCreated            BookingPayable[]           @relation("PayableCreator")
+  emailVerificationTokens      EmailVerificationToken[]
+  passwordResetTokens          PasswordResetToken[]
+  activityLogs                 ActivityLog[]
+  role                         Role?                      @relation(fields: [roleId], references: [id], onDelete: SetNull)
+  user                         User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  manager                      Profile?                   @relation("ProfileManager", fields: [managerId], references: [id], onDelete: SetNull)
+  subordinates                 Profile[]                  @relation("ProfileManager")
+  dataGroupMemberships         UserGroupMember[]
+  ledGroups                    UserGroup[]                @relation("GroupLeader")
+  bookingsAsSales              Booking[]                  @relation("BookingSales")
+  bookingsAsManager            Booking[]                  @relation("BookingManager")
+  uploadedDocuments            BookingDocument[]
+  createdSettlements           BookingPaymentSettlement[]
+  notifications                Notification[]
+  bookingComments              BookingComment[]
+  bookingCommentReads          BookingCommentRead[]
+  commentReactions             BookingCommentReaction[]
+  approvalRecordsCreated       ApprovalRecord[]           @relation("ApprovalRecordCreator")
+  approvalRecordsUpdated       ApprovalRecord[]           @relation("ApprovalRecordUpdater")
+  approvalStepApprovals        ApprovalRecordStep[]       @relation("ApprovalRecordStepApprover")
+  approvalStepDecisions        ApprovalRecordStep[]       @relation("ApprovalRecordStepDecider")
+  bookingRevisions             BookingRevision[]
+  userTargets                  UserTarget[]               @relation("UserTargets")
+  userTargetsSet               UserTarget[]               @relation("UserTargetsSetBy")
+  leadsCreated                 DailyActivity[]
+  leadsAssigned                DailyActivity[]            @relation("LeadAssignee")
+  quotations                   Quotation[]
+  ledgersCreated               Ledger[]                   @relation("LedgerCreator")
+  ledgersAcknowledged          Ledger[]                   @relation("LedgerAcknowledger")
+  ledgersVoided                Ledger[]                   @relation("LedgerVoider")
+  invoicesIssued               Invoice[]                  @relation("InvoiceIssuer")
+  invoicesVoided               Invoice[]                  @relation("InvoiceVoider")
+  paymentActivities            PaymentActivity[]          @relation("PaymentActivityActor")
+  bookingsRecognized           Booking[]                  @relation("BookingRecognizer")
+  maintenanceTicketsAssigned   MaintenanceTicket[]        @relation("MaintenanceAssignee")
+  maintenanceTicketsCreated    MaintenanceTicket[]        @relation("MaintenanceCreator")
+  bookingEditDrafts            BookingEditDraft[]
+  attendances                  Attendance[]
+  department                   Department?                @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  position                     Position?                  @relation(fields: [positionId], references: [id], onDelete: SetNull)
+  departmentsHeaded            Department[]               @relation("DepartmentHead")
+  employeeDocuments            EmployeeDocument[]
+  uploadedEmployeeDocs         EmployeeDocument[]         @relation("DocumentUploader")
+  employmentHistories          EmploymentHistory[]
+  createdHistoryEntries        EmploymentHistory[]        @relation("HistoryCreator")
+  workAssignments              EmployeeWorkAssignment[]
+  shiftOverrides               ShiftOverride[]
+  shiftOverridesCreated        ShiftOverride[]            @relation("ShiftOverrideCreator")
+  leaveBalances                LeaveBalance[]
+  leaveRequests                LeaveRequest[]
+  leaveManagerApprovals        LeaveRequest[]             @relation("LeaveManagerApprover")
+  leaveHrApprovals             LeaveRequest[]             @relation("LeaveHrApprover")
+  leaveRejections              LeaveRequest[]             @relation("LeaveRejector")
+  employeeSalaries             EmployeeSalary[]
+  payslips                     Payslip[]
+  payrollsGenerated            PayrollPeriod[]            @relation("PayrollGenerator")
+  payrollsFinalized            PayrollPeriod[]            @relation("PayrollFinalizer")
+  jobPostingsCreated           JobPosting[]               @relation("JobPostingCreator")
+  jobPostingApprovals          JobPosting[]               @relation("JobPostingApprover")
+  jobPostingsApproved          JobPosting[]               @relation("JobPostingApprovedBy")
+  jobPostingApprovals2         JobPosting[]               @relation("JobPostingApprover2")
+  jobPostingsApproved2         JobPosting[]               @relation("JobPostingApprovedBy2")
+  hiredFromCandidate           Candidate[]                @relation("HiredCandidate")
+  candidateNotesCreated        CandidateNote[]            @relation("CandidateNoteCreator")
+  onboardingAssignments        OnboardingAssignment[]
+  onboardingTasksCompleted     OnboardingTask[]           @relation("OnboardingTaskCompleter")
+  procurementItemsCreated      ProcurementItem[]          @relation("ProcurementCreator")
+  procurementItemsApproved     ProcurementItem[]          @relation("ProcurementApprover")
+  procurementAnnouncements     ProcurementAnnouncement[]  @relation("ProcurementAnnouncementCreator")
+  procurementVenueBudgets      ProcurementVenueBudget[]   @relation("ProcurementBudgetUpdater")
+  pushSubscriptions            PushSubscription[]
+  evaluationsAsSpecialist      EventEvaluation[]          @relation("EvaluationSpecialist")
+  weddingIndicators            WeddingIndicator[]         @relation("WeddingIndicatorCreator")
+  employeeDevelopments         EmployeeDevelopment[]
+  employeeCertifications       EmployeeCertification[]
+  performanceReviews           PerformanceReview[]
+  payablesSettled              BookingPayable[]           @relation("PayableSettler")
+  payablesCreated              BookingPayable[]           @relation("PayableCreator")
+  recruitmentRequestsCreated   RecruitmentRequest[]       @relation("RecruitmentRequestCreator")
+  recruitmentRequestsApproved1 RecruitmentRequest[]       @relation("RecruitmentRequestApprover1")
+  recruitmentRequestsApproved2 RecruitmentRequest[]       @relation("RecruitmentRequestApprover2")
+  guestbookHosted              GuestbookEntry[]           @relation("GuestbookHost")
+  guestbookCreated             GuestbookEntry[]           @relation("GuestbookCreator")
+  guestbookSales               GuestbookEntry[]           @relation("GuestbookSales")
+  blacklistCreated             BlacklistEntry[]           @relation("BlacklistCreator")
+  memosCreated                 Memo[]                     @relation("MemoCreator")
+  memoComments                 MemoComment[]              @relation("MemoCommentAuthor")
+  memoReads                    MemoReader[]               @relation("MemoReader")
+  announcementsCreated         Announcement[]             @relation("AnnouncementCreator")
+  announcementComments         AnnouncementComment[]      @relation("AnnouncementCommentAuthor")
+  announcementReads            AnnouncementReader[]       @relation("AnnouncementReader")
+  onboardingFormLinksCreated   OnboardingFormLink[]       @relation("OnboardingFormLinkCreator")
 
   @@index([roleId])
   @@index([managerId])
   @@index([dataScope])
   @@index([departmentId])
   @@index([positionId])
-  recruitmentRequestsCreated  RecruitmentRequest[] @relation("RecruitmentRequestCreator")
-  recruitmentRequestsApproved1 RecruitmentRequest[] @relation("RecruitmentRequestApprover1")
-  recruitmentRequestsApproved2 RecruitmentRequest[] @relation("RecruitmentRequestApprover2")
-  guestbookHosted             GuestbookEntry[]     @relation("GuestbookHost")
-  guestbookCreated            GuestbookEntry[]     @relation("GuestbookCreator")
-  guestbookSales              GuestbookEntry[]     @relation("GuestbookSales")
-  blacklistCreated            BlacklistEntry[]     @relation("BlacklistCreator")
-  memosCreated                Memo[]               @relation("MemoCreator")
-  memoComments                MemoComment[]        @relation("MemoCommentAuthor")
-  memoReads                   MemoReader[]         @relation("MemoReader")
-  announcementsCreated        Announcement[]       @relation("AnnouncementCreator")
-  announcementComments        AnnouncementComment[] @relation("AnnouncementCommentAuthor")
-  announcementReads           AnnouncementReader[] @relation("AnnouncementReader")
-  onboardingFormLinksCreated  OnboardingFormLink[] @relation("OnboardingFormLinkCreator")
   @@map("profiles")
 }
 
@@ -344,49 +344,49 @@ model UserGroupMember {
 // ─── Venue (dipakai untuk user invitation — assign venue ke user) ─────────────
 
 model Brand {
-  id        String   @id @default(uuid())
-  name      String
-  code      String   @unique
-  createdAt DateTime @default(now())
-  venues    Venue[]
+  id          String       @id @default(uuid())
+  name        String
+  code        String       @unique
+  createdAt   DateTime     @default(now())
+  venues      Venue[]
   jobPostings JobPosting[]
 
   @@map("brands")
 }
 
 model Venue {
-  id                 String                   @id @default(uuid())
-  name               String
-  description        String?
-  address            String?
-  capacity           Int?
-  imageUrl           String?
-  code               String                   @default("KODE")
-  brandId            String?
-  isActive           Boolean                  @default(true)
-  createdAt          DateTime                 @default(now())
-  updatedAt          DateTime                 @updatedAt
-  brand              Brand?                   @relation(fields: [brandId], references: [id], onDelete: SetNull)
-  packages           Package[]
-  paymentMethods     PaymentMethod[]
-  bookings           Booking[]
-  leads              DailyActivity[]          @relation("LeadPrimaryVenue")
-  leadsSecondary     DailyActivity[]          @relation("LeadSecondaryVenue")
-  quotations         Quotation[]
-  quotationTemplates QuotationTemplate[]
-  maintenanceTickets MaintenanceTicket[]
-  workLocations      WorkLocation[]
-  procurementItems   ProcurementItem[]
-  procurementBudgets ProcurementVenueBudget[]
-  eventEvaluations   EventEvaluation[]
-  weddingIndicators  WeddingIndicator[]
-  jobPostingInterviews JobPosting[]     @relation("JobPostingInterviewVenue")
+  id                        String                     @id @default(uuid())
+  name                      String
+  description               String?
+  address                   String?
+  capacity                  Int?
+  imageUrl                  String?
+  code                      String                     @default("KODE")
+  brandId                   String?
+  isActive                  Boolean                    @default(true)
+  createdAt                 DateTime                   @default(now())
+  updatedAt                 DateTime                   @updatedAt
+  brand                     Brand?                     @relation(fields: [brandId], references: [id], onDelete: SetNull)
+  packages                  Package[]
+  paymentMethods            PaymentMethod[]
+  bookings                  Booking[]
+  leads                     DailyActivity[]            @relation("LeadPrimaryVenue")
+  leadsSecondary            DailyActivity[]            @relation("LeadSecondaryVenue")
+  quotations                Quotation[]
+  quotationTemplates        QuotationTemplate[]
+  maintenanceTickets        MaintenanceTicket[]
+  workLocations             WorkLocation[]
+  procurementItems          ProcurementItem[]
+  procurementBudgets        ProcurementVenueBudget[]
+  eventEvaluations          EventEvaluation[]
+  weddingIndicators         WeddingIndicator[]
+  jobPostingInterviews      JobPosting[]               @relation("JobPostingInterviewVenue")
+  guestbookEntries          GuestbookEntry[]
+  memos                     Memo[]
+  announcements             Announcement[]
+  onboardingFormSubmissions OnboardingFormSubmission[]
 
   @@index([brandId])
-  guestbookEntries       GuestbookEntry[]
-  memos                  Memo[]
-  announcements          Announcement[]
-  onboardingFormSubmissions OnboardingFormSubmission[]
   @@map("venues")
 }
 
@@ -684,9 +684,9 @@ model CustomerMemberStatus {
 // ─── Source of Information ────────────────────────────────────────────────────
 
 model SourceOfInformation {
-  id        String     @id @default(uuid())
-  name      String     @unique
-  createdAt DateTime   @default(now())
+  id               String           @id @default(uuid())
+  name             String           @unique
+  createdAt        DateTime         @default(now())
   bookings         Booking[]
   customers        Customer[]
   leads            DailyActivity[]
@@ -707,7 +707,7 @@ model EducationLevel {
 // ─── Dashboard Banner ────────────────────────────────────────────────────────
 
 model Banner {
-  id           String   @id @default(uuid())
+  id           String         @id @default(uuid())
   title        String
   caption      String?
   imageKey     String
@@ -853,7 +853,6 @@ enum OnboardingStatus {
   completed
 }
 
-
 enum RecruitmentRequestStatus {
   pending
   approved
@@ -866,20 +865,6 @@ enum RecruitmentRequestPriority {
   medium
   high
   urgent
-}
-
-enum GuestVisitPurpose {
-  client_visit
-  vendor_meeting
-  interview
-  delivery
-  other
-}
-
-enum GuestbookSource {
-  database
-  walk_in
-  referral
 }
 
 enum GuestVisitStatus {
@@ -947,57 +932,57 @@ enum ProcurementAnnouncementTarget {
 }
 
 model Booking {
-  id                    String              @id @default(uuid())
-  bookingStatus         BookingStatus       @default(Pending)
-  recordStatus          BookingRecordStatus @default(saved)
-  paymentStatus         String              @default("")
-  category              EventCategory       @default(WEDDINGS)
-  weddingSession        WeddingSession?
-  weddingType           String?
-  eventTime             String?
-  notes                 String?
-  poNumber              String?
-  poYear                Int?
-  poSeq                 Int?
-  eventDate             DateTime? // required for saved bookings; null only during MICE draft steps
-  quotationId           String?
-  salesSignature        String?
-  rejectionNotes        String?
-  lostReason            String?
-  cancelReason          String?
-  signingLocation       String?
-  withMaterai           Boolean             @default(false)
-  discountName          String?
-  discountAmount        Int                 @default(0)
-  salesId               String?
-  managerId             String?
-  customerId            String
-  venueId               String
-  packageId             String?
-  paymentMethodId       String?
-  sourceOfInformationId String?
+  id                        String              @id @default(uuid())
+  bookingStatus             BookingStatus       @default(Pending)
+  recordStatus              BookingRecordStatus @default(saved)
+  paymentStatus             String              @default("")
+  category                  EventCategory       @default(WEDDINGS)
+  weddingSession            WeddingSession?
+  weddingType               String?
+  eventTime                 String?
+  notes                     String?
+  poNumber                  String?
+  poYear                    Int?
+  poSeq                     Int?
+  eventDate                 DateTime? // required for saved bookings; null only during MICE draft steps
+  quotationId               String?
+  salesSignature            String?
+  rejectionNotes            String?
+  lostReason                String?
+  cancelReason              String?
+  signingLocation           String?
+  withMaterai               Boolean             @default(false)
+  discountName              String?
+  discountAmount            Int                 @default(0)
+  salesId                   String?
+  managerId                 String?
+  customerId                String
+  venueId                   String
+  packageId                 String?
+  paymentMethodId           String?
+  sourceOfInformationId     String?
   sourceOfInformationDetail String?
   // When a booking draft was created from a lead (Deal flow), leadId is set.
   // This allows the availability endpoint to block the slot even for drafts
   // (only draft-from-lead blocks; manually created drafts do not).
-  leadId                String?
+  leadId                    String?
   // Draft-only fields: persisted during multi-step form, cleared on finalize (kept as null for saved bookings)
-  draftCategoryToggles  Json? // { categoryName: string, isTakeout: boolean, takeoutNominal: number }[]
-  draftComplimentaries  Json? // { complimentaryId: string | null, name: string, price: number, isShowPrice: boolean, description: string | null, qty: number }[]
-  draftInternalItems    Json? // { itemName: string, itemDescription: string }[] — editable package internal items during draft
-  draftVendorItems      Json? // { categoryId: string | null, categoryName: string, itemText: string }[] — editable package vendor items during draft
+  draftCategoryToggles      Json? // { categoryName: string, isTakeout: boolean, takeoutNominal: number }[]
+  draftComplimentaries      Json? // { complimentaryId: string | null, name: string, price: number, isShowPrice: boolean, description: string | null, qty: number }[]
+  draftInternalItems        Json? // { itemName: string, itemDescription: string }[] — editable package internal items during draft
+  draftVendorItems          Json? // { categoryId: string | null, categoryName: string, itemText: string }[] — editable package vendor items during draft
   // Tracks the active revision for approval step filtering (snapshot approach)
-  currentRevisionId     String?
+  currentRevisionId         String?
   // Set when the client signs the agreement — freezes the snapshot layer (SnapCustomer,
   // internal items, pricing). After this, only vendor items stay editable (ops swap);
   // changing internal items / price / pax requires a new revision + re-approval.
-  snapshotFrozenAt      DateTime?
+  snapshotFrozenAt          DateTime?
   // Revenue recognition (PSAK 72 / IFRS 15) — properti event/booking, BUKAN per-row Ledger.
   // null = unearned; terisi = pendapatan diakui (event selesai + approval). Manual finance action.
-  recognizedAt          DateTime?
-  recognizedById        String?
-  createdAt             DateTime            @default(now())
-  updatedAt             DateTime            @updatedAt
+  recognizedAt              DateTime?
+  recognizedById            String?
+  createdAt                 DateTime            @default(now())
+  updatedAt                 DateTime            @updatedAt
 
   sales               Profile?             @relation("BookingSales", fields: [salesId], references: [id], onDelete: Restrict)
   manager             Profile?             @relation("BookingManager", fields: [managerId], references: [id])
@@ -1252,16 +1237,16 @@ model SnapBonus {
 // ─── Complimentary Master ─────────────────────────────────────────────────────
 
 model Complimentary {
-  id                        String                    @id @default(uuid())
-  name                      String
-  price                     Int                       @default(0)
-  description               String?
-  isShowPrice               Boolean                   @default(false)
-  isActive                  Boolean                   @default(true)
-  createdAt                 DateTime                  @default(now())
-  updatedAt                 DateTime                  @updatedAt
-  snapComplimentaries       SnapComplimentary[]
-  quotationComplimentaries  QuotationComplimentary[]
+  id                       String                   @id @default(uuid())
+  name                     String
+  price                    Int                      @default(0)
+  description              String?
+  isShowPrice              Boolean                  @default(false)
+  isActive                 Boolean                  @default(true)
+  createdAt                DateTime                 @default(now())
+  updatedAt                DateTime                 @updatedAt
+  snapComplimentaries      SnapComplimentary[]
+  quotationComplimentaries QuotationComplimentary[]
 
   @@map("complimentaries")
 }
@@ -1882,14 +1867,14 @@ model Notification {
 }
 
 model EventType {
-  id         String        @id @default(uuid())
+  id         String          @id @default(uuid())
   name       String // e.g. "Resepsi", "Akad & Resepsi", "Halfday 6hrs"
-  code       String        @unique // e.g. "R", "AR", "H6" — used in PO number
-  category   EventCategory @default(WEDDINGS)
-  sortOrder  Int           @default(0)
-  isActive   Boolean       @default(true)
-  createdAt  DateTime      @default(now())
-  updatedAt  DateTime      @updatedAt
+  code       String          @unique // e.g. "R", "AR", "H6" — used in PO number
+  category   EventCategory   @default(WEDDINGS)
+  sortOrder  Int             @default(0)
+  isActive   Boolean         @default(true)
+  createdAt  DateTime        @default(now())
+  updatedAt  DateTime        @updatedAt
   leads      DailyActivity[]
   quotations Quotation[]
 
@@ -1917,16 +1902,16 @@ enum MiceItemPriceType {
 }
 
 model LeadStatus {
-  id        String   @id @default(uuid())
+  id        String          @id @default(uuid())
   name      String
-  color     String   @default("#6b7280")
-  sortOrder Int      @default(0)
-  isDefault Boolean  @default(false)
-  isFinal   Boolean  @default(false)
-  isSystem  Boolean  @default(false)
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  color     String          @default("#6b7280")
+  sortOrder Int             @default(0)
+  isDefault Boolean         @default(false)
+  isFinal   Boolean         @default(false)
+  isSystem  Boolean         @default(false)
+  isActive  Boolean         @default(true)
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
   leads     DailyActivity[]
 
   @@index([sortOrder])
@@ -1934,12 +1919,12 @@ model LeadStatus {
 }
 
 model DailyActivitySegment {
-  id        String   @id @default(uuid())
+  id        String          @id @default(uuid())
   name      String
-  isActive  Boolean  @default(true)
-  sortOrder Int      @default(0)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  isActive  Boolean         @default(true)
+  sortOrder Int             @default(0)
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
   leads     DailyActivity[]
 
   // Physical table kept as "lead_segments" — no data migration needed.
@@ -2002,18 +1987,18 @@ model DailyActivity {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  venue               Venue?               @relation("LeadPrimaryVenue", fields: [venueId], references: [id], onDelete: SetNull)
-  venueSecondary      Venue?               @relation("LeadSecondaryVenue", fields: [venueSecondaryId], references: [id], onDelete: SetNull)
-  package             Package?             @relation(fields: [packageId], references: [id], onDelete: SetNull)
-  eventType           EventType?           @relation(fields: [eventTypeId], references: [id], onDelete: SetNull)
-  sourceOfInformation SourceOfInformation? @relation(fields: [sourceOfInformationId], references: [id], onDelete: SetNull)
+  venue               Venue?                @relation("LeadPrimaryVenue", fields: [venueId], references: [id], onDelete: SetNull)
+  venueSecondary      Venue?                @relation("LeadSecondaryVenue", fields: [venueSecondaryId], references: [id], onDelete: SetNull)
+  package             Package?              @relation(fields: [packageId], references: [id], onDelete: SetNull)
+  eventType           EventType?            @relation(fields: [eventTypeId], references: [id], onDelete: SetNull)
+  sourceOfInformation SourceOfInformation?  @relation(fields: [sourceOfInformationId], references: [id], onDelete: SetNull)
   segment             DailyActivitySegment? @relation(fields: [segmentId], references: [id], onDelete: SetNull)
-  status              LeadStatus           @relation(fields: [statusId], references: [id], onDelete: Restrict)
-  createdBy           Profile              @relation(fields: [createdById], references: [id], onDelete: Restrict)
-  assignedTo          Profile?             @relation("LeadAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
-  convertedToCustomer Customer?            @relation("LeadConvertedCustomer", fields: [convertedToCustomerId], references: [id], onDelete: SetNull)
-  convertedToBooking  Booking?             @relation("LeadConvertedBooking", fields: [convertedToBookingId], references: [id], onDelete: SetNull)
-  bookingsFromLead    Booking[]            @relation("BookingFromLead")
+  status              LeadStatus            @relation(fields: [statusId], references: [id], onDelete: Restrict)
+  createdBy           Profile               @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  assignedTo          Profile?              @relation("LeadAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
+  convertedToCustomer Customer?             @relation("LeadConvertedCustomer", fields: [convertedToCustomerId], references: [id], onDelete: SetNull)
+  convertedToBooking  Booking?              @relation("LeadConvertedBooking", fields: [convertedToBookingId], references: [id], onDelete: SetNull)
+  bookingsFromLead    Booking[]             @relation("BookingFromLead")
 
   @@index([statusId])
   @@index([createdById])
@@ -2385,19 +2370,19 @@ model WorkShift {
 }
 
 model EmployeeWorkAssignment {
-  id                  String    @id @default(uuid())
-  profileId           String
-  workLocationId      String
-  workShiftId         String
-  isDefault           Boolean   @default(false)
-  offdayDays          Int[]     @default([])
-  effectiveDate       DateTime
-  endDate             DateTime?
-  isMobileAttendance  Boolean   @default(false)
-  clockInLocationId   String?
-  clockOutLocationId  String?
-  createdAt           DateTime  @default(now())
-  updatedAt           DateTime  @updatedAt
+  id                 String    @id @default(uuid())
+  profileId          String
+  workLocationId     String
+  workShiftId        String
+  isDefault          Boolean   @default(false)
+  offdayDays         Int[]     @default([])
+  effectiveDate      DateTime
+  endDate            DateTime?
+  isMobileAttendance Boolean   @default(false)
+  clockInLocationId  String?
+  clockOutLocationId String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 
   profile          Profile       @relation(fields: [profileId], references: [id], onDelete: Cascade)
   workLocation     WorkLocation  @relation(fields: [workLocationId], references: [id], onDelete: Cascade)
@@ -2448,16 +2433,16 @@ model Department {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  parent      Department?  @relation("DepartmentHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
-  children    Department[] @relation("DepartmentHierarchy")
-  head        Profile?     @relation("DepartmentHead", fields: [headId], references: [id], onDelete: SetNull)
-  profiles    Profile[]
-  positions   Position[]
-  jobPostings JobPosting[]
+  parent              Department?          @relation("DepartmentHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
+  children            Department[]         @relation("DepartmentHierarchy")
+  head                Profile?             @relation("DepartmentHead", fields: [headId], references: [id], onDelete: SetNull)
+  profiles            Profile[]
+  positions           Position[]
+  jobPostings         JobPosting[]
+  recruitmentRequests RecruitmentRequest[]
 
   @@index([parentId])
   @@index([headId])
-  recruitmentRequests RecruitmentRequest[]
   @@map("departments")
 }
 
@@ -2471,12 +2456,12 @@ model Position {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  department  Department?  @relation(fields: [departmentId], references: [id], onDelete: SetNull)
-  profiles    Profile[]
-  jobPostings JobPosting[]
+  department          Department?          @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  profiles            Profile[]
+  jobPostings         JobPosting[]
+  recruitmentRequests RecruitmentRequest[]
 
   @@index([departmentId])
-  recruitmentRequests RecruitmentRequest[]
   @@map("positions")
 }
 
@@ -2775,7 +2760,7 @@ model PayslipItem {
 // ─── Recruitment & Onboarding ────────────────────────────────────────────────
 
 model JobPosting {
-  id                   String                  @id @default(uuid())
+  id                   String                   @id @default(uuid())
   title                String
   departmentId         String?
   positionId           String?
@@ -2783,12 +2768,12 @@ model JobPosting {
   requirements         String?
   employmentType       EmploymentType?
   location             String?
-  salaryRangeMin       Decimal?                @db.Decimal(15, 2)
-  salaryRangeMax       Decimal?                @db.Decimal(15, 2)
-  status               JobPostingStatus        @default(draft)
+  salaryRangeMin       Decimal?                 @db.Decimal(15, 2)
+  salaryRangeMax       Decimal?                 @db.Decimal(15, 2)
+  status               JobPostingStatus         @default(draft)
   openDate             DateTime?
   closeDate            DateTime?
-  isWalkInInterview    Boolean                 @default(false)
+  isWalkInInterview    Boolean                  @default(false)
   brandId              String?
   submissionDate       DateTime?
   interviewDate        DateTime?
@@ -2816,11 +2801,11 @@ model JobPosting {
   approvedAt2          DateTime?
   approvalNote2        String?
   createdBy            String?
-  publicToken          String?                 @unique
+  publicToken          String?                  @unique
   publicAccessCode     String?
   deletedAt            DateTime?
-  createdAt            DateTime                @default(now())
-  updatedAt            DateTime                @updatedAt
+  createdAt            DateTime                 @default(now())
+  updatedAt            DateTime                 @updatedAt
 
   department        Department?           @relation(fields: [departmentId], references: [id], onDelete: SetNull)
   position          Position?             @relation(fields: [positionId], references: [id], onDelete: SetNull)
@@ -2846,12 +2831,12 @@ model JobPosting {
 }
 
 model JobApplicationToken {
-  id           String     @id @default(uuid())
+  id           String    @id @default(uuid())
   jobPostingId String
-  token        String     @unique
+  token        String    @unique
   usedAt       DateTime?
   expiresAt    DateTime
-  createdAt    DateTime   @default(now())
+  createdAt    DateTime  @default(now())
 
   jobPosting JobPosting @relation(fields: [jobPostingId], references: [id], onDelete: Cascade)
 
@@ -2861,35 +2846,35 @@ model JobApplicationToken {
 }
 
 model Candidate {
-  id              String         @id @default(uuid())
-  jobPostingId    String
-  fullName        String
-  email           String
-  phoneNumber     String?
-  resumeUrl       String?
-  coverLetterUrl  String?
-  religion        String?
-  photoUrl        String?
+  id                   String         @id @default(uuid())
+  jobPostingId         String
+  fullName             String
+  email                String
+  phoneNumber          String?
+  resumeUrl            String?
+  coverLetterUrl       String?
+  religion             String?
+  photoUrl             String?
   photoOriginalName    String?
   photoStorageKey      String?
   photoMimeType        String?
-  ktpPhotoUrl     String?
+  ktpPhotoUrl          String?
   ktpPhotoOriginalName String?
   ktpPhotoStorageKey   String?
   ktpPhotoMimeType     String?
-  stage           CandidateStage @default(applied)
-  rating          Int?
-  notes           String?
-  rejectionReason String?
-  expectedSalary  Decimal?       @db.Decimal(15, 2)
-  viewed          Boolean        @default(false)
-  hiredAt         DateTime?
-  hiredProfileId  String?
-  createdAt       DateTime       @default(now())
-  updatedAt       DateTime       @updatedAt
+  stage                CandidateStage @default(applied)
+  rating               Int?
+  notes                String?
+  rejectionReason      String?
+  expectedSalary       Decimal?       @db.Decimal(15, 2)
+  viewed               Boolean        @default(false)
+  hiredAt              DateTime?
+  hiredProfileId       String?
+  createdAt            DateTime       @default(now())
+  updatedAt            DateTime       @updatedAt
 
-  jobPosting     JobPosting      @relation(fields: [jobPostingId], references: [id], onDelete: Cascade)
-  hiredProfile   Profile?        @relation("HiredCandidate", fields: [hiredProfileId], references: [id], onDelete: SetNull)
+  jobPosting     JobPosting       @relation(fields: [jobPostingId], references: [id], onDelete: Cascade)
+  hiredProfile   Profile?         @relation("HiredCandidate", fields: [hiredProfileId], references: [id], onDelete: SetNull)
   candidateNotes CandidateNote[]
   invite         CandidateInvite?
 
@@ -3026,7 +3011,7 @@ model OnboardingFormLink {
   createdAt  DateTime                 @default(now())
   updatedAt  DateTime                 @updatedAt
 
-  creator    Profile                  @relation("OnboardingFormLinkCreator", fields: [createdBy], references: [id])
+  creator    Profile                   @relation("OnboardingFormLinkCreator", fields: [createdBy], references: [id])
   submission OnboardingFormSubmission?
 
   @@index([token])
@@ -3478,21 +3463,21 @@ model Kpi {
 // --- Recruitment Request (FPK) -----------------------------------------------
 
 model RecruitmentRequest {
-  id                  String                      @id @default(uuid())
-  fpkNumber           String                      @unique
-  isWalkinInterview   Boolean                     @default(false)
-  company             String?
-  documentDate        DateTime?
+  id                String    @id @default(uuid())
+  fpkNumber         String    @unique
+  isWalkinInterview Boolean   @default(false)
+  company           String?
+  documentDate      DateTime?
 
-  departmentId        String?
-  positionId          String?
-  level               String?
-  salary              Decimal?                    @db.Decimal(15, 2)
-  quota               Int                         @default(1)
-  workLocation        String?
-  interviewLocation   String?
-  trainingCompanion   String?
-  startDate           DateTime?
+  departmentId      String?
+  positionId        String?
+  level             String?
+  salary            Decimal?  @db.Decimal(15, 2)
+  quota             Int       @default(1)
+  workLocation      String?
+  interviewLocation String?
+  trainingCompanion String?
+  startDate         DateTime?
 
   minEducation        String?
   minExperience       String?
@@ -3502,19 +3487,19 @@ model RecruitmentRequest {
   approver1Id         String?
   approver2Id         String?
 
-  requestedById       String?
-  status              RecruitmentRequestStatus    @default(pending)
-  priority            RecruitmentRequestPriority  @default(medium)
-  rejectionReason     String?
-  createdAt           DateTime                    @default(now())
-  updatedAt           DateTime                    @updatedAt
+  requestedById   String?
+  status          RecruitmentRequestStatus   @default(pending)
+  priority        RecruitmentRequestPriority @default(medium)
+  rejectionReason String?
+  createdAt       DateTime                   @default(now())
+  updatedAt       DateTime                   @updatedAt
 
-  department          Department?                 @relation(fields: [departmentId], references: [id], onDelete: SetNull)
-  position            Position?                   @relation(fields: [positionId], references: [id], onDelete: SetNull)
-  requestedBy         Profile?                    @relation("RecruitmentRequestCreator", fields: [requestedById], references: [id], onDelete: SetNull)
-  approver1           Profile?                    @relation("RecruitmentRequestApprover1", fields: [approver1Id], references: [id], onDelete: SetNull)
-  approver2           Profile?                    @relation("RecruitmentRequestApprover2", fields: [approver2Id], references: [id], onDelete: SetNull)
-  formLink            RecruitmentFormLink?
+  department  Department?          @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  position    Position?            @relation(fields: [positionId], references: [id], onDelete: SetNull)
+  requestedBy Profile?             @relation("RecruitmentRequestCreator", fields: [requestedById], references: [id], onDelete: SetNull)
+  approver1   Profile?             @relation("RecruitmentRequestApprover1", fields: [approver1Id], references: [id], onDelete: SetNull)
+  approver2   Profile?             @relation("RecruitmentRequestApprover2", fields: [approver2Id], references: [id], onDelete: SetNull)
+  formLink    RecruitmentFormLink?
 
   @@index([status])
   @@index([departmentId])
@@ -3525,18 +3510,18 @@ model RecruitmentRequest {
 // --- Recruitment Form Link ---------------------------------------------------
 
 model RecruitmentFormLink {
-  id                    String                      @id @default(uuid())
-  recruitmentRequestId  String                      @unique
-  token                 String                      @unique
-  accessCode            String
-  status                RecruitmentFormLinkStatus    @default(Active)
-  viewedAt              DateTime?
-  expiresAt             DateTime?
-  createdAt             DateTime                    @default(now())
-  updatedAt             DateTime                    @updatedAt
+  id                   String                    @id @default(uuid())
+  recruitmentRequestId String                    @unique
+  token                String                    @unique
+  accessCode           String
+  status               RecruitmentFormLinkStatus @default(Active)
+  viewedAt             DateTime?
+  expiresAt            DateTime?
+  createdAt            DateTime                  @default(now())
+  updatedAt            DateTime                  @updatedAt
 
-  recruitmentRequest    RecruitmentRequest          @relation(fields: [recruitmentRequestId], references: [id], onDelete: Cascade)
-  submissions           CandidateSubmission[]
+  recruitmentRequest RecruitmentRequest    @relation(fields: [recruitmentRequestId], references: [id], onDelete: Cascade)
+  submissions        CandidateSubmission[]
 
   @@index([token])
   @@map("recruitment_form_links")
@@ -3550,25 +3535,25 @@ enum RecruitmentFormLinkStatus {
 // --- Candidate Submission ----------------------------------------------------
 
 model CandidateSubmission {
-  id                    String                      @id @default(uuid())
-  formLinkId            String
-  fullName              String
-  email                 String
-  phoneNumber           String
-  address               String?
-  birthPlace            String?
-  birthDate             DateTime?
-  lastEducation         String?
-  major                 String?
-  workExperienceYears   Int?
-  workHistory           String?
-  cvUrl                 String?
-  photoUrl              String?
-  submittedAt           DateTime                    @default(now())
-  createdAt             DateTime                    @default(now())
-  updatedAt             DateTime                    @updatedAt
+  id                  String    @id @default(uuid())
+  formLinkId          String
+  fullName            String
+  email               String
+  phoneNumber         String
+  address             String?
+  birthPlace          String?
+  birthDate           DateTime?
+  lastEducation       String?
+  major               String?
+  workExperienceYears Int?
+  workHistory         String?
+  cvUrl               String?
+  photoUrl            String?
+  submittedAt         DateTime  @default(now())
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
 
-  formLink              RecruitmentFormLink          @relation(fields: [formLinkId], references: [id], onDelete: Cascade)
+  formLink RecruitmentFormLink @relation(fields: [formLinkId], references: [id], onDelete: Cascade)
 
   @@index([formLinkId])
   @@map("candidate_submissions")
@@ -3587,7 +3572,7 @@ model BlacklistEntry {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
-  blacklistedBy   Profile? @relation("BlacklistCreator", fields: [blacklistedById], references: [id], onDelete: SetNull)
+  blacklistedBy Profile? @relation("BlacklistCreator", fields: [blacklistedById], references: [id], onDelete: SetNull)
 
   @@index([email])
   @@map("blacklist_entries")
@@ -3596,54 +3581,46 @@ model BlacklistEntry {
 // --- Guestbook ---------------------------------------------------------------
 
 model GuestbookEntry {
-  id              String            @id @default(uuid())
-  visitorName     String
-  company         String?
-  email           String?
-  phoneNumber     String?
-  idNumber        String?
-  visitorPhotoUrl String?
-  idPhotoUrl      String?
-  purpose         GuestVisitPurpose @default(other)
-  purposeNote     String?
-  interactionType GuestInteractionType?
-  onlineMedium    OnlineMeetingMedium?
-  meetingUrl      String?
-  meetingLocation String?
-  scheduledAt     DateTime?
-  hostId          String?
-  venueId         String?
-  numberOfGuests  Int               @default(1)
-  checkInAt       DateTime          @default(now())
-  checkOutAt      DateTime?
-  notes           String?
-  guestCode          String?           @unique
-  visitStatus        GuestVisitStatus?
-  notJoinReason      String?
-  createdById        String?
-  salesId            String?
-  phoneNumberNorm    String?
-  bitrixContactId    String?
-  bitrixName         String?
-  source             GuestbookSource?
-  proofChatUrl       String?
-  proofPhotoUrl      String?
-  proofLostUrl       String?
-  proofRescheduleUrl String?
-  commitVisitDate    DateTime?
-  commitPayDate      DateTime?
+  id                    String                @id @default(uuid())
+  visitorName           String
+  email                 String?
+  phoneNumber           String?
+  visitorPhotoUrl       String?
+  interactionType       GuestInteractionType?
+  onlineMedium          OnlineMeetingMedium?
+  meetingUrl            String?
+  meetingLocation       String?
+  scheduledAt           DateTime?
+  hostId                String?
+  venueId               String?
+  checkInAt             DateTime              @default(now())
+  checkOutAt            DateTime?
+  notes                 String?
+  guestCode             String?               @unique
+  visitStatus           GuestVisitStatus?
+  createdById           String?
+  salesId               String?
+  phoneNumberNorm       String?
+  bitrixContactId       String?
+  bitrixName            String?
+  proofChatUrl          String?
+  proofPhotoUrl         String?
+  proofLostUrl          String?
+  proofRescheduleUrl    String?
+  commitVisitDate       DateTime?
+  commitPayDate         DateTime?
   bitrixSourceInfo      String?
   sourceOfInformationId String?
   packageId             String?
-  createdAt             DateTime          @default(now())
-  updatedAt             DateTime          @updatedAt
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
 
-  host                Profile?              @relation("GuestbookHost", fields: [hostId], references: [id], onDelete: SetNull)
-  createdBy           Profile?              @relation("GuestbookCreator", fields: [createdById], references: [id], onDelete: SetNull)
-  sales               Profile?              @relation("GuestbookSales", fields: [salesId], references: [id], onDelete: SetNull)
-  venue               Venue?                @relation(fields: [venueId], references: [id], onDelete: SetNull)
-  sourceOfInformation SourceOfInformation?  @relation(fields: [sourceOfInformationId], references: [id], onDelete: SetNull)
-  package             Package?              @relation(fields: [packageId], references: [id], onDelete: SetNull)
+  host                Profile?             @relation("GuestbookHost", fields: [hostId], references: [id], onDelete: SetNull)
+  createdBy           Profile?             @relation("GuestbookCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  sales               Profile?             @relation("GuestbookSales", fields: [salesId], references: [id], onDelete: SetNull)
+  venue               Venue?               @relation(fields: [venueId], references: [id], onDelete: SetNull)
+  sourceOfInformation SourceOfInformation? @relation(fields: [sourceOfInformationId], references: [id], onDelete: SetNull)
+  package             Package?             @relation(fields: [packageId], references: [id], onDelete: SetNull)
 
   @@index([checkInAt])
   @@index([hostId])
@@ -3712,8 +3689,8 @@ model Memo {
   createdAt      DateTime   @default(now())
   updatedAt      DateTime   @updatedAt
 
-  createdBy Profile      @relation("MemoCreator", fields: [createdById], references: [id], onDelete: Restrict)
-  venue     Venue?       @relation(fields: [venueId], references: [id], onDelete: SetNull)
+  createdBy Profile       @relation("MemoCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  venue     Venue?        @relation(fields: [venueId], references: [id], onDelete: SetNull)
   comments  MemoComment[]
   readers   MemoReader[]
 
@@ -3770,7 +3747,7 @@ enum AnnouncementStatus {
 }
 
 model Announcement {
-  id             String              @id @default(uuid())
+  id             String               @id @default(uuid())
   title          String
   category       String?
   content        String?
@@ -3780,11 +3757,11 @@ model Announcement {
   publishedAt    DateTime?
   venueId        String?
   createdById    String
-  createdAt      DateTime            @default(now())
-  updatedAt      DateTime            @updatedAt
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
 
-  createdBy Profile              @relation("AnnouncementCreator", fields: [createdById], references: [id], onDelete: Restrict)
-  venue     Venue?               @relation(fields: [venueId], references: [id], onDelete: SetNull)
+  createdBy Profile               @relation("AnnouncementCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  venue     Venue?                @relation(fields: [venueId], references: [id], onDelete: SetNull)
   comments  AnnouncementComment[]
   readers   AnnouncementReader[]
 
