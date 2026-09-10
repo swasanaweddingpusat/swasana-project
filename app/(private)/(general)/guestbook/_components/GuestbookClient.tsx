@@ -257,7 +257,6 @@ function GuestbookClientInner() {
     if (autoOpenHandled.current) return;
     if (searchParams.get("create") !== "1") return;
     autoOpenHandled.current = true;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-shot auto-open from URL query, intentional
     setDrawerOpen(true);
     router.replace(pathname, { scroll: false });
   }, [searchParams, router, pathname]);
