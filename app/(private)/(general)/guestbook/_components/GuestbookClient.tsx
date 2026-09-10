@@ -4,7 +4,6 @@ import { Suspense, useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { format } from "date-fns";
-import { id as idLocale } from "date-fns/locale";
 import type { DateRange } from "react-day-picker";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -19,18 +18,6 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -40,8 +27,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Calendar } from "@/components/ui/calendar";
-import { Input } from "@/components/ui/input";
 import {
   AddCircle,
   UsersGroupRounded,
@@ -49,7 +34,6 @@ import {
   Download,
   Eye,
   Filter,
-  Magnifer,
   Pen,
   Refresh,
   TrashBinTrash,
@@ -60,9 +44,11 @@ import { useQueryClient } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { useGuestbookEntries, useDeleteGuestbookEntry } from "@/hooks/use-guestbook";
 import { useVenues } from "@/hooks/use-venues";
+import { useSalesUsers } from "@/hooks/use-sales-users";
 import type { GuestbookEntryItem } from "@/lib/queries/guestbookEntries";
 import { GuestbookDrawer } from "./GuestbookDrawer";
 import { GuestbookDetailDrawer } from "./GuestbookDetailDrawer";
+import { GuestbookFilterDrawer } from "./GuestbookFilterDrawer";
 import { resolveGuestbookPhotoUrl } from "./photo-url";
 
 const STATUS_LABELS: Record<string, { label: string; className: string }> = {
@@ -93,29 +79,9 @@ function formatTime(dateStr: string | Date): string {
   });
 }
 
-function isSameDay(a: Date, b: Date): boolean {
-  return (
-    a.getFullYear() === b.getFullYear() &&
-    a.getMonth() === b.getMonth() &&
-    a.getDate() === b.getDate()
-  );
-}
-
 function todayRange(): DateRange {
   const today = new Date();
   return { from: today, to: today };
-}
-
-function formatDateRangeLabel(range: DateRange | undefined): string {
-  if (!range?.from) return "Semua Tanggal";
-  const today = new Date();
-  if (isSameDay(range.from, today) && (!range.to || isSameDay(range.to, today))) {
-    return "Hari Ini";
-  }
-  if (range.to && !isSameDay(range.from, range.to)) {
-    return `${format(range.from, "dd MMM yyyy", { locale: idLocale })} — ${format(range.to, "dd MMM yyyy", { locale: idLocale })}`;
-  }
-  return format(range.from, "dd MMM yyyy", { locale: idLocale });
 }
 
 function SkeletonRows() {
@@ -268,8 +234,10 @@ function GuestbookClientInner() {
 
   const [dateRange, setDateRange] = useState<DateRange | undefined>(todayRange);
   const [filterVenueId, setFilterVenueId] = useState<string>("all");
+  const [filterHostId, setFilterHostId] = useState<string>("all");
   const [search, setSearch] = useState("");
   const [isExporting, setIsExporting] = useState(false);
+  const [filterOpen, setFilterOpen] = useState(false);
 
   const router = useRouter();
   const pathname = usePathname();
@@ -280,7 +248,6 @@ function GuestbookClientInner() {
     if (autoOpenHandled.current) return;
     if (searchParams.get("create") !== "1") return;
     autoOpenHandled.current = true;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-shot auto-open from URL query, intentional
     setDrawerOpen(true);
     router.replace(pathname, { scroll: false });
   }, [searchParams, router, pathname]);
@@ -289,6 +256,8 @@ function GuestbookClientInner() {
   const { data: guestbookData, isLoading } = useGuestbookEntries();
   const entries = guestbookData?.data ?? [];
   const { data: venues = [] } = useVenues();
+  const { users: salesUsers } = useSalesUsers();
+  const salesOptions = salesUsers.map((u) => ({ id: u.id, name: u.fullName ?? u.id }));
   const deleteMutation = useDeleteGuestbookEntry();
 
   function handleEditClick(entry: GuestbookEntryItem) {
@@ -358,6 +327,7 @@ function GuestbookClientInner() {
       if (d > to) return false;
     }
     if (filterVenueId !== "all" && e.venueId !== filterVenueId) return false;
+    if (filterHostId !== "all" && e.host?.id !== filterHostId) return false;
     const q = search.trim().toLowerCase();
     if (q) {
       const haystack = [e.visitorName, e.guestCode, e.host?.fullName]
@@ -369,12 +339,18 @@ function GuestbookClientInner() {
     return true;
   });
 
-  const hasActiveFilter =
-    Boolean(dateRange?.from) || filterVenueId !== "all" || search.trim() !== "";
   const activeFilterCount =
     (dateRange?.from ? 1 : 0) +
     (filterVenueId !== "all" ? 1 : 0) +
+    (filterHostId !== "all" ? 1 : 0) +
     (search.trim() !== "" ? 1 : 0);
+
+  function resetFilters() {
+    setDateRange(todayRange());
+    setFilterVenueId("all");
+    setFilterHostId("all");
+    setSearch("");
+  }
 
   return (
     <div className="flex flex-col gap-3">
@@ -389,64 +365,20 @@ function GuestbookClientInner() {
               </span>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <div className="relative">
-                <Magnifer
-                  weight="BoldDuotone"
-                  className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground"
-                />
-                <Input
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Cari nama tamu..."
-                  className="rounded-full text-xs h-8 pl-8 w-52"
-                />
-              </div>
-
-              <Popover>
-                <PopoverTrigger render={
-                  <button
-                    type="button"
-                    className="flex items-center gap-2 h-8 px-3 text-xs rounded-full border border-input bg-background hover:bg-accent transition-colors text-left"
-                  >
-                    <CalendarMinimalistic weight="BoldDuotone" className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                    <span className={dateRange?.from ? "text-foreground" : "text-muted-foreground"}>
-                      {formatDateRangeLabel(dateRange)}
-                    </span>
-                  </button>
-                } />
-                <PopoverContent className="w-auto p-0" align="start">
-                  <Calendar
-                    mode="range"
-                    numberOfMonths={2}
-                    selected={dateRange}
-                    onSelect={setDateRange}
-                    locale={idLocale}
-                  />
-                </PopoverContent>
-              </Popover>
-
-              {dateRange?.from && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="rounded-full text-xs h-8 text-muted-foreground"
-                  onClick={() => setDateRange(undefined)}
-                >
-                  Reset
-                </Button>
-              )}
-
-              <Select value={filterVenueId} onValueChange={setFilterVenueId}>
-                <SelectTrigger className="rounded-full text-xs h-8 w-44">
-                  <SelectValue placeholder="Semua Venue" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Semua Venue</SelectItem>
-                  {venues.map((v) => (
-                    <SelectItem key={v.id} value={v.id}>{v.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Button
+                variant="outline"
+                size="sm"
+                className="rounded-full text-xs h-8 gap-1.5 relative"
+                onClick={() => setFilterOpen(true)}
+              >
+                <Filter weight="BoldDuotone" className="h-3.5 w-3.5" />
+                Filter
+                {activeFilterCount > 0 && (
+                  <span className="absolute -top-1.5 -right-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[9px] font-bold text-primary-foreground leading-none">
+                    {activeFilterCount}
+                  </span>
+                )}
+              </Button>
 
               <Button
                 variant="outline"
@@ -658,81 +590,21 @@ function GuestbookClientInner() {
           </span>
           <div className="flex-1" />
 
-          <Popover>
-            <PopoverTrigger render={
-              <Button
-                type="button"
-                variant="outline"
-                size="icon"
-                className={cn("shrink-0 relative", hasActiveFilter && "border-primary/50")}
-                aria-label="Filter guestbook"
-              >
-                <Filter weight="BoldDuotone" className="h-4 w-4" />
-                {hasActiveFilter && (
-                  <span className="absolute -top-1.5 -right-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[9px] font-bold text-primary-foreground leading-none">
-                    {activeFilterCount}
-                  </span>
-                )}
-              </Button>
-            } />
-            <PopoverContent align="end" className="w-[19rem] max-w-[calc(100vw-2rem)] p-3 space-y-3">
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium text-muted-foreground">Cari</label>
-                <div className="relative">
-                  <Magnifer
-                    weight="BoldDuotone"
-                    className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground"
-                  />
-                  <Input
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    placeholder="Nama tamu / kode / host"
-                    className="rounded-full text-xs h-9 pl-9"
-                  />
-                </div>
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium text-muted-foreground">Tanggal</label>
-                <div className="flex justify-center rounded-lg border">
-                  <Calendar
-                    mode="range"
-                    selected={dateRange}
-                    onSelect={setDateRange}
-                    locale={idLocale}
-                  />
-                </div>
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium text-muted-foreground">Venue</label>
-                <Select value={filterVenueId} onValueChange={setFilterVenueId}>
-                  <SelectTrigger className="rounded-full text-xs h-9 w-full">
-                    <SelectValue placeholder="Semua Venue" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Semua Venue</SelectItem>
-                    {venues.map((v) => (
-                      <SelectItem key={v.id} value={v.id}>{v.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              {hasActiveFilter && (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="w-full rounded-full text-xs text-muted-foreground"
-                  onClick={() => {
-                    setDateRange(undefined);
-                    setFilterVenueId("all");
-                    setSearch("");
-                  }}
-                >
-                  Reset Filter
-                </Button>
-              )}
-            </PopoverContent>
-          </Popover>
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            className={cn("shrink-0 relative", activeFilterCount > 0 && "border-primary/50")}
+            onClick={() => setFilterOpen(true)}
+            aria-label="Filter guestbook"
+          >
+            <Filter weight="BoldDuotone" className="h-4 w-4" />
+            {activeFilterCount > 0 && (
+              <span className="absolute -top-1.5 -right-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[9px] font-bold text-primary-foreground leading-none">
+                {activeFilterCount}
+              </span>
+            )}
+          </Button>
 
           <Button
             type="button"
@@ -825,6 +697,22 @@ function GuestbookClientInner() {
         }}
         entry={selectedEntry}
         allEntries={entries}
+      />
+
+      <GuestbookFilterDrawer
+        open={filterOpen}
+        onClose={() => setFilterOpen(false)}
+        search={search}
+        onSearchChange={setSearch}
+        dateRange={dateRange}
+        onDateRangeChange={setDateRange}
+        venueId={filterVenueId}
+        onVenueIdChange={setFilterVenueId}
+        hostId={filterHostId}
+        onHostIdChange={setFilterHostId}
+        venues={venues}
+        salesOptions={salesOptions}
+        onReset={resetFilters}
       />
 
       {/* Delete confirmation */}
