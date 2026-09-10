@@ -3585,7 +3585,7 @@ model GuestbookEntry {
   visitorName           String
   email                 String?
   phoneNumber           String?
-  visitorPhotoUrl       String?
+  visitorPhoto          String?
   interactionType       GuestInteractionType?
   onlineMedium          OnlineMeetingMedium?
   meetingUrl            String?
@@ -3603,10 +3603,7 @@ model GuestbookEntry {
   phoneNumberNorm       String?
   bitrixContactId       String?
   bitrixName            String?
-  proofChatUrl          String?
-  proofPhotoUrl         String?
-  proofLostUrl          String?
-  proofRescheduleUrl    String?
+  proofFiles            Json?
   commitVisitDate       DateTime?
   commitPayDate         DateTime?
   bitrixSourceInfo      String?

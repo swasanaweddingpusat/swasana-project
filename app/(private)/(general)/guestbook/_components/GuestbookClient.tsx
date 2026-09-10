@@ -41,6 +41,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Calendar } from "@/components/ui/calendar";
+import { Input } from "@/components/ui/input";
 import {
   AddCircle,
   UsersGroupRounded,
@@ -48,25 +49,22 @@ import {
   CalendarMinimalistic,
   Download,
   Eye,
+  Filter,
+  Magnifer,
   Pen,
   Refresh,
   TrashBinTrash,
+  UserCircle,
 } from "@solar-icons/react";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
+import { cn } from "@/lib/utils";
 import { useGuestbookEntries, useCheckOutGuestbookEntry, useDeleteGuestbookEntry } from "@/hooks/use-guestbook";
 import { useVenues } from "@/hooks/use-venues";
 import type { GuestbookEntryItem } from "@/lib/queries/guestbookEntries";
 import { GuestbookDrawer } from "./GuestbookDrawer";
 import { GuestbookDetailDrawer } from "./GuestbookDetailDrawer";
-
-function resolvePhotoUrl(key: string | null | undefined): string | null {
-  if (!key) return null;
-  if (key.startsWith("http")) return key;
-  const base = process.env.NEXT_PUBLIC_S3_PUBLIC_URL;
-  if (!base) return null;
-  return `${base}/${key}`;
-}
+import { resolveGuestbookPhotoUrl } from "./photo-url";
 
 const STATUS_LABELS: Record<string, { label: string; className: string }> = {
   deal: { label: "Deal", className: "bg-green-100 text-green-700 border-0" },
@@ -74,6 +72,11 @@ const STATUS_LABELS: Record<string, { label: string; className: string }> = {
   pending: { label: "Pending", className: "bg-gray-100 text-gray-700 border-0" },
   to_be_discuss: { label: "To Be Discuss", className: "bg-yellow-100 text-yellow-700 border-0" },
   lost: { label: "Lost", className: "bg-red-100 text-red-700 border-0" },
+};
+
+const EVENT_CATEGORY_LABELS: Record<string, string> = {
+  WEDDINGS: "Wedding",
+  MICE: "MICE",
 };
 
 function formatDate(dateStr: string | Date): string {
@@ -151,111 +154,114 @@ function MobileCard({
 }) {
   const sourceLabel = entry.sourceOfInformation?.name ?? null;
   const statusInfo = entry.visitStatus ? STATUS_LABELS[entry.visitStatus] : null;
+  const photoSrc = resolveGuestbookPhotoUrl(entry.visitorPhoto);
 
   return (
     <div
-      className="rounded-2xl border bg-card p-4 space-y-3 shadow-sm cursor-pointer transition-shadow hover:shadow-md"
+      className="rounded-lg border bg-card p-3 space-y-2 cursor-pointer"
       onClick={() => onViewClick(entry)}
     >
+      {/* Row 1: avatar + name + status badge */}
       <div className="flex items-start justify-between gap-2">
-        <div className="flex items-center gap-2.5">
-          {(() => {
-            const photoSrc = resolvePhotoUrl(entry.visitorPhotoUrl);
-            if (photoSrc) {
-              return <Image src={photoSrc} alt="" width={40} height={40} className="h-10 w-10 rounded-xl object-cover shrink-0" unoptimized />;
-            }
-            return null;
-          })()}
-          <div>
-            <p className="font-semibold text-foreground text-sm">{entry.visitorName}</p>
+        <div className="flex items-center gap-2.5 min-w-0">
+          {photoSrc ? (
+            <Image src={photoSrc} alt="" width={36} height={36} className="h-9 w-9 rounded-lg object-cover shrink-0" unoptimized />
+          ) : (
+            <div className="h-9 w-9 rounded-lg bg-muted shrink-0 flex items-center justify-center">
+              <UsersGroupRounded weight="BoldDuotone" className="h-4 w-4 text-muted-foreground" />
+            </div>
+          )}
+          <div className="min-w-0">
+            <p className="font-medium text-foreground text-sm truncate">{entry.visitorName}</p>
             {entry.guestCode && (
-              <p className="text-[10px] font-mono text-muted-foreground/70 mt-0.5">{entry.guestCode}</p>
+              <p className="text-[10px] font-mono text-muted-foreground/70">{entry.guestCode}</p>
             )}
           </div>
         </div>
         {statusInfo ? (
-          <Badge className={`rounded-full text-[11px] shrink-0 ${statusInfo.className}`}>
+          <Badge className={`rounded-full text-[10px] shrink-0 ${statusInfo.className}`}>
             {statusInfo.label}
           </Badge>
         ) : (
-          <Badge variant="secondary" className="rounded-full text-[11px] shrink-0">
+          <Badge variant="secondary" className="rounded-full text-[10px] shrink-0">
             —
           </Badge>
         )}
       </div>
 
-      <div className="grid grid-cols-2 gap-2 text-xs">
-        <div>
-          <p className="text-muted-foreground">Venue</p>
-          <p className="text-foreground">{entry.venue?.name ?? "-"}</p>
-        </div>
+      {/* Row 2: venue + package + sumber */}
+      <div className="flex items-center gap-1.5 flex-wrap text-xs text-muted-foreground">
+        <span className="truncate">{entry.venue?.name ?? "Venue —"}</span>
+        {entry.package?.packageName && (
+          <>
+            <span aria-hidden="true">·</span>
+            <span className="text-foreground/70 truncate">{entry.package.packageName}</span>
+          </>
+        )}
         {sourceLabel && (
-          <div>
-            <p className="text-muted-foreground">Sumber</p>
-            <p className="text-foreground">{sourceLabel}</p>
-          </div>
+          <>
+            <span aria-hidden="true">·</span>
+            <span className="truncate">{sourceLabel}</span>
+          </>
         )}
-        {entry.package && (
-          <div>
-            <p className="text-muted-foreground">Paket</p>
-            <p className="text-foreground">{entry.package.packageName}</p>
-          </div>
-        )}
-        <div>
-          <p className="text-muted-foreground">Bertemu</p>
-          <p className="text-foreground">{entry.host?.fullName ?? "-"}</p>
-        </div>
-        <div>
-          <p className="text-muted-foreground">Dicatat oleh</p>
-          <p className="text-foreground">{entry.createdBy?.fullName ?? "—"}</p>
-        </div>
-        <div className="col-span-2">
-          <p className="text-muted-foreground">In / Out</p>
-          <div className="space-y-0.5 text-foreground">
-            <p className="flex items-baseline gap-1.5">
-              <span className="w-6 shrink-0 text-[10px] font-medium text-muted-foreground/60">in</span>
-              <span>{formatDate(entry.checkInAt)} {formatTime(entry.checkInAt)}</span>
-            </p>
-            <p className="flex items-baseline gap-1.5">
-              <span className="w-6 shrink-0 text-[10px] font-medium text-muted-foreground/60">out</span>
-              {entry.checkOutAt ? (
-                <span>{formatDate(entry.checkOutAt)} {formatTime(entry.checkOutAt)}</span>
-              ) : (
-                <span className="text-muted-foreground/50">—</span>
-              )}
-            </p>
-          </div>
-        </div>
       </div>
 
-      <div className="flex items-center gap-1 pt-1" onClick={(e) => e.stopPropagation()}>
+      {/* Row 3: bertemu + dicatat oleh */}
+      <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
+        <UserCircle weight="BoldDuotone" className="h-3 w-3 shrink-0" />
+        <span className="truncate">
+          Bertemu {entry.host?.fullName ?? "-"}
+          {entry.createdBy?.fullName && ` · Dicatat ${entry.createdBy.fullName}`}
+        </span>
+      </div>
+
+      {/* Row 4: check-in / check-out */}
+      <div className="flex items-center gap-2 flex-wrap text-[11px] text-muted-foreground">
+        <span className="flex items-center gap-1">
+          <CalendarMinimalistic weight="BoldDuotone" className="h-3.5 w-3.5 shrink-0" />
+          <span className="text-muted-foreground/60">in</span>
+          <span className="text-foreground">{formatDate(entry.checkInAt)} {formatTime(entry.checkInAt)}</span>
+        </span>
+        {entry.checkOutAt && (
+          <span className="flex items-center gap-1">
+            <span className="text-muted-foreground/60">out</span>
+            <span className="text-foreground">{formatDate(entry.checkOutAt)} {formatTime(entry.checkOutAt)}</span>
+          </span>
+        )}
+      </div>
+
+      {/* Footer: action tile bar */}
+      <div
+        className="flex items-center justify-center gap-1 pt-1 border-t border-border"
+        onClick={(e) => e.stopPropagation()}
+      >
         {entry.checkOutAt === null && (
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8 rounded-full text-green-600 hover:bg-green-50"
+          <button
+            type="button"
+            className="flex flex-col items-center justify-center gap-0.5 w-14 rounded-xl py-1.5 px-1 cursor-pointer transition-colors hover:bg-accent disabled:opacity-50 disabled:pointer-events-none"
             onClick={() => onCompleteClick(entry)}
             disabled={isCheckingOut}
           >
-            <CheckCircle weight="BoldDuotone" className="h-4 w-4" />
-          </Button>
+            <CheckCircle weight="BoldDuotone" className="h-5 w-5 text-primary" />
+            <span className="text-[10px] font-medium text-muted-foreground leading-none">Selesai</span>
+          </button>
         )}
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-8 w-8 rounded-full"
+        <button
+          type="button"
+          className="flex flex-col items-center justify-center gap-0.5 w-14 rounded-xl py-1.5 px-1 cursor-pointer transition-colors hover:bg-accent"
           onClick={() => onViewClick(entry)}
         >
-          <Eye weight="BoldDuotone" className="h-4 w-4" />
-        </Button>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-8 w-8 rounded-full"
+          <Eye weight="BoldDuotone" className="h-5 w-5 text-primary" />
+          <span className="text-[10px] font-medium text-muted-foreground leading-none">Detail</span>
+        </button>
+        <button
+          type="button"
+          className="flex flex-col items-center justify-center gap-0.5 w-14 rounded-xl py-1.5 px-1 cursor-pointer transition-colors hover:bg-accent"
           onClick={() => onEditClick(entry)}
         >
-          <Pen weight="BoldDuotone" className="h-4 w-4" />
-        </Button>
+          <Pen weight="BoldDuotone" className="h-5 w-5 text-primary" />
+          <span className="text-[10px] font-medium text-muted-foreground leading-none">Edit</span>
+        </button>
       </div>
     </div>
   );
@@ -279,6 +285,7 @@ function GuestbookClientInner() {
 
   const [dateRange, setDateRange] = useState<DateRange | undefined>(todayRange);
   const [filterVenueId, setFilterVenueId] = useState<string>("all");
+  const [search, setSearch] = useState("");
   const [isExporting, setIsExporting] = useState(false);
 
   const router = useRouter();
@@ -384,8 +391,23 @@ function GuestbookClientInner() {
       if (d > to) return false;
     }
     if (filterVenueId !== "all" && e.venueId !== filterVenueId) return false;
+    const q = search.trim().toLowerCase();
+    if (q) {
+      const haystack = [e.visitorName, e.guestCode, e.host?.fullName]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      if (!haystack.includes(q)) return false;
+    }
     return true;
   });
+
+  const hasActiveFilter =
+    Boolean(dateRange?.from) || filterVenueId !== "all" || search.trim() !== "";
+  const activeFilterCount =
+    (dateRange?.from ? 1 : 0) +
+    (filterVenueId !== "all" ? 1 : 0) +
+    (search.trim() !== "" ? 1 : 0);
 
   return (
     <div className="flex flex-col gap-3">
@@ -400,6 +422,19 @@ function GuestbookClientInner() {
               </span>
             </div>
             <div className="flex flex-wrap items-center gap-2">
+              <div className="relative">
+                <Magnifer
+                  weight="BoldDuotone"
+                  className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground"
+                />
+                <Input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Cari nama tamu..."
+                  className="rounded-full text-xs h-8 pl-8 w-52"
+                />
+              </div>
+
               <Popover>
                 <PopoverTrigger render={
                   <button
@@ -483,11 +518,11 @@ function GuestbookClientInner() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Nama Tamu</TableHead>
+                  <TableHead>Event</TableHead>
                   <TableHead>Venue</TableHead>
                   <TableHead>Bertemu</TableHead>
                   <TableHead>In / Out</TableHead>
                   <TableHead>Sumber</TableHead>
-                  <TableHead>Paket</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Dicatat oleh</TableHead>
                   <TableHead className="text-right">Aksi</TableHead>
@@ -508,11 +543,11 @@ function GuestbookClientInner() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Nama Tamu</TableHead>
+                    <TableHead>Event</TableHead>
                     <TableHead>Venue</TableHead>
                     <TableHead>Bertemu</TableHead>
                     <TableHead>In / Out</TableHead>
                     <TableHead>Sumber</TableHead>
-                    <TableHead>Paket</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Dicatat oleh</TableHead>
                     <TableHead className="text-right pr-4">Aksi</TableHead>
@@ -532,7 +567,7 @@ function GuestbookClientInner() {
                         <TableCell>
                           <div className="flex items-center gap-2.5">
                             {(() => {
-                              const photoSrc = resolvePhotoUrl(entry.visitorPhotoUrl);
+                              const photoSrc = resolveGuestbookPhotoUrl(entry.visitorPhoto);
                               if (photoSrc) {
                                 return <Image src={photoSrc} alt="" width={32} height={32} className="h-8 w-8 rounded-lg object-cover shrink-0" unoptimized />;
                               }
@@ -549,7 +584,21 @@ function GuestbookClientInner() {
                           </div>
                         </TableCell>
                         <TableCell className="text-muted-foreground whitespace-nowrap">
-                          {entry.venue?.name ?? "-"}
+                          {entry.package?.category ? (
+                            EVENT_CATEGORY_LABELS[entry.package.category] ?? entry.package.category
+                          ) : (
+                            <span className="text-muted-foreground/50">—</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground whitespace-nowrap">
+                          <div className="flex flex-col gap-1 items-start">
+                            <span>{entry.venue?.name ?? "-"}</span>
+                            {entry.package?.packageName && (
+                              <Badge variant="secondary" className="rounded-full text-[10px] font-normal">
+                                {entry.package.packageName}
+                              </Badge>
+                            )}
+                          </div>
                         </TableCell>
                         <TableCell className="text-muted-foreground">
                           {entry.host?.fullName ?? "-"}
@@ -582,9 +631,6 @@ function GuestbookClientInner() {
                         </TableCell>
                         <TableCell className="text-muted-foreground whitespace-nowrap">
                           {sourceLabel ?? <span className="text-muted-foreground/50">—</span>}
-                        </TableCell>
-                        <TableCell className="text-muted-foreground whitespace-nowrap">
-                          {entry.package?.packageName ?? <span className="text-muted-foreground/50">—</span>}
                         </TableCell>
                         <TableCell>
                           {statusInfo ? (
@@ -649,96 +695,142 @@ function GuestbookClientInner() {
 
       {/* Mobile card list */}
       <div className="flex flex-col gap-3 sm:hidden">
-        {/* Mobile filter bar */}
-        <div className="flex flex-col gap-2">
+        {/* Mobile toolbar: count · filter popover · export · refresh · add */}
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-medium bg-muted text-muted-foreground px-2.5 py-1 border border-border rounded-full shrink-0">
+            {filteredEntries.length} tamu
+          </span>
+          <div className="flex-1" />
+
           <Popover>
             <PopoverTrigger render={
-              <button
+              <Button
                 type="button"
-                className="flex items-center gap-2 h-8 px-3 text-xs rounded-full border border-input bg-background hover:bg-accent transition-colors text-left w-full"
+                variant="outline"
+                size="icon"
+                className={cn("shrink-0 relative", hasActiveFilter && "border-primary/50")}
+                aria-label="Filter guestbook"
               >
-                <CalendarMinimalistic weight="BoldDuotone" className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                <span className={dateRange?.from ? "text-foreground" : "text-muted-foreground"}>
-                  {formatDateRangeLabel(dateRange)}
-                </span>
-              </button>
+                <Filter weight="BoldDuotone" className="h-4 w-4" />
+                {hasActiveFilter && (
+                  <span className="absolute -top-1.5 -right-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[9px] font-bold text-primary-foreground leading-none">
+                    {activeFilterCount}
+                  </span>
+                )}
+              </Button>
             } />
-            <PopoverContent className="w-auto p-0" align="start">
-              <Calendar
-                mode="range"
-                selected={dateRange}
-                onSelect={setDateRange}
-                locale={idLocale}
-              />
+            <PopoverContent align="end" className="w-[19rem] max-w-[calc(100vw-2rem)] p-3 space-y-3">
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground">Cari</label>
+                <div className="relative">
+                  <Magnifer
+                    weight="BoldDuotone"
+                    className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground"
+                  />
+                  <Input
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    placeholder="Nama tamu / kode / host"
+                    className="rounded-full text-xs h-9 pl-9"
+                  />
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground">Tanggal</label>
+                <div className="flex justify-center rounded-lg border">
+                  <Calendar
+                    mode="range"
+                    selected={dateRange}
+                    onSelect={setDateRange}
+                    locale={idLocale}
+                  />
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground">Venue</label>
+                <Select value={filterVenueId} onValueChange={setFilterVenueId}>
+                  <SelectTrigger className="rounded-full text-xs h-9 w-full">
+                    <SelectValue placeholder="Semua Venue" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Semua Venue</SelectItem>
+                    {venues.map((v) => (
+                      <SelectItem key={v.id} value={v.id}>{v.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              {hasActiveFilter && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="w-full rounded-full text-xs text-muted-foreground"
+                  onClick={() => {
+                    setDateRange(undefined);
+                    setFilterVenueId("all");
+                    setSearch("");
+                  }}
+                >
+                  Reset Filter
+                </Button>
+              )}
             </PopoverContent>
           </Popover>
 
-          <div className="flex gap-2">
-            {dateRange?.from && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="rounded-full text-xs h-8 text-muted-foreground"
-                onClick={() => setDateRange(undefined)}
-              >
-                Reset
-              </Button>
-            )}
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            className="shrink-0"
+            onClick={() => { void handleExport(); }}
+            disabled={isExporting}
+            aria-label="Export guestbook"
+          >
+            <Download weight="BoldDuotone" className="h-4 w-4" />
+          </Button>
 
-            <Select value={filterVenueId} onValueChange={setFilterVenueId}>
-              <SelectTrigger className="rounded-full text-xs h-8 flex-1">
-                <SelectValue placeholder="Semua Venue" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Semua Venue</SelectItem>
-                {venues.map((v) => (
-                  <SelectItem key={v.id} value={v.id}>{v.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            className="shrink-0"
+            onClick={() => queryClient.invalidateQueries({ queryKey: ["guestbook-entries"] })}
+            aria-label="Refresh data guestbook"
+          >
+            <Refresh weight="BoldDuotone" className="h-4 w-4" />
+          </Button>
 
-            <Button
-              variant="outline"
-              size="sm"
-              className="rounded-full text-xs h-8 gap-1.5"
-              onClick={() => queryClient.invalidateQueries({ queryKey: ["guestbook-entries"] })}
-            >
-              <Refresh weight="BoldDuotone" className="h-3.5 w-3.5" />
-              Refresh
-            </Button>
-
-            <Button
-              variant="outline"
-              size="sm"
-              className="rounded-full text-xs h-8 gap-1.5"
-              onClick={() => { void handleExport(); }}
-              disabled={isExporting}
-            >
-              <Download weight="BoldDuotone" className="h-3.5 w-3.5" />
-              {isExporting ? "Mengekspor..." : "Export"}
-            </Button>
-
-            <Button
-              size="sm"
-              className="rounded-full text-xs h-8 gap-1.5"
-              onClick={() => setDrawerOpen(true)}
-            >
-              <AddCircle weight="BoldDuotone" className="h-3.5 w-3.5" />
-              Tambah Tamu
-            </Button>
-          </div>
+          <Button
+            type="button"
+            size="icon"
+            className="shrink-0"
+            onClick={() => setDrawerOpen(true)}
+            aria-label="Tambah Tamu"
+          >
+            <AddCircle weight="BoldDuotone" className="h-4 w-4" />
+          </Button>
         </div>
 
         {isLoading && (
           <div className="space-y-3">
             {Array.from({ length: 4 }).map((_, i) => (
-              <Card key={i} className="rounded-2xl shadow-sm">
-                <CardContent className="p-4 space-y-3">
-                  <Skeleton className="h-4 w-36" />
-                  <Skeleton className="h-3 w-24" />
-                  <Skeleton className="h-3 w-full" />
-                </CardContent>
-              </Card>
+              <div key={i} className="rounded-lg border bg-card p-3 space-y-2">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-center gap-2.5">
+                    <Skeleton className="h-9 w-9 rounded-lg" />
+                    <Skeleton className="h-4 w-32" />
+                  </div>
+                  <Skeleton className="h-5 w-14 rounded-full" />
+                </div>
+                <Skeleton className="h-3 w-28" />
+                <Skeleton className="h-3 w-40" />
+                <div className="flex items-center justify-center gap-1 pt-1 border-t border-border">
+                  <Skeleton className="h-11 w-14 rounded-xl" />
+                  <Skeleton className="h-11 w-14 rounded-xl" />
+                  <Skeleton className="h-11 w-14 rounded-xl" />
+                </div>
+              </div>
             ))}
           </div>
         )}

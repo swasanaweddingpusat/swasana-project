@@ -8,7 +8,8 @@ import { BitrixDealSelect } from "./BitrixDealSelect";
 
 interface BitrixIdFieldProps {
   value: string;
-  onChange: (id: string) => void;
+  /** Fires with the Bitrix id and, when picked from the dropdown, the deal's phone. */
+  onChange: (id: string, deal?: { phone: string | null }) => void;
   disabled?: boolean;
 }
 

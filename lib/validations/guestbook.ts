@@ -1,5 +1,33 @@
 import { z } from 'zod';
 
+/** Descriptor persisted for every guestbook photo/proof file — path is a storage KEY, never a full URL. */
+export const fileDescriptorSchema = z.object({
+  id: z.string().nullable().optional(),
+  name_file_origin: z.string().nullable().optional(),
+  mimetype: z.string().nullable().optional(),
+  path: z.string(),
+});
+
+export type FileDescriptor = z.infer<typeof fileDescriptorSchema>;
+
+export interface ProofFiles {
+  photo?: FileDescriptor | null;
+  chat?: FileDescriptor | null;
+  lost?: FileDescriptor | null;
+  reschedule?: FileDescriptor | null;
+}
+
+const proofFilesSchema = z
+  .object({
+    photo: fileDescriptorSchema.optional(),
+    chat: fileDescriptorSchema.optional(),
+    lost: fileDescriptorSchema.optional(),
+    reschedule: fileDescriptorSchema.optional(),
+  })
+  .partial()
+  .nullable()
+  .optional();
+
 export const createGuestbookEntrySchema = z
   .object({
     visitorName: z.string().min(1, 'Nama tamu wajib diisi'),
@@ -8,7 +36,7 @@ export const createGuestbookEntrySchema = z
     bitrixContactId: z.string().optional().nullable(),
     bitrixName: z.string().optional().nullable(),
     bitrixSourceInfo: z.string().optional().nullable(),
-    visitorPhotoUrl: z.string().optional().nullable(),
+    visitorPhoto: z.string().nullable().optional(),
     interactionType: z.enum(['client_visit', 'online_meeting', 'jemput_bola']),
     onlineMedium: z.enum(['zoom', 'google_meet', 'whatsapp_call', 'microsoft_teams', 'other']).optional().nullable(),
     meetingUrl: z.string().optional().nullable(),
@@ -21,14 +49,27 @@ export const createGuestbookEntrySchema = z
     visitStatus: z.enum(['deal', 'in_progress', 'pending', 'to_be_discuss', 'lost']).optional().nullable(),
     sourceOfInformationId: z.string().optional().nullable(),
     packageId: z.string().optional().nullable(),
-    proofPhotoUrl: z.string().optional().nullable(),
-    proofChatUrl: z.string().optional().nullable(),
-    proofLostUrl: z.string().optional().nullable(),
-    proofRescheduleUrl: z.string().optional().nullable(),
+    proofFiles: proofFilesSchema,
     commitVisitDate: z.string().optional().nullable(),
     commitPayDate: z.string().optional().nullable(),
   })
   .superRefine((val, ctx) => {
+    if (!val.visitorPhoto) {
+      ctx.addIssue({
+        path: ['visitorPhoto'],
+        code: z.ZodIssueCode.custom,
+        message: 'Foto tamu wajib diupload',
+      });
+    }
+
+    if (!val.proofFiles?.photo) {
+      ctx.addIssue({
+        path: ['proofFiles', 'photo'],
+        code: z.ZodIssueCode.custom,
+        message: 'Bukti Foto Visit wajib diupload',
+      });
+    }
+
     if (val.interactionType === 'online_meeting') {
       if (!val.onlineMedium) {
         ctx.addIssue({
@@ -80,7 +121,7 @@ export const updateGuestbookEntrySchema = z.object({
   bitrixContactId: z.string().optional().nullable(),
   bitrixName: z.string().optional().nullable(),
   bitrixSourceInfo: z.string().optional().nullable(),
-  visitorPhotoUrl: z.string().optional().nullable(),
+  visitorPhoto: z.string().nullable().optional(),
   interactionType: z.enum(['client_visit', 'online_meeting', 'jemput_bola']).optional(),
   onlineMedium: z.enum(['zoom', 'google_meet', 'whatsapp_call', 'microsoft_teams', 'other']).optional().nullable(),
   meetingUrl: z.string().optional().nullable(),
@@ -90,10 +131,7 @@ export const updateGuestbookEntrySchema = z.object({
   venueId: z.string().optional().nullable(),
   checkInAt: z.string().optional().nullable(),
   checkOutAt: z.string().optional().nullable(),
-  proofPhotoUrl: z.string().optional().nullable(),
-  proofChatUrl: z.string().optional().nullable(),
-  proofLostUrl: z.string().optional().nullable(),
-  proofRescheduleUrl: z.string().optional().nullable(),
+  proofFiles: proofFilesSchema,
   commitVisitDate: z.string().optional().nullable(),
   commitPayDate: z.string().optional().nullable(),
 });

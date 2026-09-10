@@ -20,6 +20,8 @@ import {
   Gift,
 } from "@solar-icons/react";
 import type { GuestbookEntryItem } from "@/lib/queries/guestbookEntries";
+import type { ProofFiles } from "@/lib/validations/guestbook";
+import { resolveGuestbookPhotoUrl } from "./photo-url";
 
 interface GuestbookDetailDrawerProps {
   open: boolean;
@@ -49,14 +51,6 @@ const ONLINE_MEDIUM_LABELS: Record<string, string> = {
   microsoft_teams: "Microsoft Teams",
   other: "Lainnya",
 };
-
-function resolvePhotoUrl(key: string | null | undefined): string | null {
-  if (!key) return null;
-  if (key.startsWith("http")) return key;
-  const base = process.env.NEXT_PUBLIC_S3_PUBLIC_URL;
-  if (!base) return null;
-  return `${base}/${key}`;
-}
 
 function formatDateTime(date: Date | string | null | undefined): string {
   if (!date) return "—";
@@ -123,11 +117,12 @@ export function GuestbookDetailDrawer({
       e.phoneNumber === entry.phoneNumber
   );
   const totalVisit = matchingEntries.length + 1;
-  const visitorPhoto = resolvePhotoUrl(entry.visitorPhotoUrl);
-  const proofChat = resolvePhotoUrl(entry.proofChatUrl);
-  const proofPhoto = resolvePhotoUrl(entry.proofPhotoUrl);
-  const proofLost = resolvePhotoUrl(entry.proofLostUrl);
-  const proofReschedule = resolvePhotoUrl(entry.proofRescheduleUrl);
+  const proofFiles = (entry.proofFiles ?? null) as ProofFiles | null;
+  const visitorPhoto = resolveGuestbookPhotoUrl(entry.visitorPhoto);
+  const proofChat = resolveGuestbookPhotoUrl(proofFiles?.chat?.path);
+  const proofPhoto = resolveGuestbookPhotoUrl(proofFiles?.photo?.path);
+  const proofLost = resolveGuestbookPhotoUrl(proofFiles?.lost?.path);
+  const proofReschedule = resolveGuestbookPhotoUrl(proofFiles?.reschedule?.path);
 
   return (
     <Drawer
