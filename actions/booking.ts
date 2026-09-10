@@ -19,6 +19,7 @@ import { canAccessBooking } from "@/lib/access-control";
 import { generateEmaterai } from "@/lib/peruri";
 import { computeFullPrice, calcFinalFromFullPrice } from "@/lib/package-prices";
 import { getTermAllocatedMap } from "@/lib/queries/ledger";
+import { toDateOnly } from "@/lib/utils";
 import { z } from "zod";
 
 export async function createBooking(data: unknown) {
@@ -1139,7 +1140,7 @@ export async function updateBookingClientInfo(data: unknown): Promise<{ success:
   const parsed = updateBookingClientInfoSchema.safeParse(data);
   if (!parsed.success) return { success: false, error: parsed.error.issues[0]?.message ?? "Validasi gagal." };
 
-  const { id, customerName, contactNumbers, contactEmailCpp, contactEmailCpw, contactIdTypeCpp, contactIdTypeCpw, contactNikCpp, contactNikCpw, contactCppAddress, contactCpwAddress, contactBitrixId, salesId, sourceOfInformationId, sourceOfInformationDetail } = parsed.data;
+  const { id, customerName, contactNumbers, contactEmailCpp, contactEmailCpw, contactIdTypeCpp, contactIdTypeCpw, contactNikCpp, contactNikCpw, contactCppAddress, contactCpwAddress, contactBitrixId, salesId, sourceOfInformationId, sourceOfInformationDetail, createdAt: dealingDateInput } = parsed.data;
 
   if (!session!.user.profileId) return { success: false, error: "Sesi tidak valid, silakan login ulang." };
   const scope = session!.user.dataScope ?? "own";
@@ -1147,12 +1148,24 @@ export async function updateBookingClientInfo(data: unknown): Promise<{ success:
     return { success: false, error: "Anda tidak memiliki akses ke booking ini." };
   }
 
+  // Dealing date override is gated separately (super-admin only by default) — silently
+  // dropped if the caller lacks the permission, even if sent in the payload.
+  const canEditDealingDate = await hasPermission(session!.user.roleId, "booking", "dealing-date", session!.user.isSuperAdmin);
+
   try {
     const booking = await db.booking.findUnique({
       where: { id },
-      select: { customerId: true, snapshotFrozenAt: true, snapCustomer: { select: { name: true, mobileNumber: true } } },
+      select: { customerId: true, snapshotFrozenAt: true, createdAt: true, snapCustomer: { select: { name: true, mobileNumber: true } } },
     });
     if (!booking) return { success: false, error: "Booking tidak ditemukan." };
+
+    // Only counts as a real change (and gets logged) when it actually differs
+    // from the current value — the edit form always resubmits the current
+    // dealing date on every Step-1 save, even when unrelated fields change.
+    const newDealingDate =
+      canEditDealingDate && dealingDateInput && dealingDateInput !== toDateOnly(booking.createdAt)
+        ? new Date(`${dealingDateInput}T00:00:00.000Z`)
+        : undefined;
 
     const contactDisplay = serializeContactNumbersToDisplay(contactNumbers ?? "");
     const contactArray = parseContactNumbersToArray(contactNumbers ?? "");
@@ -1168,6 +1181,7 @@ export async function updateBookingClientInfo(data: unknown): Promise<{ success:
           sourceOfInformationId: sourceOfInformationId ?? undefined,
           sourceOfInformationDetail: sourceOfInformationDetail ?? undefined,
           ...(salesId != null ? { salesId } : {}),
+          ...(newDealingDate && { createdAt: newDealingDate }),
         },
       }),
       ...(skipSnapCustomerWrite
@@ -1226,8 +1240,11 @@ export async function updateBookingClientInfo(data: unknown): Promise<{ success:
       changes: {
         scope: "client-info-only",
         customerName,
+        ...(newDealingDate && { createdAt: { from: booking.createdAt.toISOString(), to: newDealingDate.toISOString() } }),
       },
-      description: `Updated client info for booking ${id}`,
+      description: newDealingDate
+        ? `Updated client info for booking ${id} (tanggal dealing diubah)`
+        : `Updated client info for booking ${id}`,
     });
 
     revalidateTag("bookings", "max");

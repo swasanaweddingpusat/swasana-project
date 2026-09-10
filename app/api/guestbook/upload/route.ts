@@ -1,6 +1,6 @@
 import { requirePermissionForRoute } from "@/lib/permissions";
 import { mutationLimiter, rateLimitResponse } from "@/lib/rate-limit";
-import { uploadToStorage, generateStorageKey } from "@/lib/storage";
+import { uploadToStorage, randomId12 } from "@/lib/storage";
 import { compressToWebp } from "@/lib/image";
 
 const ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"] as const;
@@ -34,12 +34,14 @@ export async function POST(req: Request): Promise<Response> {
 
     const raw = Buffer.from(await file.arrayBuffer());
     const compressed = await compressToWebp(raw);
-    const key = generateStorageKey("guestbook", "webp");
-    await uploadToStorage(compressed, key, "image/webp");
+    const id = randomId12();
+    const path = `guestbook/${id}.webp`;
+    await uploadToStorage(compressed, path, "image/webp");
 
-    return Response.json({ key });
+    return Response.json({ id, name_file_origin: file.name, mimetype: "image/webp", path });
   } catch (err) {
     console.error("[POST /api/guestbook/upload]", err);
-    return Response.json({ error: "Gagal upload foto." }, { status: 500 });
+    const detail = err instanceof Error ? err.message : "Unknown error";
+    return Response.json({ error: `Gagal upload foto: ${detail}` }, { status: 500 });
   }
 }
