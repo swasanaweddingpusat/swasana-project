@@ -48,8 +48,8 @@ export function GuestbookFilterDrawer({
   onReset,
 }: GuestbookFilterDrawerProps) {
   return (
-    <Drawer isOpen={open} onClose={onClose} title="Filter Guestbook" maxWidth="sm:max-w-full">
-      <div className="flex flex-col h-full max-w-md w-full mx-auto">
+    <Drawer isOpen={open} onClose={onClose} title="Filter Guestbook" maxWidth="sm:max-w-sm">
+      <div className="flex flex-col h-full">
         <div className="flex-1 overflow-y-auto space-y-5 pb-4">
           <div className="space-y-1.5">
             <Label className="text-sm font-medium">Cari</Label>

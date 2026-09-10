@@ -41,7 +41,8 @@ import {
 } from "@solar-icons/react";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
-import { cn } from "@/lib/utils";
+import { cn, formatRupiah } from "@/lib/utils";
+import { computeFullPrice } from "@/lib/package-prices";
 import { useGuestbookEntries, useDeleteGuestbookEntry } from "@/hooks/use-guestbook";
 import { useVenues } from "@/hooks/use-venues";
 import { useSalesUsers } from "@/hooks/use-sales-users";
@@ -82,6 +83,12 @@ function formatTime(dateStr: string | Date): string {
 function todayRange(): DateRange {
   const today = new Date();
   return { from: today, to: today };
+}
+
+function getPackagePrice(pkg: NonNullable<GuestbookEntryItem["package"]>): number {
+  if (pkg.sellingPrice > 0) return pkg.sellingPrice;
+  const base = (pkg.categoryPrices ?? []).reduce((sum, c) => sum + c.basePrice, 0);
+  return computeFullPrice([{ basePrice: base }], pkg.margin ?? 0);
 }
 
 function SkeletonRows() {
@@ -156,7 +163,9 @@ function MobileCard({
         {entry.package?.packageName && (
           <>
             <span aria-hidden="true">·</span>
-            <span className="text-foreground/70 truncate">{entry.package.packageName}</span>
+            <span className="text-foreground/70 truncate">
+              {entry.package.packageName} ({entry.package.pax} pax, {formatRupiah(getPackagePrice(entry.package))})
+            </span>
           </>
         )}
         {sourceLabel && (
@@ -171,7 +180,7 @@ function MobileCard({
       <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
         <UserCircle weight="BoldDuotone" className="h-3 w-3 shrink-0" />
         <span className="truncate">
-          Bertemu {entry.host?.fullName ?? "-"}
+          PIC {entry.host?.fullName ?? "-"}
           {entry.createdBy?.fullName && ` · Dicatat ${entry.createdBy.fullName}`}
         </span>
       </div>
@@ -419,7 +428,7 @@ function GuestbookClientInner() {
                   <TableHead>Nama Tamu</TableHead>
                   <TableHead>Event</TableHead>
                   <TableHead>Venue</TableHead>
-                  <TableHead>Bertemu</TableHead>
+                  <TableHead>PIC</TableHead>
                   <TableHead>In / Out</TableHead>
                   <TableHead>Sumber</TableHead>
                   <TableHead>Status</TableHead>
@@ -444,7 +453,7 @@ function GuestbookClientInner() {
                     <TableHead>Nama Tamu</TableHead>
                     <TableHead>Event</TableHead>
                     <TableHead>Venue</TableHead>
-                    <TableHead>Bertemu</TableHead>
+                    <TableHead>PIC</TableHead>
                     <TableHead>In / Out</TableHead>
                     <TableHead>Sumber</TableHead>
                     <TableHead>Status</TableHead>
@@ -494,7 +503,7 @@ function GuestbookClientInner() {
                             <span>{entry.venue?.name ?? "-"}</span>
                             {entry.package?.packageName && (
                               <Badge variant="secondary" className="rounded-full text-[10px] font-normal">
-                                {entry.package.packageName}
+                                {entry.package.packageName} · {entry.package.pax} pax · {formatRupiah(getPackagePrice(entry.package))}
                               </Badge>
                             )}
                           </div>

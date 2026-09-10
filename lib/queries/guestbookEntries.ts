@@ -48,7 +48,17 @@ const guestbookEntrySelect = {
   sales: { select: { id: true, fullName: true } },
   venue: { select: { id: true, name: true } },
   sourceOfInformation: { select: { id: true, name: true } },
-  package: { select: { id: true, packageName: true, pax: true, category: true } },
+  package: {
+    select: {
+      id: true,
+      packageName: true,
+      pax: true,
+      category: true,
+      sellingPrice: true,
+      margin: true,
+      categoryPrices: { select: { basePrice: true } },
+    },
+  },
 } satisfies Prisma.GuestbookEntrySelect;
 
 type GuestbookEntryRow = Prisma.GuestbookEntryGetPayload<{ select: typeof guestbookEntrySelect }>;

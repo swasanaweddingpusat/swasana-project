@@ -51,6 +51,7 @@ import { BitrixIdField } from "@/components/shared/BitrixIdField";
 import { PhoneInput } from "@/components/shared/PhoneInput";
 import { normalizePhoneId } from "@/lib/phone";
 import { cn, formatRupiah } from "@/lib/utils";
+import { computeFullPrice } from "@/lib/package-prices";
 import { toast } from "sonner";
 import { useCreateGuestbookEntry, useUpdateGuestbookEntry } from "@/hooks/use-guestbook";
 import { useVenues } from "@/hooks/use-venues";
@@ -72,6 +73,8 @@ type PackageOption = {
   id: string;
   packageName: string;
   pax: number;
+  sellingPrice: number;
+  margin: number;
   // basePrice datang sebagai string (Prisma Decimal di-serialize) atau number
   categoryPrices?: { basePrice: number | string }[];
 };
@@ -489,11 +492,13 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
 
   useEffect(() => {
     if (!isOpen || isEditMode || !isSelfAssignableSales || !currentUser?.profileId) return;
-    setForm((prev) =>
-      prev.hostId === currentUser.profileId
-        ? prev
-        : { ...prev, hostId: currentUser.profileId! }
-    );
+    queueMicrotask(() => {
+      setForm((prev) =>
+        prev.hostId === currentUser.profileId
+          ? prev
+          : { ...prev, hostId: currentUser.profileId! }
+      );
+    });
   }, [isOpen, isEditMode, isSelfAssignableSales, currentUser?.profileId]);
 
   const canWedding = can("booking", "view");
@@ -648,6 +653,10 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
     }
     if (!form.notes.trim()) {
       toast.error("Catatan wajib diisi");
+      return false;
+    }
+    if (!form.checkInAt) {
+      toast.error("Tanggal berkunjung wajib diisi");
       return false;
     }
     if (!form.sourceOfInformationId) {
@@ -914,18 +923,19 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1.5 sm:col-span-2">
                   <Label htmlFor="gb-checkInAt" className="text-sm font-medium">
-                    Tanggal Berkunjung
+                    Tanggal Berkunjung <span className="text-destructive">*</span>
                   </Label>
                   <Input
                     id="gb-checkInAt"
                     type="datetime-local"
+                    required
                     value={form.checkInAt}
                     onChange={(e) => setField("checkInAt", e.target.value)}
                     className="rounded-xl"
                   />
                 </div>
                 {isEditMode && (
-                  <div className="space-y-1.5">
+                  <div className="space-y-1.5 sm:col-span-2">
                     <Label htmlFor="gb-checkOutAt" className="text-sm font-medium">
                       Tanggal Checkout
                     </Label>
@@ -1011,10 +1021,11 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
                   <Label className="text-sm font-medium">Paket</Label>
                   <SearchableSelect
                     options={packages.map((p) => {
-                      const price = (p.categoryPrices ?? []).reduce(
+                      const base = (p.categoryPrices ?? []).reduce(
                         (sum, c) => sum + Number(c.basePrice),
                         0
                       );
+                      const price = computeFullPrice([{ basePrice: base }], p.margin ?? 0, p.sellingPrice);
                       const paxLabel = p.pax ? ` — ${p.pax} pax` : "";
                       const priceLabel = price > 0 ? ` — ${formatRupiah(price)}` : "";
                       return {
