@@ -204,6 +204,9 @@ export const updateBookingClientInfoSchema = z.object({
   salesId: z.string().optional().nullable(),
   sourceOfInformationId: z.string().optional().nullable(),
   sourceOfInformationDetail: z.string().optional().nullable(),
+  // Dealing date override — gated by booking:dealing-date permission (super-admin only
+  // by default). Ignored server-side if the caller lacks the permission.
+  createdAt: z.string().optional(),
 }).superRefine((data, ctx) => {
   const nikCpp = data.contactNikCpp ?? "";
   if (nikCpp !== "") {

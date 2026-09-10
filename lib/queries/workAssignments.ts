@@ -15,9 +15,12 @@ export async function getWorkAssignments(params?: {
     select: {
       id: true, profileId: true, workLocationId: true, workShiftId: true,
       isDefault: true, offdayDays: true, effectiveDate: true, endDate: true,
+      isMobileAttendance: true, clockInLocationId: true, clockOutLocationId: true,
       profile: { select: { id: true, fullName: true, avatarUrl: true, employeeNumber: true } },
       workLocation: { select: { id: true, name: true } },
       workShift: { select: { id: true, name: true, startTime: true, endTime: true } },
+      clockInLocation: { select: { id: true, name: true } },
+      clockOutLocation: { select: { id: true, name: true } },
     },
     orderBy: { createdAt: "desc" },
     take: 500,

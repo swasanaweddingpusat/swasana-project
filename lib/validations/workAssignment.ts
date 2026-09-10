@@ -8,6 +8,9 @@ export const createWorkAssignmentSchema = z.object({
   offdayDays: z.array(z.number().int().min(1).max(7)).default([]),
   effectiveDate: z.coerce.date(),
   endDate: z.coerce.date().optional(),
+  isMobileAttendance: z.boolean().default(false),
+  clockInLocationId: z.string().optional(),
+  clockOutLocationId: z.string().optional(),
 });
 
 export const updateWorkAssignmentSchema = createWorkAssignmentSchema.omit({ profileId: true }).partial();
@@ -20,6 +23,9 @@ export const bulkCreateWorkAssignmentSchema = z.object({
   offdayDays: z.array(z.number().int().min(1).max(7)).default([]),
   effectiveDate: z.coerce.date(),
   endDate: z.coerce.date().optional(),
+  isMobileAttendance: z.boolean().default(false),
+  clockInLocationId: z.string().optional(),
+  clockOutLocationId: z.string().optional(),
 });
 
 export type CreateWorkAssignmentInput = z.infer<typeof createWorkAssignmentSchema>;

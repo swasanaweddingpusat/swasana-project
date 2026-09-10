@@ -3,7 +3,7 @@ import { format } from "date-fns";
 import { id as localeId } from "date-fns/locale";
 import { ShieldCross } from "@solar-icons/react";
 import { cn } from "@/lib/utils";
-import { getDashboardData, resolveDealingRange, resolveEventRange } from "@/lib/queries/dashboard";
+import { getDashboardData, resolveDealingRange, resolveEventRange, toIsoDay } from "@/lib/queries/dashboard";
 import { getDashboardCalendarEvents } from "@/lib/queries/calendar-events";
 import { getTopSalesByRecentBooking } from "@/lib/queries/salesPerformance";
 import { getActiveBanners } from "@/lib/queries/banners";
@@ -31,8 +31,18 @@ export default async function DashboardPage({
   const calendarMonth = now.getMonth();
 
   // Dealing-date (createdAt) range — drives every stat/performance section
-  // below. Absent `dealFrom`/`dealTo` → no range (all-time, whole DB).
-  const { range, fromDay, toDay } = resolveDealingRange(params.dealFrom, params.dealTo);
+  // below. Defaults to the CURRENT calendar month when neither `dealFrom` nor
+  // `dealTo` is present in the URL — matches `DashboardFilterDrawer`'s own
+  // default so the initial server render and the client refetch agree. Once
+  // the user picks either param explicitly, that value wins as-is (single-day
+  // fallback logic stays inside `resolveDealingRange`).
+  const hasExplicitDealParam = Boolean(params.dealFrom || params.dealTo);
+  const defaultDealFrom = toIsoDay(new Date(now.getFullYear(), now.getMonth(), 1));
+  const defaultDealTo = toIsoDay(new Date(now.getFullYear(), now.getMonth() + 1, 0));
+  const { range, fromDay, toDay } = resolveDealingRange(
+    hasExplicitDealParam ? params.dealFrom : defaultDealFrom,
+    hasExplicitDealParam ? params.dealTo : defaultDealTo,
+  );
 
   // Event-date (eventDate) range — composes via AND with the dealing-date
   // range above, scoped to the SAME three sections (stats, sales performance,
@@ -66,8 +76,10 @@ export default async function DashboardPage({
 
   const topSalesData = await getTopSalesByRecentBooking(undefined, range, eventRange);
 
-  // No filter picked → whole-database totals. Otherwise show the picked range
-  // (display uses the inclusive `toDay`, not the exclusive `to` upper bound).
+  // `fromDay` is always populated now (defaults to the current month above),
+  // so this only falls back to "seluruh data" in the unreachable edge case
+  // where `resolveDealingRange` still returns an empty day-string. Display
+  // uses the inclusive `toDay`, not the exclusive `to` upper bound.
   let subtitle = "seluruh data";
   if (fromDay) {
     const fromDisplay = new Date(`${fromDay}T00:00:00`);
