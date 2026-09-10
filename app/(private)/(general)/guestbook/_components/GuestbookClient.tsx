@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import Image from "next/image";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { format } from "date-fns";
 import { id as idLocale } from "date-fns/locale";
 import type { DateRange } from "react-day-picker";
@@ -45,6 +46,7 @@ import {
   UsersGroupRounded,
   CheckCircle,
   CalendarMinimalistic,
+  Download,
   Eye,
   Pen,
   Refresh,
@@ -89,40 +91,29 @@ function formatTime(dateStr: string | Date): string {
   });
 }
 
-function isToday(dateStr: string | Date): boolean {
-  const d = new Date(dateStr);
-  const now = new Date();
+function isSameDay(a: Date, b: Date): boolean {
   return (
-    d.getFullYear() === now.getFullYear() &&
-    d.getMonth() === now.getMonth() &&
-    d.getDate() === now.getDate()
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate()
   );
 }
 
-function StatCard({
-  icon,
-  label,
-  value,
-  iconClass,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: number;
-  iconClass?: string;
-}) {
-  return (
-    <Card className="rounded-2xl shadow-sm">
-      <CardContent className="p-5 flex items-center gap-4">
-        <div className={`p-3 rounded-full bg-secondary ${iconClass ?? ""}`}>
-          {icon}
-        </div>
-        <div>
-          <p className="text-xs text-muted-foreground font-medium">{label}</p>
-          <p className="text-2xl font-heading font-bold text-foreground">{value}</p>
-        </div>
-      </CardContent>
-    </Card>
-  );
+function todayRange(): DateRange {
+  const today = new Date();
+  return { from: today, to: today };
+}
+
+function formatDateRangeLabel(range: DateRange | undefined): string {
+  if (!range?.from) return "Semua Tanggal";
+  const today = new Date();
+  if (isSameDay(range.from, today) && (!range.to || isSameDay(range.to, today))) {
+    return "Hari Ini";
+  }
+  if (range.to && !isSameDay(range.from, range.to)) {
+    return `${format(range.from, "dd MMM yyyy", { locale: idLocale })} — ${format(range.to, "dd MMM yyyy", { locale: idLocale })}`;
+  }
+  return format(range.from, "dd MMM yyyy", { locale: idLocale });
 }
 
 function SkeletonRows() {
@@ -133,8 +124,7 @@ function SkeletonRows() {
           <TableCell><Skeleton className="h-4 w-32" /></TableCell>
           <TableCell><Skeleton className="h-4 w-24" /></TableCell>
           <TableCell><Skeleton className="h-4 w-24" /></TableCell>
-          <TableCell><Skeleton className="h-4 w-28" /></TableCell>
-          <TableCell><Skeleton className="h-4 w-28" /></TableCell>
+          <TableCell><Skeleton className="h-8 w-28" /></TableCell>
           <TableCell><Skeleton className="h-5 w-20 rounded-full" /></TableCell>
           <TableCell><Skeleton className="h-4 w-24" /></TableCell>
           <TableCell><Skeleton className="h-5 w-24 rounded-full" /></TableCell>
@@ -219,20 +209,23 @@ function MobileCard({
           <p className="text-muted-foreground">Dicatat oleh</p>
           <p className="text-foreground">{entry.createdBy?.fullName ?? "—"}</p>
         </div>
-        <div>
-          <p className="text-muted-foreground">Check-in</p>
-          <p className="text-foreground">
-            {formatDate(entry.checkInAt)} {formatTime(entry.checkInAt)}
-          </p>
-        </div>
-        {entry.checkOutAt && (
-          <div>
-            <p className="text-muted-foreground">Check-out</p>
-            <p className="text-foreground">
-              {formatDate(entry.checkOutAt)} {formatTime(entry.checkOutAt)}
+        <div className="col-span-2">
+          <p className="text-muted-foreground">In / Out</p>
+          <div className="space-y-0.5 text-foreground">
+            <p className="flex items-baseline gap-1.5">
+              <span className="w-6 shrink-0 text-[10px] font-medium text-muted-foreground/60">in</span>
+              <span>{formatDate(entry.checkInAt)} {formatTime(entry.checkInAt)}</span>
+            </p>
+            <p className="flex items-baseline gap-1.5">
+              <span className="w-6 shrink-0 text-[10px] font-medium text-muted-foreground/60">out</span>
+              {entry.checkOutAt ? (
+                <span>{formatDate(entry.checkOutAt)} {formatTime(entry.checkOutAt)}</span>
+              ) : (
+                <span className="text-muted-foreground/50">—</span>
+              )}
             </p>
           </div>
-        )}
+        </div>
       </div>
 
       <div className="flex items-center gap-1 pt-1" onClick={(e) => e.stopPropagation()}>
@@ -269,14 +262,38 @@ function MobileCard({
 }
 
 export function GuestbookClient() {
+  return (
+    <Suspense>
+      <GuestbookClientInner />
+    </Suspense>
+  );
+}
+
+function GuestbookClientInner() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [selectedEntry, setSelectedEntry] = useState<GuestbookEntryItem | null>(null);
   const [confirmComplete, setConfirmComplete] = useState<GuestbookEntryItem | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<GuestbookEntryItem | null>(null);
+  const [confirmEdit, setConfirmEdit] = useState<GuestbookEntryItem | null>(null);
   const [editEntry, setEditEntry] = useState<GuestbookEntryItem | null>(null);
 
-  const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
+  const [dateRange, setDateRange] = useState<DateRange | undefined>(todayRange);
   const [filterVenueId, setFilterVenueId] = useState<string>("all");
+  const [isExporting, setIsExporting] = useState(false);
+
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const autoOpenHandled = useRef(false);
+
+  useEffect(() => {
+    if (autoOpenHandled.current) return;
+    if (searchParams.get("create") !== "1") return;
+    autoOpenHandled.current = true;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-shot auto-open from URL query, intentional
+    setDrawerOpen(true);
+    router.replace(pathname, { scroll: false });
+  }, [searchParams, router, pathname]);
 
   const queryClient = useQueryClient();
   const { data: guestbookData, isLoading } = useGuestbookEntries();
@@ -290,7 +307,13 @@ export function GuestbookClient() {
   }
 
   function handleEditClick(entry: GuestbookEntryItem) {
-    setEditEntry(entry);
+    setConfirmEdit(entry);
+  }
+
+  function handleConfirmEdit() {
+    if (!confirmEdit) return;
+    setEditEntry(confirmEdit);
+    setConfirmEdit(null);
   }
 
   async function handleConfirmComplete() {
@@ -315,8 +338,38 @@ export function GuestbookClient() {
     setConfirmDelete(null);
   }
 
-  const todayEntries = entries.filter((e) => isToday(e.checkInAt));
-  const totalToday = todayEntries.length;
+  async function handleExport(): Promise<void> {
+    setIsExporting(true);
+    try {
+      const params = new URLSearchParams();
+      if (dateRange?.from) params.set("from", format(dateRange.from, "yyyy-MM-dd"));
+      if (dateRange?.to) params.set("to", format(dateRange.to, "yyyy-MM-dd"));
+
+      const res = await fetch(`/api/guestbook/export?${params.toString()}`);
+      if (!res.ok) {
+        const msg =
+          res.status === 429
+            ? "Terlalu banyak permintaan, coba lagi sebentar."
+            : "Gagal mengekspor data guestbook.";
+        toast.error(msg);
+        return;
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `Guestbook_${format(new Date(), "yyyy-MM-dd")}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      toast.success("Export berhasil diunduh.");
+    } catch {
+      toast.error("Gagal mengekspor data guestbook.");
+    } finally {
+      setIsExporting(false);
+    }
+  }
 
   const filteredEntries = entries.filter((e) => {
     const d = new Date(e.checkInAt);
@@ -335,48 +388,18 @@ export function GuestbookClient() {
   });
 
   return (
-    <div className="flex flex-col gap-6">
-      {/* Page header */}
-      <div className="flex items-center justify-between gap-4">
-        <div>
-          <h1 className="text-xl font-heading font-bold text-foreground">Guestbook</h1>
-          <p className="text-sm text-muted-foreground">Kelola data kunjungan tamu</p>
-        </div>
-        <Button
-          className="rounded-full gap-2 shrink-0"
-          onClick={() => setDrawerOpen(true)}
-        >
-          <AddCircle weight="BoldDuotone" className="h-4 w-4" />
-          Tambah Tamu
-        </Button>
-      </div>
-
-      {/* Stats — single card */}
-      <div className="grid grid-cols-1">
-        <StatCard
-          icon={<UsersGroupRounded weight="BoldDuotone" className="h-5 w-5 text-primary" />}
-          label="Total Pengunjung Hari Ini"
-          value={totalToday}
-        />
-      </div>
-
+    <div className="flex flex-col gap-3">
       {/* Table — desktop */}
-      <Card className="rounded-2xl shadow-sm hidden sm:block">
+      <Card className="rounded-2xl shadow-sm hidden sm:block py-0">
         <CardContent className="p-0">
-          <div className="flex flex-col gap-3 px-6 py-4 border-b">
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2">
-                <h2 className="text-sm font-bold text-foreground">Riwayat Kunjungan</h2>
-                <span className="text-xs font-medium bg-secondary text-secondary-foreground px-3 py-1 rounded-full">
-                  {filteredEntries.length} tamu
-                </span>
-              </div>
-              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                <CalendarMinimalistic weight="BoldDuotone" className="h-3.5 w-3.5" />
-                <span>Filter</span>
-              </div>
+          <div className="flex flex-wrap items-center justify-between gap-3 px-6 py-4 border-b">
+            <div className="flex items-center gap-2">
+              <h2 className="text-sm font-bold text-foreground">Riwayat Kunjungan</h2>
+              <span className="text-xs font-medium bg-secondary text-secondary-foreground px-3 py-1 rounded-full">
+                {filteredEntries.length} tamu
+              </span>
             </div>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <Popover>
                 <PopoverTrigger render={
                   <button
@@ -385,11 +408,7 @@ export function GuestbookClient() {
                   >
                     <CalendarMinimalistic weight="BoldDuotone" className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                     <span className={dateRange?.from ? "text-foreground" : "text-muted-foreground"}>
-                      {dateRange?.from && dateRange?.to
-                        ? `${format(dateRange.from, "dd MMM yyyy", { locale: idLocale })} — ${format(dateRange.to, "dd MMM yyyy", { locale: idLocale })}`
-                        : dateRange?.from
-                          ? format(dateRange.from, "dd MMM yyyy", { locale: idLocale })
-                          : "Pilih rentang tanggal"}
+                      {formatDateRangeLabel(dateRange)}
                     </span>
                   </button>
                 } />
@@ -436,6 +455,26 @@ export function GuestbookClient() {
                 <Refresh weight="BoldDuotone" className="h-3.5 w-3.5" />
                 Refresh
               </Button>
+
+              <Button
+                variant="outline"
+                size="sm"
+                className="rounded-full text-xs h-8 gap-1.5"
+                onClick={() => { void handleExport(); }}
+                disabled={isExporting}
+              >
+                <Download weight="BoldDuotone" className="h-3.5 w-3.5" />
+                {isExporting ? "Mengekspor..." : "Export"}
+              </Button>
+
+              <Button
+                size="sm"
+                className="rounded-full text-xs h-8 gap-1.5"
+                onClick={() => setDrawerOpen(true)}
+              >
+                <AddCircle weight="BoldDuotone" className="h-3.5 w-3.5" />
+                Tambah Tamu
+              </Button>
             </div>
           </div>
 
@@ -446,8 +485,7 @@ export function GuestbookClient() {
                   <TableHead>Nama Tamu</TableHead>
                   <TableHead>Venue</TableHead>
                   <TableHead>Bertemu</TableHead>
-                  <TableHead>Check-in</TableHead>
-                  <TableHead>Check-out</TableHead>
+                  <TableHead>In / Out</TableHead>
                   <TableHead>Sumber</TableHead>
                   <TableHead>Paket</TableHead>
                   <TableHead>Status</TableHead>
@@ -472,8 +510,7 @@ export function GuestbookClient() {
                     <TableHead>Nama Tamu</TableHead>
                     <TableHead>Venue</TableHead>
                     <TableHead>Bertemu</TableHead>
-                    <TableHead>Check-in</TableHead>
-                    <TableHead>Check-out</TableHead>
+                    <TableHead>In / Out</TableHead>
                     <TableHead>Sumber</TableHead>
                     <TableHead>Paket</TableHead>
                     <TableHead>Status</TableHead>
@@ -518,22 +555,30 @@ export function GuestbookClient() {
                           {entry.host?.fullName ?? "-"}
                         </TableCell>
                         <TableCell className="text-muted-foreground whitespace-nowrap">
-                          {formatDate(entry.checkInAt)}{" "}
-                          <span className="text-foreground font-medium">
-                            {formatTime(entry.checkInAt)}
-                          </span>
-                        </TableCell>
-                        <TableCell className="text-muted-foreground whitespace-nowrap">
-                          {entry.checkOutAt ? (
-                            <>
-                              {formatDate(entry.checkOutAt)}{" "}
-                              <span className="text-foreground font-medium">
-                                {formatTime(entry.checkOutAt)}
+                          <div className="flex flex-col gap-1">
+                            <span className="flex items-baseline gap-1.5">
+                              <span className="w-6 shrink-0 text-[10px] font-medium text-muted-foreground/60">in</span>
+                              <span>
+                                {formatDate(entry.checkInAt)}{" "}
+                                <span className="text-foreground font-medium">
+                                  {formatTime(entry.checkInAt)}
+                                </span>
                               </span>
-                            </>
-                          ) : (
-                            <span className="text-muted-foreground/50">—</span>
-                          )}
+                            </span>
+                            <span className="flex items-baseline gap-1.5">
+                              <span className="w-6 shrink-0 text-[10px] font-medium text-muted-foreground/60">out</span>
+                              {entry.checkOutAt ? (
+                                <span>
+                                  {formatDate(entry.checkOutAt)}{" "}
+                                  <span className="text-foreground font-medium">
+                                    {formatTime(entry.checkOutAt)}
+                                  </span>
+                                </span>
+                              ) : (
+                                <span className="text-muted-foreground/50">—</span>
+                              )}
+                            </span>
+                          </div>
                         </TableCell>
                         <TableCell className="text-muted-foreground whitespace-nowrap">
                           {sourceLabel ?? <span className="text-muted-foreground/50">—</span>}
@@ -614,11 +659,7 @@ export function GuestbookClient() {
               >
                 <CalendarMinimalistic weight="BoldDuotone" className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                 <span className={dateRange?.from ? "text-foreground" : "text-muted-foreground"}>
-                  {dateRange?.from && dateRange?.to
-                    ? `${format(dateRange.from, "dd MMM yyyy", { locale: idLocale })} — ${format(dateRange.to, "dd MMM yyyy", { locale: idLocale })}`
-                    : dateRange?.from
-                      ? format(dateRange.from, "dd MMM yyyy", { locale: idLocale })
-                      : "Pilih rentang tanggal"}
+                  {formatDateRangeLabel(dateRange)}
                 </span>
               </button>
             } />
@@ -664,6 +705,26 @@ export function GuestbookClient() {
             >
               <Refresh weight="BoldDuotone" className="h-3.5 w-3.5" />
               Refresh
+            </Button>
+
+            <Button
+              variant="outline"
+              size="sm"
+              className="rounded-full text-xs h-8 gap-1.5"
+              onClick={() => { void handleExport(); }}
+              disabled={isExporting}
+            >
+              <Download weight="BoldDuotone" className="h-3.5 w-3.5" />
+              {isExporting ? "Mengekspor..." : "Export"}
+            </Button>
+
+            <Button
+              size="sm"
+              className="rounded-full text-xs h-8 gap-1.5"
+              onClick={() => setDrawerOpen(true)}
+            >
+              <AddCircle weight="BoldDuotone" className="h-3.5 w-3.5" />
+              Tambah Tamu
             </Button>
           </div>
         </div>
@@ -764,6 +825,29 @@ export function GuestbookClient() {
               onClick={handleConfirmDelete}
             >
               Ya, Hapus
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Edit confirmation */}
+      <AlertDialog
+        open={confirmEdit !== null}
+        onOpenChange={(open) => {
+          if (!open) setConfirmEdit(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Edit data tamu?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Kamu akan mengubah data kunjungan tamu ini.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="rounded-full">Batal</AlertDialogCancel>
+            <AlertDialogAction className="rounded-full" onClick={handleConfirmEdit}>
+              Edit
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

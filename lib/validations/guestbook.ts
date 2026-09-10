@@ -89,6 +89,7 @@ export const updateGuestbookEntrySchema = z.object({
   hostId: z.string().optional().nullable(),
   venueId: z.string().optional().nullable(),
   checkInAt: z.string().optional().nullable(),
+  checkOutAt: z.string().optional().nullable(),
   proofPhotoUrl: z.string().optional().nullable(),
   proofChatUrl: z.string().optional().nullable(),
   proofLostUrl: z.string().optional().nullable(),
