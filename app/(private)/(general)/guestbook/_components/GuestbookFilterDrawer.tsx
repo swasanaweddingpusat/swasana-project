@@ -15,6 +15,20 @@ import {
 } from "@/components/ui/select";
 import { Calendar } from "@/components/ui/calendar";
 import { Magnifer } from "@solar-icons/react";
+import type { GuestbookCategoryFilter } from "@/lib/queries/guestbookEntries";
+import type { GuestInteractionType } from "@prisma/client";
+
+const EVENT_CATEGORY_OPTIONS = [
+  { value: "WEDDINGS", label: "Wedding" },
+  { value: "MICE", label: "MICE" },
+  { value: "no_package", label: "Belum Ada Paket" },
+] as const;
+
+const INTERACTION_TYPE_OPTIONS = [
+  { value: "client_visit", label: "Kunjungan Client" },
+  { value: "online_meeting", label: "Online Meeting" },
+  { value: "jemput_bola", label: "Jemput Bola" },
+] as const;
 
 interface GuestbookFilterDrawerProps {
   open: boolean;
@@ -27,6 +41,10 @@ interface GuestbookFilterDrawerProps {
   onVenueIdChange: (value: string) => void;
   hostId: string;
   onHostIdChange: (value: string) => void;
+  category: "all" | GuestbookCategoryFilter;
+  onCategoryChange: (value: "all" | GuestbookCategoryFilter) => void;
+  interactionType: "all" | GuestInteractionType;
+  onInteractionTypeChange: (value: "all" | GuestInteractionType) => void;
   venues: { id: string; name: string }[];
   salesOptions: { id: string; name: string }[];
   onReset: () => void;
@@ -43,6 +61,10 @@ export function GuestbookFilterDrawer({
   onVenueIdChange,
   hostId,
   onHostIdChange,
+  category,
+  onCategoryChange,
+  interactionType,
+  onInteractionTypeChange,
   venues,
   salesOptions,
   onReset,
@@ -105,6 +127,42 @@ export function GuestbookFilterDrawer({
                 <SelectItem value="all">Semua Venue</SelectItem>
                 {venues.map((v) => (
                   <SelectItem key={v.id} value={v.id}>{v.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-sm font-medium">Event</Label>
+            <Select
+              value={category}
+              onValueChange={(v) => onCategoryChange(v as "all" | GuestbookCategoryFilter)}
+            >
+              <SelectTrigger className="rounded-xl w-full">
+                <SelectValue placeholder="Semua Event" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Semua Event</SelectItem>
+                {EVENT_CATEGORY_OPTIONS.map((opt) => (
+                  <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-sm font-medium">Jenis Interaksi</Label>
+            <Select
+              value={interactionType}
+              onValueChange={(v) => onInteractionTypeChange(v as "all" | GuestInteractionType)}
+            >
+              <SelectTrigger className="rounded-xl w-full">
+                <SelectValue placeholder="Semua Interaksi" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Semua Interaksi</SelectItem>
+                {INTERACTION_TYPE_OPTIONS.map((opt) => (
+                  <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
                 ))}
               </SelectContent>
             </Select>

@@ -46,11 +46,13 @@ import { computeFullPrice } from "@/lib/package-prices";
 import { useGuestbookEntries, useDeleteGuestbookEntry } from "@/hooks/use-guestbook";
 import { useVenues } from "@/hooks/use-venues";
 import { useSalesUsers } from "@/hooks/use-sales-users";
-import type { GuestbookEntryItem } from "@/lib/queries/guestbookEntries";
+import type { GuestbookEntryItem, GuestbookCategoryFilter } from "@/lib/queries/guestbookEntries";
+import type { GuestInteractionType } from "@prisma/client";
 import { GuestbookDrawer } from "./GuestbookDrawer";
 import { GuestbookDetailDrawer } from "./GuestbookDetailDrawer";
 import { GuestbookFilterDrawer } from "./GuestbookFilterDrawer";
 import { resolveGuestbookPhotoUrl } from "./photo-url";
+import { PaginationBar } from "@/components/shared/pagination-bar";
 
 const STATUS_LABELS: Record<string, { label: string; className: string }> = {
   deal: { label: "Deal", className: "bg-green-100 text-green-700 border-0" },
@@ -244,7 +246,11 @@ function GuestbookClientInner() {
   const [dateRange, setDateRange] = useState<DateRange | undefined>(todayRange);
   const [filterVenueId, setFilterVenueId] = useState<string>("all");
   const [filterHostId, setFilterHostId] = useState<string>("all");
+  const [filterCategory, setFilterCategory] = useState<"all" | GuestbookCategoryFilter>("all");
+  const [filterInteractionType, setFilterInteractionType] = useState<"all" | GuestInteractionType>("all");
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
   const [isExporting, setIsExporting] = useState(false);
   const [filterOpen, setFilterOpen] = useState(false);
 
@@ -261,9 +267,34 @@ function GuestbookClientInner() {
     router.replace(pathname, { scroll: false });
   }, [searchParams, router, pathname]);
 
+  // Debounce search → debouncedSearch (mirrors vendors-table.tsx), resets page to 1.
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setDebouncedSearch(search);
+      setCurrentPage(1);
+    }, 400);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  // Any other filter change also resets page to 1.
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [dateRange, filterVenueId, filterHostId, filterCategory, filterInteractionType]);
+
   const queryClient = useQueryClient();
-  const { data: guestbookData, isLoading } = useGuestbookEntries();
+  const { data: guestbookData, isLoading } = useGuestbookEntries({
+    page: currentPage,
+    pageSize: 50,
+    search: debouncedSearch,
+    venueId: filterVenueId !== "all" ? filterVenueId : undefined,
+    hostId: filterHostId !== "all" ? filterHostId : undefined,
+    dateFrom: dateRange?.from ? format(dateRange.from, "yyyy-MM-dd") : undefined,
+    dateTo: dateRange?.to ? format(dateRange.to, "yyyy-MM-dd") : undefined,
+    category: filterCategory !== "all" ? filterCategory : undefined,
+    interactionType: filterInteractionType !== "all" ? filterInteractionType : undefined,
+  });
   const entries = guestbookData?.data ?? [];
+  const totalPages = Math.max(1, Math.ceil((guestbookData?.total ?? 0) / 50));
   const { data: venues = [] } = useVenues();
   const { users: salesUsers } = useSalesUsers();
   const salesOptions = salesUsers.map((u) => ({ id: u.id, name: u.fullName ?? u.id }));
@@ -296,6 +327,11 @@ function GuestbookClientInner() {
       const params = new URLSearchParams();
       if (dateRange?.from) params.set("from", format(dateRange.from, "yyyy-MM-dd"));
       if (dateRange?.to) params.set("to", format(dateRange.to, "yyyy-MM-dd"));
+      if (debouncedSearch) params.set("search", debouncedSearch);
+      if (filterVenueId !== "all") params.set("venueId", filterVenueId);
+      if (filterHostId !== "all") params.set("hostId", filterHostId);
+      if (filterCategory !== "all") params.set("category", filterCategory);
+      if (filterInteractionType !== "all") params.set("interactionType", filterInteractionType);
 
       const res = await fetch(`/api/guestbook/export?${params.toString()}`);
       if (!res.ok) {
@@ -323,42 +359,22 @@ function GuestbookClientInner() {
     }
   }
 
-  const filteredEntries = entries.filter((e) => {
-    const d = new Date(e.checkInAt);
-    if (dateRange?.from) {
-      const from = new Date(dateRange.from);
-      from.setHours(0, 0, 0, 0);
-      if (d < from) return false;
-    }
-    if (dateRange?.to) {
-      const to = new Date(dateRange.to);
-      to.setHours(23, 59, 59, 999);
-      if (d > to) return false;
-    }
-    if (filterVenueId !== "all" && e.venueId !== filterVenueId) return false;
-    if (filterHostId !== "all" && e.host?.id !== filterHostId) return false;
-    const q = search.trim().toLowerCase();
-    if (q) {
-      const haystack = [e.visitorName, e.guestCode, e.host?.fullName]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
-      if (!haystack.includes(q)) return false;
-    }
-    return true;
-  });
-
   const activeFilterCount =
     (dateRange?.from ? 1 : 0) +
     (filterVenueId !== "all" ? 1 : 0) +
     (filterHostId !== "all" ? 1 : 0) +
-    (search.trim() !== "" ? 1 : 0);
+    (search.trim() !== "" ? 1 : 0) +
+    (filterCategory !== "all" ? 1 : 0) +
+    (filterInteractionType !== "all" ? 1 : 0);
 
   function resetFilters() {
     setDateRange(todayRange());
     setFilterVenueId("all");
     setFilterHostId("all");
+    setFilterCategory("all");
+    setFilterInteractionType("all");
     setSearch("");
+    setCurrentPage(1);
   }
 
   return (
@@ -370,7 +386,7 @@ function GuestbookClientInner() {
             <div className="flex items-center gap-2">
               <h2 className="text-sm font-bold text-foreground">Riwayat Kunjungan</h2>
               <span className="text-xs font-medium bg-secondary text-secondary-foreground px-3 py-1 rounded-full">
-                {filteredEntries.length} tamu
+                {guestbookData?.total ?? 0} tamu
               </span>
             </div>
             <div className="flex flex-wrap items-center gap-2">
@@ -440,7 +456,7 @@ function GuestbookClientInner() {
                 <SkeletonRows />
               </TableBody>
             </Table>
-          ) : filteredEntries.length === 0 ? (
+          ) : entries.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16 text-muted-foreground gap-2">
               <UsersGroupRounded weight="BoldDuotone" className="h-10 w-10 opacity-30" />
               <p className="text-sm">Belum ada data kunjungan</p>
@@ -462,7 +478,7 @@ function GuestbookClientInner() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredEntries.map((entry) => {
+                  {entries.map((entry) => {
                     const sourceLabel = entry.sourceOfInformation?.name ?? null;
                     const statusInfo = entry.visitStatus ? STATUS_LABELS[entry.visitStatus] : null;
 
@@ -587,6 +603,12 @@ function GuestbookClientInner() {
               </Table>
             </div>
           )}
+          <PaginationBar
+            currentPage={currentPage}
+            totalPages={totalPages}
+            onPageChange={setCurrentPage}
+            label="Navigasi halaman guestbook"
+          />
         </CardContent>
       </Card>
 
@@ -595,7 +617,7 @@ function GuestbookClientInner() {
         {/* Mobile toolbar: count · filter popover · export · refresh · add */}
         <div className="flex items-center gap-2">
           <span className="text-xs font-medium bg-muted text-muted-foreground px-2.5 py-1 border border-border rounded-full shrink-0">
-            {filteredEntries.length} tamu
+            {guestbookData?.total ?? 0} tamu
           </span>
           <div className="flex-1" />
 
@@ -671,14 +693,14 @@ function GuestbookClientInner() {
             ))}
           </div>
         )}
-        {!isLoading && filteredEntries.length === 0 && (
+        {!isLoading && entries.length === 0 && (
           <div className="flex flex-col items-center justify-center py-16 text-muted-foreground gap-2">
             <UsersGroupRounded weight="BoldDuotone" className="h-10 w-10 opacity-30" />
             <p className="text-sm">Belum ada data kunjungan</p>
           </div>
         )}
         {!isLoading &&
-          filteredEntries.map((entry) => (
+          entries.map((entry) => (
             <MobileCard
               key={entry.id}
               entry={entry}
@@ -686,6 +708,13 @@ function GuestbookClientInner() {
               onEditClick={handleEditClick}
             />
           ))}
+
+        <PaginationBar
+          currentPage={currentPage}
+          totalPages={totalPages}
+          onPageChange={setCurrentPage}
+          label="Navigasi halaman guestbook"
+        />
       </div>
 
       <GuestbookDrawer
@@ -719,6 +748,10 @@ function GuestbookClientInner() {
         onVenueIdChange={setFilterVenueId}
         hostId={filterHostId}
         onHostIdChange={setFilterHostId}
+        category={filterCategory}
+        onCategoryChange={setFilterCategory}
+        interactionType={filterInteractionType}
+        onInteractionTypeChange={setFilterInteractionType}
         venues={venues}
         salesOptions={salesOptions}
         onReset={resetFilters}
