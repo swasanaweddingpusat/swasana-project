@@ -14,6 +14,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Calendar } from "@/components/ui/calendar";
+import { ComplimentarySelect } from "@/components/shared/ComplimentarySelect";
 import { Magnifer } from "@solar-icons/react";
 import type { GuestbookCategoryFilter } from "@/lib/queries/guestbookEntries";
 import type { GuestInteractionType } from "@prisma/client";
@@ -104,17 +105,15 @@ export function GuestbookFilterDrawer({
 
           <div className="space-y-1.5">
             <Label className="text-sm font-medium">Sales PIC</Label>
-            <Select value={hostId} onValueChange={onHostIdChange}>
-              <SelectTrigger className="rounded-xl w-full">
-                <SelectValue placeholder="Semua PIC" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Semua PIC</SelectItem>
-                {salesOptions.map((u) => (
-                  <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <ComplimentarySelect
+              options={[{ id: "all", name: "Semua PIC" }, ...salesOptions]}
+              value={hostId}
+              onChange={onHostIdChange}
+              placeholder="Semua PIC"
+              searchPlaceholder="Cari sales..."
+              emptyText="Sales tidak ditemukan"
+              triggerClassName="rounded-xl"
+            />
           </div>
 
           <div className="space-y-1.5">
