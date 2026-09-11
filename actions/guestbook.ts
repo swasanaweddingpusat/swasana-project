@@ -190,7 +190,7 @@ export async function updateGuestbookEntry(
 }
 
 export async function deleteGuestbookEntry(id: string): Promise<{ success: boolean; error?: string }> {
-  const { session, error } = await requirePermission({ module: "guestbook", action: "edit" });
+  const { session, error } = await requirePermission({ module: "guestbook", action: "delete" });
   if (error) return { success: false, error };
   if (!mutationLimiter.check(`guestbook-delete:${session!.user.id}`)) return { success: false, ...rateLimitError() };
 

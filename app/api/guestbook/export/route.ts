@@ -2,7 +2,11 @@ import { requirePermissionForRoute } from "@/lib/permissions";
 import { apiLimiter, rateLimitResponse } from "@/lib/rate-limit";
 import { db } from "@/lib/db";
 import { buildOwnerScopeWhere } from "@/lib/access-control";
-import type { Prisma } from "@prisma/client";
+import { buildGuestbookWhere, type GuestbookCategoryFilter } from "@/lib/queries/guestbookEntries";
+import type { Prisma, GuestInteractionType } from "@prisma/client";
+
+const ALLOWED_CATEGORY = new Set<GuestbookCategoryFilter>(["WEDDINGS", "MICE", "no_package"]);
+const ALLOWED_INTERACTION = new Set<GuestInteractionType>(["client_visit", "online_meeting", "jemput_bola"]);
 
 // Mirrors GuestbookClient.tsx / GuestbookDetailDrawer.tsx — keep labels in sync.
 const VISIT_STATUS_LABELS: Record<string, string> = {
@@ -71,8 +75,23 @@ export async function GET(req: Request): Promise<Response> {
   if (!apiLimiter.check(`guestbook-export:${session.user.id}`)) return rateLimitResponse();
 
   const { searchParams } = new URL(req.url);
-  const from = searchParams.get("from") ?? undefined;
-  const to = searchParams.get("to") ?? undefined;
+  const search = searchParams.get("search")?.trim() || undefined;
+  const venueId = searchParams.get("venueId")?.trim() || undefined;
+  const hostId = searchParams.get("hostId")?.trim() || undefined;
+  const dateFrom = searchParams.get("from")?.trim() || undefined;
+  const dateTo = searchParams.get("to")?.trim() || undefined;
+
+  const rawCategory = searchParams.get("category");
+  const category: GuestbookCategoryFilter | undefined =
+    rawCategory && ALLOWED_CATEGORY.has(rawCategory as GuestbookCategoryFilter)
+      ? (rawCategory as GuestbookCategoryFilter)
+      : undefined;
+
+  const rawInteractionType = searchParams.get("interactionType");
+  const interactionType: GuestInteractionType | undefined =
+    rawInteractionType && ALLOWED_INTERACTION.has(rawInteractionType as GuestInteractionType)
+      ? (rawInteractionType as GuestInteractionType)
+      : undefined;
 
   try {
     const scopeWhere = (await buildOwnerScopeWhere(
@@ -81,13 +100,10 @@ export async function GET(req: Request): Promise<Response> {
       "salesId",
     )) as Prisma.GuestbookEntryWhereInput;
 
-    const where: Prisma.GuestbookEntryWhereInput = { ...scopeWhere };
-    if (from || to) {
-      where.checkInAt = {
-        ...(from && { gte: new Date(`${from}T00:00:00`) }),
-        ...(to && { lte: new Date(`${to}T23:59:59.999`) }),
-      };
-    }
+    const where: Prisma.GuestbookEntryWhereInput = {
+      ...scopeWhere,
+      ...buildGuestbookWhere({ search, venueId, hostId, dateFrom, dateTo, category, interactionType }),
+    };
 
     const rows = await db.guestbookEntry.findMany({
       where,

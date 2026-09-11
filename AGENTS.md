@@ -482,7 +482,7 @@ Permission `(module, action)` tuples — kebab-case format. **Sumber kebenaran =
 | `procurement-summary` | `view` |
 | `procurement-announcement` | `view`, `create`, `edit`, `delete` |
 | `procurement-budget` | `view`, `create`, `edit`, `delete` |
-| `guestbook` | `view`, `create`, `edit` |
+| `guestbook` | `view`, `create`, `edit`, `delete` |
 | `bitrix` | `view` |
 | `hr` | `view`, `create`, `edit`, `delete`, `approve` |
 | `hr-recruitment` | `view`, `create`, `edit`, `delete`, `hire` |

@@ -56,7 +56,7 @@ export function PaginationBar({
     <nav
       aria-label={label}
       className={cn(
-        "flex flex-col gap-3 px-4 sm:px-6 py-4 border-t sm:flex-row sm:justify-between sm:items-center",
+        "flex flex-row items-center justify-between gap-3 px-4 sm:px-6 py-4 border-t",
         className
       )}
     >

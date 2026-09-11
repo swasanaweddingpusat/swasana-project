@@ -70,7 +70,7 @@ export const moduleActions: Record<string, string[]> = {
   "procurement-summary": ["view"],
   "procurement-announcement": ["view", "create", "edit", "delete"],
   "procurement-budget": ["view", "create", "edit", "delete"],
-  guestbook: ["view", "create", "edit"],
+  guestbook: ["view", "create", "edit", "delete"],
   // Bitrix24 CRM integration — own gate (was reusing `customers`). GENERAL menu
   // (muncul di semua module), route /bitrix24/*.
   bitrix: ["view"],
@@ -123,7 +123,7 @@ export const rolePermissionMap: Record<string, Record<string, string[]>> = {
     quotations: ["view", "create", "edit", "delete"],
     "settings-quotation-templates": ["view", "create", "edit", "delete"],
     complimentary: ["view", "create", "edit", "delete"],
-    guestbook: ["view", "create", "edit"],
+    guestbook: ["view", "create", "edit", "delete"],
     promo: ["view"],
     bitrix: ["view"],
     "internal-faq": ["view"],
@@ -142,7 +142,7 @@ export const rolePermissionMap: Record<string, Record<string, string[]>> = {
     package: ["view", "create", "edit", "delete", "set-harga", "term-&-condition", "set-status"],
     vendor: ["view", "create", "edit", "delete"],
     complimentary: ["view", "create", "edit", "delete"],
-    guestbook: ["view", "create", "edit"],
+    guestbook: ["view", "create", "edit", "delete"],
     promo: ["view"],
     procurement: ["view", "create", "edit", "delete", "approve"],
     "procurement-summary": ["view"],
@@ -160,7 +160,7 @@ export const rolePermissionMap: Record<string, Record<string, string[]>> = {
     package: ["view"],
     vendor: ["view", "create", "edit"],
     maintenance: ["view", "create", "edit"],
-    guestbook: ["view", "create", "edit"],
+    guestbook: ["view", "create", "edit", "delete"],
     promo: ["view"],
     procurement: ["view", "approve"],
     "procurement-summary": ["view"],
@@ -185,7 +185,7 @@ export const rolePermissionMap: Record<string, Record<string, string[]>> = {
     "procurement-budget": ["view", "create", "edit", "delete"],
     vendor: ["view"],
     "vendor-specialist": ["view"],
-    guestbook: ["view", "create", "edit"],
+    guestbook: ["view", "create", "edit", "delete"],
     "internal-faq": ["view"],
     announcement: ["view"],
     bitrix: ["view"],
@@ -242,7 +242,7 @@ export const rolePermissionMap: Record<string, Record<string, string[]>> = {
     groups: ["view"],
     // daily-activity sengaja BELUM di-grant — per instruksi user, ditahan dulu.
     package: ["view", "create", "edit", "term-&-condition"],
-    guestbook: ["view", "create", "edit"],
+    guestbook: ["view", "create", "edit", "delete"],
     // Full CRUD — sales kelola master complimentary sendiri.
     complimentary: ["view", "create", "edit", "delete"],
     promo: ["view", "create", "edit", "delete"],
@@ -288,7 +288,7 @@ export const rolePermissionMap: Record<string, Record<string, string[]>> = {
     "daily-activity": ["view", "create", "edit", "delete"],
     // Full CRUD — sales-mice kelola master complimentary sendiri.
     complimentary: ["view", "create", "edit", "delete"],
-    guestbook: ["view", "create", "edit"],
+    guestbook: ["view", "create", "edit", "delete"],
     // sales-mice can view/create/edit packages but NOT set-harga and NOT delete
     "package-mice": ["view", "create", "edit", "term-&-condition"],
     // Only tab Pengadaan — Ringkasan/Pengumuman/Anggaran Venue reserved for management roles.

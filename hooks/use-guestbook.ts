@@ -1,15 +1,28 @@
 "use client";
 
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import { fetchGuestbookEntries } from "@/services/guestbookService";
 import { createGuestbookEntry, checkOutGuestbookEntry, updateGuestbookEntry, deleteGuestbookEntry } from "@/actions/guestbook";
+import type { GuestbookFilterOptions } from "@/lib/queries/guestbookEntries";
 
-export function useGuestbookEntries(params?: { page?: number; pageSize?: number }) {
+export function useGuestbookEntries(params?: GuestbookFilterOptions & { page?: number; pageSize?: number }) {
   const page = params?.page ?? 1;
   const pageSize = params?.pageSize ?? 50;
   return useQuery({
-    queryKey: ["guestbook-entries", page, pageSize],
-    queryFn: () => fetchGuestbookEntries({ page, pageSize }),
+    queryKey: [
+      "guestbook-entries",
+      page,
+      pageSize,
+      params?.search,
+      params?.venueId,
+      params?.hostId,
+      params?.dateFrom,
+      params?.dateTo,
+      params?.category,
+      params?.interactionType,
+    ],
+    queryFn: () => fetchGuestbookEntries({ page, pageSize, ...params }),
+    placeholderData: keepPreviousData,
     staleTime: 5 * 60 * 1000,
   });
 }
