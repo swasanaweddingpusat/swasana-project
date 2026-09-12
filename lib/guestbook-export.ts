@@ -22,7 +22,6 @@ function buildRows(data: GuestbookEntryItem[]): (string | number)[][] {
   return data.map((r, i) => [
     i + 1,
     r.visitorName ?? "-",
-    r.company ?? "-",
     r.venue?.name ?? "-",
     r.host?.fullName ?? "-",
     r.sourceOfInformation?.name ?? "-",
@@ -51,7 +50,7 @@ export function exportGuestbookToPDF(data: GuestbookEntryItem[]): void {
 
   autoTable(doc, {
     startY: 35,
-    head: [["No", "Nama Tamu", "Perusahaan", "Venue", "Bertemu", "Sumber", "Paket", "Status", "Dicatat oleh", "Tanggal"]],
+    head: [["No", "Nama Tamu", "Venue", "Bertemu", "Sumber", "Paket", "Status", "Dicatat oleh", "Tanggal"]],
     body: buildRows(data),
     styles: { fontSize: 7, cellPadding: 2.5 },
     headStyles: {
@@ -62,15 +61,14 @@ export function exportGuestbookToPDF(data: GuestbookEntryItem[]): void {
     alternateRowStyles: { fillColor: [248, 250, 252] as [number, number, number] },
     columnStyles: {
       0: { cellWidth: 8 },
-      1: { cellWidth: 35 },
+      1: { cellWidth: 40 },
       2: { cellWidth: 30 },
-      3: { cellWidth: 25 },
+      3: { cellWidth: 30 },
       4: { cellWidth: 28 },
-      5: { cellWidth: 25 },
-      6: { cellWidth: 30 },
-      7: { cellWidth: 20 },
-      8: { cellWidth: 28 },
-      9: { cellWidth: 22 },
+      5: { cellWidth: 35 },
+      6: { cellWidth: 22 },
+      7: { cellWidth: 30 },
+      8: { cellWidth: 24 },
     },
   });
 
