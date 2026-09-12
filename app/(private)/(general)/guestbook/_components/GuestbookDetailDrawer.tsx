@@ -301,16 +301,6 @@ export function GuestbookDetailDrawer({
           )}
         </div>
 
-        {/* Time info */}
-        <div className="bg-muted/30 rounded-2xl p-4 space-y-4">
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Waktu</p>
-          <InfoRow icon={<Calendar weight="BoldDuotone" className="h-4 w-4 text-muted-foreground" />} label="Check-in" value={formatDateTime(entry.checkInAt)} />
-          <InfoRow
-            icon={<Calendar weight="BoldDuotone" className="h-4 w-4 text-muted-foreground" />}
-            label="Check-out"
-            value={entry.checkOutAt ? formatDateTime(entry.checkOutAt) : "Belum check-out"}
-          />
-        </div>
 
         {/* Komitmen */}
         {(entry.commitVisitDate || entry.commitPayDate) && (

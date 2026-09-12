@@ -49,12 +49,14 @@ import {
   Pen,
   Refresh,
   TrashBinTrash,
+  Download,
 } from "@solar-icons/react";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 import { useGuestbookEntries, useCheckOutGuestbookEntry, useDeleteGuestbookEntry } from "@/hooks/use-guestbook";
 import { useVenues } from "@/hooks/use-venues";
 import type { GuestbookEntryItem } from "@/lib/queries/guestbookEntries";
+import { exportGuestbookToPDF } from "@/lib/guestbook-export";
 import { GuestbookDrawer } from "./GuestbookDrawer";
 import { GuestbookDetailDrawer } from "./GuestbookDetailDrawer";
 
@@ -133,8 +135,6 @@ function SkeletonRows() {
           <TableCell><Skeleton className="h-4 w-32" /></TableCell>
           <TableCell><Skeleton className="h-4 w-24" /></TableCell>
           <TableCell><Skeleton className="h-4 w-24" /></TableCell>
-          <TableCell><Skeleton className="h-4 w-28" /></TableCell>
-          <TableCell><Skeleton className="h-4 w-28" /></TableCell>
           <TableCell><Skeleton className="h-5 w-20 rounded-full" /></TableCell>
           <TableCell><Skeleton className="h-4 w-24" /></TableCell>
           <TableCell><Skeleton className="h-5 w-24 rounded-full" /></TableCell>
@@ -222,20 +222,6 @@ function MobileCard({
           <p className="text-muted-foreground">Dicatat oleh</p>
           <p className="text-foreground">{entry.createdBy?.fullName ?? "—"}</p>
         </div>
-        <div>
-          <p className="text-muted-foreground">Check-in</p>
-          <p className="text-foreground">
-            {formatDate(entry.checkInAt)} {formatTime(entry.checkInAt)}
-          </p>
-        </div>
-        {entry.checkOutAt && (
-          <div>
-            <p className="text-muted-foreground">Check-out</p>
-            <p className="text-foreground">
-              {formatDate(entry.checkOutAt)} {formatTime(entry.checkOutAt)}
-            </p>
-          </div>
-        )}
       </div>
 
       <div className="flex items-center gap-1 pt-1" onClick={(e) => e.stopPropagation()}>
@@ -287,6 +273,15 @@ export function GuestbookClient() {
   const { data: venues = [] } = useVenues();
   const checkOutMutation = useCheckOutGuestbookEntry();
   const deleteMutation = useDeleteGuestbookEntry();
+
+  function handleExportPdf() {
+    if (filteredEntries.length === 0) {
+      toast.warning("Tidak ada data untuk diekspor");
+      return;
+    }
+    exportGuestbookToPDF(filteredEntries);
+    toast.success("PDF berhasil diunduh");
+  }
 
   function handleCompleteClick(entry: GuestbookEntryItem) {
     setConfirmComplete(entry);
@@ -342,16 +337,26 @@ export function GuestbookClient() {
       {/* Page header */}
       <div className="flex items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl font-heading font-bold text-foreground">Guestbook</h1>
+          <h1 className="text-xl font-heading font-bold text-foreground">Buku Tamu</h1>
           <p className="text-sm text-muted-foreground">Kelola data kunjungan tamu</p>
         </div>
-        <Button
-          className="rounded-full gap-2 shrink-0"
-          onClick={() => setDrawerOpen(true)}
-        >
-          <AddCircle weight="BoldDuotone" className="h-4 w-4" />
-          Tambah Tamu
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            className="rounded-full gap-2 shrink-0"
+            onClick={() => handleExportPdf()}
+          >
+            <Download weight="BoldDuotone" className="h-4 w-4" />
+            Export PDF
+          </Button>
+          <Button
+            className="rounded-full gap-2 shrink-0"
+            onClick={() => setDrawerOpen(true)}
+          >
+            <AddCircle weight="BoldDuotone" className="h-4 w-4" />
+            Tambah Tamu
+          </Button>
+        </div>
       </div>
 
       {/* Stats — single card */}
@@ -449,8 +454,6 @@ export function GuestbookClient() {
                   <TableHead>Nama Tamu</TableHead>
                   <TableHead>Venue</TableHead>
                   <TableHead>Bertemu</TableHead>
-                  <TableHead>Check-in</TableHead>
-                  <TableHead>Check-out</TableHead>
                   <TableHead>Sumber</TableHead>
                   <TableHead>Paket</TableHead>
                   <TableHead>Status</TableHead>
@@ -475,8 +478,6 @@ export function GuestbookClient() {
                     <TableHead>Nama Tamu</TableHead>
                     <TableHead>Venue</TableHead>
                     <TableHead>Bertemu</TableHead>
-                    <TableHead>Check-in</TableHead>
-                    <TableHead>Check-out</TableHead>
                     <TableHead>Sumber</TableHead>
                     <TableHead>Paket</TableHead>
                     <TableHead>Status</TableHead>
@@ -524,24 +525,6 @@ export function GuestbookClient() {
                         </TableCell>
                         <TableCell className="text-muted-foreground">
                           {entry.host?.fullName ?? "-"}
-                        </TableCell>
-                        <TableCell className="text-muted-foreground whitespace-nowrap">
-                          {formatDate(entry.checkInAt)}{" "}
-                          <span className="text-foreground font-medium">
-                            {formatTime(entry.checkInAt)}
-                          </span>
-                        </TableCell>
-                        <TableCell className="text-muted-foreground whitespace-nowrap">
-                          {entry.checkOutAt ? (
-                            <>
-                              {formatDate(entry.checkOutAt)}{" "}
-                              <span className="text-foreground font-medium">
-                                {formatTime(entry.checkOutAt)}
-                              </span>
-                            </>
-                          ) : (
-                            <span className="text-muted-foreground/50">—</span>
-                          )}
                         </TableCell>
                         <TableCell className="text-muted-foreground whitespace-nowrap">
                           {sourceLabel ?? <span className="text-muted-foreground/50">—</span>}

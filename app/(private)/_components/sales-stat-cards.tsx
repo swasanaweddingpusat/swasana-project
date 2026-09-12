@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { format } from "date-fns";
-import { CalendarMark, ClockCircle, CloseCircle } from "@solar-icons/react";
+import { CalendarMark, ClockCircle, CloseCircle, WalletMoney } from "@solar-icons/react";
 import { cn } from "@/lib/utils";
 import { useDashboardStats } from "@/hooks/use-dashboard-stats";
 import type { DashboardStats } from "@/lib/queries/dashboard";
@@ -50,6 +50,10 @@ const cards = [
   },
 ];
 
+function formatCurrencyFull(amount: number): string {
+  return `Rp ${amount.toLocaleString("id-ID")}`;
+}
+
 const TONE_CHIP: Record<(typeof cards)[number]["tone"], string> = {
   neutral: "bg-accent text-foreground",
   attention: "bg-accent text-foreground",
@@ -82,6 +86,28 @@ export function SalesStatCards({ initialStats, dealFrom, dealTo, eventFrom, even
 
   return (
     <>
+      <div
+        className={cn(
+          "flex", "items-center", "gap-4", "rounded-2xl", "border", "border-border",
+          "bg-card", "p-5", "shadow-sm",
+        )}
+      >
+        <div
+          className={cn(
+            "flex", "h-12", "w-12", "shrink-0", "items-center", "justify-center",
+            "rounded-xl", "bg-primary/10",
+          )}
+        >
+          <WalletMoney weight="BoldDuotone" className={cn("h-6", "w-6", "text-primary")} />
+        </div>
+        <div className={cn("min-w-0", "flex-1")}>
+          <p className={cn("text-xs", "font-medium", "text-muted-foreground")}>Total Omset</p>
+          <p className={cn("font-heading", "text-xl", "font-semibold", "text-foreground", "sm:text-2xl")}>
+            {formatCurrencyFull(stats.totalRevenue)}
+          </p>
+        </div>
+      </div>
+
       <div
         className={cn(
           "grid", "grid-cols-3", "divide-x", "divide-border",

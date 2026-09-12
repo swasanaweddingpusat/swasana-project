@@ -64,7 +64,14 @@ export default async function DashboardPage({
     bannersPromise,
   ]);
 
-  const topSalesData = await getTopSalesByRecentBooking(undefined, range, eventRange);
+  // Achievement & Performance Sales section defaults to the current month
+  // independently of the global dealing-date filter. Pre-compute the range here
+  // so the SSR initial data already matches what the client component will fetch.
+  const currentMonthFrom = new Date(now.getFullYear(), now.getMonth(), 1);
+  const currentMonthTo = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+  const currentMonthRange = { from: currentMonthFrom, to: currentMonthTo };
+
+  const topSalesData = await getTopSalesByRecentBooking(undefined, currentMonthRange, undefined);
 
   // No filter picked → whole-database totals. Otherwise show the picked range
   // (display uses the inclusive `toDay`, not the exclusive `to` upper bound).
@@ -119,14 +126,8 @@ export default async function DashboardPage({
         eventTo={eventToDay}
       />
 
-      {/* Achievement & Performance Sales */}
-      <SalesPerformanceSection
-        initialData={topSalesData}
-        dealFrom={fromDay}
-        dealTo={toDay}
-        eventFrom={eventFromDay}
-        eventTo={eventToDay}
-      />
+      {/* Achievement & Performance Sales — self-filtered (defaults to current month) */}
+      <SalesPerformanceSection initialData={topSalesData} />
 
       {/* Group achievement — list, full width */}
       <GroupAchievementSection

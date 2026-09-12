@@ -44,7 +44,7 @@ export function BitrixDealSelect({
   value,
   onChange,
   placeholder = "Pilih transaksi Bitrix...",
-  searchPlaceholder = "Cari nama client...",
+  searchPlaceholder = "Cari ID atau nama client...",
   disabled = false,
   className,
 }: BitrixDealSelectProps) {
