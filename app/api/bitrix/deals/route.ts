@@ -90,11 +90,16 @@ export async function GET(request: Request) {
   }
   if (Object.keys(order).length === 0) order.DATE_CREATE = "DESC";
 
-  // Free-text search — server-side partial match on the deal title. Client name
-  // isn't a deal field (it's a CONTACT_ID relation), so it can't be searched
-  // here without a second heavy lookup; title covers the common case.
+  // Free-text search. Pure-numeric input → exact ID match (the user typed a
+  // Bitrix deal ID). Otherwise → partial title match (client name / deal title).
   const q = searchParams.get("q")?.trim();
-  if (q) filter["%TITLE"] = q;
+  if (q) {
+    if (/^\d+$/.test(q)) {
+      filter["ID"] = q;
+    } else {
+      filter["%TITLE"] = q;
+    }
+  }
 
   // Stage filter — the client sends a stage *name* ("Hot Prospek") because the
   // same stage carries a different STATUS_ID per pipeline. Resolve it to every

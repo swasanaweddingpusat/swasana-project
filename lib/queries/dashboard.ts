@@ -14,6 +14,7 @@ export interface DashboardStats {
   totalBookings: number;
   pendingBookings: number;
   lostBookings: number;
+  totalRevenue: number;
 }
 
 export interface GroupAchievementData {
@@ -119,13 +120,25 @@ async function _queryBookingStats(
     ...(eventRange ? { eventDate: { gte: eventRange.from, lt: eventRange.to } } : {}),
   };
 
-  // Aggregate per status in the DB (one round-trip) instead of loading up to
-  // 10k rows and counting in JS.
-  const byStatus = await db.booking.groupBy({
-    by: ["bookingStatus"],
-    where,
-    _count: { _all: true },
-  });
+  const [byStatus, revenueAgg] = await Promise.all([
+    db.booking.groupBy({
+      by: ["bookingStatus"],
+      where,
+      _count: { _all: true },
+    }),
+    db.snapPackagePricing.aggregate({
+      _sum: { price: true },
+      where: {
+        booking: {
+          recordStatus: "saved",
+          bookingStatus: { notIn: [BookingStatus.Canceled, BookingStatus.Lost] },
+          ...(salesIds ? { salesId: { in: salesIds } } : {}),
+          ...(range ? { createdAt: { gte: range.from, lt: range.to } } : {}),
+          ...(eventRange ? { eventDate: { gte: eventRange.from, lt: eventRange.to } } : {}),
+        },
+      },
+    }),
+  ]);
 
   let total = 0;
   let pending = 0;
@@ -137,7 +150,12 @@ async function _queryBookingStats(
     else if (row.bookingStatus === BookingStatus.Lost || row.bookingStatus === BookingStatus.Canceled) lost += c;
   }
 
-  return { totalBookings: total, pendingBookings: pending, lostBookings: lost };
+  return {
+    totalBookings: total,
+    pendingBookings: pending,
+    lostBookings: lost,
+    totalRevenue: revenueAgg._sum.price ?? 0,
+  };
 }
 
 async function getBookingStats(

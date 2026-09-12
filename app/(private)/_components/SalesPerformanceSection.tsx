@@ -1,12 +1,16 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { format } from "date-fns";
+import { id as localeId } from "date-fns/locale";
 import {
   CupStar,
   Crown,
   Star,
   CalendarDate,
+  AltArrowLeft,
+  AltArrowRight,
+  WalletMoney,
 } from "@solar-icons/react";
 import { cn } from "@/lib/utils";
 import { useDashboardSalesPerformance } from "@/hooks/useDashboardSalesPerformance";
@@ -16,6 +20,7 @@ import type { SalesPerformanceCardItem } from "@/lib/queries/salesPerformance";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
 import { BookingDetailModal } from "@/app/(private)/booking/booking-weddings/_components/booking-detail-modal";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -24,6 +29,10 @@ function formatCurrency(amount: number): string {
   if (amount >= 1_000_000_000)
     return `Rp ${(amount / 1_000_000_000).toFixed(1)}M`;
   if (amount >= 1_000_000) return `Rp ${(amount / 1_000_000).toFixed(0)}Jt`;
+  return `Rp ${amount.toLocaleString("id-ID")}`;
+}
+
+function formatCurrencyFull(amount: number): string {
   return `Rp ${amount.toLocaleString("id-ID")}`;
 }
 
@@ -36,9 +45,15 @@ function getInitials(name: string): string {
     .toUpperCase();
 }
 
+function getMonthRange(year: number, month: number): { from: string; to: string } {
+  const from = `${year}-${String(month + 1).padStart(2, "0")}-01`;
+  const lastDay = new Date(year, month + 1, 0).getDate();
+  const to = `${year}-${String(month + 1).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
+  return { from, to };
+}
+
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
-// Podium — juara 1 mahkota, juara 2 & 3 bintang. Semua gold, ukuran diperbesar.
 function PodiumIcon({ rank }: { rank: number }): React.ReactElement | null {
   if (rank === 0)
     return (
@@ -90,9 +105,6 @@ function AvatarCircle({
   );
 }
 
-// Dummy target sales — placeholder sampai fitur target-per-sales beneran dipasang.
-// Kalau item udah punya target asli (hasTarget), pakai itu; kalau belum, generate
-// target dummy dari revenue biar progress bar tetep kelihatan masuk akal.
 const DUMMY_TARGET_MULTIPLIER = 1.35;
 const DUMMY_TARGET_FLOOR = 1_000_000;
 
@@ -176,16 +188,95 @@ function SalesPerformanceTable({
   );
 }
 
+// ─── Total Revenue Card ──────────────────────────────────────────────────────
+
+function TotalRevenueCard({ data }: { data: SalesPerformanceCardItem[] }) {
+  const totalRevenue = useMemo(
+    () => data.reduce((sum, item) => sum + item.revenue, 0),
+    [data],
+  );
+  const totalBookings = useMemo(
+    () => data.reduce((sum, item) => sum + item.bookingCount, 0),
+    [data],
+  );
+
+  return (
+    <div
+      className={cn(
+        "flex items-center gap-4 rounded-2xl border border-border bg-card p-5 shadow-sm",
+      )}
+    >
+      <div
+        className={cn(
+          "flex h-12 w-12 shrink-0 items-center justify-center rounded-xl",
+          "bg-primary/10",
+        )}
+      >
+        <WalletMoney weight="BoldDuotone" className="h-6 w-6 text-primary" />
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="text-xs font-medium text-muted-foreground">Total Revenue</p>
+        <p className="font-heading text-xl font-semibold text-foreground sm:text-2xl">
+          {formatCurrencyFull(totalRevenue)}
+        </p>
+      </div>
+      <div className="shrink-0 text-right">
+        <p className="text-xs font-medium text-muted-foreground">Booking</p>
+        <p className="font-heading text-xl font-semibold text-foreground">
+          {totalBookings}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// ─── Month Picker ────────────────────────────────────────────────────────────
+
+function MonthPicker({
+  year,
+  month,
+  onPrev,
+  onNext,
+  isCurrentMonth,
+}: {
+  year: number;
+  month: number;
+  onPrev: () => void;
+  onNext: () => void;
+  isCurrentMonth: boolean;
+}) {
+  const label = format(new Date(year, month, 1), "MMMM yyyy", { locale: localeId });
+
+  return (
+    <div className="flex items-center gap-1">
+      <Button
+        variant="ghost"
+        size="icon"
+        className="h-8 w-8 rounded-full"
+        onClick={onPrev}
+      >
+        <AltArrowLeft weight="BoldDuotone" className="h-4 w-4" />
+      </Button>
+      <span className="min-w-28 text-center text-sm font-medium text-foreground capitalize">
+        {label}
+      </span>
+      <Button
+        variant="ghost"
+        size="icon"
+        className="h-8 w-8 rounded-full"
+        onClick={onNext}
+        disabled={isCurrentMonth}
+      >
+        <AltArrowRight weight="BoldDuotone" className="h-4 w-4" />
+      </Button>
+    </div>
+  );
+}
+
 // ─── Main export ──────────────────────────────────────────────────────────────
 
 interface SalesPerformanceSectionProps {
   initialData: SalesPerformanceCardItem[];
-  /** Dealing-date (createdAt) range, calendar-day strings (YYYY-MM-DD). */
-  dealFrom: string;
-  dealTo: string;
-  /** Event-date (eventDate) range, calendar-day strings (YYYY-MM-DD). */
-  eventFrom: string;
-  eventTo: string;
 }
 
 function statusBadgeVariant(status: string): "default" | "secondary" | "destructive" | "outline" {
@@ -199,12 +290,25 @@ function statusBadgeVariant(status: string): "default" | "secondary" | "destruct
 
 export function SalesPerformanceSection({
   initialData,
-  dealFrom,
-  dealTo,
-  eventFrom,
-  eventTo,
 }: SalesPerformanceSectionProps) {
-  const { data: liveData } = useDashboardSalesPerformance(dealFrom, dealTo, eventFrom, eventTo, initialData);
+  const now = new Date();
+  const [year, setYear] = useState(now.getFullYear());
+  const [month, setMonth] = useState(now.getMonth());
+
+  const isCurrentMonth = year === now.getFullYear() && month === now.getMonth();
+
+  const { from: dealFrom, to: dealTo } = useMemo(
+    () => getMonthRange(year, month),
+    [year, month],
+  );
+
+  const { data: liveData } = useDashboardSalesPerformance(
+    dealFrom,
+    dealTo,
+    "",
+    "",
+    isCurrentMonth ? initialData : undefined,
+  );
   const data = liveData ?? initialData;
 
   const [selectedSales, setSelectedSales] = useState<SalesPerformanceCardItem | null>(null);
@@ -216,13 +320,49 @@ export function SalesPerformanceSection({
   );
   const [selectedBookingId, setSelectedBookingId] = useState<string | null>(null);
 
+  function handlePrevMonth(): void {
+    if (month === 0) {
+      setYear((y) => y - 1);
+      setMonth(11);
+    } else {
+      setMonth((m) => m - 1);
+    }
+  }
+
+  function handleNextMonth(): void {
+    if (isCurrentMonth) return;
+    if (month === 11) {
+      setYear((y) => y + 1);
+      setMonth(0);
+    } else {
+      setMonth((m) => m + 1);
+    }
+  }
+
   if (data.length === 0) {
     return (
-      <div className="bg-card border rounded-2xl p-6 flex flex-col items-center gap-3 text-center shadow-sm">
-        <CalendarDate weight="BoldDuotone" className="h-10 w-10 text-muted-foreground/50" />
-        <p className="text-sm text-muted-foreground">
-          Belum ada data booking di periode ini.
-        </p>
+      <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-2">
+            <CupStar weight="BoldDuotone" className="h-5 w-5 text-[var(--brand-gold)]" />
+            <h2 className="text-base font-semibold text-foreground">
+              Achievement & Performance Sales
+            </h2>
+          </div>
+          <MonthPicker
+            year={year}
+            month={month}
+            onPrev={handlePrevMonth}
+            onNext={handleNextMonth}
+            isCurrentMonth={isCurrentMonth}
+          />
+        </div>
+        <div className="bg-card border rounded-2xl p-6 flex flex-col items-center gap-3 text-center shadow-sm">
+          <CalendarDate weight="BoldDuotone" className="h-10 w-10 text-muted-foreground/50" />
+          <p className="text-sm text-muted-foreground">
+            Belum ada data booking di periode ini.
+          </p>
+        </div>
       </div>
     );
   }
@@ -230,17 +370,24 @@ export function SalesPerformanceSection({
   return (
     <>
       <div className="flex flex-col gap-6">
-        <div className="flex items-center gap-2">
-          <CupStar weight="BoldDuotone" className="h-5 w-5 text-[var(--brand-gold)]" />
-          <h2 className="text-base font-semibold text-foreground">
-            Achievement & Performance Sales
-          </h2>
-          <span className="text-xs text-muted-foreground ml-1">
-            (semua sales, by revenue)
-          </span>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-2">
+            <CupStar weight="BoldDuotone" className="h-5 w-5 text-[var(--brand-gold)]" />
+            <h2 className="text-base font-semibold text-foreground">
+              Achievement & Performance Sales
+            </h2>
+          </div>
+          <MonthPicker
+            year={year}
+            month={month}
+            onPrev={handlePrevMonth}
+            onNext={handleNextMonth}
+            isCurrentMonth={isCurrentMonth}
+          />
         </div>
 
-        {/* Table per sales */}
+        <TotalRevenueCard data={data} />
+
         <SalesPerformanceTable data={data} onSalesClick={setSelectedSales} />
       </div>
 
