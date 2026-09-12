@@ -103,9 +103,9 @@ function SkeletonRows() {
           <TableCell><Skeleton className="h-4 w-24" /></TableCell>
           <TableCell><Skeleton className="h-8 w-28" /></TableCell>
           <TableCell><Skeleton className="h-5 w-20 rounded-full" /></TableCell>
-          <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+          <TableCell className="hidden xl:table-cell"><Skeleton className="h-4 w-24" /></TableCell>
           <TableCell><Skeleton className="h-5 w-24 rounded-full" /></TableCell>
-          <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+          <TableCell className="hidden xl:table-cell"><Skeleton className="h-4 w-24" /></TableCell>
           <TableCell><Skeleton className="h-8 w-20 rounded-full" /></TableCell>
         </TableRow>
       ))}
@@ -117,10 +117,12 @@ function MobileCard({
   entry,
   onViewClick,
   onEditClick,
+  onDeleteClick,
 }: {
   entry: GuestbookEntryItem;
   onViewClick: (entry: GuestbookEntryItem) => void;
   onEditClick: (entry: GuestbookEntryItem) => void;
+  onDeleteClick: (entry: GuestbookEntryItem) => void;
 }) {
   const sourceLabel = entry.sourceOfInformation?.name ?? null;
   const statusInfo = entry.visitStatus ? STATUS_LABELS[entry.visitStatus] : null;
@@ -222,6 +224,14 @@ function MobileCard({
         >
           <Pen weight="BoldDuotone" className="h-5 w-5 text-primary" />
           <span className="text-[10px] font-medium text-muted-foreground leading-none">Edit</span>
+        </button>
+        <button
+          type="button"
+          className="flex flex-col items-center justify-center gap-0.5 w-14 rounded-xl py-1.5 px-1 cursor-pointer transition-colors hover:bg-destructive/10"
+          onClick={() => onDeleteClick(entry)}
+        >
+          <TrashBinTrash weight="BoldDuotone" className="h-5 w-5 text-destructive" />
+          <span className="text-[10px] font-medium text-destructive leading-none">Hapus</span>
         </button>
       </div>
     </div>
@@ -446,9 +456,9 @@ function GuestbookClientInner() {
                   <TableHead>Venue</TableHead>
                   <TableHead>PIC</TableHead>
                   <TableHead>In / Out</TableHead>
-                  <TableHead>Sumber</TableHead>
+                  <TableHead className="hidden xl:table-cell">Sumber</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead>Dicatat oleh</TableHead>
+                  <TableHead className="hidden xl:table-cell">Dicatat oleh</TableHead>
                   <TableHead className="text-right">Aksi</TableHead>
                 </TableRow>
               </TableHeader>
@@ -471,9 +481,9 @@ function GuestbookClientInner() {
                     <TableHead>Venue</TableHead>
                     <TableHead>PIC</TableHead>
                     <TableHead>In / Out</TableHead>
-                    <TableHead>Sumber</TableHead>
+                    <TableHead className="hidden xl:table-cell">Sumber</TableHead>
                     <TableHead>Status</TableHead>
-                    <TableHead>Dicatat oleh</TableHead>
+                    <TableHead className="hidden xl:table-cell">Dicatat oleh</TableHead>
                     <TableHead className="text-right pr-4">Aksi</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -488,8 +498,8 @@ function GuestbookClientInner() {
                         className="cursor-pointer hover:bg-muted/50 transition-colors"
                         onClick={() => setSelectedEntry(entry)}
                       >
-                        <TableCell>
-                          <div className="flex items-center gap-2.5">
+                        <TableCell className="max-w-48">
+                          <div className="flex items-center gap-2.5 min-w-0">
                             {(() => {
                               const photoSrc = resolveGuestbookPhotoUrl(entry.visitorPhoto);
                               if (photoSrc) {
@@ -497,10 +507,10 @@ function GuestbookClientInner() {
                               }
                               return null;
                             })()}
-                            <div className="leading-tight">
-                              <p className="font-medium text-foreground">{entry.visitorName}</p>
+                            <div className="leading-tight min-w-0">
+                              <p className="font-medium text-foreground truncate">{entry.visitorName}</p>
                               {entry.guestCode && (
-                                <p className="text-[10px] font-mono text-muted-foreground/60 mt-0.5">
+                                <p className="text-[10px] font-mono text-muted-foreground/60 mt-0.5 truncate">
                                   {entry.guestCode}
                                 </p>
                               )}
@@ -514,17 +524,17 @@ function GuestbookClientInner() {
                             <span className="text-muted-foreground/50">—</span>
                           )}
                         </TableCell>
-                        <TableCell className="text-muted-foreground whitespace-nowrap">
-                          <div className="flex flex-col gap-1 items-start">
-                            <span>{entry.venue?.name ?? "-"}</span>
+                        <TableCell className="text-muted-foreground max-w-56">
+                          <div className="flex flex-col gap-1 items-start min-w-0 max-w-full">
+                            <span className="truncate max-w-full">{entry.venue?.name ?? "-"}</span>
                             {entry.package?.packageName && (
-                              <Badge variant="secondary" className="rounded-full text-[10px] font-normal">
+                              <Badge variant="secondary" className="rounded-full text-[10px] font-normal max-w-full truncate">
                                 {entry.package.packageName} · {entry.package.pax} pax · {formatRupiah(getPackagePrice(entry.package))}
                               </Badge>
                             )}
                           </div>
                         </TableCell>
-                        <TableCell className="text-muted-foreground">
+                        <TableCell className="text-muted-foreground max-w-32 truncate">
                           {entry.host?.fullName ?? "-"}
                         </TableCell>
                         <TableCell className="text-muted-foreground whitespace-nowrap">
@@ -553,7 +563,7 @@ function GuestbookClientInner() {
                             </span>
                           </div>
                         </TableCell>
-                        <TableCell className="text-muted-foreground whitespace-nowrap">
+                        <TableCell className="text-muted-foreground max-w-32 truncate hidden xl:table-cell">
                           {sourceLabel ?? <span className="text-muted-foreground/50">—</span>}
                         </TableCell>
                         <TableCell>
@@ -565,7 +575,7 @@ function GuestbookClientInner() {
                             <span className="text-muted-foreground/50">—</span>
                           )}
                         </TableCell>
-                        <TableCell className="text-muted-foreground whitespace-nowrap">
+                        <TableCell className="text-muted-foreground max-w-32 truncate hidden xl:table-cell">
                           {entry.createdBy?.fullName ?? "—"}
                         </TableCell>
                         <TableCell className="text-right pr-4">
@@ -706,6 +716,7 @@ function GuestbookClientInner() {
               entry={entry}
               onViewClick={setSelectedEntry}
               onEditClick={handleEditClick}
+              onDeleteClick={setConfirmDelete}
             />
           ))}
 
