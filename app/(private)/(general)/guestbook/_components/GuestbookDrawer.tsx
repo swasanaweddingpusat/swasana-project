@@ -471,11 +471,15 @@ function PhotoUpload({
 export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerProps) {
   const [form, setForm] = useState<GuestbookForm>(EMPTY_FORM);
   const [showConfirm, setShowConfirm] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  // Guard sinkron anti double-submit: setState nunggu re-render, ref langsung
+  // ke-set — jadi klik kedua yang datang sebelum render berikutnya tetap ke-block.
+  const submittingRef = useRef(false);
 
   const isEditMode = editEntry != null;
   const createMutation = useCreateGuestbookEntry();
   const updateMutation = useUpdateGuestbookEntry();
-  const isSaving = createMutation.isPending || updateMutation.isPending;
+  const isSaving = createMutation.isPending || updateMutation.isPending || isSubmitting;
   const { data: venues = [] } = useVenues();
   const { users: salesUsers } = useSalesUsers();
   const salesOptions = salesUsers.map((u) => ({ id: u.id, name: u.fullName ?? u.id }));
@@ -699,8 +703,12 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
   }
 
   async function handleSubmit() {
+    if (submittingRef.current) return;
+    submittingRef.current = true;
+    setIsSubmitting(true);
     setShowConfirm(false);
 
+    try {
     async function resolveDescriptor(
       file: File | null,
       existingPreview: string,
@@ -775,6 +783,10 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
       } else {
         toast.error(result.error ?? "Gagal mencatat tamu");
       }
+    }
+    } finally {
+      submittingRef.current = false;
+      setIsSubmitting(false);
     }
   }
 
@@ -1262,9 +1274,9 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel className="rounded-full">Batal</AlertDialogCancel>
-            <AlertDialogAction className="rounded-full" onClick={handleSubmit}>
-              {isEditMode ? "Ya, Simpan" : "Ya, Tambah"}
+            <AlertDialogCancel className="rounded-full" disabled={isSaving}>Batal</AlertDialogCancel>
+            <AlertDialogAction className="rounded-full" onClick={handleSubmit} disabled={isSaving}>
+              {isSaving ? "Menyimpan..." : isEditMode ? "Ya, Simpan" : "Ya, Tambah"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
