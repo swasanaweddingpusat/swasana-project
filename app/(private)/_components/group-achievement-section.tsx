@@ -22,8 +22,18 @@ function getInitials(name: string): string {
     .toUpperCase();
 }
 
-function GroupListRow({ group, rank }: { group: GroupAchievementData; rank: number }) {
-  const pct = group.target > 0 ? Math.min(Math.round((group.revenue / group.target) * 100), 100) : 0;
+function GroupListRow({
+  group,
+  rank,
+  maxRevenue,
+}: {
+  group: GroupAchievementData;
+  rank: number;
+  maxRevenue: number;
+}) {
+  // No target concept anymore — bar width is relative to the highest-revenue
+  // group in the current list, so the top group always reads as "full".
+  const barPct = maxRevenue > 0 ? Math.min(Math.round((group.revenue / maxRevenue) * 100), 100) : 0;
   const isTop = rank === 0;
   const isRunnerUp = rank === 1 || rank === 2;
 
@@ -72,17 +82,14 @@ function GroupListRow({ group, rank }: { group: GroupAchievementData; rank: numb
         <p className="truncate text-xs text-muted-foreground">
           {group.leaderName} · {group.confirmedBookings} booking confirmed
         </p>
-        <div className="mt-1.5 flex items-center gap-2">
-          <div className="h-2 min-w-0 flex-1 overflow-hidden rounded-full bg-secondary">
-            <div
-              className="h-full rounded-full bg-primary transition-all"
-              style={{ width: `${pct}%` }}
-            />
-          </div>
-          <span className="shrink-0 text-xs font-semibold text-foreground">{pct}%</span>
+        <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-secondary">
+          <div
+            className="h-full rounded-full bg-primary transition-all"
+            style={{ width: `${barPct}%` }}
+          />
         </div>
-        <p className="mt-0.5 text-xs text-muted-foreground">
-          {formatCurrency(group.revenue)} dari target {formatCurrency(group.target)}
+        <p className="mt-0.5 text-xs font-semibold text-foreground">
+          {formatCurrency(group.revenue)}
         </p>
       </div>
     </li>
@@ -103,13 +110,15 @@ export function GroupAchievementSection({ initialGroups, dealFrom, dealTo, event
   const { data } = useDashboardGroups(dealFrom, dealTo, eventFrom, eventTo, initialGroups);
   const groups = data ?? initialGroups;
   const sorted = [...groups].sort((a, b) => b.revenue - a.revenue);
+  // Bars are scaled relative to the highest revenue in the list, not a target.
+  const maxRevenue = sorted.reduce((max, g) => Math.max(max, g.revenue), 0);
 
   return (
     <div className={cn("flex", "flex-col", "gap-4")}>
       <h2 className={cn("text-base", "font-semibold", "text-foreground")}>Achievement per Group</h2>
       <ol className="flex flex-col divide-y divide-border overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
         {sorted.map((g, idx) => (
-          <GroupListRow key={g.id} group={g} rank={idx} />
+          <GroupListRow key={g.id} group={g} rank={idx} maxRevenue={maxRevenue} />
         ))}
       </ol>
     </div>

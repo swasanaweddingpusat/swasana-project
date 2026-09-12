@@ -12,11 +12,13 @@ interface BitrixDealOption {
   assignedBy: string | null;
   stage: string;
   stageColor: string | null;
+  phone: string | null;
 }
 
 interface BitrixDealSelectProps {
   value: string;
-  onChange: (id: string) => void;
+  /** Fires with the selected deal id and, on user selection, the full deal (incl. phone). */
+  onChange: (id: string, deal?: BitrixDealOption) => void;
   placeholder?: string;
   searchPlaceholder?: string;
   disabled?: boolean;
@@ -148,7 +150,7 @@ export function BitrixDealSelect({
   }, [open]);
 
   const handleSelect = (opt: BitrixDealOption) => {
-    onChange(opt.id);
+    onChange(opt.id, opt);
     setSelectedLabel(opt.client ?? opt.title);
     setOpen(false);
     setSearch("");

@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, type ForwardRefExoticComponent, type RefAttributes } from "react";
+import { createPortal } from "react-dom";
 import Image from "next/image";
 import { useQuery } from "@tanstack/react-query";
 import { Drawer } from "@/components/shared/drawer";
@@ -25,16 +26,41 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { AddCircle, Camera, Link, CloseCircle, CheckCircle, Pen } from "@solar-icons/react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  AddCircle,
+  Camera,
+  Gallery,
+  CloseCircle,
+  Pen,
+  ChatRoundDots,
+  User,
+  MapPoint,
+  UsersGroupRounded,
+  CalendarMark,
+  type IconProps,
+} from "@solar-icons/react";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { BitrixIdField } from "@/components/shared/BitrixIdField";
-import { cn } from "@/lib/utils";
+import { PhoneInput } from "@/components/shared/PhoneInput";
+import { normalizePhoneId } from "@/lib/phone";
+import { cn, formatRupiah } from "@/lib/utils";
+import { computeFullPrice } from "@/lib/package-prices";
 import { toast } from "sonner";
 import { useCreateGuestbookEntry, useUpdateGuestbookEntry } from "@/hooks/use-guestbook";
 import { useVenues } from "@/hooks/use-venues";
 import { useSalesUsers } from "@/hooks/use-sales-users";
 import { usePermissions } from "@/hooks/use-permissions";
+import { useCurrentUser } from "@/hooks/use-current-user";
 import type { GuestbookEntryItem } from "@/lib/queries/guestbookEntries";
+import type { FileDescriptor, ProofFiles } from "@/lib/validations/guestbook";
+import { resolveGuestbookPhotoUrl } from "./photo-url";
 
 async function fetchJson<T>(url: string): Promise<T> {
   const res = await fetch(url);
@@ -43,7 +69,15 @@ async function fetchJson<T>(url: string): Promise<T> {
 }
 
 type SourceOption = { id: string; name: string; createdAt: string };
-type PackageOption = { id: string; packageName: string; pax: number };
+type PackageOption = {
+  id: string;
+  packageName: string;
+  pax: number;
+  sellingPrice: number;
+  margin: number;
+  // basePrice datang sebagai string (Prisma Decimal di-serialize) atau number
+  categoryPrices?: { basePrice: number | string }[];
+};
 
 interface GuestbookDrawerProps {
   isOpen: boolean;
@@ -81,6 +115,7 @@ type GuestbookForm = {
   packageId: string;
   packageCategory: string;
   checkInAt: string;
+  checkOutAt: string;
   commitVisitDate: string;
   commitPayDate: string;
   visitorPhotoFile: File | null;
@@ -110,11 +145,12 @@ const EMPTY_FORM: GuestbookForm = {
   scheduledAt: "",
   hostId: "",
   notes: "",
-  visitStatus: "",
+  visitStatus: "to_be_discuss",
   sourceOfInformationId: "",
   packageId: "",
   packageCategory: "",
   checkInAt: "",
+  checkOutAt: "",
   commitVisitDate: "",
   commitPayDate: "",
   visitorPhotoFile: null,
@@ -146,51 +182,208 @@ const ONLINE_MEDIUM_OPTIONS = [
   { value: "other", label: "Lainnya" },
 ] as const;
 
-function SectionLabel({ children }: { children: string }) {
+function SectionHeader({
+  icon: Icon,
+  title,
+  required,
+}: {
+  icon: ForwardRefExoticComponent<Omit<IconProps, "ref"> & RefAttributes<SVGSVGElement>>;
+  title: string;
+  required?: boolean;
+}) {
   return (
-    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-      {children}
-    </p>
+    <div className="flex items-center gap-2 pb-1 border-b border-border">
+      <Icon weight="BoldDuotone" className="h-4 w-4 text-muted-foreground shrink-0" />
+      <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+        {title}
+      </span>
+      {required && <span className="text-xs font-semibold text-destructive">*</span>}
+    </div>
   );
 }
 
-function resolvePhotoUrl(key: string | null | undefined): string | null {
-  if (!key) return null;
-  if (key.startsWith("http")) return key;
-  const base = process.env.NEXT_PUBLIC_S3_PUBLIC_URL;
-  if (!base) return null;
-  return `${base}/${key}`;
-}
+/** Full-screen rear-camera capture, portaled to <body> so it escapes the drawer's transform. */
+function CameraCapture({
+  onCapture,
+  onClose,
+}: {
+  onCapture: (file: File) => void;
+  onClose: () => void;
+}) {
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const [ready, setReady] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-type BitrixContact = { id: string; name: string };
+  useEffect(() => {
+    let cancelled = false;
+
+    async function start() {
+      if (!navigator.mediaDevices?.getUserMedia) {
+        setError("Kamera tidak didukung di perangkat atau browser ini.");
+        return;
+      }
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: "environment" } },
+          audio: false,
+        });
+        if (cancelled) {
+          stream.getTracks().forEach((t) => t.stop());
+          return;
+        }
+        streamRef.current = stream;
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          await videoRef.current.play().catch(() => {});
+        }
+        setReady(true);
+      } catch (err) {
+        if (cancelled) return;
+        const name = err instanceof Error ? err.name : "";
+        if (name === "NotAllowedError" || name === "SecurityError") {
+          setError("Akses kamera ditolak. Izinkan kamera lalu coba lagi.");
+        } else if (name === "NotFoundError" || name === "OverconstrainedError") {
+          setError("Kamera belakang tidak ditemukan di perangkat ini.");
+        } else {
+          setError("Gagal membuka kamera.");
+        }
+      }
+    }
+
+    start();
+    return () => {
+      cancelled = true;
+      streamRef.current?.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
+    };
+  }, []);
+
+  function handleShutter() {
+    const video = videoRef.current;
+    if (!video) return;
+    const w = video.videoWidth;
+    const h = video.videoHeight;
+    if (!w || !h) return;
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.drawImage(video, 0, 0, w, h);
+    canvas.toBlob(
+      (blob) => {
+        if (!blob) {
+          toast.error("Gagal mengambil foto. Coba lagi.");
+          return;
+        }
+        onCapture(new File([blob], `foto-tamu-${Date.now()}.jpg`, { type: "image/jpeg" }));
+      },
+      "image/jpeg",
+      0.9
+    );
+  }
+
+  if (typeof document === "undefined") return null;
+
+  return createPortal(
+    <div className="fixed inset-0 z-[70] flex flex-col bg-black text-white">
+      <div className="flex items-center justify-between p-4">
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Tutup kamera"
+          className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 transition-colors hover:bg-white/20"
+        >
+          <CloseCircle weight="BoldDuotone" className="h-6 w-6" />
+        </button>
+        <span className="text-sm font-medium">Ambil Foto Tamu</span>
+        <span className="h-10 w-10" aria-hidden />
+      </div>
+
+      <div className="relative flex-1 overflow-hidden">
+        {error ? (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 p-6 text-center">
+            <Camera weight="BoldDuotone" className="h-10 w-10 opacity-60" />
+            <p className="max-w-xs text-sm text-white/80">{error}</p>
+            <Button type="button" variant="secondary" className="rounded-full" onClick={onClose}>
+              Tutup
+            </Button>
+          </div>
+        ) : (
+          <video ref={videoRef} playsInline muted className="h-full w-full object-cover" />
+        )}
+      </div>
+
+      {!error && (
+        <div className="flex items-center justify-center p-6">
+          <button
+            type="button"
+            onClick={handleShutter}
+            disabled={!ready}
+            aria-label="Ambil foto"
+            className="flex h-16 w-16 items-center justify-center rounded-full border-4 border-white/70 bg-white/20 backdrop-blur transition-transform active:scale-95 disabled:opacity-40"
+          >
+            <span className="h-12 w-12 rounded-full bg-white" />
+          </button>
+        </div>
+      )}
+    </div>,
+    document.body
+  );
+}
 
 function PhotoUpload({
   label,
   required,
   preview,
+  fullWidth,
+  withCamera,
   onFileChange,
   onClear,
 }: {
   label: string;
   required?: boolean;
   preview: string;
+  fullWidth?: boolean;
+  withCamera?: boolean;
   onFileChange: (file: File) => void;
   onClear: () => void;
 }) {
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const [choiceOpen, setChoiceOpen] = useState(false);
+  const [cameraOpen, setCameraOpen] = useState(false);
+
+  function openGallery() {
+    setChoiceOpen(false);
+    inputRef.current?.click();
+  }
+
+  function handleTileClick() {
+    if (withCamera) {
+      setChoiceOpen(true);
+    } else {
+      inputRef.current?.click();
+    }
+  }
+
   return (
     <div className="space-y-1.5">
       <Label className="text-sm font-medium">
         {label} {required && <span className="text-destructive">*</span>}
       </Label>
-      <div className="flex items-center gap-3">
+      <div className={cn("flex items-center gap-3", fullWidth && "w-full")}>
         {preview ? (
-          <div className="relative">
+          <div className={cn("relative", fullWidth && "w-full")}>
             <Image
               src={preview}
               alt={label}
-              width={80}
-              height={80}
-              className="h-20 w-20 rounded-xl object-cover border"
+              width={fullWidth ? 400 : 80}
+              height={fullWidth ? 160 : 80}
+              className={cn(
+                "rounded-xl object-cover border",
+                fullWidth ? "h-36 w-full" : "h-20 w-20"
+              )}
               unoptimized
             />
             <button
@@ -202,21 +395,75 @@ function PhotoUpload({
             </button>
           </div>
         ) : (
-          <label className="flex flex-col items-center justify-center h-20 w-20 rounded-xl border-2 border-dashed border-border hover:border-primary/50 cursor-pointer transition-colors">
+          <button
+            type="button"
+            onClick={handleTileClick}
+            className={cn(
+              "flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-border hover:border-primary/50 cursor-pointer transition-colors",
+              fullWidth ? "h-28 w-full" : "h-20 w-20"
+            )}
+          >
             <Camera weight="BoldDuotone" className="h-5 w-5 text-muted-foreground" />
-            <span className="text-[10px] text-muted-foreground mt-0.5">Upload</span>
-            <input
-              type="file"
-              accept="image/jpeg,image/png,image/webp"
-              className="hidden"
-              onChange={(e) => {
-                const f = e.target.files?.[0];
-                if (f) onFileChange(f);
-              }}
-            />
-          </label>
+            <span className="text-[10px] text-muted-foreground mt-0.5">
+              {withCamera ? "Tambah" : "Upload"}
+            </span>
+          </button>
         )}
       </div>
+
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/jpeg,image/png,image/webp"
+        className="hidden"
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          if (f) onFileChange(f);
+          e.target.value = "";
+        }}
+      />
+
+      {withCamera && (
+        <Dialog open={choiceOpen} onOpenChange={setChoiceOpen}>
+          <DialogContent className="rounded-2xl sm:max-w-xs">
+            <DialogHeader>
+              <DialogTitle>{label}</DialogTitle>
+              <DialogDescription>Pilih cara menambahkan foto.</DialogDescription>
+            </DialogHeader>
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={openGallery}
+                className="flex flex-col items-center justify-center gap-2 rounded-2xl border p-4 transition-colors hover:bg-accent hover:text-accent-foreground"
+              >
+                <Gallery weight="BoldDuotone" className="h-7 w-7 text-primary" />
+                <span className="text-xs font-medium">Galeri</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setChoiceOpen(false);
+                  setCameraOpen(true);
+                }}
+                className="flex flex-col items-center justify-center gap-2 rounded-2xl border p-4 transition-colors hover:bg-accent hover:text-accent-foreground"
+              >
+                <Camera weight="BoldDuotone" className="h-7 w-7 text-primary" />
+                <span className="text-xs font-medium">Ambil Foto</span>
+              </button>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {cameraOpen && (
+        <CameraCapture
+          onCapture={(file) => {
+            setCameraOpen(false);
+            onFileChange(file);
+          }}
+          onClose={() => setCameraOpen(false)}
+        />
+      )}
     </div>
   );
 }
@@ -224,20 +471,39 @@ function PhotoUpload({
 export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerProps) {
   const [form, setForm] = useState<GuestbookForm>(EMPTY_FORM);
   const [showConfirm, setShowConfirm] = useState(false);
-  const [bitrixContacts, setBitrixContacts] = useState<BitrixContact[]>([]);
-  const [bitrixLoading, setBitrixLoading] = useState(false);
-  const [bitrixError, setBitrixError] = useState<string | null>(null);
-  const [bitrixSearched, setBitrixSearched] = useState(false);
-  const bitrixAbortRef = useRef<AbortController | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  // Guard sinkron anti double-submit: setState nunggu re-render, ref langsung
+  // ke-set — jadi klik kedua yang datang sebelum render berikutnya tetap ke-block.
+  const submittingRef = useRef(false);
 
   const isEditMode = editEntry != null;
   const createMutation = useCreateGuestbookEntry();
   const updateMutation = useUpdateGuestbookEntry();
-  const isSaving = createMutation.isPending || updateMutation.isPending;
+  const isSaving = createMutation.isPending || updateMutation.isPending || isSubmitting;
   const { data: venues = [] } = useVenues();
   const { users: salesUsers } = useSalesUsers();
   const salesOptions = salesUsers.map((u) => ({ id: u.id, name: u.fullName ?? u.id }));
   const { can } = usePermissions();
+  const { user: currentUser } = useCurrentUser();
+
+  // Sales PIC lock — kalau yang create sales, hostId dikunci ke dirinya sendiri.
+  const isSalesRole =
+    currentUser?.roleName === "sales" || currentUser?.roleName === "sales-mice";
+  const isSelfAssignableSales =
+    isSalesRole &&
+    !!currentUser?.profileId &&
+    salesUsers.some((u) => u.id === currentUser.profileId);
+
+  useEffect(() => {
+    if (!isOpen || isEditMode || !isSelfAssignableSales || !currentUser?.profileId) return;
+    queueMicrotask(() => {
+      setForm((prev) =>
+        prev.hostId === currentUser.profileId
+          ? prev
+          : { ...prev, hostId: currentUser.profileId! }
+      );
+    });
+  }, [isOpen, isEditMode, isSelfAssignableSales, currentUser?.profileId]);
 
   const canWedding = can("booking", "view");
   const canMice = can("booking-mice", "view");
@@ -274,6 +540,7 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
 
   useEffect(() => {
     if (!isEditMode || !isOpen) return;
+    const proofFiles = (editEntry.proofFiles ?? null) as ProofFiles | null;
     queueMicrotask(() => {
       setForm({
         visitorName: editEntry.visitorName ?? "",
@@ -292,20 +559,21 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
         packageId: editEntry.packageId ?? "",
         packageCategory: editEntry.package?.category ?? (canWedding ? "WEDDINGS" : "MICE"),
         checkInAt: editEntry.checkInAt ? new Date(editEntry.checkInAt).toISOString().slice(0, 16) : "",
+        checkOutAt: editEntry.checkOutAt ? new Date(editEntry.checkOutAt).toISOString().slice(0, 16) : "",
         commitVisitDate: editEntry.commitVisitDate
           ? new Date(editEntry.commitVisitDate).toISOString().slice(0, 10) : "",
         commitPayDate: editEntry.commitPayDate
           ? new Date(editEntry.commitPayDate).toISOString().slice(0, 10) : "",
         visitorPhotoFile: null,
-        visitorPhotoPreview: resolvePhotoUrl(editEntry.visitorPhotoUrl) ?? "",
+        visitorPhotoPreview: resolveGuestbookPhotoUrl(editEntry.visitorPhoto) ?? "",
         proofChatFile: null,
-        proofChatPreview: resolvePhotoUrl(editEntry.proofChatUrl) ?? "",
+        proofChatPreview: resolveGuestbookPhotoUrl(proofFiles?.chat?.path) ?? "",
         proofPhotoFile: null,
-        proofPhotoPreview: resolvePhotoUrl(editEntry.proofPhotoUrl) ?? "",
+        proofPhotoPreview: resolveGuestbookPhotoUrl(proofFiles?.photo?.path) ?? "",
         proofLostFile: null,
-        proofLostPreview: resolvePhotoUrl(editEntry.proofLostUrl) ?? "",
+        proofLostPreview: resolveGuestbookPhotoUrl(proofFiles?.lost?.path) ?? "",
         proofRescheduleFile: null,
-        proofReschedulePreview: resolvePhotoUrl(editEntry.proofRescheduleUrl) ?? "",
+        proofReschedulePreview: resolveGuestbookPhotoUrl(proofFiles?.reschedule?.path) ?? "",
         bitrixContactId: editEntry.bitrixContactId ?? "",
         bitrixName: editEntry.bitrixName ?? "",
         bitrixSourceInfo: editEntry.bitrixSourceInfo ?? "",
@@ -313,41 +581,8 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
     });
   }, [isOpen, isEditMode, editEntry, canWedding]);
 
-  useEffect(() => {
-    const digits = form.phoneNumber.replace(/\D/g, "");
-    if (digits.length < 8 || form.bitrixContactId) return;
-
-    const timer = setTimeout(() => {
-      if (bitrixAbortRef.current) bitrixAbortRef.current.abort();
-      const controller = new AbortController();
-      bitrixAbortRef.current = controller;
-      setBitrixLoading(true);
-
-      fetch(`/api/guestbook/bitrix-lookup?phone=${encodeURIComponent(form.phoneNumber)}`, {
-        signal: controller.signal,
-      })
-        .then((res) => res.json() as Promise<{ contacts?: BitrixContact[]; error?: string }>)
-        .then((data) => {
-          setBitrixContacts(data.contacts ?? []);
-          setBitrixSearched(true);
-          setBitrixError(null);
-          setBitrixLoading(false);
-        })
-        .catch((err: unknown) => {
-          if (err instanceof Error && err.name === "AbortError") return;
-          setBitrixError("Gagal menghubungi Bitrix");
-          setBitrixLoading(false);
-        });
-    }, 300);
-
-    return () => clearTimeout(timer);
-  }, [form.phoneNumber, form.bitrixContactId]);
-
   function handleClose() {
     setForm(EMPTY_FORM);
-    setBitrixContacts([]);
-    setBitrixError(null);
-    setBitrixSearched(false);
     setShowConfirm(false);
     onClose();
   }
@@ -376,39 +611,39 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
     setForm((prev) => ({ ...prev, [field]: file, [previewField]: url }));
   }
 
-  async function uploadPhoto(file: File): Promise<string | null> {
+  async function uploadPhoto(file: File): Promise<FileDescriptor | null> {
     const fd = new FormData();
     fd.append("file", file);
     try {
       const res = await fetch("/api/guestbook/upload", { method: "POST", body: fd });
-      const data = (await res.json().catch(() => null)) as { key?: string; error?: string } | null;
+      const data = (await res.json().catch(() => null)) as {
+        id?: string;
+        name_file_origin?: string;
+        mimetype?: string;
+        path?: string;
+        error?: string;
+      } | null;
       if (!res.ok) {
         const msg = data?.error ?? `Upload gagal (HTTP ${res.status})`;
         toast.error(msg);
         console.error("[uploadPhoto]", res.status, data);
         return null;
       }
-      if (!data?.key) {
+      if (!data?.id || !data?.path) {
         toast.error("Respons upload tidak valid.");
         return null;
       }
-      return data.key;
+      return {
+        id: data.id,
+        name_file_origin: data.name_file_origin ?? null,
+        mimetype: data.mimetype ?? null,
+        path: data.path,
+      };
     } catch (err) {
       console.error("[uploadPhoto] network error", err);
       toast.error("Gagal mengupload foto. Periksa koneksi atau konfigurasi storage.");
       return null;
     }
-  }
-
-  async function handleBindBitrix(contact: BitrixContact) {
-    setField("bitrixContactId", contact.id);
-    setField("bitrixName", contact.name);
-    fetch(`/api/guestbook/bitrix-source?contactId=${encodeURIComponent(contact.id)}`)
-      .then((res) => res.json() as Promise<{ sourceInfo?: string | null }>)
-      .then((data) => {
-        if (data.sourceInfo) setField("bitrixSourceInfo", data.sourceInfo);
-      })
-      .catch(() => {});
   }
 
   function validateForm(): boolean {
@@ -420,6 +655,30 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
       toast.error("Pilih tipe interaksi");
       return false;
     }
+    if (!form.notes.trim()) {
+      toast.error("Catatan wajib diisi");
+      return false;
+    }
+    if (!form.checkInAt) {
+      toast.error("Tanggal berkunjung wajib diisi");
+      return false;
+    }
+    if (!form.sourceOfInformationId) {
+      toast.error("Sumber wajib dipilih");
+      return false;
+    }
+    if (!form.hostId) {
+      toast.error("Sales PIC wajib dipilih");
+      return false;
+    }
+    if (isBitrixSource && !form.bitrixContactId.trim()) {
+      toast.error("Bitrix ID wajib dipilih");
+      return false;
+    }
+    if (!form.phoneNumber.trim()) {
+      toast.error("No. Telepon wajib diisi");
+      return false;
+    }
     if (form.interactionType === "online_meeting") {
       if (!form.onlineMedium) { toast.error("Pilih medium online meeting"); return false; }
       if (form.onlineMedium !== "whatsapp_call" && !form.meetingUrl.trim()) { toast.error("Link meeting wajib diisi"); return false; }
@@ -428,47 +687,60 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
       toast.error("Lokasi kunjungan wajib diisi");
       return false;
     }
-    if (form.interactionType === "client_visit" && !form.venueId && !form.meetingLocation.trim()) {
-      toast.error("Pilih venue atau isi lokasi kunjungan");
+    if (form.interactionType === "client_visit" && !form.venueId) {
+      toast.error("Pilih venue");
       return false;
     }
     if (!isEditMode && !form.proofPhotoFile && !form.proofPhotoPreview) {
       toast.error("Bukti foto visit wajib diupload");
       return false;
     }
+    if (!isEditMode && !form.visitorPhotoFile && !form.visitorPhotoPreview) {
+      toast.error("Foto tamu wajib diupload");
+      return false;
+    }
     return true;
   }
 
   async function handleSubmit() {
+    if (submittingRef.current) return;
+    submittingRef.current = true;
+    setIsSubmitting(true);
     setShowConfirm(false);
 
-    async function resolveUrl(
+    try {
+    async function resolveDescriptor(
       file: File | null,
       existingPreview: string,
-      existingKey: string | null | undefined
-    ): Promise<string | null> {
+      existing: FileDescriptor | null | undefined
+    ): Promise<FileDescriptor | null> {
       if (file) return uploadPhoto(file);
-      if (isEditMode && existingPreview) return existingKey ?? null;
+      if (isEditMode && existingPreview) return existing ?? null;
       return null;
     }
 
-    const visitorPhotoUrl = await resolveUrl(form.visitorPhotoFile, form.visitorPhotoPreview, editEntry?.visitorPhotoUrl);
-    if (form.visitorPhotoFile && !visitorPhotoUrl) return;
+    const visitorPhotoDescriptor = await resolveDescriptor(
+      form.visitorPhotoFile,
+      form.visitorPhotoPreview,
+      editEntry?.visitorPhoto ? { id: editEntry.visitorPhoto, path: `guestbook/${editEntry.visitorPhoto}.webp` } : null
+    );
+    if (form.visitorPhotoFile && !visitorPhotoDescriptor) return;
 
-    const proofChatUrl = await resolveUrl(form.proofChatFile, form.proofChatPreview, editEntry?.proofChatUrl);
-    if (form.proofChatFile && !proofChatUrl) return;
-    const proofPhotoUrl = await resolveUrl(form.proofPhotoFile, form.proofPhotoPreview, editEntry?.proofPhotoUrl);
-    if (form.proofPhotoFile && !proofPhotoUrl) return;
-    const proofLostUrl = await resolveUrl(form.proofLostFile, form.proofLostPreview, editEntry?.proofLostUrl);
-    if (form.proofLostFile && !proofLostUrl) return;
-    const proofRescheduleUrl = await resolveUrl(form.proofRescheduleFile, form.proofReschedulePreview, editEntry?.proofRescheduleUrl);
-    if (form.proofRescheduleFile && !proofRescheduleUrl) return;
+    const proofFilesData = (editEntry?.proofFiles ?? null) as ProofFiles | null;
+    const proofChat = await resolveDescriptor(form.proofChatFile, form.proofChatPreview, proofFilesData?.chat);
+    if (form.proofChatFile && !proofChat) return;
+    const proofPhoto = await resolveDescriptor(form.proofPhotoFile, form.proofPhotoPreview, proofFilesData?.photo);
+    if (form.proofPhotoFile && !proofPhoto) return;
+    const proofLost = await resolveDescriptor(form.proofLostFile, form.proofLostPreview, proofFilesData?.lost);
+    if (form.proofLostFile && !proofLost) return;
+    const proofReschedule = await resolveDescriptor(form.proofRescheduleFile, form.proofReschedulePreview, proofFilesData?.reschedule);
+    if (form.proofRescheduleFile && !proofReschedule) return;
 
     const payload = {
       visitorName: form.visitorName.trim(),
       email: form.email.trim() || null,
       phoneNumber: form.phoneNumber.trim() || null,
-      visitorPhotoUrl,
+      visitorPhoto: visitorPhotoDescriptor?.id ?? null,
       venueId: form.venueId || null,
       interactionType: form.interactionType,
       onlineMedium: form.onlineMedium || null,
@@ -481,10 +753,13 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
       sourceOfInformationId: form.sourceOfInformationId || null,
       packageId: form.packageId || null,
       checkInAt: form.checkInAt || null,
-      proofChatUrl,
-      proofPhotoUrl,
-      proofLostUrl,
-      proofRescheduleUrl,
+      checkOutAt: form.checkOutAt || null,
+      proofFiles: {
+        ...(proofPhoto ? { photo: proofPhoto } : {}),
+        ...(proofChat ? { chat: proofChat } : {}),
+        ...(proofLost ? { lost: proofLost } : {}),
+        ...(proofReschedule ? { reschedule: proofReschedule } : {}),
+      },
       commitVisitDate: form.commitVisitDate || null,
       commitPayDate: form.commitPayDate || null,
       bitrixContactId: form.bitrixContactId || null,
@@ -509,6 +784,10 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
         toast.error(result.error ?? "Gagal mencatat tamu");
       }
     }
+    } finally {
+      submittingRef.current = false;
+      setIsSubmitting(false);
+    }
   }
 
   function handleSubmitClick() {
@@ -524,32 +803,43 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
       maxWidth="sm:max-w-lg"
     >
       <div className="flex flex-col h-full">
-        <div className="flex-1 overflow-y-auto space-y-6 pb-2">
-          {/* Section: Interaksi */}
-          <div className="space-y-2">
-            <SectionLabel>Interaksi</SectionLabel>
+        <div className="flex-1 overflow-y-auto space-y-4 pb-2">
+          {/* Section: Jenis Interaksi */}
+          <div className="rounded-2xl border bg-card p-5 flex flex-col gap-4">
+            <SectionHeader icon={ChatRoundDots} title="Jenis Interaksi" required />
             <div className="grid grid-cols-3 gap-2">
-              {INTERACTION_TYPE_OPTIONS.map((opt) => (
-                <button
-                  key={opt.value}
-                  type="button"
-                  onClick={() => setInteractionType(opt.value)}
-                  className={cn(
-                    "min-h-9 rounded-full px-2 py-2 text-xs font-medium text-center transition-colors",
-                    form.interactionType === opt.value
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-muted text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-                  )}
-                >
-                  {opt.label}
-                </button>
-              ))}
+              {INTERACTION_TYPE_OPTIONS.map((opt) => {
+                const active = form.interactionType === opt.value;
+                return (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => setInteractionType(opt.value)}
+                    className={cn(
+                      "flex items-center justify-center gap-2 min-h-11 rounded-full px-3 py-2.5 text-xs font-semibold leading-tight text-center transition-colors",
+                      active
+                        ? "bg-primary text-primary-foreground shadow-sm"
+                        : "bg-muted text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        "flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2",
+                        active ? "border-primary-foreground" : "border-muted-foreground/40"
+                      )}
+                    >
+                      {active && <span className="h-1.5 w-1.5 rounded-full bg-primary-foreground" />}
+                    </span>
+                    {opt.label}
+                  </button>
+                );
+              })}
             </div>
           </div>
 
           {/* Section: Data Tamu */}
-          <div className="space-y-4">
-            <SectionLabel>Data Tamu</SectionLabel>
+          <div className="rounded-2xl border bg-card p-5 flex flex-col gap-4">
+            <SectionHeader icon={User} title="Data Tamu" />
 
             <div className="space-y-1.5">
               <Label htmlFor="gb-visitorName" className="text-sm font-medium">
@@ -565,21 +855,9 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor="gb-checkInAt" className="text-sm font-medium">
-                Tanggal & Waktu
+              <Label className="text-sm font-medium">
+                Sumber <span className="text-destructive">*</span>
               </Label>
-              <Input
-                id="gb-checkInAt"
-                type="datetime-local"
-                value={form.checkInAt}
-                onChange={(e) => setField("checkInAt", e.target.value)}
-                className="rounded-xl"
-              />
-              <p className="text-xs text-muted-foreground">Kosongkan untuk waktu sekarang</p>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label className="text-sm font-medium">Sumber</Label>
               <SearchableSelect
                 options={sourceOptions.map((o) => ({ id: o.id, name: o.name }))}
                 value={form.sourceOfInformationId}
@@ -594,11 +872,24 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
 
             {isBitrixSource && (
               <div className="space-y-1.5">
-                <Label className="text-sm font-medium">Bitrix ID</Label>
+                <Label className="text-sm font-medium">
+                  Bitrix ID <span className="text-destructive">*</span>
+                </Label>
                 <BitrixIdField
                   value={form.bitrixContactId}
-                  onChange={(v) => setField("bitrixContactId", v)}
+                  onChange={(v, deal) => {
+                    setField("bitrixContactId", v);
+                    // No. telp auto-bind dari kontak Bitrix (dinormalisasi ke format
+                    // simpanan <kodeNegara><nomor>); kalau kosong, biar user isi manual.
+                    if (deal?.phone) {
+                      const norm = normalizePhoneId(deal.phone);
+                      if (norm) setField("phoneNumber", norm);
+                    }
+                  }}
                 />
+                <p className="text-xs text-muted-foreground">
+                  No. telepon terisi otomatis bila kontak Bitrix punya nomor.
+                </p>
               </div>
             )}
 
@@ -615,107 +906,68 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor="gb-phone" className="text-sm font-medium">No. Telepon</Label>
-              <Input
+              <Label htmlFor="gb-phone" className="text-sm font-medium">
+                No. Telepon <span className="text-destructive">*</span>
+              </Label>
+              <PhoneInput
                 id="gb-phone"
-                placeholder="08xx-xxxx-xxxx"
                 value={form.phoneNumber}
-                onChange={(e) => {
-                  const val = e.target.value;
-                  setField("phoneNumber", val);
-                  if (form.bitrixContactId) {
-                    setField("bitrixContactId", "");
-                    setField("bitrixName", "");
-                    setField("bitrixSourceInfo", "");
-                  }
-                  const digits = val.replace(/\D/g, "");
-                  if (digits.length < 8) {
-                    setBitrixContacts([]);
-                    setBitrixError(null);
-                    setBitrixSearched(false);
-                  }
-                }}
-                className="rounded-xl"
+                onChange={(v) => setField("phoneNumber", v)}
+                wrapperClassName="rounded-xl"
               />
-
-              {form.bitrixContactId ? (
-                <div className="flex items-center gap-2 mt-1.5 px-3 py-2 rounded-xl bg-secondary border border-border">
-                  <CheckCircle weight="BoldDuotone" className="h-4 w-4 text-primary shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-medium text-foreground truncate">{form.bitrixName}</p>
-                    <p className="text-[11px] text-muted-foreground">Terhubung ke Bitrix</p>
-                    {form.bitrixSourceInfo && (
-                      <p className="text-[11px] text-muted-foreground">Sumber: {form.bitrixSourceInfo}</p>
-                    )}
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setField("bitrixContactId", "");
-                      setField("bitrixName", "");
-                      setField("bitrixSourceInfo", "");
-                    }}
-                    className="shrink-0 text-muted-foreground hover:text-destructive transition-colors"
-                    aria-label="Hapus binding Bitrix"
-                  >
-                    <CloseCircle weight="BoldDuotone" className="h-4 w-4" />
-                  </button>
-                </div>
-              ) : (
-                <>
-                  {bitrixLoading && (
-                    <p className="text-xs text-muted-foreground mt-1.5 flex items-center gap-1.5">
-                      <span className="inline-block h-3 w-3 rounded-full border-2 border-muted-foreground/40 border-t-primary animate-spin" />
-                      Mencari di Bitrix...
-                    </p>
-                  )}
-                  {bitrixError && !bitrixLoading && (
-                    <p className="text-xs text-muted-foreground mt-1.5">{bitrixError}</p>
-                  )}
-                  {!bitrixLoading && !bitrixError && bitrixSearched && bitrixContacts.length === 0 && (
-                    <p className="text-xs text-muted-foreground mt-1.5">Tidak ditemukan di Bitrix</p>
-                  )}
-                  {!bitrixLoading && !bitrixError && bitrixContacts.length > 0 && (
-                    <div className="mt-1.5 space-y-1.5">
-                      <p className="text-xs text-muted-foreground flex items-center gap-1">
-                        <Link weight="BoldDuotone" className="h-3.5 w-3.5" />
-                        Hubungkan ke kontak Bitrix:
-                      </p>
-                      <div className="flex flex-wrap gap-1.5">
-                        {bitrixContacts.map((contact) => (
-                          <button
-                            key={contact.id}
-                            type="button"
-                            onClick={() => handleBindBitrix(contact)}
-                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-muted text-foreground hover:bg-primary hover:text-primary-foreground transition-colors"
-                          >
-                            {contact.name}
-                            <span className="text-[10px] opacity-60">#{contact.id}</span>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </>
-              )}
             </div>
 
             <PhotoUpload
               label="Foto Tamu"
+              required
+              fullWidth
+              withCamera
               preview={form.visitorPhotoPreview}
               onFileChange={(f) => handlePhotoChange("visitorPhotoFile", "visitorPhotoPreview", f)}
               onClear={() => handlePhotoChange("visitorPhotoFile", "visitorPhotoPreview", null)}
             />
           </div>
 
-          {/* Section: Detail */}
-          {form.interactionType && (
-            <div className="space-y-4">
-              <SectionLabel>Detail</SectionLabel>
+          {/* Section: Detail — selalu tampil, gak nunggu jenis interaksi dipilih */}
+          <div className="rounded-2xl border bg-card p-5 flex flex-col gap-4">
+            <SectionHeader icon={MapPoint} title="Detail Kunjungan" />
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1.5 sm:col-span-2">
+                  <Label htmlFor="gb-checkInAt" className="text-sm font-medium">
+                    Tanggal Berkunjung <span className="text-destructive">*</span>
+                  </Label>
+                  <Input
+                    id="gb-checkInAt"
+                    type="datetime-local"
+                    required
+                    value={form.checkInAt}
+                    onChange={(e) => setField("checkInAt", e.target.value)}
+                    className="rounded-xl"
+                  />
+                </div>
+                {isEditMode && (
+                  <div className="space-y-1.5 sm:col-span-2">
+                    <Label htmlFor="gb-checkOutAt" className="text-sm font-medium">
+                      Tanggal Checkout
+                    </Label>
+                    <Input
+                      id="gb-checkOutAt"
+                      type="datetime-local"
+                      value={form.checkOutAt}
+                      onChange={(e) => setField("checkOutAt", e.target.value)}
+                      className="rounded-xl"
+                    />
+                  </div>
+                )}
+              </div>
 
               {/* Venue — semua tipe interaksi */}
               <div className="space-y-1.5">
-                <Label htmlFor="gb-venue" className="text-sm font-medium">Venue</Label>
+                <Label htmlFor="gb-venue" className="text-sm font-medium">
+                  Venue{" "}
+                  {form.interactionType === "client_visit" && <span className="text-destructive">*</span>}
+                </Label>
                 <Select
                   value={form.venueId}
                   onValueChange={(v) => {
@@ -742,66 +994,74 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
                     {[
                       { value: "WEDDINGS", label: "Wedding" },
                       { value: "MICE", label: "MICE" },
-                    ].map((opt) => (
-                      <button
-                        key={opt.value}
-                        type="button"
-                        onClick={() => {
-                          setField("packageCategory", opt.value);
-                          setField("packageId", "");
-                        }}
-                        className={cn(
-                          "min-h-9 rounded-full px-3 py-2 text-xs font-medium text-center transition-colors",
-                          form.packageCategory === opt.value
-                            ? "bg-primary text-primary-foreground"
-                            : "bg-muted text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-                        )}
-                      >
-                        {opt.label}
-                      </button>
-                    ))}
+                    ].map((opt) => {
+                      const active = form.packageCategory === opt.value;
+                      return (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          onClick={() => {
+                            setField("packageCategory", opt.value);
+                            setField("packageId", "");
+                          }}
+                          className={cn(
+                            "flex items-center justify-center gap-2 min-h-11 rounded-full px-3 py-2.5 text-xs font-semibold leading-tight text-center transition-colors",
+                            active
+                              ? "bg-primary text-primary-foreground shadow-sm"
+                              : "bg-muted text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                          )}
+                        >
+                          <span
+                            className={cn(
+                              "flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2",
+                              active ? "border-primary-foreground" : "border-muted-foreground/40"
+                            )}
+                          >
+                            {active && <span className="h-1.5 w-1.5 rounded-full bg-primary-foreground" />}
+                          </span>
+                          {opt.label}
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
               )}
 
-              {/* Paket — semua tipe interaksi, tergantung venue */}
-              <div className="space-y-1.5">
-                <Label className="text-sm font-medium">Paket</Label>
-                <SearchableSelect
-                  options={packages.map((p) => ({
-                    id: p.id,
-                    name: `${p.packageName}${p.pax ? ` — ${p.pax} pax` : ""}`,
-                  }))}
-                  value={form.packageId}
-                  onChange={(v) => setField("packageId", v)}
-                  placeholder={
-                    !form.venueId
-                      ? "Pilih venue terlebih dahulu"
-                      : !form.packageCategory
-                        ? "Pilih kategori paket"
-                        : "Pilih paket"
-                  }
-                  searchPlaceholder="Cari paket..."
-                  emptyText="Tidak ada paket"
-                  disabled={!form.venueId || !form.packageCategory}
-                />
-              </div>
-
-              {/* Detail per tipe interaksi */}
-              {form.interactionType === "client_visit" && (
+              {/* Paket — hanya untuk Wedding; disembunyikan saat MICE */}
+              {form.packageCategory !== "MICE" && (
                 <div className="space-y-1.5">
-                  <Label htmlFor="gb-meetingLocation-visit" className="text-sm font-medium">Lokasi</Label>
-                  <Input
-                    id="gb-meetingLocation-visit"
-                    placeholder="Isi lokasi bila di luar venue"
-                    value={form.meetingLocation}
-                    onChange={(e) => setField("meetingLocation", e.target.value)}
-                    className="rounded-xl"
+                  <Label className="text-sm font-medium">Paket</Label>
+                  <SearchableSelect
+                    options={packages.map((p) => {
+                      const base = (p.categoryPrices ?? []).reduce(
+                        (sum, c) => sum + Number(c.basePrice),
+                        0
+                      );
+                      const price = computeFullPrice([{ basePrice: base }], p.margin ?? 0, p.sellingPrice);
+                      const paxLabel = p.pax ? ` — ${p.pax} pax` : "";
+                      const priceLabel = price > 0 ? ` — ${formatRupiah(price)}` : "";
+                      return {
+                        id: p.id,
+                        name: `${p.packageName}${paxLabel}${priceLabel}`,
+                      };
+                    })}
+                    value={form.packageId}
+                    onChange={(v) => setField("packageId", v)}
+                    placeholder={
+                      !form.venueId
+                        ? "Pilih venue terlebih dahulu"
+                        : !form.packageCategory
+                          ? "Pilih kategori paket"
+                          : "Pilih paket"
+                    }
+                    searchPlaceholder="Cari paket..."
+                    emptyText="Tidak ada paket"
+                    disabled={!form.venueId || !form.packageCategory}
                   />
-                  <p className="text-xs text-muted-foreground">Opsional bila venue sudah dipilih</p>
                 </div>
               )}
 
+              {/* Detail per tipe interaksi */}
               {form.interactionType === "online_meeting" && (
                 <>
                   <div className="space-y-1.5">
@@ -827,6 +1087,16 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
                     <Input id="gb-meetingUrl" placeholder="https://..." value={form.meetingUrl} onChange={(e) => setField("meetingUrl", e.target.value)} className="rounded-xl" />
                   </div>
                   <div className="space-y-1.5">
+                    <Label htmlFor="gb-meetingLocation-online" className="text-sm font-medium">Lokasi / Link</Label>
+                    <Input
+                      id="gb-meetingLocation-online"
+                      placeholder="Isi lokasi bila di luar venue"
+                      value={form.meetingLocation}
+                      onChange={(e) => setField("meetingLocation", e.target.value)}
+                      className="rounded-xl"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
                     <Label htmlFor="gb-scheduledAt-online" className="text-sm font-medium">Jadwal</Label>
                     <Input id="gb-scheduledAt-online" type="datetime-local" value={form.scheduledAt} onChange={(e) => setField("scheduledAt", e.target.value)} className="rounded-xl" />
                   </div>
@@ -837,7 +1107,7 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
                 <>
                   <div className="space-y-1.5">
                     <Label htmlFor="gb-meetingLocation-jemput" className="text-sm font-medium">
-                      Lokasi <span className="text-destructive">*</span>
+                      Lokasi / Link <span className="text-destructive">*</span>
                     </Label>
                     <Input id="gb-meetingLocation-jemput" placeholder="Lokasi kunjungan" value={form.meetingLocation} onChange={(e) => setField("meetingLocation", e.target.value)} className="rounded-xl" />
                   </div>
@@ -847,107 +1117,122 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
                   </div>
                 </>
               )}
-            </div>
-          )}
-
-          {/* Bertemu Dengan */}
-          <div className="space-y-1.5">
-            <Label className="text-sm font-medium">Bertemu Dengan</Label>
-            <SearchableSelect
-              options={salesOptions}
-              value={form.hostId}
-              onChange={(v) => setField("hostId", v)}
-              placeholder="Pilih sales yang ditemui"
-              searchPlaceholder="Cari sales..."
-              emptyText="Tidak ada sales"
-            />
-            <p className="text-xs text-muted-foreground">Sales PIC yang ditemui — dipakai untuk atribusi</p>
           </div>
 
-          {/* Catatan */}
-          <div className="space-y-1.5">
-            <Label htmlFor="gb-notes" className="text-sm font-medium">Catatan</Label>
-            <Textarea
-              id="gb-notes"
-              placeholder="Catatan tambahan..."
-              value={form.notes}
-              onChange={(e) => setField("notes", e.target.value)}
-              className="rounded-xl min-h-20 resize-y"
-            />
-          </div>
+          {/* Section: Tindak Lanjut */}
+          <div className="rounded-2xl border bg-card p-5 flex flex-col gap-4">
+            <SectionHeader icon={UsersGroupRounded} title="Tindak Lanjut" />
 
-          {/* Section: Bukti */}
-          <div className="space-y-4">
-            <SectionLabel>Bukti</SectionLabel>
-            <PhotoUpload
-              label="Bukti Foto Visit"
-              required
-              preview={form.proofPhotoPreview}
-              onFileChange={(f) => handlePhotoChange("proofPhotoFile", "proofPhotoPreview", f)}
-              onClear={() => handlePhotoChange("proofPhotoFile", "proofPhotoPreview", null)}
-            />
-            <PhotoUpload
-              label="Bukti Chat"
-              preview={form.proofChatPreview}
-              onFileChange={(f) => handlePhotoChange("proofChatFile", "proofChatPreview", f)}
-              onClear={() => handlePhotoChange("proofChatFile", "proofChatPreview", null)}
-            />
-            <PhotoUpload
-              label="Bukti Lost"
-              preview={form.proofLostPreview}
-              onFileChange={(f) => handlePhotoChange("proofLostFile", "proofLostPreview", f)}
-              onClear={() => handlePhotoChange("proofLostFile", "proofLostPreview", null)}
-            />
-            <PhotoUpload
-              label="Bukti Reschedule"
-              preview={form.proofReschedulePreview}
-              onFileChange={(f) => handlePhotoChange("proofRescheduleFile", "proofReschedulePreview", f)}
-              onClear={() => handlePhotoChange("proofRescheduleFile", "proofReschedulePreview", null)}
-            />
-          </div>
-
-          {/* Section: Hasil */}
-          <div className="space-y-4">
-            <SectionLabel>Hasil</SectionLabel>
             <div className="space-y-1.5">
-              <Label htmlFor="gb-visitStatus" className="text-sm font-medium">Status</Label>
+              <Label className="text-sm font-medium">
+                Sales PIC <span className="text-destructive">*</span>
+              </Label>
+              <SearchableSelect
+                options={salesOptions}
+                value={form.hostId}
+                onChange={(v) => setField("hostId", v)}
+                placeholder="Pilih sales yang ditemui"
+                searchPlaceholder="Cari sales..."
+                emptyText="Tidak ada sales"
+                disabled={isSelfAssignableSales}
+              />
+              {isSelfAssignableSales ? (
+                <p className="text-xs text-muted-foreground">Otomatis ditugaskan ke Anda.</p>
+              ) : (
+                <p className="text-xs text-muted-foreground">Sales PIC yang ditemui — dipakai untuk atribusi</p>
+              )}
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="gb-visitStatus" className="text-sm font-medium">Visit Status</Label>
               <Select value={form.visitStatus} onValueChange={(v) => setField("visitStatus", v)}>
                 <SelectTrigger id="gb-visitStatus" className="rounded-xl w-full">
                   <SelectValue placeholder="Pilih status" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="deal">Deal</SelectItem>
-                  <SelectItem value="in_progress">In Progress</SelectItem>
                   <SelectItem value="pending">Pending</SelectItem>
                   <SelectItem value="to_be_discuss">To Be Discuss</SelectItem>
                   <SelectItem value="lost">Lost</SelectItem>
                 </SelectContent>
               </Select>
             </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="gb-notes" className="text-sm font-medium">
+                Catatan <span className="text-destructive">*</span>
+              </Label>
+              <Textarea
+                id="gb-notes"
+                placeholder="Catatan tambahan..."
+                value={form.notes}
+                onChange={(e) => setField("notes", e.target.value)}
+                className="rounded-xl min-h-20 resize-y"
+              />
+            </div>
+          </div>
+
+          {/* Section: Bukti */}
+          <div className="rounded-2xl border bg-card p-5 flex flex-col gap-4">
+            <SectionHeader icon={Camera} title="Bukti" />
+            <div className="grid grid-cols-2 gap-4">
+              <PhotoUpload
+                label="Bukti Foto Visit"
+                required
+                fullWidth
+                withCamera
+                preview={form.proofPhotoPreview}
+                onFileChange={(f) => handlePhotoChange("proofPhotoFile", "proofPhotoPreview", f)}
+                onClear={() => handlePhotoChange("proofPhotoFile", "proofPhotoPreview", null)}
+              />
+              <PhotoUpload
+                label="Bukti Chat"
+                fullWidth
+                preview={form.proofChatPreview}
+                onFileChange={(f) => handlePhotoChange("proofChatFile", "proofChatPreview", f)}
+                onClear={() => handlePhotoChange("proofChatFile", "proofChatPreview", null)}
+              />
+              <PhotoUpload
+                label="Bukti Lost"
+                fullWidth
+                preview={form.proofLostPreview}
+                onFileChange={(f) => handlePhotoChange("proofLostFile", "proofLostPreview", f)}
+                onClear={() => handlePhotoChange("proofLostFile", "proofLostPreview", null)}
+              />
+              <PhotoUpload
+                label="Bukti Reschedule"
+                fullWidth
+                preview={form.proofReschedulePreview}
+                onFileChange={(f) => handlePhotoChange("proofRescheduleFile", "proofReschedulePreview", f)}
+                onClear={() => handlePhotoChange("proofRescheduleFile", "proofReschedulePreview", null)}
+              />
+            </div>
           </div>
 
           {/* Section: Komitmen */}
-          <div className="space-y-4">
-            <SectionLabel>Komitmen</SectionLabel>
-            <div className="space-y-1.5">
-              <Label htmlFor="gb-commitVisitDate" className="text-sm font-medium">Tanggal Commit Visit</Label>
-              <Input
-                id="gb-commitVisitDate"
-                type="date"
-                value={form.commitVisitDate}
-                onChange={(e) => setField("commitVisitDate", e.target.value)}
-                className="rounded-xl"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="gb-commitPayDate" className="text-sm font-medium">Tanggal Commit Bayar</Label>
-              <Input
-                id="gb-commitPayDate"
-                type="date"
-                value={form.commitPayDate}
-                onChange={(e) => setField("commitPayDate", e.target.value)}
-                className="rounded-xl"
-              />
+          <div className="rounded-2xl border bg-card p-5 flex flex-col gap-4">
+            <SectionHeader icon={CalendarMark} title="Komitmen" />
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="gb-commitVisitDate" className="text-sm font-medium">Tanggal Commit</Label>
+                <Input
+                  id="gb-commitVisitDate"
+                  type="date"
+                  value={form.commitVisitDate}
+                  onChange={(e) => setField("commitVisitDate", e.target.value)}
+                  className="rounded-xl"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="gb-commitPayDate" className="text-sm font-medium">Tanggal Commit Bayar</Label>
+                <Input
+                  id="gb-commitPayDate"
+                  type="date"
+                  value={form.commitPayDate}
+                  onChange={(e) => setField("commitPayDate", e.target.value)}
+                  className="rounded-xl"
+                />
+              </div>
             </div>
           </div>
         </div>
@@ -967,7 +1252,7 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
             type="button"
             className="flex-1 rounded-full gap-1.5"
             onClick={handleSubmitClick}
-            disabled={isSaving || !form.visitorName.trim() || !form.interactionType}
+            disabled={isSaving || !form.visitorName.trim() || !form.interactionType || !form.notes.trim()}
           >
             {isEditMode ? (
               <><Pen weight="BoldDuotone" className="h-4 w-4" />{isSaving ? "Menyimpan..." : "Simpan"}</>
@@ -989,9 +1274,9 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel className="rounded-full">Batal</AlertDialogCancel>
-            <AlertDialogAction className="rounded-full" onClick={handleSubmit}>
-              {isEditMode ? "Ya, Simpan" : "Ya, Tambah"}
+            <AlertDialogCancel className="rounded-full" disabled={isSaving}>Batal</AlertDialogCancel>
+            <AlertDialogAction className="rounded-full" onClick={handleSubmit} disabled={isSaving}>
+              {isSaving ? "Menyimpan..." : isEditMode ? "Ya, Simpan" : "Ya, Tambah"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

@@ -31,6 +31,8 @@ interface ComplimentarySelectProps {
   emptyText?: string;
   disabled?: boolean;
   className?: string;
+  /** Extra classes applied to the trigger button (e.g. "rounded-xl" for drawer parity). */
+  triggerClassName?: string;
 }
 
 // --- Component ---------------------------------------------------------------
@@ -45,6 +47,7 @@ export function ComplimentarySelect({
   emptyText = "Tidak ada complimentary",
   disabled = false,
   className,
+  triggerClassName,
 }: ComplimentarySelectProps): React.ReactElement {
   const [open, setOpen] = React.useState(false);
   const [search, setSearch] = React.useState("");
@@ -285,6 +288,7 @@ export function ComplimentarySelect({
             "hover:bg-accent/50 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2",
             "disabled:cursor-not-allowed disabled:opacity-50",
             !selectedOption && "text-muted-foreground",
+            triggerClassName,
           )}
         >
           <span className="truncate">

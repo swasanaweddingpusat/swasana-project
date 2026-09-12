@@ -10,8 +10,6 @@ import {
   Buildings3,
   Letter,
   Phone,
-  Card2,
-  UsersGroupRounded,
   Calendar,
   ClipboardText,
   User,
@@ -22,6 +20,8 @@ import {
   Gift,
 } from "@solar-icons/react";
 import type { GuestbookEntryItem } from "@/lib/queries/guestbookEntries";
+import type { ProofFiles } from "@/lib/validations/guestbook";
+import { resolveGuestbookPhotoUrl } from "./photo-url";
 
 interface GuestbookDetailDrawerProps {
   open: boolean;
@@ -51,14 +51,6 @@ const ONLINE_MEDIUM_LABELS: Record<string, string> = {
   microsoft_teams: "Microsoft Teams",
   other: "Lainnya",
 };
-
-function resolvePhotoUrl(key: string | null | undefined): string | null {
-  if (!key) return null;
-  if (key.startsWith("http")) return key;
-  const base = process.env.NEXT_PUBLIC_S3_PUBLIC_URL;
-  if (!base) return null;
-  return `${base}/${key}`;
-}
 
 function formatDateTime(date: Date | string | null | undefined): string {
   if (!date) return "—";
@@ -125,12 +117,12 @@ export function GuestbookDetailDrawer({
       e.phoneNumber === entry.phoneNumber
   );
   const totalVisit = matchingEntries.length + 1;
-  const visitorPhoto = resolvePhotoUrl(entry.visitorPhotoUrl);
-  const idPhoto = resolvePhotoUrl(entry.idPhotoUrl);
-  const proofChat = resolvePhotoUrl(entry.proofChatUrl);
-  const proofPhoto = resolvePhotoUrl(entry.proofPhotoUrl);
-  const proofLost = resolvePhotoUrl(entry.proofLostUrl);
-  const proofReschedule = resolvePhotoUrl(entry.proofRescheduleUrl);
+  const proofFiles = (entry.proofFiles ?? null) as ProofFiles | null;
+  const visitorPhoto = resolveGuestbookPhotoUrl(entry.visitorPhoto);
+  const proofChat = resolveGuestbookPhotoUrl(proofFiles?.chat?.path);
+  const proofPhoto = resolveGuestbookPhotoUrl(proofFiles?.photo?.path);
+  const proofLost = resolveGuestbookPhotoUrl(proofFiles?.lost?.path);
+  const proofReschedule = resolveGuestbookPhotoUrl(proofFiles?.reschedule?.path);
 
   return (
     <Drawer
@@ -186,7 +178,7 @@ export function GuestbookDetailDrawer({
         <Separator />
 
         {/* Photos section */}
-        {(visitorPhoto || idPhoto) && (
+        {visitorPhoto && (
           <div className="bg-muted/30 rounded-2xl p-4 space-y-3">
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Foto</p>
             <div className="grid grid-cols-2 gap-3">
@@ -197,16 +189,6 @@ export function GuestbookDetailDrawer({
                 ) : (
                   <div className="rounded-xl bg-secondary flex items-center justify-center w-full aspect-[4/3]">
                     <User weight="BoldDuotone" className="h-8 w-8 text-muted-foreground/40" />
-                  </div>
-                )}
-              </div>
-              <div className="space-y-1.5">
-                <p className="text-xs text-muted-foreground">Foto KTP</p>
-                {idPhoto ? (
-                  <Image src={idPhoto} alt="Foto KTP" width={300} height={200} className="rounded-xl object-cover w-full aspect-[4/3] cursor-pointer hover:opacity-80 transition-opacity" unoptimized onClick={() => setOverlayImage(idPhoto)} />
-                ) : (
-                  <div className="rounded-xl bg-secondary flex items-center justify-center w-full aspect-[4/3]">
-                    <Card2 weight="BoldDuotone" className="h-8 w-8 text-muted-foreground/40" />
                   </div>
                 )}
               </div>
@@ -295,7 +277,6 @@ export function GuestbookDetailDrawer({
           <InfoRow icon={<MapPoint weight="BoldDuotone" className="h-4 w-4 text-muted-foreground" />} label="Lokasi" value={entry.meetingLocation} />
           <InfoRow icon={<Calendar weight="BoldDuotone" className="h-4 w-4 text-muted-foreground" />} label="Jadwal" value={entry.scheduledAt ? formatDateTime(entry.scheduledAt) : null} />
           <InfoRow icon={<User weight="BoldDuotone" className="h-4 w-4 text-muted-foreground" />} label="Bertemu" value={entry.host?.fullName} />
-          <InfoRow icon={<UsersGroupRounded weight="BoldDuotone" className="h-4 w-4 text-muted-foreground" />} label="Jumlah Tamu" value={`${entry.numberOfGuests} orang`} />
           {entry.bitrixSourceInfo && (
             <InfoRow icon={<Database weight="BoldDuotone" className="h-4 w-4 text-muted-foreground" />} label="Sumber Bitrix" value={entry.bitrixSourceInfo} />
           )}
@@ -316,12 +297,11 @@ export function GuestbookDetailDrawer({
         )}
 
         {/* Contact info */}
-        {(entry.email || entry.phoneNumber || entry.idNumber) && (
+        {(entry.email || entry.phoneNumber) && (
           <div className="bg-muted/30 rounded-2xl p-4 space-y-4">
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Kontak</p>
             <InfoRow icon={<Letter weight="BoldDuotone" className="h-4 w-4 text-muted-foreground" />} label="Email" value={entry.email} />
             <InfoRow icon={<Phone weight="BoldDuotone" className="h-4 w-4 text-muted-foreground" />} label="Telepon" value={entry.phoneNumber} />
-            <InfoRow icon={<Card2 weight="BoldDuotone" className="h-4 w-4 text-muted-foreground" />} label="No. Identitas" value={entry.idNumber} />
           </div>
         )}
 
