@@ -86,13 +86,11 @@ interface GuestbookDrawerProps {
 }
 
 type PhotoFieldKey =
-  | "visitorPhotoFile"
   | "proofChatFile"
   | "proofPhotoFile"
   | "proofLostFile"
   | "proofRescheduleFile";
 type PreviewFieldKey =
-  | "visitorPhotoPreview"
   | "proofChatPreview"
   | "proofPhotoPreview"
   | "proofLostPreview"
@@ -118,8 +116,6 @@ type GuestbookForm = {
   checkOutAt: string;
   commitVisitDate: string;
   commitPayDate: string;
-  visitorPhotoFile: File | null;
-  visitorPhotoPreview: string;
   proofChatFile: File | null;
   proofChatPreview: string;
   proofPhotoFile: File | null;
@@ -153,8 +149,6 @@ const EMPTY_FORM: GuestbookForm = {
   checkOutAt: "",
   commitVisitDate: "",
   commitPayDate: "",
-  visitorPhotoFile: null,
-  visitorPhotoPreview: "",
   proofChatFile: null,
   proofChatPreview: "",
   proofPhotoFile: null,
@@ -564,8 +558,6 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
           ? new Date(editEntry.commitVisitDate).toISOString().slice(0, 10) : "",
         commitPayDate: editEntry.commitPayDate
           ? new Date(editEntry.commitPayDate).toISOString().slice(0, 10) : "",
-        visitorPhotoFile: null,
-        visitorPhotoPreview: resolveGuestbookPhotoUrl(editEntry.visitorPhoto) ?? "",
         proofChatFile: null,
         proofChatPreview: resolveGuestbookPhotoUrl(proofFiles?.chat?.path) ?? "",
         proofPhotoFile: null,
@@ -695,10 +687,6 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
       toast.error("Bukti foto visit wajib diupload");
       return false;
     }
-    if (!isEditMode && !form.visitorPhotoFile && !form.visitorPhotoPreview) {
-      toast.error("Foto tamu wajib diupload");
-      return false;
-    }
     return true;
   }
 
@@ -719,13 +707,6 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
       return null;
     }
 
-    const visitorPhotoDescriptor = await resolveDescriptor(
-      form.visitorPhotoFile,
-      form.visitorPhotoPreview,
-      editEntry?.visitorPhoto ? { id: editEntry.visitorPhoto, path: `guestbook/${editEntry.visitorPhoto}.webp` } : null
-    );
-    if (form.visitorPhotoFile && !visitorPhotoDescriptor) return;
-
     const proofFilesData = (editEntry?.proofFiles ?? null) as ProofFiles | null;
     const proofChat = await resolveDescriptor(form.proofChatFile, form.proofChatPreview, proofFilesData?.chat);
     if (form.proofChatFile && !proofChat) return;
@@ -740,7 +721,6 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
       visitorName: form.visitorName.trim(),
       email: form.email.trim() || null,
       phoneNumber: form.phoneNumber.trim() || null,
-      visitorPhoto: visitorPhotoDescriptor?.id ?? null,
       venueId: form.venueId || null,
       interactionType: form.interactionType,
       onlineMedium: form.onlineMedium || null,
@@ -916,16 +896,6 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
                 wrapperClassName="rounded-xl"
               />
             </div>
-
-            <PhotoUpload
-              label="Foto Tamu"
-              required
-              fullWidth
-              withCamera
-              preview={form.visitorPhotoPreview}
-              onFileChange={(f) => handlePhotoChange("visitorPhotoFile", "visitorPhotoPreview", f)}
-              onClear={() => handlePhotoChange("visitorPhotoFile", "visitorPhotoPreview", null)}
-            />
           </div>
 
           {/* Section: Detail — selalu tampil, gak nunggu jenis interaksi dipilih */}

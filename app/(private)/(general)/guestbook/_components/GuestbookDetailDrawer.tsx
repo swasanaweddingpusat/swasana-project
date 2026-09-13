@@ -118,7 +118,6 @@ export function GuestbookDetailDrawer({
   );
   const totalVisit = matchingEntries.length + 1;
   const proofFiles = (entry.proofFiles ?? null) as ProofFiles | null;
-  const visitorPhoto = resolveGuestbookPhotoUrl(entry.visitorPhoto);
   const proofChat = resolveGuestbookPhotoUrl(proofFiles?.chat?.path);
   const proofPhoto = resolveGuestbookPhotoUrl(proofFiles?.photo?.path);
   const proofLost = resolveGuestbookPhotoUrl(proofFiles?.lost?.path);
@@ -134,21 +133,9 @@ export function GuestbookDetailDrawer({
       <div className="space-y-5 pb-4">
         {/* Visitor header */}
         <div className="flex items-center gap-4">
-          {visitorPhoto ? (
-            <Image
-              src={visitorPhoto}
-              alt={entry.visitorName}
-              width={64}
-              height={64}
-              className="h-16 w-16 rounded-2xl object-cover shrink-0 cursor-pointer hover:opacity-80 transition-opacity"
-              unoptimized
-              onClick={() => setOverlayImage(visitorPhoto)}
-            />
-          ) : (
-            <div className="h-16 w-16 rounded-2xl bg-secondary flex items-center justify-center shrink-0">
-              <User weight="BoldDuotone" className="h-7 w-7 text-muted-foreground" />
-            </div>
-          )}
+          <div className="h-16 w-16 rounded-2xl bg-secondary flex items-center justify-center shrink-0">
+            <User weight="BoldDuotone" className="h-7 w-7 text-muted-foreground" />
+          </div>
           <div className="min-w-0">
             <h3 className="text-lg font-heading font-bold text-foreground truncate">
               {entry.visitorName}
@@ -176,25 +163,6 @@ export function GuestbookDetailDrawer({
         </div>
 
         <Separator />
-
-        {/* Photos section */}
-        {visitorPhoto && (
-          <div className="bg-muted/30 rounded-2xl p-4 space-y-3">
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Foto</p>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <p className="text-xs text-muted-foreground">Foto Tamu</p>
-                {visitorPhoto ? (
-                  <Image src={visitorPhoto} alt="Foto tamu" width={300} height={200} className="rounded-xl object-cover w-full aspect-[4/3] cursor-pointer hover:opacity-80 transition-opacity" unoptimized onClick={() => setOverlayImage(visitorPhoto)} />
-                ) : (
-                  <div className="rounded-xl bg-secondary flex items-center justify-center w-full aspect-[4/3]">
-                    <User weight="BoldDuotone" className="h-8 w-8 text-muted-foreground/40" />
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
 
         {/* Proof photos */}
         {(proofPhoto || proofChat || proofLost || proofReschedule) && (

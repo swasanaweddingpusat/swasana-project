@@ -69,11 +69,11 @@ export function SidebarNav() {
   const generalItems = isLoading ? [] : filterNavItems(GENERAL_NAV, can, isGroupMember);
   const settingsVisible = !isLoading && SETTINGS_MODULES.some((mod) => can(mod, "view"));
 
-  // Overview (general landing at `/`) and BITRIX24 are General items that must
-  // always sit at the very top of the sidebar (in that order), above the active
-  // module's world nav. Pull them out of General; the rest of General stays flat
-  // below the module items.
-  const PINNED_TOP = ["/", "/bitrix24"];
+  // Overview (general landing at `/`), BITRIX24, and Buku Tamu are General items
+  // that must always sit at the very top of the sidebar (in that order), above the
+  // active module's world nav. Pull them out of General; the rest of General stays
+  // flat below the module items.
+  const PINNED_TOP = ["/", "/bitrix24", "/guestbook"];
   const pinnedItems = PINNED_TOP
     .map((href) => generalItems.find((item) => item.href === href))
     .filter((item): item is NavItem => item !== undefined);

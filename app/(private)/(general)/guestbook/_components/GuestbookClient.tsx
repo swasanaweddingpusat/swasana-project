@@ -48,6 +48,7 @@ import { useVenues } from "@/hooks/use-venues";
 import { useSalesUsers } from "@/hooks/use-sales-users";
 import type { GuestbookEntryItem, GuestbookCategoryFilter } from "@/lib/queries/guestbookEntries";
 import type { GuestInteractionType } from "@prisma/client";
+import type { ProofFiles } from "@/lib/validations/guestbook";
 import { GuestbookDrawer } from "./GuestbookDrawer";
 import { GuestbookDetailDrawer } from "./GuestbookDetailDrawer";
 import { GuestbookFilterDrawer } from "./GuestbookFilterDrawer";
@@ -126,7 +127,7 @@ function MobileCard({
 }) {
   const sourceLabel = entry.sourceOfInformation?.name ?? null;
   const statusInfo = entry.visitStatus ? STATUS_LABELS[entry.visitStatus] : null;
-  const photoSrc = resolveGuestbookPhotoUrl(entry.visitorPhoto);
+  const photoSrc = resolveGuestbookPhotoUrl(((entry.proofFiles ?? null) as ProofFiles | null)?.photo?.path);
 
   return (
     <div
@@ -501,7 +502,7 @@ function GuestbookClientInner() {
                         <TableCell className="max-w-48">
                           <div className="flex items-center gap-2.5 min-w-0">
                             {(() => {
-                              const photoSrc = resolveGuestbookPhotoUrl(entry.visitorPhoto);
+                              const photoSrc = resolveGuestbookPhotoUrl(((entry.proofFiles ?? null) as ProofFiles | null)?.photo?.path);
                               if (photoSrc) {
                                 return <Image src={photoSrc} alt="" width={32} height={32} className="h-8 w-8 rounded-lg object-cover shrink-0" unoptimized />;
                               }

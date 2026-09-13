@@ -4,7 +4,7 @@
  * Rules (in order):
  * - Falsy input → null.
  * - Full URL → passthrough.
- * - Bare 12-char file id (visitorPhoto column) → guestbook/{id}.webp key.
+ * - Bare file id (legacy, no known caller anymore) → guestbook/{id}.webp key.
  * - Storage key with a slash (proofFiles[].path) → prepend the public base.
  */
 export function resolveGuestbookPhotoUrl(value: string | null | undefined): string | null {

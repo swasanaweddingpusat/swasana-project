@@ -36,7 +36,6 @@ export const createGuestbookEntrySchema = z
     bitrixContactId: z.string().optional().nullable(),
     bitrixName: z.string().optional().nullable(),
     bitrixSourceInfo: z.string().optional().nullable(),
-    visitorPhoto: z.string().nullable().optional(),
     interactionType: z.enum(['client_visit', 'online_meeting', 'jemput_bola']),
     onlineMedium: z.enum(['zoom', 'google_meet', 'whatsapp_call', 'microsoft_teams', 'other']).optional().nullable(),
     meetingUrl: z.string().optional().nullable(),
@@ -54,14 +53,6 @@ export const createGuestbookEntrySchema = z
     commitPayDate: z.string().optional().nullable(),
   })
   .superRefine((val, ctx) => {
-    if (!val.visitorPhoto) {
-      ctx.addIssue({
-        path: ['visitorPhoto'],
-        code: z.ZodIssueCode.custom,
-        message: 'Foto tamu wajib diupload',
-      });
-    }
-
     if (!val.proofFiles?.photo) {
       ctx.addIssue({
         path: ['proofFiles', 'photo'],
@@ -121,7 +112,6 @@ export const updateGuestbookEntrySchema = z.object({
   bitrixContactId: z.string().optional().nullable(),
   bitrixName: z.string().optional().nullable(),
   bitrixSourceInfo: z.string().optional().nullable(),
-  visitorPhoto: z.string().nullable().optional(),
   interactionType: z.enum(['client_visit', 'online_meeting', 'jemput_bola']).optional(),
   onlineMedium: z.enum(['zoom', 'google_meet', 'whatsapp_call', 'microsoft_teams', 'other']).optional().nullable(),
   meetingUrl: z.string().optional().nullable(),

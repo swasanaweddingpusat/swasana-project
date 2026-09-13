@@ -67,7 +67,6 @@ const guestbookEntrySelect = {
   visitorName: true,
   email: true,
   phoneNumber: true,
-  visitorPhoto: true,
   interactionType: true,
   onlineMedium: true,
   meetingUrl: true,
