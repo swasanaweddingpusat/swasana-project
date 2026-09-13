@@ -98,6 +98,7 @@ type PreviewFieldKey =
 
 type GuestbookForm = {
   visitorName: string;
+  companyName: string;
   email: string;
   phoneNumber: string;
   venueId: string;
@@ -111,7 +112,7 @@ type GuestbookForm = {
   visitStatus: string;
   sourceOfInformationId: string;
   packageId: string;
-  packageCategory: string;
+  eventCategory: string;
   checkInAt: string;
   checkOutAt: string;
   commitVisitDate: string;
@@ -131,6 +132,7 @@ type GuestbookForm = {
 
 const EMPTY_FORM: GuestbookForm = {
   visitorName: "",
+  companyName: "",
   email: "",
   phoneNumber: "",
   venueId: "",
@@ -144,7 +146,7 @@ const EMPTY_FORM: GuestbookForm = {
   visitStatus: "to_be_discuss",
   sourceOfInformationId: "",
   packageId: "",
-  packageCategory: "",
+  eventCategory: "",
   checkInAt: "",
   checkOutAt: "",
   commitVisitDate: "",
@@ -503,13 +505,13 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
   const canMice = can("booking-mice", "view");
 
   useEffect(() => {
-    if (form.packageCategory) return;
+    if (form.eventCategory) return;
     if (canWedding && !canMice) {
-      queueMicrotask(() => setForm((prev) => ({ ...prev, packageCategory: "WEDDINGS" })));
+      queueMicrotask(() => setForm((prev) => ({ ...prev, eventCategory: "WEDDINGS" })));
     } else if (canMice && !canWedding) {
-      queueMicrotask(() => setForm((prev) => ({ ...prev, packageCategory: "MICE" })));
+      queueMicrotask(() => setForm((prev) => ({ ...prev, eventCategory: "MICE" })));
     }
-  }, [canWedding, canMice, form.packageCategory]);
+  }, [canWedding, canMice, form.eventCategory]);
 
   const { data: sourceOptions = [] } = useQuery({
     queryKey: ["source-of-informations"],
@@ -518,14 +520,14 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
   });
 
   const selectedVenueId = form.venueId;
-  const selectedCategory = form.packageCategory || "WEDDINGS";
+  const selectedCategory = form.eventCategory || "WEDDINGS";
   const { data: packages = [] } = useQuery({
     queryKey: ["packages", selectedVenueId, selectedCategory],
     queryFn: () =>
       fetchJson<PackageOption[]>(
         `/api/packages?venueId=${selectedVenueId}&forBooking=true&category=${selectedCategory}`
       ),
-    enabled: !!selectedVenueId && !!form.packageCategory,
+    enabled: !!selectedVenueId && !!form.eventCategory,
     staleTime: 5 * 60_000,
   });
 
@@ -538,6 +540,7 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
     queueMicrotask(() => {
       setForm({
         visitorName: editEntry.visitorName ?? "",
+        companyName: editEntry.companyName ?? "",
         email: editEntry.email ?? "",
         phoneNumber: editEntry.phoneNumber ?? "",
         venueId: editEntry.venueId ?? "",
@@ -551,7 +554,7 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
         visitStatus: editEntry.visitStatus ?? "",
         sourceOfInformationId: editEntry.sourceOfInformationId ?? "",
         packageId: editEntry.packageId ?? "",
-        packageCategory: editEntry.package?.category ?? (canWedding ? "WEDDINGS" : "MICE"),
+        eventCategory: editEntry.eventCategory ?? editEntry.package?.category ?? (canWedding ? "WEDDINGS" : "MICE"),
         checkInAt: editEntry.checkInAt ? new Date(editEntry.checkInAt).toISOString().slice(0, 16) : "",
         checkOutAt: editEntry.checkOutAt ? new Date(editEntry.checkOutAt).toISOString().slice(0, 16) : "",
         commitVisitDate: editEntry.commitVisitDate
@@ -719,6 +722,8 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
 
     const payload = {
       visitorName: form.visitorName.trim(),
+      companyName: form.eventCategory === "MICE" ? (form.companyName.trim() || null) : null,
+      eventCategory: form.eventCategory || null,
       email: form.email.trim() || null,
       phoneNumber: form.phoneNumber.trim() || null,
       venueId: form.venueId || null,
@@ -815,19 +820,75 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
                 );
               })}
             </div>
+
+            {/* Kategori Event (Wedding/MICE) — muncul kalau user punya akses wedding & mice */}
+            {canWedding && canMice && (
+              <div className="space-y-1.5">
+                <Label className="text-sm font-medium">Kategori Event</Label>
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    { value: "WEDDINGS", label: "Wedding" },
+                    { value: "MICE", label: "MICE" },
+                  ].map((opt) => {
+                    const active = form.eventCategory === opt.value;
+                    return (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => {
+                          setField("eventCategory", opt.value);
+                          setField("packageId", "");
+                        }}
+                        className={cn(
+                          "flex items-center justify-center gap-2 min-h-11 rounded-full px-3 py-2.5 text-xs font-semibold leading-tight text-center transition-colors",
+                          active
+                            ? "bg-primary text-primary-foreground shadow-sm"
+                            : "bg-muted text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                        )}
+                      >
+                        <span
+                          className={cn(
+                            "flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2",
+                            active ? "border-primary-foreground" : "border-muted-foreground/40"
+                          )}
+                        >
+                          {active && <span className="h-1.5 w-1.5 rounded-full bg-primary-foreground" />}
+                        </span>
+                        {opt.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </div>
 
-          {/* Section: Data Tamu */}
+          {/* Section: Data Client */}
           <div className="rounded-2xl border bg-card p-5 flex flex-col gap-4">
-            <SectionHeader icon={User} title="Data Tamu" />
+            <SectionHeader icon={User} title="Data Client" />
+
+            {canMice && form.eventCategory === "MICE" && (
+              <div className="space-y-1.5">
+                <Label htmlFor="gb-companyName" className="text-sm font-medium">
+                  Company / Institusi
+                </Label>
+                <Input
+                  id="gb-companyName"
+                  placeholder="Nama perusahaan atau institusi"
+                  value={form.companyName}
+                  onChange={(e) => setField("companyName", e.target.value)}
+                  className="rounded-xl"
+                />
+              </div>
+            )}
 
             <div className="space-y-1.5">
               <Label htmlFor="gb-visitorName" className="text-sm font-medium">
-                Nama Tamu <span className="text-destructive">*</span>
+                Nama Client <span className="text-destructive">*</span>
               </Label>
               <Input
                 id="gb-visitorName"
-                placeholder="Nama lengkap tamu"
+                placeholder="Nama lengkap client"
                 value={form.visitorName}
                 onChange={(e) => setField("visitorName", e.target.value)}
                 className="rounded-xl"
@@ -956,49 +1017,8 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
                 </Select>
               </div>
 
-              {/* Kategori Paket — muncul kalau user punya akses wedding & mice */}
-              {canWedding && canMice && (
-                <div className="space-y-1.5">
-                  <Label className="text-sm font-medium">Kategori Paket</Label>
-                  <div className="grid grid-cols-2 gap-2">
-                    {[
-                      { value: "WEDDINGS", label: "Wedding" },
-                      { value: "MICE", label: "MICE" },
-                    ].map((opt) => {
-                      const active = form.packageCategory === opt.value;
-                      return (
-                        <button
-                          key={opt.value}
-                          type="button"
-                          onClick={() => {
-                            setField("packageCategory", opt.value);
-                            setField("packageId", "");
-                          }}
-                          className={cn(
-                            "flex items-center justify-center gap-2 min-h-11 rounded-full px-3 py-2.5 text-xs font-semibold leading-tight text-center transition-colors",
-                            active
-                              ? "bg-primary text-primary-foreground shadow-sm"
-                              : "bg-muted text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-                          )}
-                        >
-                          <span
-                            className={cn(
-                              "flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2",
-                              active ? "border-primary-foreground" : "border-muted-foreground/40"
-                            )}
-                          >
-                            {active && <span className="h-1.5 w-1.5 rounded-full bg-primary-foreground" />}
-                          </span>
-                          {opt.label}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-
               {/* Paket — hanya untuk Wedding; disembunyikan saat MICE */}
-              {form.packageCategory !== "MICE" && (
+              {form.eventCategory !== "MICE" && (
                 <div className="space-y-1.5">
                   <Label className="text-sm font-medium">Paket</Label>
                   <SearchableSelect
@@ -1020,13 +1040,13 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
                     placeholder={
                       !form.venueId
                         ? "Pilih venue terlebih dahulu"
-                        : !form.packageCategory
-                          ? "Pilih kategori paket"
+                        : !form.eventCategory
+                          ? "Pilih kategori event"
                           : "Pilih paket"
                     }
                     searchPlaceholder="Cari paket..."
                     emptyText="Tidak ada paket"
-                    disabled={!form.venueId || !form.packageCategory}
+                    disabled={!form.venueId || !form.eventCategory}
                   />
                 </div>
               )}

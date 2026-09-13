@@ -45,7 +45,12 @@ export function buildGuestbookWhere(filters: GuestbookFilterOptions): Prisma.Gue
   }
 
   if (filters.category === "WEDDINGS" || filters.category === "MICE") {
-    where.package = { category: filters.category };
+    // Cocokkan pilihan langsung (eventCategory) ATAU kategori paket yang ke-link.
+    // Pakai AND agar tidak bentrok dengan where.OR milik filter pencarian.
+    where.AND = [
+      ...(Array.isArray(where.AND) ? where.AND : where.AND ? [where.AND] : []),
+      { OR: [{ eventCategory: filters.category }, { package: { category: filters.category } }] },
+    ];
   } else if (filters.category === "no_package") {
     where.packageId = null;
   }
@@ -65,6 +70,8 @@ export interface PaginatedGuestbookEntries {
 const guestbookEntrySelect = {
   id: true,
   visitorName: true,
+  companyName: true,
+  eventCategory: true,
   email: true,
   phoneNumber: true,
   interactionType: true,

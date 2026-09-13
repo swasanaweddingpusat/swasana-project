@@ -31,6 +31,8 @@ const proofFilesSchema = z
 export const createGuestbookEntrySchema = z
   .object({
     visitorName: z.string().min(1, 'Nama tamu wajib diisi'),
+    companyName: z.string().optional().nullable(),
+    eventCategory: z.enum(['WEDDINGS', 'MICE']).optional().nullable(),
     email: z.string().email('Format email tidak valid').optional().nullable(),
     phoneNumber: z.string().optional().nullable(),
     bitrixContactId: z.string().optional().nullable(),
@@ -107,6 +109,8 @@ export const updateGuestbookEntrySchema = z.object({
   sourceOfInformationId: z.string().optional().nullable(),
   packageId: z.string().optional().nullable(),
   visitorName: z.string().min(1).optional(),
+  companyName: z.string().optional().nullable(),
+  eventCategory: z.enum(['WEDDINGS', 'MICE']).optional().nullable(),
   email: z.string().email().optional().nullable(),
   phoneNumber: z.string().optional().nullable(),
   bitrixContactId: z.string().optional().nullable(),

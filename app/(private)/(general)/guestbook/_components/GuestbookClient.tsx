@@ -387,7 +387,7 @@ function GuestbookClientInner() {
         <CardContent className="p-0">
           <div className="flex flex-wrap items-center justify-between gap-3 px-6 py-4 border-b">
             <div className="flex items-center gap-2">
-              <h2 className="text-sm font-bold text-foreground">Riwayat Kunjungan</h2>
+              <h2 className="text-sm font-bold text-foreground">Buku Tamu</h2>
               <span className="text-xs font-medium bg-secondary text-secondary-foreground px-3 py-1 rounded-full">
                 {guestbookData?.total ?? 0} tamu
               </span>
@@ -509,11 +509,14 @@ function GuestbookClientInner() {
                           </div>
                         </TableCell>
                         <TableCell className="text-muted-foreground whitespace-nowrap">
-                          {entry.package?.category ? (
-                            EVENT_CATEGORY_LABELS[entry.package.category] ?? entry.package.category
-                          ) : (
-                            <span className="text-muted-foreground/50">—</span>
-                          )}
+                          {(() => {
+                            const cat = entry.eventCategory ?? entry.package?.category;
+                            return cat ? (
+                              EVENT_CATEGORY_LABELS[cat] ?? cat
+                            ) : (
+                              <span className="text-muted-foreground/50">—</span>
+                            );
+                          })()}
                         </TableCell>
                         <TableCell className="text-muted-foreground max-w-56">
                           <div className="flex flex-col gap-1 items-start min-w-0 max-w-full">

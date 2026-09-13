@@ -23,6 +23,11 @@ const INTERACTION_TYPE_LABELS: Record<string, string> = {
   jemput_bola: "Jemput Bola",
 };
 
+const EVENT_CATEGORY_LABELS: Record<string, string> = {
+  WEDDINGS: "Wedding",
+  MICE: "MICE",
+};
+
 /** Format a Date as "d MMMM yyyy" in id-ID — for date-only cells. */
 function fmtDate(value: Date | null): string {
   if (!value) return "";
@@ -47,6 +52,8 @@ function fmtDateTime(value: Date | null): string {
 
 const guestbookExportSelect = {
   visitorName: true,
+  companyName: true,
+  eventCategory: true,
   guestCode: true,
   phoneNumber: true,
   email: true,
@@ -60,7 +67,7 @@ const guestbookExportSelect = {
   host: { select: { fullName: true } },
   venue: { select: { name: true } },
   sourceOfInformation: { select: { name: true } },
-  package: { select: { packageName: true } },
+  package: { select: { packageName: true, category: true } },
   createdBy: { select: { fullName: true } },
 } satisfies Prisma.GuestbookEntrySelect;
 
@@ -114,6 +121,8 @@ export async function GET(req: Request): Promise<Response> {
 
     const headers = [
       "Nama Tamu",
+      "Company / Institusi",
+      "Kategori Event",
       "Guest Code",
       "Telepon",
       "Email",
@@ -144,8 +153,11 @@ export async function GET(req: Request): Promise<Response> {
     });
 
     rows.forEach((r) => {
+      const cat = r.eventCategory ?? r.package?.category ?? null;
       sheet.addRow([
         r.visitorName,
+        r.companyName ?? "",
+        cat ? EVENT_CATEGORY_LABELS[cat] ?? cat : "",
         r.guestCode ?? "",
         r.phoneNumber ?? "",
         r.email ?? "",

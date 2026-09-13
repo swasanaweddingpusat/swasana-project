@@ -7,11 +7,13 @@ import { Drawer } from "@/components/shared/drawer";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import {
+  Buildings,
   Buildings3,
   Letter,
   Phone,
   Calendar,
   ClipboardText,
+  ConfettiMinimalistic,
   User,
   CloseCircle,
   Videocamera,
@@ -42,6 +44,11 @@ const INTERACTION_TYPE_LABELS: Record<string, string> = {
   client_visit: "Kunjungan Client",
   online_meeting: "Online Meeting",
   jemput_bola: "Jemput Bola",
+};
+
+const EVENT_CATEGORY_LABELS: Record<string, string> = {
+  WEDDINGS: "Wedding",
+  MICE: "MICE",
 };
 
 const ONLINE_MEDIUM_LABELS: Record<string, string> = {
@@ -121,6 +128,7 @@ export function GuestbookDetailDrawer({
   const proofPhoto = resolveGuestbookPhotoUrl(proofFiles?.photo?.path);
   const proofLost = resolveGuestbookPhotoUrl(proofFiles?.lost?.path);
   const proofReschedule = resolveGuestbookPhotoUrl(proofFiles?.reschedule?.path);
+  const eventCategory = entry.eventCategory ?? entry.package?.category ?? null;
 
   return (
     <Drawer
@@ -201,6 +209,22 @@ export function GuestbookDetailDrawer({
               }
             />
           )}
+          {eventCategory && (
+            <InfoRow
+              icon={<ConfettiMinimalistic weight="BoldDuotone" className="h-4 w-4 text-muted-foreground" />}
+              label="Kategori Event"
+              value={
+                <Badge variant="secondary" className="rounded-full text-xs font-medium">
+                  {EVENT_CATEGORY_LABELS[eventCategory] ?? eventCategory}
+                </Badge>
+              }
+            />
+          )}
+          <InfoRow
+            icon={<Buildings weight="BoldDuotone" className="h-4 w-4 text-muted-foreground" />}
+            label="Company / Institusi"
+            value={entry.companyName}
+          />
           {entry.sourceOfInformation?.name && (
             <InfoRow
               icon={<Database weight="BoldDuotone" className="h-4 w-4 text-muted-foreground" />}

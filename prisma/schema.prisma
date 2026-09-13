@@ -3583,6 +3583,8 @@ model BlacklistEntry {
 model GuestbookEntry {
   id                    String                @id @default(uuid())
   visitorName           String
+  companyName           String?               // Company/institusi — diisi khusus kunjungan kategori MICE
+  eventCategory         EventCategory?        // Kategori event (Wedding/MICE) — pilihan langsung, independen dari paket
   email                 String?
   phoneNumber           String?
   interactionType       GuestInteractionType?
