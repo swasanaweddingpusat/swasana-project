@@ -1057,7 +1057,7 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
                     <Input id="gb-meetingUrl" placeholder="https://..." value={form.meetingUrl} onChange={(e) => setField("meetingUrl", e.target.value)} className="rounded-xl" />
                   </div>
                   <div className="space-y-1.5">
-                    <Label htmlFor="gb-meetingLocation-online" className="text-sm font-medium">Lokasi / Link</Label>
+                    <Label htmlFor="gb-meetingLocation-online" className="text-sm font-medium">Lokasi</Label>
                     <Input
                       id="gb-meetingLocation-online"
                       placeholder="Isi lokasi bila di luar venue"
@@ -1077,7 +1077,7 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
                 <>
                   <div className="space-y-1.5">
                     <Label htmlFor="gb-meetingLocation-jemput" className="text-sm font-medium">
-                      Lokasi / Link <span className="text-destructive">*</span>
+                      Lokasi <span className="text-destructive">*</span>
                     </Label>
                     <Input id="gb-meetingLocation-jemput" placeholder="Lokasi kunjungan" value={form.meetingLocation} onChange={(e) => setField("meetingLocation", e.target.value)} className="rounded-xl" />
                   </div>
