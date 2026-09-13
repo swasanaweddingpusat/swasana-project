@@ -7,7 +7,6 @@ import { Header } from "./_components/header/header";
 import { AuthGate } from "./_components/auth-gate";
 import { HeaderActionProvider } from "@/components/providers/header-action-provider";
 import { BookingDrawerProvider } from "@/components/providers/booking-drawer-provider";
-import { DailyActivityDrawerProvider } from "@/components/providers/daily-activity-drawer-provider";
 import { QuotationDrawerProvider } from "@/components/providers/quotation-drawer-provider";
 import { MiceBookingDrawerProvider } from "@/components/providers/mice-booking-drawer-provider";
 import { ProcurementDrawerProvider } from "@/components/providers/procurement-drawer-provider";
@@ -45,28 +44,26 @@ export default function PrivateLayout({
             <BookingDrawerProvider>
               <MiceBookingDrawerProvider>
                 <QuotationDrawerProvider>
-                  <DailyActivityDrawerProvider>
-                    <ProcurementDrawerProvider>
-                      <Suspense fallback={null}>
-                        <SwasanaSidebar />
+                  <ProcurementDrawerProvider>
+                    <Suspense fallback={null}>
+                      <SwasanaSidebar />
+                    </Suspense>
+                    <SidebarInset className="min-w-0">
+                      <Suspense>
+                        <Header />
                       </Suspense>
-                      <SidebarInset className="min-w-0">
+                      <main className="flex-1 p-4 pb-24 md:pb-6 lg:p-6">
                         <Suspense>
-                          <Header />
+                          <AuthGate>{children}</AuthGate>
                         </Suspense>
-                        <main className="flex-1 p-4 pb-24 md:pb-6 lg:p-6">
-                          <Suspense>
-                            <AuthGate>{children}</AuthGate>
-                          </Suspense>
-                        </main>
-                        <Suspense fallback={null}>
-                          <MobileBottomNav />
-                        </Suspense>
-                        <PwaInstallPrompt />
-                        <ServiceWorkerRegister />
-                      </SidebarInset>
-                    </ProcurementDrawerProvider>
-                  </DailyActivityDrawerProvider>
+                      </main>
+                      <Suspense fallback={null}>
+                        <MobileBottomNav />
+                      </Suspense>
+                      <PwaInstallPrompt />
+                      <ServiceWorkerRegister />
+                    </SidebarInset>
+                  </ProcurementDrawerProvider>
                 </QuotationDrawerProvider>
               </MiceBookingDrawerProvider>
             </BookingDrawerProvider>

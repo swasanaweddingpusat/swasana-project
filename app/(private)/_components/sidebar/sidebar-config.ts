@@ -91,8 +91,6 @@ export const SETTINGS_MODULES = [
   "settings-payment-methods",
   "settings-role-permission",
   "settings-source-of-information",
-  "settings-lead-status",
-  "settings-daily-activity-segment",
   "settings-maintenance-category",
   "settings-maintenance-priority",
   "settings-maintenance-status",
@@ -131,7 +129,6 @@ export const MODULE_NAV_MAP: Record<ModuleKey, NavItem[]> = {
   booking: [
     { name: "Calendar Events", href: "/booking/calendar-events", icon: CalendarDate, subtitle: "Lihat jadwal event di kalender", permission: { module: "booking", action: "view" } },
     { name: "Groups", href: "/booking/groups", icon: UsersGroupRounded, subtitle: "Kelola tim dan pantau kinerja penjualan", permission: { module: "groups", action: "view" } },
-    { name: "Daily Activity", href: "/booking/daily-activity", icon: ClipboardList, subtitle: "Kelola data daily activity dan pipeline penjualan", permission: { module: "daily-activity", action: "view" } },
     { name: "Quotations", href: "/booking/quotations", icon: DocumentAdd, subtitle: "Kelola penawaran harga untuk lead", permission: { module: "quotations", action: "view" } },
     { name: "Booking MICE", href: "/booking/booking-mice", icon: TicketSale, subtitle: "Kelola data booking MICE", permission: { module: "booking-mice", action: "view" } },
     { name: "Booking Weddings", href: "/booking/booking-weddings", icon: Ticket, subtitle: "Kelola data booking weddings", permission: { module: "booking", action: "view" } },
