@@ -13,6 +13,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { SignaturePad } from "@/components/shared/signature-pad";
 import { useMySignature } from "@/hooks/use-my-signature";
+import Image from "next/image";
 import { cn } from "@/lib/utils";
 import { fmtRp } from "./ledger-format";
 import { acknowledgeCashIn } from "@/actions/ledger";
@@ -168,8 +169,7 @@ export function LedgerAckModal({
           {!useDefaultSig && <SignaturePad onSignature={setSignature} label="Tanda Tangan Finance" />}
           {useDefaultSig && defaultSignature && (
             <div className="flex items-center justify-center rounded-xl border border-border bg-white p-3">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={defaultSignature} alt="Tanda tangan default" className="max-h-28 max-w-full object-contain" />
+              <Image src={defaultSignature} alt="Tanda tangan default" width={224} height={112} unoptimized className="max-h-28 max-w-full object-contain" />
             </div>
           )}
         </div>

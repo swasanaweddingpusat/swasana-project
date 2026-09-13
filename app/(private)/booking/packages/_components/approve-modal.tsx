@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import { approveStep, rejectStep } from "@/actions/approval";
 import { useQueryClient } from "@tanstack/react-query";
 import { useMySignature } from "@/hooks/use-my-signature";
+import Image from "next/image";
 import { cn } from "@/lib/utils";
 
 interface ApproveModalProps {
@@ -110,8 +111,7 @@ export function ApproveModal({ open, onClose, stepId, stepLabel, packageName }: 
             {/* Preview default signature kalau toggle ON */}
             {useDefaultSig && defaultSignature && (
               <div className={cn("rounded-xl border border-border bg-white p-3 flex items-center justify-center")}>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={defaultSignature} alt="Tanda tangan default" className="max-h-28 max-w-full object-contain" />
+                <Image src={defaultSignature} alt="Tanda tangan default" width={224} height={112} unoptimized className="max-h-28 max-w-full object-contain" />
               </div>
             )}
 

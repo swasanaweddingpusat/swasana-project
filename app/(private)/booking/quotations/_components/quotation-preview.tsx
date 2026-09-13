@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { format } from "date-fns";
 import { id as idLocale } from "date-fns/locale";
 import { Printer, CloseCircle } from "@solar-icons/react";
@@ -369,9 +370,12 @@ export function QuotationPreview({
                 <div className="mt-2 w-56">
                   <div className="flex items-end justify-center h-20">
                     {q.signatureSales ? (
-                      <img
+                      <Image
                         src={q.signatureSales}
                         alt="Tanda tangan sales"
+                        width={224}
+                        height={80}
+                        unoptimized
                         className="max-h-20 w-auto object-contain"
                       />
                     ) : null}

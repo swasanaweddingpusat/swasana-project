@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Image from "next/image";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { useQuery } from "@tanstack/react-query";
@@ -2566,8 +2567,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
                       {/* Preview default signature kalau toggle ON */}
                       {useDefaultSignature && myDefaultSignature && (
                         <div className={cn("rounded-xl border border-border bg-white p-3 flex items-center justify-center")}>
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src={myDefaultSignature} alt="Tanda tangan default" className="max-h-28 max-w-full object-contain" />
+                          <Image src={myDefaultSignature} alt="Tanda tangan default" width={224} height={112} unoptimized className="max-h-28 max-w-full object-contain" />
                         </div>
                       )}
                     </div>
