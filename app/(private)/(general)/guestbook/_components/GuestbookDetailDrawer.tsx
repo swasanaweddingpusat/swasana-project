@@ -106,7 +106,6 @@ export function GuestbookDetailDrawer({
   const [overlayImage, setOverlayImage] = useState<string | null>(null);
 
   if (!entry) return null;
-  const isActive = entry.checkOutAt === null;
 
   const matchingEntries = allEntries.filter(
     (e) =>
@@ -144,15 +143,6 @@ export function GuestbookDetailDrawer({
               <p className="text-xs text-muted-foreground font-mono">{entry.guestCode}</p>
             )}
             <div className="mt-1.5 flex flex-wrap gap-1.5">
-              {isActive ? (
-                <Badge className="rounded-full text-xs bg-green-100 text-green-700 border-0">
-                  Masih di Lokasi
-                </Badge>
-              ) : (
-                <Badge variant="secondary" className="rounded-full text-xs">
-                  Selesai
-                </Badge>
-              )}
               {entry.sourceOfInformation?.name && (
                 <Badge variant="secondary" className="rounded-full text-xs">
                   {entry.sourceOfInformation.name}

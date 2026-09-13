@@ -52,7 +52,7 @@ import type { ProofFiles } from "@/lib/validations/guestbook";
 import { GuestbookDrawer } from "./GuestbookDrawer";
 import { GuestbookDetailDrawer } from "./GuestbookDetailDrawer";
 import { GuestbookFilterDrawer } from "./GuestbookFilterDrawer";
-import { resolveGuestbookPhotoUrl } from "./photo-url";
+import { resolveGuestbookProofThumb } from "./photo-url";
 import { PaginationBar } from "@/components/shared/pagination-bar";
 
 const STATUS_LABELS: Record<string, { label: string; className: string }> = {
@@ -105,7 +105,6 @@ function SkeletonRows() {
           <TableCell><Skeleton className="h-8 w-28" /></TableCell>
           <TableCell><Skeleton className="h-5 w-20 rounded-full" /></TableCell>
           <TableCell className="hidden xl:table-cell"><Skeleton className="h-4 w-24" /></TableCell>
-          <TableCell><Skeleton className="h-5 w-24 rounded-full" /></TableCell>
           <TableCell className="hidden xl:table-cell"><Skeleton className="h-4 w-24" /></TableCell>
           <TableCell><Skeleton className="h-8 w-20 rounded-full" /></TableCell>
         </TableRow>
@@ -127,7 +126,7 @@ function MobileCard({
 }) {
   const sourceLabel = entry.sourceOfInformation?.name ?? null;
   const statusInfo = entry.visitStatus ? STATUS_LABELS[entry.visitStatus] : null;
-  const photoSrc = resolveGuestbookPhotoUrl(((entry.proofFiles ?? null) as ProofFiles | null)?.photo?.path);
+  const photoSrc = resolveGuestbookProofThumb((entry.proofFiles ?? null) as ProofFiles | null);
 
   return (
     <div
@@ -135,7 +134,7 @@ function MobileCard({
       onClick={() => onViewClick(entry)}
     >
       {/* Row 1: avatar + name + status badge */}
-      <div className="flex items-start justify-between gap-2">
+      <div className="flex items-start gap-2">
         <div className="flex items-center gap-2.5 min-w-0">
           {photoSrc ? (
             <Image src={photoSrc} alt="" width={36} height={36} className="h-9 w-9 rounded-lg object-cover shrink-0" unoptimized />
@@ -146,20 +145,13 @@ function MobileCard({
           )}
           <div className="min-w-0">
             <p className="font-medium text-foreground text-sm truncate">{entry.visitorName}</p>
-            {entry.guestCode && (
-              <p className="text-[10px] font-mono text-muted-foreground/70">{entry.guestCode}</p>
+            {statusInfo && (
+              <Badge className={`rounded-full text-[10px] mt-0.5 ${statusInfo.className}`}>
+                {statusInfo.label}
+              </Badge>
             )}
           </div>
         </div>
-        {statusInfo ? (
-          <Badge className={`rounded-full text-[10px] shrink-0 ${statusInfo.className}`}>
-            {statusInfo.label}
-          </Badge>
-        ) : (
-          <Badge variant="secondary" className="rounded-full text-[10px] shrink-0">
-            —
-          </Badge>
-        )}
       </div>
 
       {/* Row 2: venue + package + sumber */}
@@ -458,7 +450,6 @@ function GuestbookClientInner() {
                   <TableHead>PIC</TableHead>
                   <TableHead>In / Out</TableHead>
                   <TableHead className="hidden xl:table-cell">Sumber</TableHead>
-                  <TableHead>Status</TableHead>
                   <TableHead className="hidden xl:table-cell">Dicatat oleh</TableHead>
                   <TableHead className="text-right">Aksi</TableHead>
                 </TableRow>
@@ -483,7 +474,6 @@ function GuestbookClientInner() {
                     <TableHead>PIC</TableHead>
                     <TableHead>In / Out</TableHead>
                     <TableHead className="hidden xl:table-cell">Sumber</TableHead>
-                    <TableHead>Status</TableHead>
                     <TableHead className="hidden xl:table-cell">Dicatat oleh</TableHead>
                     <TableHead className="text-right pr-4">Aksi</TableHead>
                   </TableRow>
@@ -502,7 +492,7 @@ function GuestbookClientInner() {
                         <TableCell className="max-w-48">
                           <div className="flex items-center gap-2.5 min-w-0">
                             {(() => {
-                              const photoSrc = resolveGuestbookPhotoUrl(((entry.proofFiles ?? null) as ProofFiles | null)?.photo?.path);
+                              const photoSrc = resolveGuestbookProofThumb((entry.proofFiles ?? null) as ProofFiles | null);
                               if (photoSrc) {
                                 return <Image src={photoSrc} alt="" width={32} height={32} className="h-8 w-8 rounded-lg object-cover shrink-0" unoptimized />;
                               }
@@ -510,10 +500,10 @@ function GuestbookClientInner() {
                             })()}
                             <div className="leading-tight min-w-0">
                               <p className="font-medium text-foreground truncate">{entry.visitorName}</p>
-                              {entry.guestCode && (
-                                <p className="text-[10px] font-mono text-muted-foreground/60 mt-0.5 truncate">
-                                  {entry.guestCode}
-                                </p>
+                              {statusInfo && (
+                                <Badge className={`rounded-full text-[10px] mt-0.5 ${statusInfo.className}`}>
+                                  {statusInfo.label}
+                                </Badge>
                               )}
                             </div>
                           </div>
@@ -566,15 +556,6 @@ function GuestbookClientInner() {
                         </TableCell>
                         <TableCell className="text-muted-foreground max-w-32 truncate hidden xl:table-cell">
                           {sourceLabel ?? <span className="text-muted-foreground/50">—</span>}
-                        </TableCell>
-                        <TableCell>
-                          {statusInfo ? (
-                            <Badge className={`rounded-full text-xs ${statusInfo.className}`}>
-                              {statusInfo.label}
-                            </Badge>
-                          ) : (
-                            <span className="text-muted-foreground/50">—</span>
-                          )}
                         </TableCell>
                         <TableCell className="text-muted-foreground max-w-32 truncate hidden xl:table-cell">
                           {entry.createdBy?.fullName ?? "—"}
