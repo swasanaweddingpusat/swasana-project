@@ -48,8 +48,6 @@ export const moduleActions: Record<string, string[]> = {
   complimentary: ["view", "create", "edit", "delete"],
   // CRM modules
   "daily-activity": ["view", "create", "edit", "delete"],
-  "settings-lead-status": ["view", "create", "edit", "delete"],
-  "settings-daily-activity-segment": ["view", "create", "edit", "delete"],
   quotations: ["view", "create", "edit", "delete"],
   "booking-mice": ["view", "create", "edit", "delete", "print", "approve", "mark-lost", "restore", "transfer", "reject", "comment", "client-agreement"],
   // "term-&-condition" — FE label ditampilkan sebagai "Term & Payment" (bukan "Term & Condition") khusus MICE.
@@ -118,8 +116,6 @@ export const rolePermissionMap: Record<string, Record<string, string[]>> = {
     "finance-ar": ["view"],
     // daily-activity:delete is intentionally reserved for super-admin & manager only.
     "daily-activity": ["view", "create", "edit"],
-    "settings-lead-status": ["view", "create", "edit", "delete"],
-    "settings-daily-activity-segment": ["view", "create", "edit", "delete"],
     quotations: ["view", "create", "edit", "delete"],
     "settings-quotation-templates": ["view", "create", "edit", "delete"],
     complimentary: ["view", "create", "edit", "delete"],
@@ -305,7 +301,6 @@ export const rolePermissionMap: Record<string, Record<string, string[]>> = {
     customers: ["view", "create", "edit", "delete"],
     "settings-event-types": ["view", "create", "edit", "delete"],
     "settings-quotation-templates": ["view", "create", "edit", "delete"],
-    "settings-daily-activity-segment": ["view", "create", "edit", "delete"],
     "package-mice": ["view", "create", "edit", "delete", "set-harga", "set-status", "term-&-condition"],
     complimentary: ["view", "create", "edit", "delete"],
     bitrix: ["view"],
@@ -345,6 +340,8 @@ const REMOVED_MODULES = [
   "settings-complimentary", // renamed → "complimentary" (now a top-level module, not under settings)
   "leads", // renamed → "daily-activity" (feature renamed; grants migrated via 20260807120000 migration)
   "settings-lead-segment", // renamed → "settings-daily-activity-segment" (grants migrated via 20260809160000 migration)
+  "settings-lead-status", // UI removed (dead settings page, no live route) — see feat/remove-daily-activity-ui
+  "settings-daily-activity-segment", // UI removed (dead settings page, no live route) — see feat/remove-daily-activity-ui
 ];
 
 // ── Main Seeder ──────────────────────────────────────────────────────
