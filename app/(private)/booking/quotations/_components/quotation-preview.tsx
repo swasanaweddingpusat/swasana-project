@@ -363,11 +363,23 @@ export function QuotationPreview({
               {/* Signature */}
               <div className="mt-10 text-[11px]">
                 <p className="text-foreground">
-                  Jakarta, {formatLongDate(q.issuedAt ?? q.createdAt)}
+                  {q.signingLocation?.trim() || "Jakarta"},{" "}
+                  {formatLongDate(q.issuedAt ?? q.createdAt)}
                 </p>
-                <div className="mt-12 w-56 border-t border-foreground pt-1 text-center">
-                  <p className="font-bold text-foreground">{q.salesName}</p>
-                  <p className="text-muted-foreground">MICE Event Sales</p>
+                <div className="mt-2 w-56">
+                  <div className="flex items-end justify-center h-20">
+                    {q.signatureSales ? (
+                      <img
+                        src={q.signatureSales}
+                        alt="Tanda tangan sales"
+                        className="max-h-20 w-auto object-contain"
+                      />
+                    ) : null}
+                  </div>
+                  <div className="border-t border-foreground pt-1 text-center">
+                    <p className="font-bold text-foreground">{q.salesName}</p>
+                    <p className="text-muted-foreground">MICE Event Sales</p>
+                  </div>
                 </div>
               </div>
             </div>
