@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { cn } from "@/lib/utils";
 import { fmtDateTime, LEDGER_ACTIVITY_META } from "./ledger-format";
 import type { LedgerActivity } from "./ledger-format";
@@ -57,8 +58,7 @@ export function LedgerActivityTimeline({
 
             {a.signatureDataUrl && (
               <div className="mt-1.5 inline-flex items-center justify-center rounded-lg border border-border bg-white p-1.5">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={a.signatureDataUrl} alt="Tanda tangan" className="h-10 max-w-32 object-contain" />
+                <Image src={a.signatureDataUrl} alt="Tanda tangan" width={128} height={40} unoptimized className="h-10 max-w-32 object-contain" />
               </div>
             )}
           </li>

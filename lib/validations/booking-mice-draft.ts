@@ -7,21 +7,19 @@ export const createMiceDraftStep1Schema = z.object({
    *  so that retries don't create duplicate draft rows. */
   id: z.string().optional().nullable(),
   venueId: z.string().min(1, "Venue wajib dipilih"),
+  eventDate: z.string().min(1, "Tanggal event wajib diisi"),
   eventTypeId: z.string().optional().nullable(),
   salesId: z.string().optional().nullable(),
   sourceOfInformationId: z.string().optional().nullable(),
-  // Session MICE: morning, evening, atau fullday
+  quotationId: z.string().optional().nullable(),
   miceSession: z.enum(["morning", "evening", "fullday"]).optional().nullable(),
-  // Jam event MICE (mis. "09:00 - 17:00") — stored in eventTime field
   eventTime: z.string().trim().max(50).optional().nullable(),
   estimatedPax: z.coerce.number().int().min(1).optional().nullable(),
   notes: z.string().trim().max(2000).optional().nullable(),
 
-  // Customer identification — one of these paths must be provided:
   customerId: z.string().optional().nullable(),
   leadId: z.string().optional().nullable(),
 
-  // New customer fields (used when no customerId/leadId)
   clientName: z.string().trim().max(200).optional(),
   clientPhone: z.string().trim().max(20).optional(),
   companyName: z.string().trim().max(200).optional().nullable(),

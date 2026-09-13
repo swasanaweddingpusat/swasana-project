@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import Image from "next/image";
 import { toast } from "sonner";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import SignatureCanvas from "react-signature-canvas";
@@ -186,14 +187,12 @@ function SalesSignatureBody({
 
             {useDefault && defaultSignature ? (
               <div className="rounded-xl border border-border bg-white p-3 flex items-center justify-center">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={defaultSignature} alt="tanda tangan default" className="max-h-28 object-contain" />
+                <Image src={defaultSignature} alt="tanda tangan default" width={224} height={112} unoptimized className="max-h-28 object-contain" />
               </div>
             ) : existingSig && !redraw ? (
               // Signature already saved on this booking — show it, allow redraw.
               <div className="rounded-xl border border-border bg-white p-3 flex flex-col items-center gap-2">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={existingSig} alt="tanda tangan tersimpan" className="max-h-28 object-contain" />
+                <Image src={existingSig} alt="tanda tangan tersimpan" width={224} height={112} unoptimized className="max-h-28 object-contain" />
                 <button
                   type="button"
                   onClick={() => { setRedraw(true); setDrawnSig(""); }}
