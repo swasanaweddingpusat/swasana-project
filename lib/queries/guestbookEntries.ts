@@ -63,6 +63,8 @@ export function buildGuestbookWhere(filters: GuestbookFilterOptions): Prisma.Gue
 export interface PaginatedGuestbookEntries {
   data: GuestbookEntryRow[];
   total: number;
+  weddingCount: number;
+  miceCount: number;
   page: number;
   pageSize: number;
 }
@@ -127,7 +129,14 @@ export async function getGuestbookEntries(
   const page = Math.max(1, options?.page ?? 1);
   const pageSize = Math.min(100, Math.max(1, options?.pageSize ?? 50));
 
-  const [data, total] = await Promise.all([
+  const categoryCountWhere = (cat: "WEDDINGS" | "MICE"): Prisma.GuestbookEntryWhereInput => ({
+    AND: [
+      where,
+      { OR: [{ eventCategory: cat }, { eventCategory: null, package: { category: cat } }] },
+    ],
+  });
+
+  const [data, total, weddingCount, miceCount] = await Promise.all([
     db.guestbookEntry.findMany({
       where,
       select: guestbookEntrySelect,
@@ -136,9 +145,11 @@ export async function getGuestbookEntries(
       take: pageSize,
     }),
     db.guestbookEntry.count({ where }),
+    db.guestbookEntry.count({ where: categoryCountWhere("WEDDINGS") }),
+    db.guestbookEntry.count({ where: categoryCountWhere("MICE") }),
   ]);
 
-  return { data, total, page, pageSize };
+  return { data, total, weddingCount, miceCount, page, pageSize };
 }
 
 export type GuestbookEntryItem = GuestbookEntryRow;

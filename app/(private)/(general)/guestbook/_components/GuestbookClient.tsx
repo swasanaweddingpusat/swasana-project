@@ -391,6 +391,12 @@ function GuestbookClientInner() {
               <span className="text-xs font-medium bg-secondary text-secondary-foreground px-3 py-1 rounded-full">
                 {guestbookData?.total ?? 0} tamu
               </span>
+              <span className="text-xs font-medium bg-primary/10 text-primary px-3 py-1 rounded-full">
+                Wedding {guestbookData?.weddingCount ?? 0}
+              </span>
+              <span className="text-xs font-medium bg-secondary text-secondary-foreground px-3 py-1 rounded-full">
+                MICE {guestbookData?.miceCount ?? 0}
+              </span>
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <Button
@@ -508,13 +514,18 @@ function GuestbookClientInner() {
                             </div>
                           </div>
                         </TableCell>
-                        <TableCell className="text-muted-foreground whitespace-nowrap">
+                        <TableCell className="whitespace-nowrap">
                           {(() => {
                             const cat = entry.eventCategory ?? entry.package?.category;
-                            return cat ? (
-                              EVENT_CATEGORY_LABELS[cat] ?? cat
-                            ) : (
-                              <span className="text-muted-foreground/50">—</span>
+                            if (!cat) return <span className="text-muted-foreground/50">—</span>;
+                            const badgeClass =
+                              cat === "MICE"
+                                ? "bg-[var(--brand-gold)]/15 text-[var(--brand-gold)]"
+                                : "bg-primary/10 text-primary";
+                            return (
+                              <Badge className={`rounded-full text-[10px] font-medium border-0 ${badgeClass}`}>
+                                {EVENT_CATEGORY_LABELS[cat] ?? cat}
+                              </Badge>
                             );
                           })()}
                         </TableCell>
@@ -613,6 +624,12 @@ function GuestbookClientInner() {
         <div className="flex items-center gap-2">
           <span className="text-xs font-medium bg-muted text-muted-foreground px-2.5 py-1 border border-border rounded-full shrink-0">
             {guestbookData?.total ?? 0} tamu
+          </span>
+          <span className="text-xs font-medium bg-primary/10 text-primary px-2.5 py-1 rounded-full shrink-0">
+            Wedding {guestbookData?.weddingCount ?? 0}
+          </span>
+          <span className="text-xs font-medium bg-muted text-muted-foreground px-2.5 py-1 border border-border rounded-full shrink-0">
+            MICE {guestbookData?.miceCount ?? 0}
           </span>
           <div className="flex-1" />
 
