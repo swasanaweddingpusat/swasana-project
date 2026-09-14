@@ -1,5 +1,4 @@
-import test from "node:test";
-import assert from "node:assert/strict";
+import { test, expect } from "vitest";
 import { resolveAttendanceContext } from "./attendance-helpers";
 import { db } from "./db";
 
@@ -14,7 +13,7 @@ test("resolveAttendanceContext: WORKDAY + not a holiday", async () => {
   const restoreAssignment = mockOnce(db.employeeWorkAssignment, "findFirst", (async () => ({ offdayDays: [6, 7] })) as unknown as typeof db.employeeWorkAssignment.findFirst);
   try {
     const result = await resolveAttendanceContext("profile-1", new Date("2026-09-15T00:00:00.000Z")); // Tuesday
-    assert.deepEqual(result, { attendantType: "WORKDAY", isPublicHoliday: false });
+    expect(result).toEqual({ attendantType: "WORKDAY", isPublicHoliday: false });
   } finally {
     restoreHoliday();
     restoreAssignment();
@@ -26,7 +25,7 @@ test("resolveAttendanceContext: DAY_OFF + not a holiday", async () => {
   const restoreAssignment = mockOnce(db.employeeWorkAssignment, "findFirst", (async () => ({ offdayDays: [6, 7] })) as unknown as typeof db.employeeWorkAssignment.findFirst);
   try {
     const result = await resolveAttendanceContext("profile-1", new Date("2026-09-19T00:00:00.000Z")); // Saturday
-    assert.deepEqual(result, { attendantType: "DAY_OFF", isPublicHoliday: false });
+    expect(result).toEqual({ attendantType: "DAY_OFF", isPublicHoliday: false });
   } finally {
     restoreHoliday();
     restoreAssignment();
@@ -38,7 +37,7 @@ test("resolveAttendanceContext: WORKDAY + is a holiday", async () => {
   const restoreAssignment = mockOnce(db.employeeWorkAssignment, "findFirst", (async () => ({ offdayDays: [6, 7] })) as unknown as typeof db.employeeWorkAssignment.findFirst);
   try {
     const result = await resolveAttendanceContext("profile-1", new Date("2026-09-15T00:00:00.000Z")); // Tuesday, holiday
-    assert.deepEqual(result, { attendantType: "WORKDAY", isPublicHoliday: true });
+    expect(result).toEqual({ attendantType: "WORKDAY", isPublicHoliday: true });
   } finally {
     restoreHoliday();
     restoreAssignment();
@@ -50,7 +49,7 @@ test("resolveAttendanceContext: DAY_OFF + is a holiday (independent computation)
   const restoreAssignment = mockOnce(db.employeeWorkAssignment, "findFirst", (async () => ({ offdayDays: [6, 7] })) as unknown as typeof db.employeeWorkAssignment.findFirst);
   try {
     const result = await resolveAttendanceContext("profile-1", new Date("2026-09-19T00:00:00.000Z")); // Saturday, holiday
-    assert.deepEqual(result, { attendantType: "DAY_OFF", isPublicHoliday: true });
+    expect(result).toEqual({ attendantType: "DAY_OFF", isPublicHoliday: true });
   } finally {
     restoreHoliday();
     restoreAssignment();
@@ -62,7 +61,7 @@ test("resolveAttendanceContext: no assignment found defaults to WORKDAY", async 
   const restoreAssignment = mockOnce(db.employeeWorkAssignment, "findFirst", (async () => null) as unknown as typeof db.employeeWorkAssignment.findFirst);
   try {
     const result = await resolveAttendanceContext("profile-1", new Date("2026-09-15T00:00:00.000Z"));
-    assert.deepEqual(result, { attendantType: "WORKDAY", isPublicHoliday: false });
+    expect(result).toEqual({ attendantType: "WORKDAY", isPublicHoliday: false });
   } finally {
     restoreHoliday();
     restoreAssignment();
