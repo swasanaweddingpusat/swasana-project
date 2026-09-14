@@ -31,7 +31,7 @@
 - Create: `prisma/migrations/20260914130000_add_public_holiday_and_attendant_type/migration.sql`
 
 **Interfaces:**
-- Produces: `db.publicHoliday` Prisma delegate (`id`, `date` unique, `name`, `isActive`, `createdAt`, `updatedAt`), `AttendantType` enum (`WORKDAY`/`DAY_OFF`) usable as a TS type via `Prisma.AttendantType` or the generated union, `Attendance.attendantType: AttendantType` (default `WORKDAY`), `Attendance.isPublicHoliday: boolean` (default `false`). New permission rows `(settings-public-holiday, view|create|edit|delete)` granted to `human-resource` and `manager` roles.
+- Produces: `db.publicHoliday` Prisma delegate (`id`, `date` unique, `name`, `isActive`, `createdAt`, `updatedAt`), `AttendantType` enum (`WORKDAY`/`DAY_OFF`) usable as a TS type via `Prisma.AttendantType` or the generated union, `Attendance.attendantType: AttendantType` (default `WORKDAY`), `Attendance.isPublicHoliday: boolean` (default `false`). New permission rows `(settings-public-holiday, view|create|edit|delete)` granted to the `human-resource` role only (`manager` intentionally excluded — see ruling in SDD ledger: `prisma/seeders/roles-permissions.ts:146` documents manager as having zero HRD-module access by design).
 
 - [ ] **Step 1: Add `AttendantType` enum to `prisma/schema.prisma`**
 
@@ -159,25 +159,9 @@ BEGIN
   WHERE p.module = 'settings-public-holiday' AND p.action IN ('view', 'create', 'edit', 'delete')
   ON CONFLICT ("roleId", "permissionId") DO NOTHING;
 END $$;
-
--- Grant settings-public-holiday:* to manager role
-DO $$
-DECLARE
-  mgr_id text;
-BEGIN
-  SELECT id INTO mgr_id FROM "roles" WHERE name = 'manager';
-  IF mgr_id IS NULL THEN
-    RAISE NOTICE 'manager role not found — skipping';
-    RETURN;
-  END IF;
-
-  INSERT INTO "role_permissions" ("id", "roleId", "permissionId", "createdAt")
-  SELECT gen_random_uuid(), mgr_id, p.id, now()
-  FROM "permissions" p
-  WHERE p.module = 'settings-public-holiday' AND p.action IN ('view', 'create', 'edit', 'delete')
-  ON CONFLICT ("roleId", "permissionId") DO NOTHING;
-END $$;
 ```
+
+`manager` is intentionally NOT granted `settings-public-holiday` — `prisma/seeders/roles-permissions.ts:146` documents manager as having zero HRD-module access by design (`hr/hr-recruitment sengaja DICABUT — manager gak perlu akses module HRD sama sekali`), and Public Holiday management is HRD-adjacent reference data.
 
 - [ ] **Step 6: Apply the migration and regenerate the Prisma client**
 
@@ -196,7 +180,7 @@ git commit -m "feat(db): add PublicHoliday table and Attendance.attendantType/is
 ### Task 2: Permission seeder registration (dev/local consistency)
 
 **Files:**
-- Modify: `prisma/seeders/roles-permissions.ts:36` (insert into `moduleActions`), and `rolePermissionMap` entries for `human-resource` (line 266-270) and `manager` (line 131-151)
+- Modify: `prisma/seeders/roles-permissions.ts:36` (insert into `moduleActions`), and `rolePermissionMap` entry for `human-resource` (line 266-270) only — `manager` is intentionally NOT touched (see Task 1's ruling: manager has zero HRD-module access by design)
 
 **Interfaces:**
 - Consumes: nothing new.
@@ -240,34 +224,11 @@ to:
   },
 ```
 
-- [ ] **Step 3: Grant it to `manager` in `rolePermissionMap`**
+- [ ] **Step 3: Do NOT grant it to `manager`, and do NOT add it to `prisma/seeders/modules.ts`**
 
-In `prisma/seeders/roles-permissions.ts`, in the `manager` block (lines 131-151), change:
+No edit needed for either. `manager` (lines 131-151) is intentionally left untouched — `prisma/seeders/roles-permissions.ts:146` already documents manager as having zero HRD-module access by design (`hr/hr-recruitment sengaja DICABUT`), and Public Holiday management is HRD-adjacent reference data, so it follows the same exclusion. Leaving `settings-public-holiday` out of `MODULE_REGISTRY.permissions` (`prisma/seeders/modules.ts`) is what makes it resolve as a general Settings item (ARCHITECTURE.md §5). This step exists only to record both decisions so no future task mistakenly adds either.
 
-```ts
-    bitrix: ["view"],
-    "internal-faq": ["view", "create", "edit", "delete"],
-    announcement: ["view", "create", "edit", "delete"],
-    "settings-booking-log": ["view"],
-  },
-```
-
-(the closing lines of the `manager` block) to:
-
-```ts
-    bitrix: ["view"],
-    "internal-faq": ["view", "create", "edit", "delete"],
-    announcement: ["view", "create", "edit", "delete"],
-    "settings-booking-log": ["view"],
-    "settings-public-holiday": ["view", "create", "edit", "delete"],
-  },
-```
-
-- [ ] **Step 4: Do NOT add `settings-public-holiday` to `prisma/seeders/modules.ts`**
-
-No edit needed — leaving it out of `MODULE_REGISTRY.permissions` is what makes it resolve as a general Settings item (ARCHITECTURE.md §5). This step exists only to record the decision so no future task mistakenly adds it.
-
-- [ ] **Step 5: Commit**
+- [ ] **Step 4: Commit**
 
 ```bash
 git add prisma/seeders/roles-permissions.ts
