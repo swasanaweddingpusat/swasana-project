@@ -101,7 +101,7 @@ export function SalesStatCards({ initialStats, dealFrom, dealTo, eventFrom, even
           <WalletMoney weight="BoldDuotone" className={cn("h-6", "w-6", "text-primary")} />
         </div>
         <div className={cn("min-w-0", "flex-1")}>
-          <p className={cn("text-xs", "font-medium", "text-muted-foreground")}>Total Omset</p>
+          <p className={cn("text-xs", "font-medium", "text-muted-foreground")}>Total Revenue</p>
           <p className={cn("font-heading", "text-xl", "font-semibold", "text-foreground", "sm:text-2xl")}>
             {formatCurrencyFull(stats.totalRevenue)}
           </p>

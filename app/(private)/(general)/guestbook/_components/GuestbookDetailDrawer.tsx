@@ -7,11 +7,13 @@ import { Drawer } from "@/components/shared/drawer";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import {
+  Buildings,
   Buildings3,
   Letter,
   Phone,
   Calendar,
   ClipboardText,
+  ConfettiMinimalistic,
   User,
   CloseCircle,
   Videocamera,
@@ -31,10 +33,11 @@ interface GuestbookDetailDrawerProps {
 }
 
 const VISIT_STATUS_LABELS: Record<string, { label: string; className: string }> = {
-  deal: { label: "Deal", className: "bg-green-100 text-green-700 border-0" },
-  in_progress: { label: "In Progress", className: "bg-blue-100 text-blue-700 border-0" },
-  pending: { label: "Pending", className: "bg-gray-100 text-gray-700 border-0" },
+  cold: { label: "Cold", className: "bg-sky-100 text-sky-700 border-0" },
+  warm: { label: "Warm", className: "bg-amber-100 text-amber-700 border-0" },
+  hot: { label: "Hot", className: "bg-orange-100 text-orange-700 border-0" },
   to_be_discuss: { label: "To Be Discuss", className: "bg-yellow-100 text-yellow-700 border-0" },
+  deal: { label: "Deal", className: "bg-green-100 text-green-700 border-0" },
   lost: { label: "Lost", className: "bg-red-100 text-red-700 border-0" },
 };
 
@@ -42,6 +45,11 @@ const INTERACTION_TYPE_LABELS: Record<string, string> = {
   client_visit: "Kunjungan Client",
   online_meeting: "Online Meeting",
   jemput_bola: "Jemput Bola",
+};
+
+const EVENT_CATEGORY_LABELS: Record<string, string> = {
+  WEDDINGS: "Wedding",
+  MICE: "MICE",
 };
 
 const ONLINE_MEDIUM_LABELS: Record<string, string> = {
@@ -106,7 +114,6 @@ export function GuestbookDetailDrawer({
   const [overlayImage, setOverlayImage] = useState<string | null>(null);
 
   if (!entry) return null;
-  const isActive = entry.checkOutAt === null;
 
   const matchingEntries = allEntries.filter(
     (e) =>
@@ -118,11 +125,11 @@ export function GuestbookDetailDrawer({
   );
   const totalVisit = matchingEntries.length + 1;
   const proofFiles = (entry.proofFiles ?? null) as ProofFiles | null;
-  const visitorPhoto = resolveGuestbookPhotoUrl(entry.visitorPhoto);
   const proofChat = resolveGuestbookPhotoUrl(proofFiles?.chat?.path);
   const proofPhoto = resolveGuestbookPhotoUrl(proofFiles?.photo?.path);
   const proofLost = resolveGuestbookPhotoUrl(proofFiles?.lost?.path);
   const proofReschedule = resolveGuestbookPhotoUrl(proofFiles?.reschedule?.path);
+  const eventCategory = entry.eventCategory ?? entry.package?.category ?? null;
 
   return (
     <Drawer
@@ -134,21 +141,9 @@ export function GuestbookDetailDrawer({
       <div className="space-y-5 pb-4">
         {/* Visitor header */}
         <div className="flex items-center gap-4">
-          {visitorPhoto ? (
-            <Image
-              src={visitorPhoto}
-              alt={entry.visitorName}
-              width={64}
-              height={64}
-              className="h-16 w-16 rounded-2xl object-cover shrink-0 cursor-pointer hover:opacity-80 transition-opacity"
-              unoptimized
-              onClick={() => setOverlayImage(visitorPhoto)}
-            />
-          ) : (
-            <div className="h-16 w-16 rounded-2xl bg-secondary flex items-center justify-center shrink-0">
-              <User weight="BoldDuotone" className="h-7 w-7 text-muted-foreground" />
-            </div>
-          )}
+          <div className="h-16 w-16 rounded-2xl bg-secondary flex items-center justify-center shrink-0">
+            <User weight="BoldDuotone" className="h-7 w-7 text-muted-foreground" />
+          </div>
           <div className="min-w-0">
             <h3 className="text-lg font-heading font-bold text-foreground truncate">
               {entry.visitorName}
@@ -157,15 +152,6 @@ export function GuestbookDetailDrawer({
               <p className="text-xs text-muted-foreground font-mono">{entry.guestCode}</p>
             )}
             <div className="mt-1.5 flex flex-wrap gap-1.5">
-              {isActive ? (
-                <Badge className="rounded-full text-xs bg-green-100 text-green-700 border-0">
-                  Masih di Lokasi
-                </Badge>
-              ) : (
-                <Badge variant="secondary" className="rounded-full text-xs">
-                  Selesai
-                </Badge>
-              )}
               {entry.sourceOfInformation?.name && (
                 <Badge variant="secondary" className="rounded-full text-xs">
                   {entry.sourceOfInformation.name}
@@ -176,25 +162,6 @@ export function GuestbookDetailDrawer({
         </div>
 
         <Separator />
-
-        {/* Photos section */}
-        {visitorPhoto && (
-          <div className="bg-muted/30 rounded-2xl p-4 space-y-3">
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Foto</p>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <p className="text-xs text-muted-foreground">Foto Tamu</p>
-                {visitorPhoto ? (
-                  <Image src={visitorPhoto} alt="Foto tamu" width={300} height={200} className="rounded-xl object-cover w-full aspect-[4/3] cursor-pointer hover:opacity-80 transition-opacity" unoptimized onClick={() => setOverlayImage(visitorPhoto)} />
-                ) : (
-                  <div className="rounded-xl bg-secondary flex items-center justify-center w-full aspect-[4/3]">
-                    <User weight="BoldDuotone" className="h-8 w-8 text-muted-foreground/40" />
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
 
         {/* Proof photos */}
         {(proofPhoto || proofChat || proofLost || proofReschedule) && (
@@ -243,11 +210,34 @@ export function GuestbookDetailDrawer({
               }
             />
           )}
+          {eventCategory && (
+            <InfoRow
+              icon={<ConfettiMinimalistic weight="BoldDuotone" className="h-4 w-4 text-muted-foreground" />}
+              label="Kategori Event"
+              value={
+                <Badge variant="secondary" className="rounded-full text-xs font-medium">
+                  {EVENT_CATEGORY_LABELS[eventCategory] ?? eventCategory}
+                </Badge>
+              }
+            />
+          )}
+          <InfoRow
+            icon={<Buildings weight="BoldDuotone" className="h-4 w-4 text-muted-foreground" />}
+            label="Company / Institusi"
+            value={entry.companyName}
+          />
           {entry.sourceOfInformation?.name && (
             <InfoRow
               icon={<Database weight="BoldDuotone" className="h-4 w-4 text-muted-foreground" />}
               label="Sumber"
               value={entry.sourceOfInformation.name}
+            />
+          )}
+          {entry.segment?.name && (
+            <InfoRow
+              icon={<ClipboardText weight="BoldDuotone" className="h-4 w-4 text-muted-foreground" />}
+              label="Segmen / Kategori"
+              value={entry.segment.name}
             />
           )}
           <InfoRow

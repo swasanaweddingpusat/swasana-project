@@ -45,7 +45,12 @@ export function buildGuestbookWhere(filters: GuestbookFilterOptions): Prisma.Gue
   }
 
   if (filters.category === "WEDDINGS" || filters.category === "MICE") {
-    where.package = { category: filters.category };
+    // Cocokkan pilihan langsung (eventCategory) ATAU kategori paket yang ke-link.
+    // Pakai AND agar tidak bentrok dengan where.OR milik filter pencarian.
+    where.AND = [
+      ...(Array.isArray(where.AND) ? where.AND : where.AND ? [where.AND] : []),
+      { OR: [{ eventCategory: filters.category }, { package: { category: filters.category } }] },
+    ];
   } else if (filters.category === "no_package") {
     where.packageId = null;
   }
@@ -58,6 +63,8 @@ export function buildGuestbookWhere(filters: GuestbookFilterOptions): Prisma.Gue
 export interface PaginatedGuestbookEntries {
   data: GuestbookEntryRow[];
   total: number;
+  weddingCount: number;
+  miceCount: number;
   page: number;
   pageSize: number;
 }
@@ -65,9 +72,10 @@ export interface PaginatedGuestbookEntries {
 const guestbookEntrySelect = {
   id: true,
   visitorName: true,
+  companyName: true,
+  eventCategory: true,
   email: true,
   phoneNumber: true,
-  visitorPhoto: true,
   interactionType: true,
   onlineMedium: true,
   meetingUrl: true,
@@ -87,6 +95,7 @@ const guestbookEntrySelect = {
   commitPayDate: true,
   sourceOfInformationId: true,
   packageId: true,
+  segmentId: true,
   venueId: true,
   salesId: true,
   createdAt: true,
@@ -106,6 +115,7 @@ const guestbookEntrySelect = {
       categoryPrices: { select: { basePrice: true } },
     },
   },
+  segment: { select: { id: true, name: true } },
 } satisfies Prisma.GuestbookEntrySelect;
 
 type GuestbookEntryRow = Prisma.GuestbookEntryGetPayload<{ select: typeof guestbookEntrySelect }>;
@@ -121,7 +131,14 @@ export async function getGuestbookEntries(
   const page = Math.max(1, options?.page ?? 1);
   const pageSize = Math.min(100, Math.max(1, options?.pageSize ?? 50));
 
-  const [data, total] = await Promise.all([
+  const categoryCountWhere = (cat: "WEDDINGS" | "MICE"): Prisma.GuestbookEntryWhereInput => ({
+    AND: [
+      where,
+      { OR: [{ eventCategory: cat }, { eventCategory: null, package: { category: cat } }] },
+    ],
+  });
+
+  const [data, total, weddingCount, miceCount] = await Promise.all([
     db.guestbookEntry.findMany({
       where,
       select: guestbookEntrySelect,
@@ -130,9 +147,11 @@ export async function getGuestbookEntries(
       take: pageSize,
     }),
     db.guestbookEntry.count({ where }),
+    db.guestbookEntry.count({ where: categoryCountWhere("WEDDINGS") }),
+    db.guestbookEntry.count({ where: categoryCountWhere("MICE") }),
   ]);
 
-  return { data, total, page, pageSize };
+  return { data, total, weddingCount, miceCount, page, pageSize };
 }
 
 export type GuestbookEntryItem = GuestbookEntryRow;

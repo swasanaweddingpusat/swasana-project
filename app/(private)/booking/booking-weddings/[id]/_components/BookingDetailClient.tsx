@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { format } from "date-fns";
 import { toast } from "sonner";
@@ -762,11 +763,10 @@ function DocumentsSection({ booking }: { booking: BookingDetailResolved }) {
                   <button
                     type="button"
                     onClick={() => { if (url) window.open(url, "_blank", "noopener,noreferrer"); }}
-                    className="flex h-20 w-full items-center justify-center overflow-hidden bg-muted/50"
+                    className="relative flex h-20 w-full items-center justify-center overflow-hidden bg-muted/50"
                   >
                     {isImage && url ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={url} alt={doc.fileName} className="h-full w-full object-cover" />
+                      <Image src={url} alt={doc.fileName} fill className="object-cover" />
                     ) : (
                       <div className="flex flex-col items-center gap-1">
                         <FileText weight="BoldDuotone" className="h-6 w-6 text-muted-foreground" />
@@ -870,8 +870,7 @@ function AgreementSection({ booking }: { booking: BookingDetailResolved }) {
         <div className="space-y-1.5">
           <p className={lbl}>Tanda Tangan Client</p>
           <div className="w-fit rounded-xl border bg-card p-2">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={clientSignature} alt="Tanda tangan client" className="max-h-24 max-w-48 object-contain" />
+            <Image src={clientSignature} alt="Tanda tangan client" width={192} height={96} unoptimized className="max-h-24 max-w-48 object-contain" />
           </div>
         </div>
       )}

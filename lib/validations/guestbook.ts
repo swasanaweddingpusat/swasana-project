@@ -31,12 +31,13 @@ const proofFilesSchema = z
 export const createGuestbookEntrySchema = z
   .object({
     visitorName: z.string().min(1, 'Nama tamu wajib diisi'),
+    companyName: z.string().optional().nullable(),
+    eventCategory: z.enum(['WEDDINGS', 'MICE']).optional().nullable(),
     email: z.string().email('Format email tidak valid').optional().nullable(),
     phoneNumber: z.string().optional().nullable(),
     bitrixContactId: z.string().optional().nullable(),
     bitrixName: z.string().optional().nullable(),
     bitrixSourceInfo: z.string().optional().nullable(),
-    visitorPhoto: z.string().nullable().optional(),
     interactionType: z.enum(['client_visit', 'online_meeting', 'jemput_bola']),
     onlineMedium: z.enum(['zoom', 'google_meet', 'whatsapp_call', 'microsoft_teams', 'other']).optional().nullable(),
     meetingUrl: z.string().optional().nullable(),
@@ -46,22 +47,15 @@ export const createGuestbookEntrySchema = z
     venueId: z.string().optional().nullable(),
     checkInAt: z.string().min(1, 'Tanggal berkunjung wajib diisi'),
     notes: z.string().optional().nullable(),
-    visitStatus: z.enum(['deal', 'in_progress', 'pending', 'to_be_discuss', 'lost']).optional().nullable(),
+    visitStatus: z.enum(['cold', 'warm', 'hot', 'to_be_discuss', 'deal', 'lost']).optional().nullable(),
     sourceOfInformationId: z.string().optional().nullable(),
     packageId: z.string().optional().nullable(),
+    segmentId: z.string().optional().nullable(),
     proofFiles: proofFilesSchema,
     commitVisitDate: z.string().optional().nullable(),
     commitPayDate: z.string().optional().nullable(),
   })
   .superRefine((val, ctx) => {
-    if (!val.visitorPhoto) {
-      ctx.addIssue({
-        path: ['visitorPhoto'],
-        code: z.ZodIssueCode.custom,
-        message: 'Foto tamu wajib diupload',
-      });
-    }
-
     if (!val.proofFiles?.photo) {
       ctx.addIssue({
         path: ['proofFiles', 'photo'],
@@ -111,17 +105,19 @@ export const checkOutGuestbookEntrySchema = z.object({
 });
 
 export const updateGuestbookEntrySchema = z.object({
-  visitStatus: z.enum(['deal', 'in_progress', 'pending', 'to_be_discuss', 'lost']).optional().nullable(),
+  visitStatus: z.enum(['cold', 'warm', 'hot', 'to_be_discuss', 'deal', 'lost']).optional().nullable(),
   notes: z.string().optional().nullable(),
   sourceOfInformationId: z.string().optional().nullable(),
   packageId: z.string().optional().nullable(),
+  segmentId: z.string().optional().nullable(),
   visitorName: z.string().min(1).optional(),
+  companyName: z.string().optional().nullable(),
+  eventCategory: z.enum(['WEDDINGS', 'MICE']).optional().nullable(),
   email: z.string().email().optional().nullable(),
   phoneNumber: z.string().optional().nullable(),
   bitrixContactId: z.string().optional().nullable(),
   bitrixName: z.string().optional().nullable(),
   bitrixSourceInfo: z.string().optional().nullable(),
-  visitorPhoto: z.string().nullable().optional(),
   interactionType: z.enum(['client_visit', 'online_meeting', 'jemput_bola']).optional(),
   onlineMedium: z.enum(['zoom', 'google_meet', 'whatsapp_call', 'microsoft_teams', 'other']).optional().nullable(),
   meetingUrl: z.string().optional().nullable(),

@@ -48,8 +48,6 @@ export const moduleActions: Record<string, string[]> = {
   complimentary: ["view", "create", "edit", "delete"],
   // CRM modules
   "daily-activity": ["view", "create", "edit", "delete"],
-  "settings-lead-status": ["view", "create", "edit", "delete"],
-  "settings-daily-activity-segment": ["view", "create", "edit", "delete"],
   quotations: ["view", "create", "edit", "delete"],
   "booking-mice": ["view", "create", "edit", "delete", "print", "approve", "mark-lost", "restore", "transfer", "reject", "comment", "client-agreement"],
   // "term-&-condition" — FE label ditampilkan sebagai "Term & Payment" (bukan "Term & Condition") khusus MICE.
@@ -79,6 +77,8 @@ export const moduleActions: Record<string, string[]> = {
   // Attendance — own permission so ALL roles can be granted `attendance:view`
   // (menu Absensi = GENERAL) without unlocking the whole HRD world (hr:view).
   attendance: ["view"],
+  // HR Attendance Management — CRUD for work locations, shifts, assignments, overrides
+  "hr-attendance": ["view", "create", "edit", "delete"],
   // HR Recruitment & Onboarding — seeded originally via migration 20260622180000.
   // Listed here so the seeder treats it as a valid module (else step 3b would
   // delete these permissions) and can assign them per the role matrix.
@@ -89,6 +89,8 @@ export const moduleActions: Record<string, string[]> = {
   "internal-faq": ["view", "create", "edit", "delete"],
   // Announcement — company-wide announcements module
   "announcement": ["view", "create", "edit", "delete"],
+  // Daily Report Manager — manager submits daily team reports
+  "daily-report-manager": ["view", "create", "edit", "delete"],
   // Performance Sales — read-only monitoring hub for the STAKEHOLDER world.
   // View-only: no mutation surface (dashboard reads getGroupsWithPerformance).
   "performance-sales": ["view"],
@@ -118,14 +120,13 @@ export const rolePermissionMap: Record<string, Record<string, string[]>> = {
     "finance-ar": ["view"],
     // daily-activity:delete is intentionally reserved for super-admin & manager only.
     "daily-activity": ["view", "create", "edit"],
-    "settings-lead-status": ["view", "create", "edit", "delete"],
-    "settings-daily-activity-segment": ["view", "create", "edit", "delete"],
     quotations: ["view", "create", "edit", "delete"],
     "settings-quotation-templates": ["view", "create", "edit", "delete"],
     complimentary: ["view", "create", "edit", "delete"],
     guestbook: ["view", "create", "edit", "delete"],
     promo: ["view"],
     bitrix: ["view"],
+    "daily-report-manager": ["view", "create", "edit"],
     "internal-faq": ["view"],
     announcement: ["view"],
     "settings-booking-log": ["view"],
@@ -150,6 +151,7 @@ export const rolePermissionMap: Record<string, Record<string, string[]>> = {
     "procurement-budget": ["view", "create", "edit", "delete"],
     // hr/hr-recruitment sengaja DICABUT — manager gak perlu akses module HRD sama sekali.
     bitrix: ["view"],
+    "daily-report-manager": ["view", "create", "edit", "delete"],
     "internal-faq": ["view", "create", "edit", "delete"],
     announcement: ["view", "create", "edit", "delete"],
     "settings-booking-log": ["view"],
@@ -270,6 +272,7 @@ export const rolePermissionMap: Record<string, Record<string, string[]>> = {
   // sengaja DICABUT — tidak ada di spec menu HR.
   "human-resource": {
     hr: ["view", "create", "edit", "delete", "approve"],
+    "hr-attendance": ["view", "create", "edit", "delete"],
     "hr-recruitment": ["view", "create", "edit", "delete", "hire", "approve"],
     procurement: ["view"],
   },
@@ -305,10 +308,10 @@ export const rolePermissionMap: Record<string, Record<string, string[]>> = {
     customers: ["view", "create", "edit", "delete"],
     "settings-event-types": ["view", "create", "edit", "delete"],
     "settings-quotation-templates": ["view", "create", "edit", "delete"],
-    "settings-daily-activity-segment": ["view", "create", "edit", "delete"],
     "package-mice": ["view", "create", "edit", "delete", "set-harga", "set-status", "term-&-condition"],
     complimentary: ["view", "create", "edit", "delete"],
     bitrix: ["view"],
+    "daily-report-manager": ["view", "create", "edit", "delete"],
     "internal-faq": ["view"],
     announcement: ["view"],
     "settings-booking-log": ["view"],
@@ -345,6 +348,8 @@ const REMOVED_MODULES = [
   "settings-complimentary", // renamed → "complimentary" (now a top-level module, not under settings)
   "leads", // renamed → "daily-activity" (feature renamed; grants migrated via 20260807120000 migration)
   "settings-lead-segment", // renamed → "settings-daily-activity-segment" (grants migrated via 20260809160000 migration)
+  "settings-lead-status", // UI removed (dead settings page, no live route) — see feat/remove-daily-activity-ui
+  "settings-daily-activity-segment", // UI removed (dead settings page, no live route) — see feat/remove-daily-activity-ui
 ];
 
 // ── Main Seeder ──────────────────────────────────────────────────────

@@ -9,7 +9,6 @@ import {
   UsersGroupRounded,
   Documents,
   UserCircle,
-  UserPlus,
   DocumentAdd,
   CalendarAdd,
   Buildings,
@@ -29,7 +28,6 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { usePermissions } from "@/hooks/use-permissions";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn, getInitials } from "@/lib/utils";
-import { useDailyActivityDrawer } from "@/components/providers/daily-activity-drawer-provider";
 import { useBookingDrawer } from "@/components/providers/booking-drawer-provider";
 import { useMiceBookingDrawer } from "@/components/providers/mice-booking-drawer-provider";
 import { useQuotationDrawer } from "@/components/providers/quotation-drawer-provider";
@@ -38,7 +36,7 @@ import type { OpenDrawerOptions } from "@/hooks/use-drawer-controller";
 type SolarIcon = ForwardRefExoticComponent<Omit<IconProps, "ref"> & RefAttributes<SVGSVGElement>>;
 
 /** Drawer-backed create actions surfaced inside the center "+" sheet. */
-type DrawerKey = "lead" | "quotation" | "booking" | "mice";
+type DrawerKey = "quotation" | "booking" | "mice";
 
 interface BottomNavItem {
   key: string;
@@ -94,15 +92,6 @@ const NAV_ITEMS: BottomNavItem[] = [
 /** Items inside the center "+" create sheet. Gated by the `create` action so it
  *  mirrors the desktop header "Tambah Baru" menu. */
 const CREATE_SHEET_ITEMS: CreateSheetItem[] = [
-  {
-    key: "lead",
-    label: "Tambah Daily Activity",
-    description: "Catat prospek baru",
-    href: "/booking/daily-activity",
-    Icon: UserPlus,
-    drawerKey: "lead",
-    visible: (can) => can("daily-activity", "create"),
-  },
   {
     key: "quotation",
     label: "Tambah Quotation",
@@ -165,13 +154,11 @@ export function MobileBottomNav(): React.JSX.Element | null {
   const { can, isLoading, isGroupMember } = usePermissions();
   const [createSheetOpen, setCreateSheetOpen] = useState(false);
   const [profileSheetOpen, setProfileSheetOpen] = useState(false);
-  const { openDailyActivityDrawer } = useDailyActivityDrawer();
   const { openBookingDrawer } = useBookingDrawer();
   const { openMiceBookingDrawer } = useMiceBookingDrawer();
   const { openQuotationDrawer } = useQuotationDrawer();
 
   const drawerOpeners: Record<DrawerKey, (opts?: OpenDrawerOptions) => void> = {
-    lead: openDailyActivityDrawer,
     quotation: openQuotationDrawer,
     booking: openBookingDrawer,
     mice: openMiceBookingDrawer,

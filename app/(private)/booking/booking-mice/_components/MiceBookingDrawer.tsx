@@ -149,11 +149,6 @@ const DEFAULT_VALUES: MiceFormValues = {
 
 const TOTAL_STEPS = 3;
 
-// ─── TEMP: design-review mode ────────────────────────────────────────────────
-// Melewati validasi required & pembuatan draft di tombol "Lanjut" supaya Step 2/3
-// bisa dipreview tanpa isi form dulu. Set ke false untuk balikin alur normal.
-const SKIP_STEP_VALIDATION_FOR_DESIGN = true;
-
 // ─── localStorage helpers for MICE draft pointer ─────────────────────────────
 
 const MICE_DRAFT_LS_KEY = "swasana_mice_draft_id";
@@ -552,11 +547,6 @@ export function MiceBookingDrawer({
       return;
     }
 
-    if (SKIP_STEP_VALIDATION_FOR_DESIGN) {
-      setCurrentStep((s) => Math.min(s + 1, 3));
-      return;
-    }
-
     if (currentStep === 1) {
       const ok = await form.trigger([
         "clientName", "clientPhone", "venueId", "eventTypeId", "eventDate",
@@ -575,8 +565,10 @@ export function MiceBookingDrawer({
         const draftData = {
           id: pendingDraftId,
           venueId: values.venueId,
+          eventDate: values.eventDate,
           eventTypeId: values.eventTypeId,
           salesId: resolvedSalesId || null,
+          quotationId: selectedQuotationId || null,
           miceSession: (values.miceSession || null) as "morning" | "evening" | "fullday" | null,
           eventTime: values.time || null,
           estimatedPax: values.estimatedPax ? Number(values.estimatedPax) : null,
