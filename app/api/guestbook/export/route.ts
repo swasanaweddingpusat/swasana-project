@@ -10,10 +10,11 @@ const ALLOWED_INTERACTION = new Set<GuestInteractionType>(["client_visit", "onli
 
 // Mirrors GuestbookClient.tsx / GuestbookDetailDrawer.tsx — keep labels in sync.
 const VISIT_STATUS_LABELS: Record<string, string> = {
-  deal: "Deal",
-  in_progress: "In Progress",
-  pending: "Pending",
+  cold: "Cold",
+  warm: "Warm",
+  hot: "Hot",
   to_be_discuss: "To Be Discuss",
+  deal: "Deal",
   lost: "Lost",
 };
 

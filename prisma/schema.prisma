@@ -868,10 +868,11 @@ enum RecruitmentRequestPriority {
 }
 
 enum GuestVisitStatus {
-  deal
-  in_progress
-  pending
+  cold
+  warm
+  hot
   to_be_discuss
+  deal
   lost
 }
 

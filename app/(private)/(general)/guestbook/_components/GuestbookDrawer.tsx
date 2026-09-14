@@ -144,7 +144,7 @@ const EMPTY_FORM: GuestbookForm = {
   scheduledAt: "",
   hostId: "",
   notes: "",
-  visitStatus: "to_be_discuss",
+  visitStatus: "cold",
   sourceOfInformationId: "",
   packageId: "",
   segmentId: "",
@@ -1158,15 +1158,17 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor="gb-visitStatus" className="text-sm font-medium">Visit Status</Label>
+              <Label htmlFor="gb-visitStatus" className="text-sm font-medium">Status</Label>
               <Select value={form.visitStatus} onValueChange={(v) => setField("visitStatus", v)}>
                 <SelectTrigger id="gb-visitStatus" className="rounded-xl w-full">
                   <SelectValue placeholder="Pilih status" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="deal">Deal</SelectItem>
-                  <SelectItem value="pending">Pending</SelectItem>
+                  <SelectItem value="cold">Cold</SelectItem>
+                  <SelectItem value="warm">Warm</SelectItem>
+                  <SelectItem value="hot">Hot</SelectItem>
                   <SelectItem value="to_be_discuss">To Be Discuss</SelectItem>
+                  <SelectItem value="deal">Deal</SelectItem>
                   <SelectItem value="lost">Lost</SelectItem>
                 </SelectContent>
               </Select>
