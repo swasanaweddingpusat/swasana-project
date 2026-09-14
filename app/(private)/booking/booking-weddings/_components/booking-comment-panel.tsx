@@ -25,6 +25,7 @@ import { useMentionableUsers } from "@/hooks/use-mentionable-users";
 import { createBookingComment, editBookingComment, deleteBookingComment, markCommentsRead, toggleCommentReaction } from "@/actions/booking-comment";
 import type { BookingCommentItem, AggregatedReaction } from "@/lib/queries/booking-comments";
 import type { MentionableUser } from "@/lib/queries/users";
+import Image from "next/image";
 import { cn } from "@/lib/utils";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -59,7 +60,7 @@ function commentPreviewText(content: string, attachments: unknown): string {
 
 async function compressImage(file: File): Promise<{ blob: Blob; url: string }> {
   return new Promise((resolve) => {
-    const img = new Image();
+    const img = new window.Image();
     const reader = new FileReader();
     reader.onload = (e) => {
       img.src = e.target?.result as string;
@@ -152,12 +153,11 @@ function MentionDropdown({ users, query, activeIndex, onSelect }: MentionDropdow
         >
           <div className={cn(
             'shrink-0', 'w-7', 'h-7', 'rounded-full',
-            'overflow-hidden', 'bg-secondary', 'flex', 'items-center',
+            'relative', 'overflow-hidden', 'bg-secondary', 'flex', 'items-center',
             'justify-center', 'text-[10px]', 'font-semibold', 'text-secondary-foreground'
           )}>
             {user.avatarUrl
-              // eslint-disable-next-line @next/next/no-img-element
-              ? <img src={user.avatarUrl} alt={user.fullName ?? ""} className={cn('w-full', 'h-full', 'object-cover')} />
+              ? <Image src={user.avatarUrl} alt={user.fullName ?? ""} fill className={cn('object-cover')} />
               : getInitials(user.fullName)
             }
           </div>
@@ -699,10 +699,9 @@ export function BookingCommentPanel({ open, onClose, bookingId, customerName, hi
                           style={highlightedId === comment.id ? { outlineColor: "var(--brand-gold)" } : undefined}
                         >
                           {/* Avatar */}
-                          <div className={cn('shrink-0', 'w-7', 'h-7', 'rounded-full', 'overflow-hidden', 'bg-secondary', 'flex', 'items-center', 'justify-center', 'text-[10px]', 'font-semibold', 'text-secondary-foreground', 'mt-0.5')}>
+                          <div className={cn('shrink-0', 'w-7', 'h-7', 'rounded-full', 'relative', 'overflow-hidden', 'bg-secondary', 'flex', 'items-center', 'justify-center', 'text-[10px]', 'font-semibold', 'text-secondary-foreground', 'mt-0.5')}>
                             {comment.author.avatarUrl
-                              // eslint-disable-next-line @next/next/no-img-element
-                              ? <img src={comment.author.avatarUrl} alt={comment.author.fullName ?? ""} className={cn('w-full', 'h-full', 'object-cover')} />
+                              ? <Image src={comment.author.avatarUrl} alt={comment.author.fullName ?? ""} fill className={cn('object-cover')} />
                               : getInitials(comment.author.fullName)
                             }
                           </div>
@@ -785,8 +784,7 @@ export function BookingCommentPanel({ open, onClose, bookingId, customerName, hi
                                             );
                                           }
                                           return isImg ? (
-                                            // eslint-disable-next-line @next/next/no-img-element
-                                            <img key={i} src={url} alt={att.name} className={cn('rounded-lg', 'max-w-45', 'cursor-pointer', 'hover:opacity-90', 'transition-opacity')} onClick={() => setPreviewImage(url)} />
+                                            <Image key={i} src={url} alt={att.name} width={180} height={180} className={cn('rounded-lg', 'max-w-45', 'cursor-pointer', 'hover:opacity-90', 'transition-opacity')} onClick={() => setPreviewImage(url)} />
                                           ) : (
                                             <div key={i} className={cn('flex', 'items-center', 'gap-2', 'bg-black/10', 'rounded-lg', 'px-2', 'py-1.5', 'cursor-pointer')} onClick={() => window.open(url, "_blank")}>
                                               <div className={cn('shrink-0', 'flex', 'flex-col', 'items-center', 'justify-center', 'w-8', 'h-8', 'rounded', 'bg-black/10')}>
@@ -907,8 +905,7 @@ export function BookingCommentPanel({ open, onClose, bookingId, customerName, hi
               {pendingAttachments.map((a, i) => (
                 <div key={i} className={cn('flex', 'items-center', 'gap-2', 'px-2', 'py-1.5', 'bg-muted', 'rounded-lg', 'max-w-45')}>
                   {a.type === "image"
-                    // eslint-disable-next-line @next/next/no-img-element
-                    ? <img src={a.url} alt="" className={cn('h-7', 'w-7', 'rounded', 'object-cover', 'shrink-0')} />
+                    ? <Image src={a.url} alt="" width={28} height={28} className={cn('h-7', 'w-7', 'rounded', 'object-cover', 'shrink-0')} />
                     : <FileText weight="BoldDuotone" className={cn('h-4', 'w-4', 'text-muted-foreground', 'shrink-0')} />
                   }
                   <span className={cn('text-xs', 'truncate', 'flex-1', 'min-w-0')}>{a.name}</span>

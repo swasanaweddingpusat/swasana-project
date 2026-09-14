@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
+import Image from "next/image";
 import { useBookingDetail } from "@/hooks/use-booking-detail";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -777,12 +778,11 @@ export function BookingDetailModal({ open, onClose, bookingId }: Props) {
                                       <div key={doc.id} className={`w-25 border rounded-lg overflow-hidden bg-card transition-colors ${isSelected ? "border-primary ring-1 ring-primary" : "border-border"}`}>
                                         <div className="relative">
                                           <div
-                                            className="h-20 w-full bg-muted/50 flex items-center justify-center overflow-hidden cursor-pointer"
+                                            className="relative h-20 w-full bg-muted/50 flex items-center justify-center overflow-hidden cursor-pointer"
                                             onClick={() => { if (url) window.open(url, "_blank", "noopener,noreferrer"); }}
                                           >
                                             {isImage && url ? (
-                                              // eslint-disable-next-line @next/next/no-img-element
-                                              <img src={url} alt={doc.fileName} className="w-full h-full object-cover" />
+                                              <Image src={url} alt={doc.fileName} fill className="object-cover" />
                                             ) : (
                                               <div className="flex flex-col items-center gap-1">
                                                 <FileText className="h-6 w-6 text-muted-foreground" />

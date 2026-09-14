@@ -485,9 +485,11 @@ Permission `(module, action)` tuples — kebab-case format. **Sumber kebenaran =
 | `guestbook` | `view`, `create`, `edit`, `delete` |
 | `bitrix` | `view` |
 | `hr` | `view`, `create`, `edit`, `delete`, `approve` |
+| `hr-attendance` | `view`, `create`, `edit`, `delete` |
 | `hr-recruitment` | `view`, `create`, `edit`, `delete`, `hire` |
+| `daily-report-manager` | `view`, `create`, `edit`, `delete` |
 
-Module yang sudah **dihapus** (jangan dipakai di kode baru): `leads` (→ `daily-activity`), `settings-lead-segment` (→ `settings-daily-activity-segment`), `attendance`, `brand_management`, `calendar_event`, `catering`, `dashboard`, `decoration`, `finance_ap`, `notification`, `user_management`, `venue_management`. Daftar lengkap ada di `REMOVED_MODULES`.
+Module yang sudah **dihapus** (jangan dipakai di kode baru): `leads` (→ `daily-activity`), `settings-lead-segment` (→ `settings-daily-activity-segment`), `brand_management`, `calendar_event`, `catering`, `dashboard`, `decoration`, `finance_ap`, `notification`, `user_management`, `venue_management`. Daftar lengkap ada di `REMOVED_MODULES`.
 
 ---
 

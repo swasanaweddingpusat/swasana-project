@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState, useCallback, useEffect } from "react";
+import Image from "next/image";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Camera, Restart, CheckCircle } from "@solar-icons/react";
@@ -145,8 +146,7 @@ export function CameraModal({ open, onClose, onCapture }: CameraModalProps) {
             />
           )}
           {preview && (
-            /* eslint-disable-next-line @next/next/no-img-element */
-            <img src={preview} alt="Preview selfie" className="h-full w-full object-cover" />
+            <Image src={preview} alt="Preview selfie" fill unoptimized className="object-cover" />
           )}
           {!cameraReady && !preview && !cameraError && (
             <div className="absolute inset-0 flex items-center justify-center">

@@ -7,6 +7,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Badge } from "@/components/ui/badge";
 import {
   Table,
   TableBody,
@@ -33,12 +34,39 @@ import {
   Pen,
   Eye,
   Refresh,
+  ClipboardCheck,
+  ClockCircle,
 } from "@solar-icons/react";
 import { cn } from "@/lib/utils";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useQuotations } from "@/hooks/use-quotations";
+import { useCurrentUser } from "@/hooks/use-current-user";
+import { usePermissions } from "@/hooks/use-permissions";
 import type { QuotationListRow } from "@/lib/queries/quotations";
 import { QuotationDrawer } from "./quotation-drawer";
 import { QuotationPreview } from "./quotation-preview";
+import { ApprovalDialog } from "@/app/(private)/booking/packages/_components/approval-dialog";
+import { ApproveModal } from "@/app/(private)/booking/packages/_components/approve-modal";
+
+// ── Approval types ───────────────────────────────────────────────────────────
+
+interface QApprovalStep {
+  id: string;
+  stepOrder: number;
+  approverType: string;
+  approverRoleId: string | null;
+  approverUserId: string | null;
+  status: string;
+  approverRole: { id: string; name: string } | null;
+  approverUser: { id: string; fullName: string | null } | null;
+}
+
+interface QApprovalRecord {
+  id: string;
+  status: string;
+  steps: QApprovalStep[];
+  createdBy: { id: string; fullName: string | null };
+}
 
 /** Satu baris penawaran (flat list). Total default = qty * price, tapi bisa di-override manual. */
 export interface QuotationLineItem {
@@ -270,6 +298,13 @@ export function QuotationsTable() {
   const [editQuotation, setEditQuotation] = useState<QuotationItem | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewQuotation, setPreviewQuotation] = useState<QuotationItem | null>(null);
+  const [approvalDialogOpen, setApprovalDialogOpen] = useState(false);
+  const [approvalTarget, setApprovalTarget] = useState<QuotationItem | null>(null);
+  const [approveStepTarget, setApproveStepTarget] = useState<{ stepId: string; stepLabel: string; quotation: QuotationItem } | null>(null);
+
+  const qc = useQueryClient();
+  const { user } = useCurrentUser();
+  const { isAdmin } = usePermissions();
 
   // ── Server-side data ──────────────────────────────────────────────────────
   const { data: quotationsResult, isLoading, isError, isFetching, refetch } = useQuotations({
@@ -282,6 +317,57 @@ export function QuotationsTable() {
   const total = quotationsResult?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / ROWS_PER_PAGE));
   const paginated = rawRows.map(mapRowToQuotationItem);
+
+  // ── Approval data (batch fetch for visible rows) ─────────────────────────
+  const quotationIds = paginated.map((q) => q.id);
+  const { data: approvalMap } = useQuery({
+    queryKey: ["quotation-approvals", quotationIds],
+    queryFn: async () => {
+      if (quotationIds.length === 0) return {} as Record<string, QApprovalRecord>;
+      const results: Record<string, QApprovalRecord> = {};
+      await Promise.all(
+        quotationIds.map(async (id) => {
+          try {
+            const res = await fetch(`/api/approval-records?module=quotations&entityId=${id}`);
+            if (res.ok) {
+              const data: QApprovalRecord = await res.json();
+              if (data) results[id] = data;
+            }
+          } catch { /* ignore */ }
+        })
+      );
+      return results;
+    },
+    enabled: quotationIds.length > 0,
+    staleTime: 15_000,
+  });
+
+  // ── Approval helpers ──────────────────────────────────────────────────────
+  function getApprovalBadge(qId: string): { label: string; variant: "default" | "outline" | "secondary" | "destructive" } | null {
+    const record = approvalMap?.[qId];
+    if (!record) return null;
+    const steps = record.steps.filter((s) => s.approverType !== "client");
+    if (steps.length === 0) return null;
+    if (steps.some((s) => s.status === "rejected")) return { label: "Ditolak", variant: "destructive" };
+    if (steps.every((s) => s.status === "approved")) return { label: "Approved", variant: "default" };
+    return { label: "Menunggu", variant: "secondary" };
+  }
+
+  function getActionableSteps(qId: string): QApprovalStep[] {
+    const record = approvalMap?.[qId];
+    if (!record) return [];
+    return record.steps.filter((s) =>
+      s.status === "pending" && s.approverType !== "client" && (
+        isAdmin ||
+        (s.approverType === "role" && s.approverRoleId === user?.roleId) ||
+        (s.approverType === "user" && s.approverUserId === user?.profileId)
+      )
+    );
+  }
+
+  function stepLabel(s: QApprovalStep): string {
+    return (s.approverType === "role" ? s.approverRole?.name : s.approverUser?.fullName) ?? "Approver";
+  }
 
   const handleAdd = useCallback(() => {
     setEditQuotation(null);
@@ -507,6 +593,15 @@ export function QuotationsTable() {
                               <span className="block truncate text-xs text-muted-foreground">
                                 {q.leadPhone}
                               </span>
+                              {(() => {
+                                const badge = getApprovalBadge(q.id);
+                                if (!badge) return null;
+                                return (
+                                  <Badge variant={badge.variant} className="text-[10px] mt-0.5">
+                                    {badge.label}
+                                  </Badge>
+                                );
+                              })()}
                             </div>
                           </TableCell>
 
@@ -581,6 +676,23 @@ export function QuotationsTable() {
                                   <Pen weight="BoldDuotone" aria-hidden="true" className="h-4 w-4 mr-2 text-primary" />
                                   Edit
                                 </DropdownMenuItem>
+                                {getActionableSteps(q.id).map((step) => (
+                                  <DropdownMenuItem
+                                    key={step.id}
+                                    onClick={() => setApproveStepTarget({
+                                      stepId: step.id,
+                                      stepLabel: stepLabel(step),
+                                      quotation: q,
+                                    })}
+                                  >
+                                    <ClipboardCheck weight="BoldDuotone" aria-hidden="true" className="h-4 w-4 mr-2 text-primary" />
+                                    Approve {stepLabel(step)}
+                                  </DropdownMenuItem>
+                                ))}
+                                <DropdownMenuItem onClick={() => { setApprovalTarget(q); setApprovalDialogOpen(true); }}>
+                                  <ClockCircle weight="BoldDuotone" aria-hidden="true" className="h-4 w-4 mr-2 text-muted-foreground" />
+                                  Lihat Approval
+                                </DropdownMenuItem>
                                 <DropdownMenuSeparator />
                                 <DropdownMenuItem onClick={() => handleConvertToBooking(q)}>
                                   <CalendarMark weight="BoldDuotone" aria-hidden="true" className="h-4 w-4 mr-2 text-primary" />
@@ -613,7 +725,7 @@ export function QuotationsTable() {
                           <span className="text-xs text-muted-foreground tabular-nums shrink-0 mt-0.5">
                             {rowNumber}.
                           </span>
-                          <div className="min-w-0">
+                          <div className="min-w-0 flex-1">
                             <span className="block font-mono text-[10px] text-muted-foreground truncate">
                               {deriveQuotationNo(q)}
                             </span>
@@ -623,6 +735,15 @@ export function QuotationsTable() {
                             >
                               {q.leadName}
                             </span>
+                            {(() => {
+                              const badge = getApprovalBadge(q.id);
+                              if (!badge) return null;
+                              return (
+                                <Badge variant={badge.variant} className="text-[10px] mt-0.5">
+                                  {badge.label}
+                                </Badge>
+                              );
+                            })()}
                           </div>
                         </div>
 
@@ -677,6 +798,25 @@ export function QuotationsTable() {
                             />
                             Edit
                           </Button>
+                          {(() => {
+                            const steps = getActionableSteps(q.id);
+                            if (steps.length === 0) return null;
+                            return (
+                              <Button
+                                variant="outline"
+                                className="h-9 flex-1 text-xs"
+                                onClick={() => setApproveStepTarget({
+                                  stepId: steps[0].id,
+                                  stepLabel: stepLabel(steps[0]),
+                                  quotation: q,
+                                })}
+                                aria-label={`Approve ${deriveQuotationNo(q)}`}
+                              >
+                                <ClipboardCheck weight="BoldDuotone" aria-hidden="true" className="h-3.5 w-3.5 mr-1 text-muted-foreground" />
+                                Approve
+                              </Button>
+                            );
+                          })()}
                           <Button
                             variant="outline"
                             className="h-9 flex-1 text-xs"
@@ -774,6 +914,35 @@ export function QuotationsTable() {
         onOpenChange={setPreviewOpen}
         quotation={previewQuotation}
       />
+
+      {approvalDialogOpen && approvalTarget && user && (
+        <ApprovalDialog
+          open={approvalDialogOpen}
+          onClose={() => {
+            setApprovalDialogOpen(false);
+            setApprovalTarget(null);
+            qc.invalidateQueries({ queryKey: ["quotation-approvals"] });
+          }}
+          packageId={approvalTarget.id}
+          packageName={approvalTarget.leadName}
+          userProfileId={user.profileId}
+          userRoleId={user.roleId ?? null}
+          module="quotations"
+        />
+      )}
+
+      {approveStepTarget && (
+        <ApproveModal
+          open={!!approveStepTarget}
+          onClose={() => {
+            setApproveStepTarget(null);
+            qc.invalidateQueries({ queryKey: ["quotation-approvals"] });
+          }}
+          stepId={approveStepTarget.stepId}
+          stepLabel={approveStepTarget.stepLabel}
+          packageName={approveStepTarget.quotation.leadName}
+        />
+      )}
     </>
   );
 }

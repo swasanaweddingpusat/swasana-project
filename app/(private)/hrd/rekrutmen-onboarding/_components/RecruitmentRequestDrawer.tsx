@@ -4,6 +4,7 @@ import { useState } from "react";
 import { format } from "date-fns";
 import { id } from "date-fns/locale";
 import { toast } from "sonner";
+import Image from "next/image";
 import { AddCircle, TrashBinTrash } from "@solar-icons/react";
 import { Drawer } from "@/components/shared/drawer";
 import { SignaturePad } from "@/components/shared/signature-pad";
@@ -667,8 +668,7 @@ export function RecruitmentRequestDrawer({
 
             {useDefaultSig && defaultSignature && (
               <div className="rounded-xl border border-border bg-white p-3 flex items-center justify-center">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={defaultSignature} alt="Tanda tangan default" className="max-h-28 max-w-full object-contain" />
+                <Image src={defaultSignature} alt="Tanda tangan default" width={224} height={112} unoptimized className="max-h-28 max-w-full object-contain" />
               </div>
             )}
           </div>

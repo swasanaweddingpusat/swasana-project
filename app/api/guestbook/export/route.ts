@@ -10,10 +10,11 @@ const ALLOWED_INTERACTION = new Set<GuestInteractionType>(["client_visit", "onli
 
 // Mirrors GuestbookClient.tsx / GuestbookDetailDrawer.tsx — keep labels in sync.
 const VISIT_STATUS_LABELS: Record<string, string> = {
-  deal: "Deal",
-  in_progress: "In Progress",
-  pending: "Pending",
+  cold: "Cold",
+  warm: "Warm",
+  hot: "Hot",
   to_be_discuss: "To Be Discuss",
+  deal: "Deal",
   lost: "Lost",
 };
 
@@ -21,6 +22,11 @@ const INTERACTION_TYPE_LABELS: Record<string, string> = {
   client_visit: "Kunjungan Client",
   online_meeting: "Online Meeting",
   jemput_bola: "Jemput Bola",
+};
+
+const EVENT_CATEGORY_LABELS: Record<string, string> = {
+  WEDDINGS: "Wedding",
+  MICE: "MICE",
 };
 
 /** Format a Date as "d MMMM yyyy" in id-ID — for date-only cells. */
@@ -47,6 +53,8 @@ function fmtDateTime(value: Date | null): string {
 
 const guestbookExportSelect = {
   visitorName: true,
+  companyName: true,
+  eventCategory: true,
   guestCode: true,
   phoneNumber: true,
   email: true,
@@ -60,7 +68,8 @@ const guestbookExportSelect = {
   host: { select: { fullName: true } },
   venue: { select: { name: true } },
   sourceOfInformation: { select: { name: true } },
-  package: { select: { packageName: true } },
+  package: { select: { packageName: true, category: true } },
+  segment: { select: { name: true } },
   createdBy: { select: { fullName: true } },
 } satisfies Prisma.GuestbookEntrySelect;
 
@@ -114,6 +123,9 @@ export async function GET(req: Request): Promise<Response> {
 
     const headers = [
       "Nama Tamu",
+      "Company / Institusi",
+      "Kategori Event",
+      "Segmen / Kategori",
       "Guest Code",
       "Telepon",
       "Email",
@@ -144,8 +156,12 @@ export async function GET(req: Request): Promise<Response> {
     });
 
     rows.forEach((r) => {
+      const cat = r.eventCategory ?? r.package?.category ?? null;
       sheet.addRow([
         r.visitorName,
+        r.companyName ?? "",
+        cat ? EVENT_CATEGORY_LABELS[cat] ?? cat : "",
+        r.segment?.name ?? "",
         r.guestCode ?? "",
         r.phoneNumber ?? "",
         r.email ?? "",

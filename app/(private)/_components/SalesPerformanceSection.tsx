@@ -12,6 +12,12 @@ import {
   AltArrowRight,
   WalletMoney,
 } from "@solar-icons/react";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid } from "recharts";
+import {
+  ChartContainer,
+  ChartTooltip,
+  type ChartConfig,
+} from "@/components/ui/chart";
 import { cn } from "@/lib/utils";
 import { useDashboardSalesPerformance } from "@/hooks/useDashboardSalesPerformance";
 import { useDashboardBookings } from "@/hooks/use-dashboard-bookings";
@@ -36,6 +42,10 @@ function formatCurrencyFull(amount: number): string {
   return `Rp ${amount.toLocaleString("id-ID")}`;
 }
 
+function formatChartTooltip(value: number): string {
+  return `Rp ${value.toLocaleString("id-ID")}`;
+}
+
 function getInitials(name: string): string {
   return name
     .split(" ")
@@ -51,6 +61,13 @@ function getMonthRange(year: number, month: number): { from: string; to: string 
   const to = `${year}-${String(month + 1).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
   return { from, to };
 }
+
+// ─── Chart config ─────────────────────────────────────────────────────────────
+
+const salesChartConfig = {
+  revenue: { label: "Revenue", color: "hsl(var(--primary))" },
+  target: { label: "Target", color: "hsl(var(--muted))" },
+} satisfies ChartConfig;
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
@@ -105,86 +122,108 @@ function AvatarCircle({
   );
 }
 
-const DUMMY_TARGET_MULTIPLIER = 1.35;
-const DUMMY_TARGET_FLOOR = 1_000_000;
+// ─── Sales Chart ──────────────────────────────────────────────────────────────
 
-function resolveDummyTarget(item: SalesPerformanceCardItem): number {
-  if (item.hasTarget && item.target > 0) return item.target;
-  if (item.revenue <= 0) return DUMMY_TARGET_FLOOR;
-  return Math.round((item.revenue * DUMMY_TARGET_MULTIPLIER) / 100_000) * 100_000;
+interface ChartDataItem {
+  name: string;
+  fullName: string;
+  revenue: number;
+  target?: number;
+  bookingCount: number;
+  groupName: string | null;
 }
 
-function SalesListRow({
-  item,
-  rank,
-  onClick,
-}: {
-  item: SalesPerformanceCardItem;
-  rank: number;
-  onClick?: () => void;
-}) {
-  const target = resolveDummyTarget(item);
-  const collected = item.revenue;
-  const pct = target > 0 ? Math.min(100, Math.round((collected / target) * 100)) : 0;
+interface SalesTooltipPayloadEntry {
+  payload: ChartDataItem;
+  dataKey: string;
+}
 
+function SalesTooltipContent({
+  active,
+  payload,
+}: {
+  active?: boolean;
+  payload?: SalesTooltipPayloadEntry[];
+}): React.ReactElement | null {
+  if (!active || !payload?.length) return null;
+  const d = payload[0].payload;
   return (
-    <li
-      onClick={onClick}
-      className={cn(
-        "flex items-center gap-3 px-4 py-3 sm:gap-4 sm:px-5 sm:py-4",
-        rank === 0 && "bg-[var(--brand-gold)]/5",
-        onClick && "cursor-pointer hover:bg-accent transition-colors",
+    <div className="rounded-lg border border-border/50 bg-background px-3 py-2 text-xs shadow-xl">
+      <p className="font-semibold text-foreground">{d.fullName}</p>
+      {d.groupName && (
+        <p className="text-muted-foreground">{d.groupName}</p>
       )}
-    >
-      <span
-        className={cn(
-          "w-4 shrink-0 text-center font-mono text-xs",
-          rank === 0 ? "font-semibold text-[var(--brand-gold)]" : "text-muted-foreground",
+      <p className="mt-1 text-muted-foreground">{d.bookingCount} booking</p>
+      <div className="mt-1 flex flex-col gap-0.5">
+        <p className="font-semibold text-foreground">Revenue: {formatChartTooltip(d.revenue)}</p>
+        {d.target !== undefined && (
+          <p className="text-muted-foreground">Target: {formatChartTooltip(d.target)}</p>
         )}
-      >
-        {rank + 1}
-      </span>
-      <AvatarCircle name={item.name} avatarUrl={item.avatarUrl} rank={rank} />
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-semibold text-foreground">{item.name}</p>
-        {item.groupName && (
-          <p className="text-xs text-muted-foreground">{item.groupName}</p>
-        )}
-        <p className="text-xs text-muted-foreground">{item.bookingCount} booking</p>
-        <div className="mt-1.5 flex items-center gap-2">
-          <div className="h-2 min-w-0 flex-1 overflow-hidden rounded-full bg-secondary">
-            <div
-              className="h-full rounded-full bg-primary transition-all"
-              style={{ width: `${pct}%` }}
-            />
-          </div>
-        </div>
-        <p className="mt-0.5 text-xs text-muted-foreground">
-          {formatCurrency(collected)}
-        </p>
       </div>
-    </li>
+    </div>
   );
 }
 
-function SalesPerformanceTable({
-  data,
-  onSalesClick,
-}: {
-  data: SalesPerformanceCardItem[];
-  onSalesClick?: (item: SalesPerformanceCardItem) => void;
-}) {
+function SalesChart({ data }: { data: SalesPerformanceCardItem[] }) {
+  const chartData = useMemo<ChartDataItem[]>(() => {
+    return data.slice(0, 10).map((item) => ({
+      name: item.name.length > 15 ? item.name.slice(0, 15) + "…" : item.name,
+      fullName: item.name,
+      revenue: item.revenue,
+      target: item.hasTarget && item.target > 0 ? item.target : undefined,
+      bookingCount: item.bookingCount,
+      groupName: item.groupName,
+    }));
+  }, [data]);
+
+  const chartHeight = Math.max(200, chartData.length * 40 + 40);
+
+  const hasAnyTarget = chartData.some((d) => d.target !== undefined);
+
   return (
-    <ol className="flex flex-col divide-y divide-border overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
-      {data.map((item, idx) => (
-        <SalesListRow
-          key={item.profileId}
-          item={item}
-          rank={idx}
-          onClick={onSalesClick ? () => onSalesClick(item) : undefined}
-        />
-      ))}
-    </ol>
+    <div className="rounded-2xl border border-border bg-card shadow-sm p-5">
+      <ChartContainer config={salesChartConfig} className="aspect-auto" style={{ height: chartHeight }}>
+        <BarChart
+          data={chartData}
+          layout="vertical"
+          margin={{ top: 0, right: 16, bottom: 0, left: 8 }}
+        >
+          <CartesianGrid horizontal={false} strokeDasharray="3 3" />
+          <YAxis
+            dataKey="name"
+            type="category"
+            width={110}
+            tick={{ fontSize: 12 }}
+            tickLine={false}
+            axisLine={false}
+          />
+          <XAxis
+            type="number"
+            tickFormatter={(v: number) => formatCurrency(v)}
+            tick={{ fontSize: 11 }}
+            tickLine={false}
+            axisLine={false}
+          />
+          <ChartTooltip content={<SalesTooltipContent />} />
+          <Bar
+            dataKey="revenue"
+            name="revenue"
+            fill="hsl(var(--primary))"
+            radius={[0, 4, 4, 0]}
+            barSize={hasAnyTarget ? 10 : 16}
+          />
+          {hasAnyTarget && (
+            <Bar
+              dataKey="target"
+              name="target"
+              fill="hsl(var(--muted))"
+              radius={[0, 4, 4, 0]}
+              barSize={10}
+            />
+          )}
+        </BarChart>
+      </ChartContainer>
+    </div>
   );
 }
 
@@ -388,7 +427,41 @@ export function SalesPerformanceSection({
 
         <TotalRevenueCard data={data} />
 
-        <SalesPerformanceTable data={data} onSalesClick={setSelectedSales} />
+        <SalesChart data={data} />
+
+        <ol className="flex flex-col divide-y divide-border overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
+          {data.map((item, idx) => (
+            <li
+              key={item.profileId}
+              onClick={() => setSelectedSales(item)}
+              className={cn(
+                "flex items-center gap-3 px-4 py-3 sm:gap-4 sm:px-5 sm:py-4",
+                idx === 0 && "bg-[var(--brand-gold)]/5",
+                "cursor-pointer hover:bg-accent transition-colors",
+              )}
+            >
+              <span
+                className={cn(
+                  "w-4 shrink-0 text-center font-mono text-xs",
+                  idx === 0 ? "font-semibold text-[var(--brand-gold)]" : "text-muted-foreground",
+                )}
+              >
+                {idx + 1}
+              </span>
+              <AvatarCircle name={item.name} avatarUrl={item.avatarUrl} rank={idx} />
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-semibold text-foreground">{item.name}</p>
+                {item.groupName && (
+                  <p className="text-xs text-muted-foreground">{item.groupName}</p>
+                )}
+                <p className="text-xs text-muted-foreground">{item.bookingCount} booking</p>
+              </div>
+              <p className="shrink-0 text-sm font-semibold text-foreground tabular-nums">
+                {formatCurrency(item.revenue)}
+              </p>
+            </li>
+          ))}
+        </ol>
       </div>
 
       <Dialog

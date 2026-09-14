@@ -1,9 +1,39 @@
 ﻿"use client";
 
+import { useState } from "react";
 import { format } from "date-fns";
+import { useQueryClient, useQuery } from "@tanstack/react-query";
+import { CheckCircle, CloseCircle, ClockCircle } from "@solar-icons/react";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+import { useCurrentUser } from "@/hooks/use-current-user";
+import { usePermissions } from "@/hooks/use-permissions";
+import { ApprovalDialog } from "@/app/(private)/booking/packages/_components/approval-dialog";
+import { ApproveModal } from "@/app/(private)/booking/packages/_components/approve-modal";
 import { MiceStatusBadge } from "./mice-table";
 import type { MiceBookingItem, MiceTerm } from "./types";
+
+interface ApprovalStep {
+  id: string;
+  stepOrder: number;
+  approverType: string;
+  approverRoleId: string | null;
+  approverUserId: string | null;
+  revisionId: string | null;
+  status: string;
+  approverRole: { id: string; name: string } | null;
+  approverUser: { id: string; fullName: string | null } | null;
+  decidedBy: { id: string; fullName: string | null } | null;
+  decidedAt: string | null;
+  notes: string | null;
+}
+
+interface ApprovalRecord {
+  id: string;
+  status: string;
+  steps: ApprovalStep[];
+  createdBy: { id: string; fullName: string | null };
+}
 
 interface MiceDetailContentProps {
   booking: MiceBookingItem;
@@ -66,6 +96,39 @@ export function MiceDetailContent({
   showHeader = true,
   closeLabel = "Tutup",
 }: MiceDetailContentProps) {
+  const qc = useQueryClient();
+  const { user } = useCurrentUser();
+  const { isAdmin } = usePermissions();
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [approveTarget, setApproveTarget] = useState<{ stepId: string; stepLabel: string } | null>(null);
+
+  const { data: approval } = useQuery({
+    queryKey: ["approval-records", "booking", booking.id],
+    queryFn: async () => {
+      const res = await fetch(`/api/approval-records?module=booking&entityId=${booking.id}`);
+      if (!res.ok) return null;
+      return res.json() as Promise<ApprovalRecord>;
+    },
+    staleTime: 15_000,
+  });
+
+  const allSteps: ApprovalStep[] = approval?.steps ?? [];
+  const nonClientSteps = allSteps.filter((s: ApprovalStep) => s.approverType !== "client");
+  const hasRecord = !!approval && nonClientSteps.length > 0;
+
+  function stepLabel(s: ApprovalStep): string {
+    return (s.approverType === "role" ? s.approverRole?.name : s.approverUser?.fullName) ?? "Approver";
+  }
+
+  function canActOn(s: ApprovalStep): boolean {
+    return (
+      s.status === "pending" &&
+      (isAdmin ||
+        (s.approverType === "role" && s.approverRoleId === user?.roleId) ||
+        (s.approverType === "user" && s.approverUserId === user?.profileId))
+    );
+  }
+
   return (
     <div className="flex flex-col gap-5">
       {/* Status + PO */}
@@ -79,6 +142,83 @@ export function MiceDetailContent({
           ) : (
             <span className="text-xs text-muted-foreground">Belum ada PO</span>
           )}
+        </div>
+      )}
+
+      {/* Approval */}
+      {hasRecord && (
+        <div className="space-y-1">
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+            Approval
+          </p>
+          <div className="rounded-lg border border-border overflow-hidden">
+            {nonClientSteps.map((step: ApprovalStep) => {
+              const actionable = canActOn(step);
+              return (
+                <div
+                  key={step.id}
+                  className={cn(
+                    "flex items-center gap-3 px-4 py-3 border-b border-border last:border-0",
+                    step.status === "approved" && "bg-muted/30",
+                    step.status === "rejected" && "bg-destructive/5",
+                  )}
+                >
+                  <div
+                    className={cn(
+                      "flex items-center justify-center h-7 w-7 rounded-full shrink-0",
+                      step.status === "approved" && "bg-primary text-primary-foreground",
+                      step.status === "rejected" && "bg-destructive text-white",
+                      step.status === "pending" && "bg-muted text-muted-foreground",
+                    )}
+                  >
+                    {step.status === "approved" ? (
+                      <CheckCircle weight="BoldDuotone" className="h-4 w-4" />
+                    ) : step.status === "rejected" ? (
+                      <CloseCircle weight="BoldDuotone" className="h-4 w-4" />
+                    ) : (
+                      <ClockCircle weight="BoldDuotone" className="h-3.5 w-3.5" />
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium">{stepLabel(step)}</p>
+                    {step.status === "approved" && step.decidedBy && (
+                      <p className="text-xs text-muted-foreground">
+                        Disetujui oleh {step.decidedBy.fullName}
+                        {step.decidedAt
+                          ? ` · ${new Date(step.decidedAt).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })}`
+                          : ""}
+                      </p>
+                    )}
+                    {step.status === "rejected" && (
+                      <p className="text-xs text-destructive">
+                        Ditolak{step.decidedBy ? ` oleh ${step.decidedBy.fullName}` : ""}
+                        {step.notes ? ` — ${step.notes}` : ""}
+                      </p>
+                    )}
+                  </div>
+                  {actionable && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="shrink-0 text-xs"
+                      onClick={() =>
+                        setApproveTarget({ stepId: step.id, stepLabel: stepLabel(step) })
+                      }
+                    >
+                      Approve
+                    </Button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          <button
+            type="button"
+            onClick={() => setDialogOpen(true)}
+            className="text-xs text-primary hover:underline mt-1"
+          >
+            Lihat detail progres approval
+          </button>
         </div>
       )}
 
@@ -168,6 +308,33 @@ export function MiceDetailContent({
           Edit Booking
         </Button>
       </div>
+
+      {dialogOpen && user && (
+        <ApprovalDialog
+          open={dialogOpen}
+          onClose={() => {
+            setDialogOpen(false);
+            void qc.invalidateQueries({ queryKey: ["approval-records", "booking", booking.id] });
+          }}
+          packageId={booking.id}
+          packageName={booking.customer.name}
+          userProfileId={user.profileId}
+          userRoleId={user.roleId}
+          module="booking"
+        />
+      )}
+      {approveTarget && (
+        <ApproveModal
+          open={!!approveTarget}
+          onClose={() => {
+            setApproveTarget(null);
+            void qc.invalidateQueries({ queryKey: ["approval-records", "booking", booking.id] });
+          }}
+          stepId={approveTarget.stepId}
+          stepLabel={approveTarget.stepLabel}
+          packageName={booking.customer.name}
+        />
+      )}
     </div>
   );
 }
