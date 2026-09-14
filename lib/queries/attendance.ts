@@ -1,5 +1,6 @@
 import { db } from "@/lib/db";
 import type { AttendanceListQuery, AttendanceExportQuery } from "@/lib/validations/attendance";
+import type { AttendanceContext } from "@/lib/attendance-helpers";
 
 export function todayMidnightUTC(): Date {
   const now = new Date();
@@ -105,6 +106,7 @@ export type AttendanceTodayResponse = {
   attendance: AttendanceTodayResult;
   shift: AttendanceTodayShift | null;
   shiftSource: "override" | "assignment" | null;
+  context: AttendanceContext;
 };
 
 export async function getAttendanceForExport(params: AttendanceExportQuery) {
