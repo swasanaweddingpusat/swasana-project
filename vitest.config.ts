@@ -6,7 +6,7 @@ export default defineConfig({
     environment: "node",
     include: ["**/*.test.ts"],
     // Exclude pre-existing node:test runner files (not vitest-compatible).
-    exclude: ["**/node_modules/**", "lib/attendance-offdays.test.ts"],
+    exclude: ["**/node_modules/**", "lib/attendance-offdays.test.ts", "lib/attendance-context.test.ts"],
     // Money functions are pure — no DB, no setup files.
   },
   resolve: {
