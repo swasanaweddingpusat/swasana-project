@@ -150,6 +150,7 @@ model Profile {
   subordinates                 Profile[]                  @relation("ProfileManager")
   dataGroupMemberships         UserGroupMember[]
   ledGroups                    UserGroup[]                @relation("GroupLeader")
+  dailyReportsSubmitted        DailyReport[]              @relation("DailyReportSubmitter")
   bookingsAsSales              Booking[]                  @relation("BookingSales")
   bookingsAsManager            Booking[]                  @relation("BookingManager")
   uploadedDocuments            BookingDocument[]
@@ -321,8 +322,9 @@ model UserGroup {
   createdBy   String?
   createdAt   DateTime          @default(now())
   updatedAt   DateTime          @updatedAt
-  leader      Profile?          @relation("GroupLeader", fields: [leaderId], references: [id], onDelete: SetNull)
-  members     UserGroupMember[]
+  leader       Profile?          @relation("GroupLeader", fields: [leaderId], references: [id], onDelete: SetNull)
+  members      UserGroupMember[]
+  dailyReports DailyReport[]
 
   @@index([leaderId])
   @@map("user_groups")
@@ -3801,4 +3803,49 @@ model AnnouncementReader {
   @@index([announcementId])
   @@index([readerId])
   @@map("announcement_readers")
+}
+
+// ─── Daily Report Manager ────────────────────────────────────────────────────
+
+enum DailyReportStatus {
+  ON_TRACK
+  OFF_TRACK
+  AT_RISK
+}
+
+model DailyReport {
+  id        String   @id @default(uuid())
+  groupId   String
+  reportDate DateTime @db.Date
+
+  totalClientDihubungi Int @default(0)
+  totalHotProspect     Int @default(0)
+  totalLeadsBaru       Int @default(0)
+  totalFollowUp        Int @default(0)
+  totalPotensiClosing  Int @default(0)
+  closingHariIni       Int @default(0)
+
+  actionBesok String?
+  commitVisit String?
+  actualVisit String?
+  reason      String?
+  kendala     String?
+
+  membersCompleted Json @default("[]")
+  membersTotal     Int  @default(0)
+
+  status DailyReportStatus @default(ON_TRACK)
+
+  submittedById String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  group       UserGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  submittedBy Profile   @relation("DailyReportSubmitter", fields: [submittedById], references: [id], onDelete: Restrict)
+
+  @@unique([groupId, reportDate])
+  @@index([groupId])
+  @@index([submittedById])
+  @@index([reportDate])
+  @@map("daily_reports")
 }

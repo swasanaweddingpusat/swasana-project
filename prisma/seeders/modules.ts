@@ -48,6 +48,7 @@ export const MODULE_REGISTRY: ModuleSeed[] = [
       "package-mice",
       "complimentary",
       "promo",
+      "daily-report-manager",
     ],
   },
   // Purchase world: vendor-specialist only. `procurement` intentionally NOT here

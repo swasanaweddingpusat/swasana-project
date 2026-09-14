@@ -89,6 +89,8 @@ export const moduleActions: Record<string, string[]> = {
   "internal-faq": ["view", "create", "edit", "delete"],
   // Announcement — company-wide announcements module
   "announcement": ["view", "create", "edit", "delete"],
+  // Daily Report Manager — manager submits daily team reports
+  "daily-report-manager": ["view", "create", "edit", "delete"],
   // Performance Sales — read-only monitoring hub for the STAKEHOLDER world.
   // View-only: no mutation surface (dashboard reads getGroupsWithPerformance).
   "performance-sales": ["view"],
@@ -124,6 +126,7 @@ export const rolePermissionMap: Record<string, Record<string, string[]>> = {
     guestbook: ["view", "create", "edit", "delete"],
     promo: ["view"],
     bitrix: ["view"],
+    "daily-report-manager": ["view", "create", "edit"],
     "internal-faq": ["view"],
     announcement: ["view"],
     "settings-booking-log": ["view"],
@@ -148,6 +151,7 @@ export const rolePermissionMap: Record<string, Record<string, string[]>> = {
     "procurement-budget": ["view", "create", "edit", "delete"],
     // hr/hr-recruitment sengaja DICABUT — manager gak perlu akses module HRD sama sekali.
     bitrix: ["view"],
+    "daily-report-manager": ["view", "create", "edit", "delete"],
     "internal-faq": ["view", "create", "edit", "delete"],
     announcement: ["view", "create", "edit", "delete"],
     "settings-booking-log": ["view"],
@@ -307,6 +311,7 @@ export const rolePermissionMap: Record<string, Record<string, string[]>> = {
     "package-mice": ["view", "create", "edit", "delete", "set-harga", "set-status", "term-&-condition"],
     complimentary: ["view", "create", "edit", "delete"],
     bitrix: ["view"],
+    "daily-report-manager": ["view", "create", "edit", "delete"],
     "internal-faq": ["view"],
     announcement: ["view"],
     "settings-booking-log": ["view"],
