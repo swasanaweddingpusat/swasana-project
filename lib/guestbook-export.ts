@@ -3,10 +3,11 @@ import autoTable from "jspdf-autotable";
 import type { GuestbookEntryItem } from "@/lib/queries/guestbookEntries";
 
 const STATUS_LABEL: Record<string, string> = {
-  deal: "Deal",
-  in_progress: "In Progress",
-  pending: "Pending",
+  cold: "Cold",
+  warm: "Warm",
+  hot: "Hot",
   to_be_discuss: "To Be Discuss",
+  deal: "Deal",
   lost: "Lost",
 };
 

@@ -43,7 +43,6 @@ export const MODULE_REGISTRY: ModuleSeed[] = [
       "booking",
       "booking-mice",
       "groups",
-      "daily-activity",
       "quotations",
       "package",
       "package-mice",
