@@ -1,5 +1,5 @@
 import { db } from "@/lib/db";
-import type { AttendanceListQuery, AttendanceExportQuery } from "@/lib/validations/attendance";
+import type { AttendanceListQuery, AttendanceExportQuery, AttendanceOverviewQuery } from "@/lib/validations/attendance";
 import type { AttendanceContext } from "@/lib/attendance-helpers";
 
 export function todayMidnightUTC(): Date {
@@ -141,7 +141,11 @@ export async function getAttendanceForExport(params: AttendanceExportQuery) {
       id: true,
       date: true,
       clockInAt: true,
+      clockInLat: true,
+      clockInLng: true,
       clockOutAt: true,
+      clockOutLat: true,
+      clockOutLng: true,
       status: true,
       attendantType: true,
       isPublicHoliday: true,
@@ -153,3 +157,57 @@ export async function getAttendanceForExport(params: AttendanceExportQuery) {
 }
 
 export type AttendanceExportItem = Awaited<ReturnType<typeof getAttendanceForExport>>[number];
+
+export async function getEmployeeAttendanceOverview(params: AttendanceOverviewQuery) {
+  const { profileId, date, month, year } = params;
+
+  const where: Record<string, unknown> = { profileId };
+
+  if (date) {
+    const d = new Date(date);
+    const start = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+    const end = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate() + 1));
+    where.date = { gte: start, lt: end };
+  } else if (month && year) {
+    const start = new Date(Date.UTC(year, month - 1, 1));
+    const end = new Date(Date.UTC(year, month, 1));
+    where.date = { gte: start, lt: end };
+  } else if (year) {
+    const start = new Date(Date.UTC(year, 0, 1));
+    const end = new Date(Date.UTC(year + 1, 0, 1));
+    where.date = { gte: start, lt: end };
+  }
+
+  const [profile, records] = await Promise.all([
+    db.profile.findUnique({ where: { id: profileId }, select: { id: true, fullName: true, avatarUrl: true } }),
+    db.attendance.findMany({
+      where,
+      orderBy: { date: "desc" },
+      take: 400,
+      select: {
+        id: true,
+        date: true,
+        clockInAt: true,
+        clockOutAt: true,
+        status: true,
+        attendantType: true,
+        isPublicHoliday: true,
+        workLocation: { select: { id: true, name: true } },
+        workShift: { select: { id: true, name: true } },
+      },
+    }),
+  ]);
+
+  const summary = {
+    hadir: records.filter((r) => r.status === "on_time" || r.status === "late").length,
+    telat: records.filter((r) => r.status === "late").length,
+    absen: records.filter((r) => r.status === "absent" && r.attendantType === "WORKDAY" && !r.isPublicHoliday).length,
+    libur: records.filter((r) => r.attendantType === "DAY_OFF").length,
+    tanggalMerah: records.filter((r) => r.isPublicHoliday).length,
+  };
+
+  return { profile, summary, records };
+}
+
+export type EmployeeAttendanceOverview = Awaited<ReturnType<typeof getEmployeeAttendanceOverview>>;
+export type EmployeeAttendanceOverviewRecord = EmployeeAttendanceOverview["records"][number];
