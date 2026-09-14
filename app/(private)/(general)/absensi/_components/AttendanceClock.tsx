@@ -34,6 +34,7 @@ export function AttendanceClock() {
   const attendance = todayData?.attendance ?? null;
   const shift = todayData?.shift ?? null;
   const shiftSource = todayData?.shiftSource ?? null;
+  const context = todayData?.context ?? null;
 
   useEffect(() => {
     const interval = setInterval(() => setCurrentTime(new Date()), 1000);
@@ -150,6 +151,28 @@ export function AttendanceClock() {
               <div className="rounded-xl border border-border bg-muted/40 p-3 text-sm text-muted-foreground text-center">
                 <ClockCircle weight="BoldDuotone" className="inline h-4 w-4 mr-1" />
                 Anda belum di-assign ke shift/lokasi kerja
+              </div>
+            )
+          )}
+
+          {attendance ? (
+            <div className="flex items-center justify-center gap-2 flex-wrap">
+              {attendance.attendantType === "DAY_OFF" && (
+                <Badge variant="secondary">Libur Mingguan</Badge>
+              )}
+              {attendance.isPublicHoliday && (
+                <Badge variant="destructive">Tanggal Merah</Badge>
+              )}
+            </div>
+          ) : (
+            context && (
+              <div className="flex items-center justify-center gap-2 flex-wrap">
+                {context.attendantType === "DAY_OFF" && (
+                  <Badge variant="secondary">Libur Mingguan</Badge>
+                )}
+                {context.isPublicHoliday && (
+                  <Badge variant="destructive">Tanggal Merah</Badge>
+                )}
               </div>
             )
           )}
