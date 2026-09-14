@@ -2,7 +2,7 @@ import { requirePermissionForRoute } from "@/lib/permissions";
 import { mutationLimiter, rateLimitResponse } from "@/lib/rate-limit";
 import { clockInSchema } from "@/lib/validations/attendance";
 import { getAttendanceToday, todayMidnightUTC } from "@/lib/queries/attendance";
-import { resolveEmployeeShift, validateGpsAgainstLocations, determineStatus } from "@/lib/attendance-helpers";
+import { resolveEmployeeShift, validateGpsAgainstLocations, determineStatus, resolveAttendanceContext } from "@/lib/attendance-helpers";
 import { db } from "@/lib/db";
 import { uploadToStorage } from "@/lib/storage";
 import { logAudit } from "@/lib/audit";
@@ -87,6 +87,8 @@ export async function POST(req: Request) {
     resolved.workShift.isOvernight,
   );
 
+  const context = await resolveAttendanceContext(profileId, today);
+
   // 8. Upsert attendance with workLocationId and workShiftId
   try {
     const attendance = await db.attendance.upsert({
@@ -101,6 +103,8 @@ export async function POST(req: Request) {
         status,
         workLocationId: gpsResult.nearestLocationId,
         workShiftId: resolved.workShiftId,
+        attendantType: context.attendantType,
+        isPublicHoliday: context.isPublicHoliday,
       },
       update: {
         clockInAt: now,
@@ -110,6 +114,8 @@ export async function POST(req: Request) {
         status,
         workLocationId: gpsResult.nearestLocationId,
         workShiftId: resolved.workShiftId,
+        attendantType: context.attendantType,
+        isPublicHoliday: context.isPublicHoliday,
       },
     });
 
