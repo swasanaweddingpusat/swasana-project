@@ -10,6 +10,11 @@ const STATUS_LABEL: Record<string, string> = {
   on_leave: "Cuti",
 };
 
+const ATTENDANT_TYPE_LABEL: Record<string, string> = {
+  WORKDAY: "Hari Kerja",
+  DAY_OFF: "Libur Mingguan",
+};
+
 function formatDateID(value: string | Date): string {
   return new Date(value).toLocaleDateString("id-ID", {
     day: "2-digit",
@@ -36,6 +41,8 @@ function buildRows(data: AttendanceExportItem[]) {
     status: STATUS_LABEL[r.status] ?? r.status,
     lokasi: r.workLocation?.name ?? "-",
     shift: r.workShift?.name ?? "-",
+    tipeHari: ATTENDANT_TYPE_LABEL[r.attendantType] ?? r.attendantType,
+    tanggalMerah: r.isPublicHoliday ? "Ya" : "Tidak",
   }));
 }
 
@@ -49,6 +56,8 @@ export function exportToExcel(data: AttendanceExportItem[], period: string): voi
     Status: r.status,
     Lokasi: r.lokasi,
     Shift: r.shift,
+    "Tipe Hari": r.tipeHari,
+    "Tanggal Merah": r.tanggalMerah,
   }));
 
   const ws = XLSX.utils.json_to_sheet(rows);
@@ -62,6 +71,8 @@ export function exportToExcel(data: AttendanceExportItem[], period: string): voi
     { wch: 12 },
     { wch: 22 },
     { wch: 16 },
+    { wch: 16 },
+    { wch: 14 },
   ];
 
   const wb = XLSX.utils.book_new();
@@ -93,7 +104,7 @@ export function exportToPDF(
 
   autoTable(doc, {
     startY: 35,
-    head: [["No", "Nama Karyawan", "Tanggal", "Clock In", "Clock Out", "Status", "Lokasi", "Shift"]],
+    head: [["No", "Nama Karyawan", "Tanggal", "Clock In", "Clock Out", "Status", "Lokasi", "Shift", "Tipe Hari", "Tanggal Merah"]],
     body: rows.map((r) => [
       r.no,
       r.nama,
@@ -103,8 +114,10 @@ export function exportToPDF(
       r.status,
       r.lokasi,
       r.shift,
+      r.tipeHari,
+      r.tanggalMerah,
     ]),
-    styles: { fontSize: 8, cellPadding: 3 },
+    styles: { fontSize: 7, cellPadding: 2 },
     headStyles: {
       fillColor: [15, 65, 89] as [number, number, number],
       textColor: 255,
@@ -112,14 +125,16 @@ export function exportToPDF(
     },
     alternateRowStyles: { fillColor: [248, 250, 252] as [number, number, number] },
     columnStyles: {
-      0: { cellWidth: 10 },
-      1: { cellWidth: 45 },
-      2: { cellWidth: 28 },
-      3: { cellWidth: 20 },
-      4: { cellWidth: 20 },
-      5: { cellWidth: 22 },
-      6: { cellWidth: 38 },
-      7: { cellWidth: 30 },
+      0: { cellWidth: 8 },
+      1: { cellWidth: 38 },
+      2: { cellWidth: 24 },
+      3: { cellWidth: 16 },
+      4: { cellWidth: 16 },
+      5: { cellWidth: 18 },
+      6: { cellWidth: 30 },
+      7: { cellWidth: 24 },
+      8: { cellWidth: 20 },
+      9: { cellWidth: 20 },
     },
   });
 

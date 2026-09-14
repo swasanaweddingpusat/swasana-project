@@ -141,6 +141,8 @@ export async function getAttendanceForExport(params: AttendanceExportQuery) {
       clockInAt: true,
       clockOutAt: true,
       status: true,
+      attendantType: true,
+      isPublicHoliday: true,
       profile: { select: { fullName: true } },
       workLocation: { select: { name: true } },
       workShift: { select: { name: true } },
