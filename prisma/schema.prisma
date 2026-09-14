@@ -758,6 +758,11 @@ enum AttendanceStatus {
   on_leave
 }
 
+enum AttendantType {
+  WORKDAY
+  DAY_OFF
+}
+
 enum LeaveRequestStatus {
   pending
   manager_approved
@@ -2292,9 +2297,11 @@ model Attendance {
   clockOutLat      Float?
   clockOutLng      Float?
 
-  status         AttendanceStatus @default(absent)
-  workLocationId String?
-  workShiftId    String?
+  status          AttendanceStatus @default(absent)
+  workLocationId  String?
+  workShiftId     String?
+  attendantType   AttendantType    @default(WORKDAY)
+  isPublicHoliday Boolean          @default(false)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -2309,6 +2316,18 @@ model Attendance {
   @@index([workLocationId])
   @@index([workShiftId])
   @@map("attendances")
+}
+
+model PublicHoliday {
+  id        String   @id @default(uuid())
+  date      DateTime @unique
+  name      String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([date])
+  @@map("public_holidays")
 }
 
 model AttendanceSettings {
