@@ -18,6 +18,11 @@ const STATUS_BADGE: Record<string, { label: string; variant: "default" | "second
   absent: { label: "Absen", variant: "destructive" },
 };
 
+const ATTENDANT_TYPE_BADGE: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
+  WORKDAY: { label: "Hari Kerja", variant: "outline" },
+  DAY_OFF: { label: "Libur Mingguan", variant: "secondary" },
+};
+
 function formatDate(date: string | Date): string {
   return new Date(date).toLocaleDateString("id-ID", { weekday: "short", day: "numeric", month: "short", year: "numeric" });
 }
@@ -92,6 +97,8 @@ export function AttendanceTable() {
                       <TableHead>Status</TableHead>
                       <TableHead>Lokasi</TableHead>
                       <TableHead>Shift</TableHead>
+                      <TableHead>Tipe Hari</TableHead>
+                      <TableHead>Tanggal Merah</TableHead>
                       <TableHead className="w-16">Foto</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -111,6 +118,19 @@ export function AttendanceTable() {
                           </TableCell>
                           <TableCell>{record.workLocation?.name ?? "-"}</TableCell>
                           <TableCell>{record.workShift?.name ?? "-"}</TableCell>
+                          <TableCell>
+                            {(() => {
+                              const atBadge = ATTENDANT_TYPE_BADGE[record.attendantType] ?? ATTENDANT_TYPE_BADGE.WORKDAY;
+                              return <Badge variant={atBadge.variant}>{atBadge.label}</Badge>;
+                            })()}
+                          </TableCell>
+                          <TableCell>
+                            {record.isPublicHoliday ? (
+                              <Badge variant="destructive">Ya</Badge>
+                            ) : (
+                              <Badge variant="outline">Tidak</Badge>
+                            )}
+                          </TableCell>
                           <TableCell>
                             {(record.clockInPhotoUrl || record.clockOutPhotoUrl) && (
                               <Button
