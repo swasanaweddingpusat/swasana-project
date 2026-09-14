@@ -68,6 +68,7 @@ const guestbookExportSelect = {
   venue: { select: { name: true } },
   sourceOfInformation: { select: { name: true } },
   package: { select: { packageName: true, category: true } },
+  segment: { select: { name: true } },
   createdBy: { select: { fullName: true } },
 } satisfies Prisma.GuestbookEntrySelect;
 
@@ -123,6 +124,7 @@ export async function GET(req: Request): Promise<Response> {
       "Nama Tamu",
       "Company / Institusi",
       "Kategori Event",
+      "Segmen / Kategori",
       "Guest Code",
       "Telepon",
       "Email",
@@ -158,6 +160,7 @@ export async function GET(req: Request): Promise<Response> {
         r.visitorName,
         r.companyName ?? "",
         cat ? EVENT_CATEGORY_LABELS[cat] ?? cat : "",
+        r.segment?.name ?? "",
         r.guestCode ?? "",
         r.phoneNumber ?? "",
         r.email ?? "",

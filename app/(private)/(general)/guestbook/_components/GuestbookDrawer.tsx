@@ -112,6 +112,7 @@ type GuestbookForm = {
   visitStatus: string;
   sourceOfInformationId: string;
   packageId: string;
+  segmentId: string;
   eventCategory: string;
   checkInAt: string;
   checkOutAt: string;
@@ -146,6 +147,7 @@ const EMPTY_FORM: GuestbookForm = {
   visitStatus: "to_be_discuss",
   sourceOfInformationId: "",
   packageId: "",
+  segmentId: "",
   eventCategory: "",
   checkInAt: "",
   checkOutAt: "",
@@ -519,6 +521,12 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
     staleTime: 5 * 60_000,
   });
 
+  const { data: segmentOptions = [] } = useQuery({
+    queryKey: ["daily-activity-segments"],
+    queryFn: () => fetchJson<{ id: string; name: string }[]>("/api/daily-activity-segments"),
+    staleTime: 5 * 60_000,
+  });
+
   const selectedVenueId = form.venueId;
   const selectedCategory = form.eventCategory || "WEDDINGS";
   const { data: packages = [] } = useQuery({
@@ -554,6 +562,7 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
         visitStatus: editEntry.visitStatus ?? "",
         sourceOfInformationId: editEntry.sourceOfInformationId ?? "",
         packageId: editEntry.packageId ?? "",
+        segmentId: editEntry.segmentId ?? "",
         eventCategory: editEntry.eventCategory ?? editEntry.package?.category ?? (canWedding ? "WEDDINGS" : "MICE"),
         checkInAt: editEntry.checkInAt ? new Date(editEntry.checkInAt).toISOString().slice(0, 16) : "",
         checkOutAt: editEntry.checkOutAt ? new Date(editEntry.checkOutAt).toISOString().slice(0, 16) : "",
@@ -737,6 +746,7 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
       visitStatus: form.visitStatus || null,
       sourceOfInformationId: form.sourceOfInformationId || null,
       packageId: form.packageId || null,
+      segmentId: form.segmentId || null,
       checkInAt: form.checkInAt || null,
       checkOutAt: form.checkOutAt || null,
       proofFiles: {
@@ -892,6 +902,20 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
                 value={form.visitorName}
                 onChange={(e) => setField("visitorName", e.target.value)}
                 className="rounded-xl"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-sm font-medium">Segmen / Kategori</Label>
+              <SearchableSelect
+                options={segmentOptions.map((o) => ({ id: o.id, name: o.name }))}
+                value={form.segmentId}
+                onChange={(v) => {
+                  setField("segmentId", v);
+                }}
+                placeholder="Pilih segmen / kategori"
+                searchPlaceholder="Cari segmen..."
+                emptyText="Segmen tidak ditemukan"
               />
             </div>
 

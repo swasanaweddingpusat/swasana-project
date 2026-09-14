@@ -171,6 +171,11 @@ function MobileCard({
             <span className="truncate">{sourceLabel}</span>
           </>
         )}
+        {entry.segment?.name && (
+          <Badge variant="secondary" className="rounded-full text-[10px] font-normal max-w-full truncate">
+            {entry.segment.name}
+          </Badge>
+        )}
       </div>
 
       {/* Row 3: bertemu + dicatat oleh */}
@@ -568,8 +573,17 @@ function GuestbookClientInner() {
                             </span>
                           </div>
                         </TableCell>
-                        <TableCell className="text-muted-foreground max-w-32 truncate hidden xl:table-cell">
-                          {sourceLabel ?? <span className="text-muted-foreground/50">—</span>}
+                        <TableCell className="text-muted-foreground max-w-32 hidden xl:table-cell">
+                          <div className="flex flex-col gap-1 items-start min-w-0 max-w-full">
+                            <span className="truncate max-w-full">
+                              {sourceLabel ?? <span className="text-muted-foreground/50">—</span>}
+                            </span>
+                            {entry.segment?.name && (
+                              <Badge variant="secondary" className="rounded-full text-[10px] font-normal max-w-full truncate">
+                                {entry.segment.name}
+                              </Badge>
+                            )}
+                          </div>
                         </TableCell>
                         <TableCell className="text-muted-foreground max-w-32 truncate hidden xl:table-cell">
                           {entry.createdBy?.fullName ?? "—"}

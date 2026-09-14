@@ -95,6 +95,7 @@ const guestbookEntrySelect = {
   commitPayDate: true,
   sourceOfInformationId: true,
   packageId: true,
+  segmentId: true,
   venueId: true,
   salesId: true,
   createdAt: true,
@@ -114,6 +115,7 @@ const guestbookEntrySelect = {
       categoryPrices: { select: { basePrice: true } },
     },
   },
+  segment: { select: { id: true, name: true } },
 } satisfies Prisma.GuestbookEntrySelect;
 
 type GuestbookEntryRow = Prisma.GuestbookEntryGetPayload<{ select: typeof guestbookEntrySelect }>;

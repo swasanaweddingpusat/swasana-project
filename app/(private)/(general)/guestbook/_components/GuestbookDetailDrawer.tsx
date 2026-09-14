@@ -232,6 +232,13 @@ export function GuestbookDetailDrawer({
               value={entry.sourceOfInformation.name}
             />
           )}
+          {entry.segment?.name && (
+            <InfoRow
+              icon={<ClipboardText weight="BoldDuotone" className="h-4 w-4 text-muted-foreground" />}
+              label="Segmen / Kategori"
+              value={entry.segment.name}
+            />
+          )}
           <InfoRow
             icon={<Videocamera weight="BoldDuotone" className="h-4 w-4 text-muted-foreground" />}
             label="Medium"
