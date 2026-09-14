@@ -35,6 +35,7 @@ export const moduleActions: Record<string, string[]> = {
   "settings-users": ["view", "create", "edit", "delete"],
   "settings-education-level": ["view", "create", "edit", "delete"],
   "settings-event-types": ["view", "create", "edit", "delete"],
+  "settings-public-holiday": ["view", "create", "edit", "delete"],
   "settings-order-status": ["view", "create", "edit", "delete"],
   "settings-payment-methods": ["view", "create", "edit", "delete"],
   "settings-quotation-templates": ["view", "create", "edit", "delete"],
@@ -275,6 +276,7 @@ export const rolePermissionMap: Record<string, Record<string, string[]>> = {
     "hr-attendance": ["view", "create", "edit", "delete"],
     "hr-recruitment": ["view", "create", "edit", "delete", "hire", "approve"],
     procurement: ["view"],
+    "settings-public-holiday": ["view", "create", "edit", "delete"],
   },
   // Sales MICE — persis daftar menu yang disepakati (11 item):
   //   Groups · Daily Activity · Bookings MICE · Quotations · Mice Package ·
