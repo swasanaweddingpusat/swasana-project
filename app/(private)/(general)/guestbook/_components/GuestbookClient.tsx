@@ -47,22 +47,31 @@ import { useGuestbookEntries, useDeleteGuestbookEntry } from "@/hooks/use-guestb
 import { useVenues } from "@/hooks/use-venues";
 import { useSalesUsers } from "@/hooks/use-sales-users";
 import type { GuestbookEntryItem, GuestbookCategoryFilter } from "@/lib/queries/guestbookEntries";
-import type { GuestInteractionType } from "@prisma/client";
+import type { GuestInteractionType, GuestVisitStatus } from "@prisma/client";
 import type { ProofFiles } from "@/lib/validations/guestbook";
+import { GUEST_VISIT_STATUS_LABELS } from "@/lib/guestbook-status";
 import { GuestbookDrawer } from "./GuestbookDrawer";
 import { GuestbookDetailDrawer } from "./GuestbookDetailDrawer";
 import { GuestbookFilterDrawer } from "./GuestbookFilterDrawer";
 import { resolveGuestbookProofThumb } from "./photo-url";
 import { PaginationBar } from "@/components/shared/pagination-bar";
 
-const STATUS_LABELS: Record<string, { label: string; className: string }> = {
-  cold: { label: "Cold", className: "bg-sky-100 text-sky-700 border-0" },
-  warm: { label: "Warm", className: "bg-amber-100 text-amber-700 border-0" },
-  hot: { label: "Hot", className: "bg-orange-100 text-orange-700 border-0" },
-  to_be_discuss: { label: "To Be Discuss", className: "bg-yellow-100 text-yellow-700 border-0" },
-  deal: { label: "Deal", className: "bg-green-100 text-green-700 border-0" },
-  lost: { label: "Lost", className: "bg-red-100 text-red-700 border-0" },
+const STATUS_BADGE_CLASSNAMES: Record<GuestVisitStatus, string> = {
+  cold: "bg-sky-100 text-sky-700 border-0",
+  warm: "bg-amber-100 text-amber-700 border-0",
+  hot: "bg-orange-100 text-orange-700 border-0",
+  to_be_discuss: "bg-yellow-100 text-yellow-700 border-0",
+  deal: "bg-green-100 text-green-700 border-0",
+  lost: "bg-red-100 text-red-700 border-0",
 };
+
+// Label bersumber dari GUEST_VISIT_STATUS_LABELS (single source) — className badge tetap lokal.
+const STATUS_LABELS: Record<string, { label: string; className: string }> = Object.fromEntries(
+  (Object.keys(GUEST_VISIT_STATUS_LABELS) as GuestVisitStatus[]).map((status) => [
+    status,
+    { label: GUEST_VISIT_STATUS_LABELS[status], className: STATUS_BADGE_CLASSNAMES[status] },
+  ])
+);
 
 const EVENT_CATEGORY_LABELS: Record<string, string> = {
   WEDDINGS: "Wedding",
@@ -257,6 +266,7 @@ function GuestbookClientInner() {
   const [filterHostId, setFilterHostId] = useState<string>("all");
   const [filterCategory, setFilterCategory] = useState<"all" | GuestbookCategoryFilter>("all");
   const [filterInteractionType, setFilterInteractionType] = useState<"all" | GuestInteractionType>("all");
+  const [filterStatus, setFilterStatus] = useState<"all" | GuestVisitStatus>("all");
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
@@ -288,7 +298,7 @@ function GuestbookClientInner() {
   // Any other filter change also resets page to 1.
   useEffect(() => {
     setCurrentPage(1);
-  }, [dateRange, filterVenueId, filterHostId, filterCategory, filterInteractionType]);
+  }, [dateRange, filterVenueId, filterHostId, filterCategory, filterInteractionType, filterStatus]);
 
   const queryClient = useQueryClient();
   const { data: guestbookData, isLoading } = useGuestbookEntries({
@@ -301,6 +311,7 @@ function GuestbookClientInner() {
     dateTo: dateRange?.to ? format(dateRange.to, "yyyy-MM-dd") : undefined,
     category: filterCategory !== "all" ? filterCategory : undefined,
     interactionType: filterInteractionType !== "all" ? filterInteractionType : undefined,
+    visitStatus: filterStatus !== "all" ? filterStatus : undefined,
   });
   const entries = guestbookData?.data ?? [];
   const totalPages = Math.max(1, Math.ceil((guestbookData?.total ?? 0) / 50));
@@ -341,6 +352,7 @@ function GuestbookClientInner() {
       if (filterHostId !== "all") params.set("hostId", filterHostId);
       if (filterCategory !== "all") params.set("category", filterCategory);
       if (filterInteractionType !== "all") params.set("interactionType", filterInteractionType);
+      if (filterStatus !== "all") params.set("visitStatus", filterStatus);
 
       const res = await fetch(`/api/guestbook/export?${params.toString()}`);
       if (!res.ok) {
@@ -374,14 +386,16 @@ function GuestbookClientInner() {
     (filterHostId !== "all" ? 1 : 0) +
     (search.trim() !== "" ? 1 : 0) +
     (filterCategory !== "all" ? 1 : 0) +
-    (filterInteractionType !== "all" ? 1 : 0);
+    (filterInteractionType !== "all" ? 1 : 0) +
+    (filterStatus !== "all" ? 1 : 0);
 
   function resetFilters() {
-    setDateRange(todayRange());
+    setDateRange(undefined);
     setFilterVenueId("all");
     setFilterHostId("all");
     setFilterCategory("all");
     setFilterInteractionType("all");
+    setFilterStatus("all");
     setSearch("");
     setCurrentPage(1);
   }
@@ -780,6 +794,8 @@ function GuestbookClientInner() {
         onCategoryChange={setFilterCategory}
         interactionType={filterInteractionType}
         onInteractionTypeChange={setFilterInteractionType}
+        status={filterStatus}
+        onStatusChange={setFilterStatus}
         venues={venues}
         salesOptions={salesOptions}
         onReset={resetFilters}

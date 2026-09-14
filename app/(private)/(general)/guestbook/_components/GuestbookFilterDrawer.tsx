@@ -15,9 +15,10 @@ import {
 } from "@/components/ui/select";
 import { Calendar } from "@/components/ui/calendar";
 import { ComplimentarySelect } from "@/components/shared/ComplimentarySelect";
-import { Magnifer } from "@solar-icons/react";
+import { Magnifer, CloseCircle } from "@solar-icons/react";
 import type { GuestbookCategoryFilter } from "@/lib/queries/guestbookEntries";
-import type { GuestInteractionType } from "@prisma/client";
+import { GUEST_VISIT_STATUS_LABELS, GUEST_VISIT_STATUS_VALUES } from "@/lib/guestbook-status";
+import type { GuestInteractionType, GuestVisitStatus } from "@prisma/client";
 
 const EVENT_CATEGORY_OPTIONS = [
   { value: "WEDDINGS", label: "Wedding" },
@@ -46,6 +47,8 @@ interface GuestbookFilterDrawerProps {
   onCategoryChange: (value: "all" | GuestbookCategoryFilter) => void;
   interactionType: "all" | GuestInteractionType;
   onInteractionTypeChange: (value: "all" | GuestInteractionType) => void;
+  status: "all" | GuestVisitStatus;
+  onStatusChange: (value: "all" | GuestVisitStatus) => void;
   venues: { id: string; name: string }[];
   salesOptions: { id: string; name: string }[];
   onReset: () => void;
@@ -66,6 +69,8 @@ export function GuestbookFilterDrawer({
   onCategoryChange,
   interactionType,
   onInteractionTypeChange,
+  status,
+  onStatusChange,
   venues,
   salesOptions,
   onReset,
@@ -91,7 +96,21 @@ export function GuestbookFilterDrawer({
           </div>
 
           <div className="space-y-1.5">
-            <Label className="text-sm font-medium">Tanggal Berkunjung</Label>
+            <div className="flex items-center justify-between">
+              <Label className="text-sm font-medium">Tanggal Berkunjung</Label>
+              {dateRange?.from && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 rounded-full px-2 text-xs text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                  onClick={() => onDateRangeChange(undefined)}
+                >
+                  <CloseCircle weight="BoldDuotone" className="h-3.5 w-3.5" />
+                  Hapus tanggal
+                </Button>
+              )}
+            </div>
             <div className="flex justify-center rounded-xl border border-border">
               <Calendar
                 mode="range"
@@ -162,6 +181,24 @@ export function GuestbookFilterDrawer({
                 <SelectItem value="all">Semua Interaksi</SelectItem>
                 {INTERACTION_TYPE_OPTIONS.map((opt) => (
                   <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-sm font-medium">Status Kunjungan</Label>
+            <Select
+              value={status}
+              onValueChange={(v) => onStatusChange(v as "all" | GuestVisitStatus)}
+            >
+              <SelectTrigger className="rounded-xl w-full">
+                <SelectValue placeholder="Semua Status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Semua Status</SelectItem>
+                {GUEST_VISIT_STATUS_VALUES.map((value) => (
+                  <SelectItem key={value} value={value}>{GUEST_VISIT_STATUS_LABELS[value]}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
