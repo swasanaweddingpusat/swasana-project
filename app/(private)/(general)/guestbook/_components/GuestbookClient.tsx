@@ -393,7 +393,7 @@ function GuestbookClientInner() {
         <CardContent className="p-0">
           <div className="flex flex-wrap items-center justify-between gap-3 px-6 py-4 border-b">
             <div className="flex items-center gap-2">
-              <h2 className="text-sm font-bold text-foreground">Buku Tamu</h2>
+              <h2 className="text-sm font-bold text-foreground">Guestbook</h2>
               <span className="text-xs font-medium bg-secondary text-secondary-foreground px-3 py-1 rounded-full">
                 {guestbookData?.total ?? 0} tamu
               </span>
