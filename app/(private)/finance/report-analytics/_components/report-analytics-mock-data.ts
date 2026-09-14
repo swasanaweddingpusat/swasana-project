@@ -15,7 +15,7 @@ export interface OverviewStat {
 }
 
 export const OVERVIEW_STATS: OverviewStat[] = [
-  { key: "omset", label: "Total Omset (Net)", value: "Rp 4,82M", trend: { direction: "up", value: "12.4%" } },
+  { key: "omset", label: "Total Revenue (Net)", value: "Rp 4,82M", trend: { direction: "up", value: "12.4%" } },
   { key: "dealing", label: "Total Dealing", value: "38", trend: { direction: "up", value: "8.1%" } },
   { key: "activeClient", label: "Active Client", value: "126", trend: { direction: "up", value: "5.6%" } },
   { key: "cancelClient", label: "Cancel Client", value: "9", trend: { direction: "down", value: "2.1%" } },
