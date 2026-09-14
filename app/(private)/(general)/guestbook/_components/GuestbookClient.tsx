@@ -48,17 +48,19 @@ import { useVenues } from "@/hooks/use-venues";
 import { useSalesUsers } from "@/hooks/use-sales-users";
 import type { GuestbookEntryItem, GuestbookCategoryFilter } from "@/lib/queries/guestbookEntries";
 import type { GuestInteractionType } from "@prisma/client";
+import type { ProofFiles } from "@/lib/validations/guestbook";
 import { GuestbookDrawer } from "./GuestbookDrawer";
 import { GuestbookDetailDrawer } from "./GuestbookDetailDrawer";
 import { GuestbookFilterDrawer } from "./GuestbookFilterDrawer";
-import { resolveGuestbookPhotoUrl } from "./photo-url";
+import { resolveGuestbookProofThumb } from "./photo-url";
 import { PaginationBar } from "@/components/shared/pagination-bar";
 
 const STATUS_LABELS: Record<string, { label: string; className: string }> = {
-  deal: { label: "Deal", className: "bg-green-100 text-green-700 border-0" },
-  in_progress: { label: "In Progress", className: "bg-blue-100 text-blue-700 border-0" },
-  pending: { label: "Pending", className: "bg-gray-100 text-gray-700 border-0" },
+  cold: { label: "Cold", className: "bg-sky-100 text-sky-700 border-0" },
+  warm: { label: "Warm", className: "bg-amber-100 text-amber-700 border-0" },
+  hot: { label: "Hot", className: "bg-orange-100 text-orange-700 border-0" },
   to_be_discuss: { label: "To Be Discuss", className: "bg-yellow-100 text-yellow-700 border-0" },
+  deal: { label: "Deal", className: "bg-green-100 text-green-700 border-0" },
   lost: { label: "Lost", className: "bg-red-100 text-red-700 border-0" },
 };
 
@@ -104,7 +106,6 @@ function SkeletonRows() {
           <TableCell><Skeleton className="h-8 w-28" /></TableCell>
           <TableCell><Skeleton className="h-5 w-20 rounded-full" /></TableCell>
           <TableCell className="hidden xl:table-cell"><Skeleton className="h-4 w-24" /></TableCell>
-          <TableCell><Skeleton className="h-5 w-24 rounded-full" /></TableCell>
           <TableCell className="hidden xl:table-cell"><Skeleton className="h-4 w-24" /></TableCell>
           <TableCell><Skeleton className="h-8 w-20 rounded-full" /></TableCell>
         </TableRow>
@@ -126,7 +127,7 @@ function MobileCard({
 }) {
   const sourceLabel = entry.sourceOfInformation?.name ?? null;
   const statusInfo = entry.visitStatus ? STATUS_LABELS[entry.visitStatus] : null;
-  const photoSrc = resolveGuestbookPhotoUrl(entry.visitorPhoto);
+  const photoSrc = resolveGuestbookProofThumb((entry.proofFiles ?? null) as ProofFiles | null);
 
   return (
     <div
@@ -134,7 +135,7 @@ function MobileCard({
       onClick={() => onViewClick(entry)}
     >
       {/* Row 1: avatar + name + status badge */}
-      <div className="flex items-start justify-between gap-2">
+      <div className="flex items-start gap-2">
         <div className="flex items-center gap-2.5 min-w-0">
           {photoSrc ? (
             <Image src={photoSrc} alt="" width={36} height={36} className="h-9 w-9 rounded-lg object-cover shrink-0" unoptimized />
@@ -145,20 +146,13 @@ function MobileCard({
           )}
           <div className="min-w-0">
             <p className="font-medium text-foreground text-sm truncate">{entry.visitorName}</p>
-            {entry.guestCode && (
-              <p className="text-[10px] font-mono text-muted-foreground/70">{entry.guestCode}</p>
+            {statusInfo && (
+              <Badge className={`rounded-full text-[10px] mt-0.5 ${statusInfo.className}`}>
+                {statusInfo.label}
+              </Badge>
             )}
           </div>
         </div>
-        {statusInfo ? (
-          <Badge className={`rounded-full text-[10px] shrink-0 ${statusInfo.className}`}>
-            {statusInfo.label}
-          </Badge>
-        ) : (
-          <Badge variant="secondary" className="rounded-full text-[10px] shrink-0">
-            —
-          </Badge>
-        )}
       </div>
 
       {/* Row 2: venue + package + sumber */}
@@ -177,6 +171,11 @@ function MobileCard({
             <span aria-hidden="true">·</span>
             <span className="truncate">{sourceLabel}</span>
           </>
+        )}
+        {entry.segment?.name && (
+          <Badge variant="secondary" className="rounded-full text-[10px] font-normal max-w-full truncate">
+            {entry.segment.name}
+          </Badge>
         )}
       </div>
 
@@ -394,9 +393,15 @@ function GuestbookClientInner() {
         <CardContent className="p-0">
           <div className="flex flex-wrap items-center justify-between gap-3 px-6 py-4 border-b">
             <div className="flex items-center gap-2">
-              <h2 className="text-sm font-bold text-foreground">Riwayat Kunjungan</h2>
+              <h2 className="text-sm font-bold text-foreground">Buku Tamu</h2>
               <span className="text-xs font-medium bg-secondary text-secondary-foreground px-3 py-1 rounded-full">
                 {guestbookData?.total ?? 0} tamu
+              </span>
+              <span className="text-xs font-medium bg-primary/10 text-primary px-3 py-1 rounded-full">
+                Wedding {guestbookData?.weddingCount ?? 0}
+              </span>
+              <span className="text-xs font-medium bg-secondary text-secondary-foreground px-3 py-1 rounded-full">
+                MICE {guestbookData?.miceCount ?? 0}
               </span>
             </div>
             <div className="flex flex-wrap items-center gap-2">
@@ -457,7 +462,6 @@ function GuestbookClientInner() {
                   <TableHead>PIC</TableHead>
                   <TableHead>In / Out</TableHead>
                   <TableHead className="hidden xl:table-cell">Sumber</TableHead>
-                  <TableHead>Status</TableHead>
                   <TableHead className="hidden xl:table-cell">Dicatat oleh</TableHead>
                   <TableHead className="text-right">Aksi</TableHead>
                 </TableRow>
@@ -482,7 +486,6 @@ function GuestbookClientInner() {
                     <TableHead>PIC</TableHead>
                     <TableHead>In / Out</TableHead>
                     <TableHead className="hidden xl:table-cell">Sumber</TableHead>
-                    <TableHead>Status</TableHead>
                     <TableHead className="hidden xl:table-cell">Dicatat oleh</TableHead>
                     <TableHead className="text-right pr-4">Aksi</TableHead>
                   </TableRow>
@@ -501,7 +504,7 @@ function GuestbookClientInner() {
                         <TableCell className="max-w-48">
                           <div className="flex items-center gap-2.5 min-w-0">
                             {(() => {
-                              const photoSrc = resolveGuestbookPhotoUrl(entry.visitorPhoto);
+                              const photoSrc = resolveGuestbookProofThumb((entry.proofFiles ?? null) as ProofFiles | null);
                               if (photoSrc) {
                                 return <Image src={photoSrc} alt="" width={32} height={32} className="h-8 w-8 rounded-lg object-cover shrink-0" unoptimized />;
                               }
@@ -509,20 +512,28 @@ function GuestbookClientInner() {
                             })()}
                             <div className="leading-tight min-w-0">
                               <p className="font-medium text-foreground truncate">{entry.visitorName}</p>
-                              {entry.guestCode && (
-                                <p className="text-[10px] font-mono text-muted-foreground/60 mt-0.5 truncate">
-                                  {entry.guestCode}
-                                </p>
+                              {statusInfo && (
+                                <Badge className={`rounded-full text-[10px] mt-0.5 ${statusInfo.className}`}>
+                                  {statusInfo.label}
+                                </Badge>
                               )}
                             </div>
                           </div>
                         </TableCell>
-                        <TableCell className="text-muted-foreground whitespace-nowrap">
-                          {entry.package?.category ? (
-                            EVENT_CATEGORY_LABELS[entry.package.category] ?? entry.package.category
-                          ) : (
-                            <span className="text-muted-foreground/50">—</span>
-                          )}
+                        <TableCell className="whitespace-nowrap">
+                          {(() => {
+                            const cat = entry.eventCategory ?? entry.package?.category;
+                            if (!cat) return <span className="text-muted-foreground/50">—</span>;
+                            const badgeClass =
+                              cat === "MICE"
+                                ? "bg-[var(--brand-gold)]/15 text-[var(--brand-gold)]"
+                                : "bg-primary/10 text-primary";
+                            return (
+                              <Badge className={`rounded-full text-[10px] font-medium border-0 ${badgeClass}`}>
+                                {EVENT_CATEGORY_LABELS[cat] ?? cat}
+                              </Badge>
+                            );
+                          })()}
                         </TableCell>
                         <TableCell className="text-muted-foreground max-w-56">
                           <div className="flex flex-col gap-1 items-start min-w-0 max-w-full">
@@ -563,17 +574,17 @@ function GuestbookClientInner() {
                             </span>
                           </div>
                         </TableCell>
-                        <TableCell className="text-muted-foreground max-w-32 truncate hidden xl:table-cell">
-                          {sourceLabel ?? <span className="text-muted-foreground/50">—</span>}
-                        </TableCell>
-                        <TableCell>
-                          {statusInfo ? (
-                            <Badge className={`rounded-full text-xs ${statusInfo.className}`}>
-                              {statusInfo.label}
-                            </Badge>
-                          ) : (
-                            <span className="text-muted-foreground/50">—</span>
-                          )}
+                        <TableCell className="text-muted-foreground max-w-32 hidden xl:table-cell">
+                          <div className="flex flex-col gap-1 items-start min-w-0 max-w-full">
+                            <span className="truncate max-w-full">
+                              {sourceLabel ?? <span className="text-muted-foreground/50">—</span>}
+                            </span>
+                            {entry.segment?.name && (
+                              <Badge variant="secondary" className="rounded-full text-[10px] font-normal max-w-full truncate">
+                                {entry.segment.name}
+                              </Badge>
+                            )}
+                          </div>
                         </TableCell>
                         <TableCell className="text-muted-foreground max-w-32 truncate hidden xl:table-cell">
                           {entry.createdBy?.fullName ?? "—"}
@@ -628,6 +639,12 @@ function GuestbookClientInner() {
         <div className="flex items-center gap-2">
           <span className="text-xs font-medium bg-muted text-muted-foreground px-2.5 py-1 border border-border rounded-full shrink-0">
             {guestbookData?.total ?? 0} tamu
+          </span>
+          <span className="text-xs font-medium bg-primary/10 text-primary px-2.5 py-1 rounded-full shrink-0">
+            Wedding {guestbookData?.weddingCount ?? 0}
+          </span>
+          <span className="text-xs font-medium bg-muted text-muted-foreground px-2.5 py-1 border border-border rounded-full shrink-0">
+            MICE {guestbookData?.miceCount ?? 0}
           </span>
           <div className="flex-1" />
 

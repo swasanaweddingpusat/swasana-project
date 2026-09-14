@@ -56,8 +56,6 @@ const DYNAMIC_ROUTE_META: Record<string, RouteMeta> = {
   "/settings/brands": { title: "Brand", subtitle: "Kelola brand dan pemetaannya ke venue", parent: "/settings" },
   "/settings/payment-methods": { title: "Payment Methods", subtitle: "Atur metode pembayaran dan rekening", parent: "/settings" },
   "/settings/source-of-information": { title: "Source of Information", subtitle: "Sumber informasi customer untuk tracking lead", parent: "/settings" },
-  "/settings/lead-status": { title: "Lead Status", subtitle: "Kelola status pipeline lead", parent: "/settings" },
-  "/settings/daily-activity-segment": { title: "Segment Activity", subtitle: "Kelola master segment/kategori untuk daily activity MICE", parent: "/settings" },
   "/settings/education-level": { title: "Tingkat Pendidikan", subtitle: "Kelola daftar tingkat pendidikan karyawan", parent: "/settings" },
   "/settings/order-status": { title: "Order Status", subtitle: "Kelola status order vendor", parent: "/settings" },
   "/settings/event-types": { title: "Event Types", subtitle: "Kelola tipe acara untuk nomor PO", parent: "/settings" },
