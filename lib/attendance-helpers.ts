@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import { isOffdayForDate } from "@/lib/attendance-offdays";
 
 export function haversineDistance(
   lat1: number, lng1: number,
@@ -79,6 +80,37 @@ export async function resolveEmployeeShift(profileId: string, date: Date): Promi
   }
 
   return null;
+}
+
+export interface AttendanceContext {
+  attendantType: "WORKDAY" | "DAY_OFF";
+  isPublicHoliday: boolean;
+}
+
+export async function resolveAttendanceContext(profileId: string, date: Date): Promise<AttendanceContext> {
+  const [holiday, assignment] = await Promise.all([
+    db.publicHoliday.findUnique({
+      where: { date },
+      select: { id: true },
+    }),
+    db.employeeWorkAssignment.findFirst({
+      where: {
+        profileId,
+        isDefault: true,
+        effectiveDate: { lte: date },
+        OR: [{ endDate: null }, { endDate: { gte: date } }],
+      },
+      select: { offdayDays: true },
+    }),
+  ]);
+
+  const attendantType: "WORKDAY" | "DAY_OFF" =
+    assignment && isOffdayForDate(assignment.offdayDays, date) ? "DAY_OFF" : "WORKDAY";
+
+  return {
+    attendantType,
+    isPublicHoliday: holiday !== null,
+  };
 }
 
 interface LocationValidationResult {
