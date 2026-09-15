@@ -169,7 +169,7 @@ export const GENERAL_NAV: NavItem[] = [
       { name: "Percakapan", href: "/bitrix24/percakapan", icon: ChatRound, title: "Percakapan Bitrix24", subtitle: "Data percakapan Contact Center (Open Lines) dari Bitrix24", permission: { module: "bitrix", action: "view" } },
       { name: "Response Sales", href: "/bitrix24/response-sales", icon: GraphUp, title: "Response Sales Bitrix24", subtitle: "Rata-rata waktu respons sales per percakapan", permission: { module: "bitrix", action: "view" } },
     ] },
-  { name: "Guestbook", href: "/guestbook", icon: Notebook, subtitle: "Catat kunjungan tamu, vendor, dan client ke kantor", permission: { module: "guestbook", action: "view" } },
+  { name: "Buku Tamu", href: "/guestbook", icon: Notebook, subtitle: "Catat kunjungan tamu, vendor, dan client ke kantor", permission: { module: "guestbook", action: "view" } },
   { name: "Customers", href: "/customers", icon: UserRounded, subtitle: "Kelola data customer, member status, dan riwayat booking", permission: { module: "customers", action: "view" } },
   { name: "Indikator Pernikahan", href: "/wedding-indicators", icon: Heart, subtitle: "Kelola kuesioner penilaian kepuasan pasangan pernikahan", permission: { module: "vendor-specialist", action: "view" } },
   { name: "Absensi", href: "/absensi", icon: CheckSquare, subtitle: "Catat kehadiran dengan foto dan lokasi", permission: { module: "attendance", action: "view" } },

@@ -1,7 +1,7 @@
 import { db } from "@/lib/db";
 import { buildOwnerScopeWhere } from "@/lib/access-control";
 import type { DataScope } from "@/types/user";
-import type { Prisma, GuestInteractionType, GuestVisitStatus } from "@prisma/client";
+import type { Prisma, GuestInteractionType } from "@prisma/client";
 
 export type GuestbookCategoryFilter = "WEDDINGS" | "MICE" | "no_package";
 
@@ -13,7 +13,6 @@ export interface GuestbookFilterOptions {
   dateTo?: string; // yyyy-MM-dd
   category?: GuestbookCategoryFilter;
   interactionType?: GuestInteractionType;
-  visitStatus?: GuestVisitStatus;
 }
 
 export interface GuestbookEntriesOptions extends GuestbookFilterOptions {
@@ -57,7 +56,6 @@ export function buildGuestbookWhere(filters: GuestbookFilterOptions): Prisma.Gue
   }
 
   if (filters.interactionType) where.interactionType = filters.interactionType;
-  if (filters.visitStatus) where.visitStatus = filters.visitStatus;
 
   return where;
 }
