@@ -78,10 +78,13 @@ export async function POST(req: Request) {
     }
   }
 
-  // --- Normal flow: employee self-selects shift + venue at clock-in time ---
-  const { workShiftId, workLocationId, photoBase64, lat, lng } = parsed.data;
-  if (!workShiftId || !workLocationId || !photoBase64 || lat === undefined || lng === undefined) {
+  // --- Normal flow: employee self-selects shift + work type (+ venue for WFO) ---
+  const { workShiftId, workLocationId, workType, photoBase64, lat, lng } = parsed.data;
+  if (!workShiftId || !workType || !photoBase64 || lat === undefined || lng === undefined) {
     return Response.json({ error: "Data absensi tidak lengkap" }, { status: 422 });
+  }
+  if (workType === "WFO" && !workLocationId) {
+    return Response.json({ error: "Lokasi kerja wajib dipilih untuk WFO" }, { status: 422 });
   }
 
   const workShift = await db.workShift.findUnique({
@@ -92,21 +95,25 @@ export async function POST(req: Request) {
     return Response.json({ error: "Shift tidak ditemukan atau tidak aktif" }, { status: 404 });
   }
 
-  const workLocation = await db.workLocation.findUnique({
-    where: { id: workLocationId },
-    select: { id: true, isActive: true },
-  });
-  if (!workLocation || !workLocation.isActive) {
-    return Response.json({ error: "Lokasi kerja tidak ditemukan atau tidak aktif" }, { status: 404 });
-  }
+  // 4. WFO: validate the selected venue + GPS radius. WFH/WFA: no venue, GPS recorded but not validated.
+  let resolvedLocationId: string | null = null;
+  if (workType === "WFO") {
+    const workLocation = await db.workLocation.findUnique({
+      where: { id: workLocationId },
+      select: { id: true, isActive: true },
+    });
+    if (!workLocation || !workLocation.isActive) {
+      return Response.json({ error: "Lokasi kerja tidak ditemukan atau tidak aktif" }, { status: 404 });
+    }
 
-  // 4. Validate GPS against the employee's self-selected location
-  const gpsResult = await validateGpsAgainstLocations(profileId, lat, lng, today, workLocationId);
-  if (!gpsResult.valid) {
-    return Response.json(
-      { error: `Anda berada di luar area lokasi kerja (${Math.round(gpsResult.distance)}m dari lokasi terdekat)` },
-      { status: 403 },
-    );
+    const gpsResult = await validateGpsAgainstLocations(profileId, lat, lng, today, workLocationId ?? null);
+    if (!gpsResult.valid) {
+      return Response.json(
+        { error: `Anda berada di luar area lokasi kerja (${Math.round(gpsResult.distance)}m dari lokasi terdekat)` },
+        { status: 403 },
+      );
+    }
+    resolvedLocationId = gpsResult.nearestLocationId;
   }
 
   // 5. Upload photo
@@ -139,8 +146,9 @@ export async function POST(req: Request) {
         clockInLat: lat,
         clockInLng: lng,
         status,
-        workLocationId: gpsResult.nearestLocationId,
+        workLocationId: resolvedLocationId,
         workShiftId: workShift.id,
+        workType,
         attendantType: "WORKDAY",
         isPublicHoliday,
       },
@@ -150,8 +158,9 @@ export async function POST(req: Request) {
         clockInLat: lat,
         clockInLng: lng,
         status,
-        workLocationId: gpsResult.nearestLocationId,
+        workLocationId: resolvedLocationId,
         workShiftId: workShift.id,
+        workType,
         attendantType: "WORKDAY",
         isPublicHoliday,
       },

@@ -20,6 +20,12 @@ const STATUS_BADGE: Record<string, { label: string; variant: "default" | "second
   absent: { label: "Absen", variant: "destructive" },
 };
 
+const WORK_TYPE_LABEL: Record<string, string> = {
+  WFO: "WFO",
+  WFH: "WFH",
+  WFA: "WFA",
+};
+
 function formatDate(date: string | Date): string {
   return new Date(date).toLocaleDateString("id-ID", { weekday: "short", day: "numeric", month: "short", year: "numeric" });
 }
@@ -100,6 +106,12 @@ export function EmployeeOverviewDrawer({ isOpen, onClose, profileName, query }: 
                             <div className="flex items-center justify-between text-sm">
                               <span className="text-muted-foreground">Shift</span>
                               <span className="text-foreground">{r.workShift.name}</span>
+                            </div>
+                          )}
+                          {r.workType && (
+                            <div className="flex items-center justify-between text-sm">
+                              <span className="text-muted-foreground">Tipe Kerja</span>
+                              <span className="text-foreground">{WORK_TYPE_LABEL[r.workType] ?? r.workType}</span>
                             </div>
                           )}
                           {r.workLocation && (

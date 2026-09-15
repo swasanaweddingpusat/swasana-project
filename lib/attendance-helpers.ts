@@ -121,10 +121,10 @@ interface LocationValidationResult {
 }
 
 export async function validateGpsAgainstLocations(
-  profileId: string,
+  _profileId: string,
   lat: number,
   lng: number,
-  date: Date,
+  _date: Date,
   overrideLocationId: string | null,
 ): Promise<LocationValidationResult> {
   let locations: Array<{ id: string; name: string; latitude: number; longitude: number; radiusMeters: number }>;
@@ -136,19 +136,13 @@ export async function validateGpsAgainstLocations(
     });
     locations = loc ? [loc] : [];
   } else {
-    const assignments = await db.employeeWorkAssignment.findMany({
-      where: {
-        profileId,
-        effectiveDate: { lte: date },
-        OR: [{ endDate: null }, { endDate: { gte: date } }],
-      },
-      include: {
-        workLocation: { select: { id: true, name: true, latitude: true, longitude: true, radiusMeters: true, isActive: true } },
-      },
+    // No override venue selected — validate against ANY active work location,
+    // not just the employee's EmployeeWorkAssignment (attendance is not master-data-scoped).
+    locations = await db.workLocation.findMany({
+      where: { isActive: true },
+      select: { id: true, name: true, latitude: true, longitude: true, radiusMeters: true },
+      take: 200,
     });
-    locations = assignments
-      .map((a) => a.workLocation)
-      .filter((l) => l.isActive);
   }
 
   if (locations.length === 0) {

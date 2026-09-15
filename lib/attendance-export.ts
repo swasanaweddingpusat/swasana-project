@@ -15,6 +15,12 @@ const ATTENDANT_TYPE_LABEL: Record<string, string> = {
   DAY_OFF: "Libur Mingguan",
 };
 
+const WORK_TYPE_LABEL: Record<string, string> = {
+  WFO: "WFO",
+  WFH: "WFH",
+  WFA: "WFA",
+};
+
 function formatDateID(value: string | Date): string {
   return new Date(value).toLocaleDateString("id-ID", {
     day: "2-digit",
@@ -46,6 +52,7 @@ function buildRows(data: AttendanceExportItem[]) {
     status: STATUS_LABEL[r.status] ?? r.status,
     lokasi: r.workLocation?.name ?? "-",
     shift: r.workShift?.name ?? "-",
+    tipeKerja: r.workType ? (WORK_TYPE_LABEL[r.workType] ?? r.workType) : "-",
     tipeHari: ATTENDANT_TYPE_LABEL[r.attendantType] ?? r.attendantType,
     tanggalMerah: r.isPublicHoliday ? "Ya" : "Tidak",
     koordinatMasuk: formatCoord(r.clockInLat, r.clockInLng),
@@ -63,6 +70,7 @@ export function exportToExcel(data: AttendanceExportItem[], period: string): voi
     Status: r.status,
     Lokasi: r.lokasi,
     Shift: r.shift,
+    "Tipe Kerja": r.tipeKerja,
     "Tipe Hari": r.tipeHari,
     "Tanggal Merah": r.tanggalMerah,
     "Koordinat Masuk": r.koordinatMasuk,
@@ -80,6 +88,7 @@ export function exportToExcel(data: AttendanceExportItem[], period: string): voi
     { wch: 12 },
     { wch: 22 },
     { wch: 16 },
+    { wch: 12 },
     { wch: 16 },
     { wch: 14 },
     { wch: 20 },
@@ -115,7 +124,7 @@ export function exportToPDF(
 
   autoTable(doc, {
     startY: 35,
-    head: [["No", "Nama Karyawan", "Tanggal", "Clock In", "Clock Out", "Status", "Lokasi", "Shift", "Tipe Hari", "Tgl Merah", "Koordinat Masuk", "Koordinat Keluar"]],
+    head: [["No", "Nama Karyawan", "Tanggal", "Clock In", "Clock Out", "Status", "Lokasi", "Shift", "Tipe Kerja", "Tipe Hari", "Tgl Merah", "Koordinat Masuk", "Koordinat Keluar"]],
     body: rows.map((r) => [
       r.no,
       r.nama,
@@ -125,6 +134,7 @@ export function exportToPDF(
       r.status,
       r.lokasi,
       r.shift,
+      r.tipeKerja,
       r.tipeHari,
       r.tanggalMerah,
       r.koordinatMasuk,
@@ -146,10 +156,11 @@ export function exportToPDF(
       5: { cellWidth: 15 },
       6: { cellWidth: 24 },
       7: { cellWidth: 18 },
-      8: { cellWidth: 16 },
+      8: { cellWidth: 14 },
       9: { cellWidth: 16 },
-      10: { cellWidth: 26 },
+      10: { cellWidth: 16 },
       11: { cellWidth: 26 },
+      12: { cellWidth: 26 },
     },
   });
 

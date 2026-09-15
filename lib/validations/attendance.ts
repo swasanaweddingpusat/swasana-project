@@ -5,6 +5,7 @@ export const clockInSchema = z
     isOff: z.boolean().optional().default(false),
     workShiftId: z.string().optional(),
     workLocationId: z.string().optional(),
+    workType: z.enum(["WFO", "WFH", "WFA"]).optional(),
     photoBase64: z.string().optional(),
     lat: z.number().optional(),
     lng: z.number().optional(),
@@ -14,7 +15,10 @@ export const clockInSchema = z
     if (!data.workShiftId) {
       ctx.addIssue({ code: "custom", message: "Shift wajib dipilih", path: ["workShiftId"] });
     }
-    if (!data.workLocationId) {
+    if (!data.workType) {
+      ctx.addIssue({ code: "custom", message: "Tipe kerja wajib dipilih", path: ["workType"] });
+    }
+    if (data.workType === "WFO" && !data.workLocationId) {
       ctx.addIssue({ code: "custom", message: "Lokasi kerja wajib dipilih", path: ["workLocationId"] });
     }
     if (!data.photoBase64) {
