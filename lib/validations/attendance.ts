@@ -1,10 +1,36 @@
 import { z } from "zod";
 
-export const clockInSchema = z.object({
-  photoBase64: z.string().min(1, "Foto wajib disertakan"),
-  lat: z.number({ error: "Koordinat latitude wajib ada" }),
-  lng: z.number({ error: "Koordinat longitude wajib ada" }),
-});
+export const clockInSchema = z
+  .object({
+    isOff: z.boolean().optional().default(false),
+    workShiftId: z.string().optional(),
+    workLocationId: z.string().optional(),
+    workType: z.enum(["WFO", "WFH", "WFA"]).optional(),
+    photoBase64: z.string().optional(),
+    lat: z.number().optional(),
+    lng: z.number().optional(),
+  })
+  .superRefine((data, ctx) => {
+    if (data.isOff) return;
+    if (!data.workShiftId) {
+      ctx.addIssue({ code: "custom", message: "Shift wajib dipilih", path: ["workShiftId"] });
+    }
+    if (!data.workType) {
+      ctx.addIssue({ code: "custom", message: "Tipe kerja wajib dipilih", path: ["workType"] });
+    }
+    if (data.workType === "WFO" && !data.workLocationId) {
+      ctx.addIssue({ code: "custom", message: "Lokasi kerja wajib dipilih", path: ["workLocationId"] });
+    }
+    if (!data.photoBase64) {
+      ctx.addIssue({ code: "custom", message: "Foto wajib disertakan", path: ["photoBase64"] });
+    }
+    if (data.lat === undefined) {
+      ctx.addIssue({ code: "custom", message: "Koordinat latitude wajib ada", path: ["lat"] });
+    }
+    if (data.lng === undefined) {
+      ctx.addIssue({ code: "custom", message: "Koordinat longitude wajib ada", path: ["lng"] });
+    }
+  });
 
 export const clockOutSchema = z.object({
   photoBase64: z.string().min(1, "Foto wajib disertakan"),
@@ -49,9 +75,17 @@ export const attendanceExportQuerySchema = z
     message: "Tahun wajib diisi untuk export",
   });
 
+export const attendanceOverviewQuerySchema = z.object({
+  profileId: z.string().min(1, "profileId wajib diisi"),
+  date: z.string().optional(),
+  month: z.coerce.number().int().min(1).max(12).optional(),
+  year: z.coerce.number().int().min(2020).max(2100).optional(),
+});
+
 export type ClockInInput = z.infer<typeof clockInSchema>;
 export type ClockOutInput = z.infer<typeof clockOutSchema>;
 export type AttendanceSettingsInput = z.infer<typeof attendanceSettingsSchema>;
 export type AttendanceListQuery = z.infer<typeof attendanceListQuerySchema>;
 export type AttendanceExportQuery = z.infer<typeof attendanceExportQuerySchema>;
+export type AttendanceOverviewQuery = z.infer<typeof attendanceOverviewQuerySchema>;
 export type GlobalAttendanceSettingsInput = z.infer<typeof globalAttendanceSettingsSchema>;

@@ -763,6 +763,12 @@ enum AttendantType {
   DAY_OFF
 }
 
+enum WorkType {
+  WFO
+  WFH
+  WFA
+}
+
 enum LeaveRequestStatus {
   pending
   manager_approved
@@ -2300,6 +2306,7 @@ model Attendance {
   status          AttendanceStatus @default(absent)
   workLocationId  String?
   workShiftId     String?
+  workType        WorkType?
   attendantType   AttendantType    @default(WORKDAY)
   isPublicHoliday Boolean          @default(false)
 

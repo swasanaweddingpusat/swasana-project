@@ -9,8 +9,10 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PhotoPreviewModal } from "./PhotoPreviewModal";
-import { Gallery, ArrowLeft, ArrowRight } from "@solar-icons/react";
+import { EmployeeOverviewDrawer } from "./EmployeeOverviewDrawer";
+import { Gallery, ArrowLeft, ArrowRight, ChartSquare } from "@solar-icons/react";
 import type { AttendanceListItem } from "@/lib/queries/attendance";
+import type { AttendanceOverviewQuery } from "@/lib/validations/attendance";
 
 const STATUS_BADGE: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
   on_time: { label: "Hadir", variant: "default" },
@@ -23,6 +25,12 @@ const ATTENDANT_TYPE_BADGE: Record<string, { label: string; variant: "default" |
   DAY_OFF: { label: "Libur Mingguan", variant: "secondary" },
 };
 
+const WORK_TYPE_LABEL: Record<string, string> = {
+  WFO: "WFO",
+  WFH: "WFH",
+  WFA: "WFA",
+};
+
 function formatDate(date: string | Date): string {
   return new Date(date).toLocaleDateString("id-ID", { weekday: "short", day: "numeric", month: "short", year: "numeric" });
 }
@@ -32,10 +40,21 @@ function formatTimeShort(date: string | Date | null): string {
   return new Date(date).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" });
 }
 
+function formatDuration(clockInAt: string | Date | null, clockOutAt: string | Date | null): string {
+  if (!clockInAt || !clockOutAt) return "-";
+  const ms = new Date(clockOutAt).getTime() - new Date(clockInAt).getTime();
+  if (ms <= 0) return "-";
+  const totalMinutes = Math.floor(ms / 60000);
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return `${hours}j ${minutes}m`;
+}
+
 export function AttendanceTable() {
   const searchParams = useSearchParams();
   const [page, setPage] = useState(1);
   const [selectedRecord, setSelectedRecord] = useState<AttendanceListItem | null>(null);
+  const [overviewTarget, setOverviewTarget] = useState<{ profileId: string; profileName: string } | null>(null);
 
   const mode = searchParams.get("mode") ?? "month";
   const date = mode === "date" ? (searchParams.get("date") ?? undefined) : undefined;
@@ -94,12 +113,15 @@ export function AttendanceTable() {
                       <TableHead>Tanggal</TableHead>
                       <TableHead>Clock In</TableHead>
                       <TableHead>Clock Out</TableHead>
+                      <TableHead>Durasi Kerja</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead>Lokasi</TableHead>
                       <TableHead>Shift</TableHead>
+                      <TableHead>Tipe Kerja</TableHead>
                       <TableHead>Tipe Hari</TableHead>
                       <TableHead>Tanggal Merah</TableHead>
                       <TableHead className="w-16">Foto</TableHead>
+                      <TableHead className="w-16">Overview</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -113,11 +135,19 @@ export function AttendanceTable() {
                           <TableCell>{formatDate(record.date)}</TableCell>
                           <TableCell>{formatTimeShort(record.clockInAt)}</TableCell>
                           <TableCell>{formatTimeShort(record.clockOutAt)}</TableCell>
+                          <TableCell>{formatDuration(record.clockInAt, record.clockOutAt)}</TableCell>
                           <TableCell>
                             <Badge variant={badge.variant}>{badge.label}</Badge>
                           </TableCell>
                           <TableCell>{record.workLocation?.name ?? "-"}</TableCell>
                           <TableCell>{record.workShift?.name ?? "-"}</TableCell>
+                          <TableCell>
+                            {record.workType ? (
+                              <Badge variant="outline">{WORK_TYPE_LABEL[record.workType] ?? record.workType}</Badge>
+                            ) : (
+                              "-"
+                            )}
+                          </TableCell>
                           <TableCell>
                             {(() => {
                               const atBadge = ATTENDANT_TYPE_BADGE[record.attendantType] ?? ATTENDANT_TYPE_BADGE.WORKDAY;
@@ -142,6 +172,18 @@ export function AttendanceTable() {
                                 <Gallery weight="BoldDuotone" className="h-4 w-4" />
                               </Button>
                             )}
+                          </TableCell>
+                          <TableCell>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 rounded-full"
+                              onClick={() =>
+                                setOverviewTarget({ profileId: record.profile.id, profileName: record.profile.fullName ?? "-" })
+                              }
+                            >
+                              <ChartSquare weight="BoldDuotone" className="h-4 w-4" />
+                            </Button>
                           </TableCell>
                         </TableRow>
                       );
@@ -183,6 +225,17 @@ export function AttendanceTable() {
       <PhotoPreviewModal
         record={selectedRecord}
         onClose={() => setSelectedRecord(null)}
+      />
+
+      <EmployeeOverviewDrawer
+        isOpen={!!overviewTarget}
+        onClose={() => setOverviewTarget(null)}
+        profileName={overviewTarget?.profileName ?? null}
+        query={
+          overviewTarget
+            ? ({ profileId: overviewTarget.profileId, date, month, year } as AttendanceOverviewQuery)
+            : null
+        }
       />
     </>
   );
