@@ -32,9 +32,18 @@ export async function POST(req: Request) {
     return Response.json({ error: "Profile tidak ditemukan" }, { status: 404 });
   }
 
-  // Optional GPS validation based on requireClockOutLocation setting
+  const existing = await getAttendanceToday(profileId);
+  if (!existing?.clockInAt) {
+    return Response.json({ error: "Anda belum melakukan clock in hari ini" }, { status: 409 });
+  }
+  if (existing.clockOutAt) {
+    return Response.json({ error: "Anda sudah melakukan clock out hari ini" }, { status: 409 });
+  }
+
+  // Optional GPS validation based on requireClockOutLocation setting.
+  // WFH/WFA have no venue concept — GPS is recorded but never validated.
   const settings = await getAttendanceSettings();
-  if (settings?.requireClockOutLocation) {
+  if (settings?.requireClockOutLocation && existing.workType !== "WFH" && existing.workType !== "WFA") {
     const today = todayMidnightUTC();
     const gpsResult = await validateGpsAgainstLocations(profileId, parsed.data.lat, parsed.data.lng, today, null);
     if (!gpsResult.valid) {
@@ -43,14 +52,6 @@ export async function POST(req: Request) {
         { status: 403 },
       );
     }
-  }
-
-  const existing = await getAttendanceToday(profileId);
-  if (!existing?.clockInAt) {
-    return Response.json({ error: "Anda belum melakukan clock in hari ini" }, { status: 409 });
-  }
-  if (existing.clockOutAt) {
-    return Response.json({ error: "Anda sudah melakukan clock out hari ini" }, { status: 409 });
   }
 
   const ip = req.headers.get("x-forwarded-for") ?? "unknown";

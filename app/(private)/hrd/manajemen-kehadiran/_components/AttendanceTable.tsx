@@ -25,6 +25,12 @@ const ATTENDANT_TYPE_BADGE: Record<string, { label: string; variant: "default" |
   DAY_OFF: { label: "Libur Mingguan", variant: "secondary" },
 };
 
+const WORK_TYPE_LABEL: Record<string, string> = {
+  WFO: "WFO",
+  WFH: "WFH",
+  WFA: "WFA",
+};
+
 function formatDate(date: string | Date): string {
   return new Date(date).toLocaleDateString("id-ID", { weekday: "short", day: "numeric", month: "short", year: "numeric" });
 }
@@ -111,6 +117,7 @@ export function AttendanceTable() {
                       <TableHead>Status</TableHead>
                       <TableHead>Lokasi</TableHead>
                       <TableHead>Shift</TableHead>
+                      <TableHead>Tipe Kerja</TableHead>
                       <TableHead>Tipe Hari</TableHead>
                       <TableHead>Tanggal Merah</TableHead>
                       <TableHead className="w-16">Foto</TableHead>
@@ -134,6 +141,13 @@ export function AttendanceTable() {
                           </TableCell>
                           <TableCell>{record.workLocation?.name ?? "-"}</TableCell>
                           <TableCell>{record.workShift?.name ?? "-"}</TableCell>
+                          <TableCell>
+                            {record.workType ? (
+                              <Badge variant="outline">{WORK_TYPE_LABEL[record.workType] ?? record.workType}</Badge>
+                            ) : (
+                              "-"
+                            )}
+                          </TableCell>
                           <TableCell>
                             {(() => {
                               const atBadge = ATTENDANT_TYPE_BADGE[record.attendantType] ?? ATTENDANT_TYPE_BADGE.WORKDAY;

@@ -16,6 +16,18 @@ type ClockAction = "in" | "out";
 
 const OFF_VALUE = "__OFF__";
 
+const WORK_TYPE_OPTIONS = [
+  { value: "WFO", label: "Kerja dari Kantor (WFO)" },
+  { value: "WFH", label: "Kerja dari Rumah (WFH)" },
+  { value: "WFA", label: "Kerja dari Mana Saja (WFA)" },
+] as const;
+
+const WORK_TYPE_LABEL: Record<string, string> = {
+  WFO: "WFO",
+  WFH: "WFH",
+  WFA: "WFA",
+};
+
 function formatTime(date: Date): string {
   return date.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
 }
@@ -31,6 +43,7 @@ export function AttendanceClock() {
   const [gpsCoords, setGpsCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [gpsLoading, setGpsLoading] = useState(false);
   const [selectedShiftId, setSelectedShiftId] = useState<string>("");
+  const [selectedWorkType, setSelectedWorkType] = useState<string>("");
   const [selectedLocationId, setSelectedLocationId] = useState<string>("");
 
   const { data: todayData, isLoading: todayLoading } = useAttendanceToday();
@@ -114,13 +127,18 @@ export function AttendanceClock() {
       return;
     }
 
-    if (!selectedLocationId) {
+    if (!selectedWorkType) {
+      toast.error("Pilih tipe kerja terlebih dahulu");
+      return;
+    }
+
+    if (selectedWorkType === "WFO" && !selectedLocationId) {
       toast.error("Pilih lokasi kerja terlebih dahulu");
       return;
     }
 
     handleAction("in");
-  }, [selectedShiftId, selectedLocationId, isOffSelected, clockInMutation, handleAction]);
+  }, [selectedShiftId, selectedWorkType, selectedLocationId, isOffSelected, clockInMutation, handleAction]);
 
   const handleCapture = useCallback((photoBase64: string) => {
     setCameraOpen(false);
@@ -134,7 +152,8 @@ export function AttendanceClock() {
           lat: gpsCoords.lat,
           lng: gpsCoords.lng,
           workShiftId: selectedShiftId,
-          workLocationId: selectedLocationId,
+          workType: selectedWorkType as "WFO" | "WFH" | "WFA",
+          workLocationId: selectedWorkType === "WFO" ? selectedLocationId : undefined,
         },
         {
           onSuccess: () => {
@@ -167,7 +186,7 @@ export function AttendanceClock() {
         },
       },
     );
-  }, [gpsCoords, pendingAction, clockInMutation, clockOutMutation, selectedShiftId, selectedLocationId]);
+  }, [gpsCoords, pendingAction, clockInMutation, clockOutMutation, selectedShiftId, selectedWorkType, selectedLocationId]);
 
   const handleCameraClose = useCallback(() => {
     setCameraOpen(false);
@@ -179,7 +198,12 @@ export function AttendanceClock() {
   const canClockOut = !!attendance?.clockInAt && !attendance?.clockOutAt;
   const isDone = !!attendance?.clockOutAt;
   const clockInDisabled =
-    !settings || isMutating || gpsLoading || !selectedShiftId || (!isOffSelected && !selectedLocationId);
+    !settings ||
+    isMutating ||
+    gpsLoading ||
+    !selectedShiftId ||
+    (!isOffSelected && !selectedWorkType) ||
+    (!isOffSelected && selectedWorkType === "WFO" && !selectedLocationId);
 
   return (
     <>
@@ -246,6 +270,24 @@ export function AttendanceClock() {
 
                 {!isOffSelected && (
                   <div className="space-y-1.5">
+                    <label className="text-xs font-medium text-muted-foreground">Tipe Kerja</label>
+                    <Select value={selectedWorkType} onValueChange={setSelectedWorkType}>
+                      <SelectTrigger className="w-full rounded-xl">
+                        <SelectValue placeholder="Pilih tipe kerja" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {WORK_TYPE_OPTIONS.map((t) => (
+                          <SelectItem key={t.value} value={t.value}>
+                            {t.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+
+                {!isOffSelected && selectedWorkType === "WFO" && (
+                  <div className="space-y-1.5">
                     <label className="text-xs font-medium text-muted-foreground">Lokasi Kerja</label>
                     <Select value={selectedLocationId} onValueChange={setSelectedLocationId}>
                       <SelectTrigger className="w-full rounded-xl">
@@ -282,6 +324,9 @@ export function AttendanceClock() {
               <div className="flex flex-wrap items-center justify-center gap-4 text-sm text-muted-foreground">
                 {attendance.workShift && (
                   <span>Shift: <span className="text-foreground font-medium">{attendance.workShift.name}</span></span>
+                )}
+                {attendance.workType && (
+                  <Badge variant="outline">{WORK_TYPE_LABEL[attendance.workType] ?? attendance.workType}</Badge>
                 )}
                 {attendance.workLocation && (
                   <span className="flex items-center gap-1">
