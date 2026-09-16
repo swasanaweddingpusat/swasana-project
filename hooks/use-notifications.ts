@@ -35,6 +35,9 @@ export function notificationHref(n: NotificationItem): string | null {
   if (n.entityType === "booking-mice") return "/booking/booking-mice";
   // Booking notification without an id → fall back to the wedding list.
   if (n.entityType === "booking") return "/booking/booking-weddings";
+  if (n.entityType === "announcement" && n.entityId) {
+    return `/announcement/${n.entityId}`;
+  }
   return null;
 }
 

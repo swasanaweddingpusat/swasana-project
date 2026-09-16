@@ -2592,6 +2592,7 @@ model LeaveRequest {
   endDate     DateTime
   totalDays   Int
   reason      String?
+  documentKey String?
   status      LeaveRequestStatus @default(pending)
 
   managerApprovedBy String?

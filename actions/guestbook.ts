@@ -11,6 +11,28 @@ import { canAccessGuestbookEntry } from "@/lib/access-control";
 import { createGuestbookEntrySchema, updateGuestbookEntrySchema } from "@/lib/validations/guestbook";
 import { normalizePhoneId } from "@/lib/phone";
 
+function parseLocalDateTime(value: string | null | undefined): Date | undefined {
+  if (!value) return undefined;
+
+  const match = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.exec(value);
+  if (!match) return new Date(value);
+
+  const [datePart, timePart] = value.split("T");
+  const [year, month, day] = datePart.split("-").map(Number);
+  const [hours, minutes] = timePart.split(":").map(Number);
+  return new Date(year, month - 1, day, hours, minutes, 0, 0);
+}
+
+function parseLocalDateOnly(value: string | null | undefined): Date | undefined {
+  if (!value) return undefined;
+
+  const match = /^\d{4}-\d{2}-\d{2}$/.exec(value);
+  if (!match) return new Date(value);
+
+  const [year, month, day] = value.split("-").map(Number);
+  return new Date(year, month - 1, day, 0, 0, 0, 0);
+}
+
 function generateGuestCode(): string {
   const now = new Date();
   const yyyy = String(now.getFullYear());
@@ -45,10 +67,10 @@ export async function createGuestbookEntry(data: unknown): Promise<{ success: bo
               ...rest,
               proofFiles: (proofFiles ?? undefined) as Prisma.InputJsonValue | undefined,
               guestCode,
-              checkInAt: checkInAt ? new Date(checkInAt) : undefined,
-              scheduledAt: scheduledAt ? new Date(scheduledAt) : undefined,
-              commitVisitDate: commitVisitDate ? new Date(commitVisitDate) : undefined,
-              commitPayDate: commitPayDate ? new Date(commitPayDate) : undefined,
+              checkInAt: checkInAt ? parseLocalDateTime(checkInAt) : undefined,
+              scheduledAt: scheduledAt ? parseLocalDateTime(scheduledAt) : undefined,
+              commitVisitDate: commitVisitDate ? parseLocalDateOnly(commitVisitDate) : undefined,
+              commitPayDate: commitPayDate ? parseLocalDateOnly(commitPayDate) : undefined,
               createdById: session!.user.profileId,
               salesId,
               phoneNumberNorm,
@@ -164,11 +186,11 @@ export async function updateGuestbookEntry(
           proofFiles: (proofFiles ?? undefined) as Prisma.InputJsonValue | undefined,
           phoneNumber,
           phoneNumberNorm,
-          checkInAt: checkInAt ? new Date(checkInAt) : undefined,
-          checkOutAt: checkOutAt ? new Date(checkOutAt) : undefined,
-          scheduledAt: scheduledAt ? new Date(scheduledAt) : undefined,
-          commitVisitDate: commitVisitDate ? new Date(commitVisitDate) : undefined,
-          commitPayDate: commitPayDate ? new Date(commitPayDate) : undefined,
+          checkInAt: checkInAt ? parseLocalDateTime(checkInAt) : undefined,
+          checkOutAt: checkOutAt ? parseLocalDateTime(checkOutAt) : undefined,
+          scheduledAt: scheduledAt ? parseLocalDateTime(scheduledAt) : undefined,
+          commitVisitDate: commitVisitDate ? parseLocalDateOnly(commitVisitDate) : undefined,
+          commitPayDate: commitPayDate ? parseLocalDateOnly(commitPayDate) : undefined,
         },
       }),
     ]);

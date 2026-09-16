@@ -64,6 +64,26 @@ import type { GuestbookEntryItem } from "@/lib/queries/guestbookEntries";
 import type { FileDescriptor, ProofFiles } from "@/lib/validations/guestbook";
 import { resolveGuestbookPhotoUrl } from "./photo-url";
 
+function formatDateForInput(value: string | Date | null | undefined): string {
+  if (!value) return "";
+
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
+function formatDateTimeForInput(value: string | Date | null | undefined): string {
+  if (!value) return "";
+
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
 async function fetchJson<T>(url: string): Promise<T> {
   const res = await fetch(url);
   if (!res.ok) throw new Error(`Fetch error ${res.status}`);
@@ -559,7 +579,7 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
         onlineMedium: editEntry.onlineMedium ?? "",
         meetingUrl: editEntry.meetingUrl ?? "",
         meetingLocation: editEntry.meetingLocation ?? "",
-        scheduledAt: editEntry.scheduledAt ? new Date(editEntry.scheduledAt).toISOString().slice(0, 16) : "",
+        scheduledAt: formatDateTimeForInput(editEntry.scheduledAt),
         hostId: editEntry.host?.id ?? "",
         notes: editEntry.notes ?? "",
         visitStatus: editEntry.visitStatus ?? "",
@@ -567,12 +587,10 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
         packageId: editEntry.packageId ?? "",
         segmentId: editEntry.segmentId ?? "",
         eventCategory: editEntry.eventCategory ?? editEntry.package?.category ?? (canWedding ? "WEDDINGS" : "MICE"),
-        checkInAt: editEntry.checkInAt ? new Date(editEntry.checkInAt).toISOString().slice(0, 16) : "",
-        checkOutAt: editEntry.checkOutAt ? new Date(editEntry.checkOutAt).toISOString().slice(0, 16) : "",
-        commitVisitDate: editEntry.commitVisitDate
-          ? new Date(editEntry.commitVisitDate).toISOString().slice(0, 10) : "",
-        commitPayDate: editEntry.commitPayDate
-          ? new Date(editEntry.commitPayDate).toISOString().slice(0, 10) : "",
+        checkInAt: formatDateTimeForInput(editEntry.checkInAt),
+        checkOutAt: formatDateTimeForInput(editEntry.checkOutAt),
+        commitVisitDate: formatDateForInput(editEntry.commitVisitDate),
+        commitPayDate: formatDateForInput(editEntry.commitPayDate),
         proofChatFile: null,
         proofChatPreview: resolveGuestbookPhotoUrl(proofFiles?.chat?.path) ?? "",
         proofPhotoFile: null,

@@ -1,6 +1,6 @@
 export const MAX_UPLOAD_SIZE_BYTES = 10 * 1024 * 1024;
 
-export const UPLOAD_FOLDERS = ["booking-documents", "employees-documents", "client-agreements"] as const;
+export const UPLOAD_FOLDERS = ["booking-documents", "employees-documents", "client-agreements", "leave-documents"] as const;
 export type UploadFolder = (typeof UPLOAD_FOLDERS)[number];
 
 export const ALLOWED_UPLOAD_MIME_TYPES = [

@@ -109,6 +109,7 @@ export async function submitLeaveRequest(data: unknown): Promise<{ success: bool
         endDate,
         totalDays,
         reason: parsed.data.reason ?? null,
+        documentKey: parsed.data.documentKey ?? null,
         status: "pending",
       },
     });
