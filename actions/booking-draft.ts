@@ -21,6 +21,7 @@ import {
   updateDraftStep4Schema,
   finalizeDraftSchema,
 } from "@/lib/validations/booking-draft";
+import type { BonusRow } from "@/lib/validations/bonus";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -108,6 +109,7 @@ export interface DraftBookingDetail {
     description: string | null;
     qty: number;
   }>;
+  bonuses: BonusRow[];
   draftInternalItems: Array<{
     itemName: string;
     itemDescription: string;
@@ -435,6 +437,9 @@ export async function updateDraftBookingStep2(
             : Prisma.JsonNull,
           draftComplimentaries: (input.draftComplimentaries && input.draftComplimentaries.length > 0)
             ? (input.draftComplimentaries as Prisma.InputJsonValue)
+            : Prisma.JsonNull,
+          draftBonuses: (input.draftBonuses && input.draftBonuses.length > 0)
+            ? (input.draftBonuses as Prisma.InputJsonValue)
             : Prisma.JsonNull,
           draftInternalItems: (input.draftInternalItems && input.draftInternalItems.length > 0)
             ? (input.draftInternalItems as Prisma.InputJsonValue)
@@ -955,6 +960,25 @@ export async function finalizeDraftBooking(data: unknown): Promise<FinalizeDraft
       );
     }
 
+    // 5c. Add bonuses (new bonus-based snap rows)
+    if (input.bookingBonuses && input.bookingBonuses.length > 0) {
+      ops.push(
+        ...input.bookingBonuses.map((b, i) =>
+          db.snapBookingBonus.create({
+            data: {
+              bookingId: draftId,
+              bonusId: b.bonusId ?? null,
+              name: b.name,
+              price: b.price,
+              description: b.description ?? null,
+              qty: b.qty,
+              sortOrder: i,
+            },
+          })
+        )
+      );
+    }
+
     // 6b. Step-6 payments → Ledger(`in`) + PaymentAllocation + activity (§8).
     // Termin sudah persist di step-3 → resolve alokasi lewat sortOrder→termId di sini.
     // Alokasi di-clamp defensif (drop sortOrder tak dikenal, cap Σ ≤ gross & ≤ nominal
@@ -1293,6 +1317,7 @@ export async function getDraftBookingDetail(
       withMaterai: true,
       draftCategoryToggles: true,
       draftComplimentaries: true,
+      draftBonuses: true,
       draftInternalItems: true,
       draftVendorItems: true,
       customer: {
@@ -1373,6 +1398,21 @@ export async function getDraftBookingDetail(
       }));
   }
 
+  // Parse draftBonuses JSON → typed array
+  const rawBonuses = draft.draftBonuses;
+  let bonuses: BonusRow[] = [];
+  if (Array.isArray(rawBonuses)) {
+    bonuses = (rawBonuses as Array<Record<string, unknown>>)
+      .filter((e) => typeof e.name === "string")
+      .map((e) => ({
+        bonusId: typeof e.bonusId === "string" ? e.bonusId : null,
+        name: e.name as string,
+        price: typeof e.price === "number" ? e.price : 0,
+        description: typeof e.description === "string" ? e.description : null,
+        qty: typeof e.qty === "number" ? e.qty : 1,
+      }));
+  }
+
   // Parse draftInternalItems JSON → typed array
   const rawInternal = draft.draftInternalItems;
   let draftInternalItems: Array<{ itemName: string; itemDescription: string }> = [];
@@ -1438,6 +1478,7 @@ export async function getDraftBookingDetail(
     })),
     draftCategoryToggles,
     draftComplimentaries,
+    bonuses,
     draftInternalItems,
     draftVendorItems,
   };

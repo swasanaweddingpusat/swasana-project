@@ -575,6 +575,24 @@ export async function createBooking(data: unknown) {
       );
     }
 
+    if (input.bookingBonuses && input.bookingBonuses.length > 0) {
+      ops.push(
+        ...input.bookingBonuses.map((b, i) =>
+          db.snapBookingBonus.create({
+            data: {
+              bookingId,
+              bonusId: b.bonusId ?? null,
+              name: b.name,
+              price: b.price,
+              description: b.description ?? null,
+              qty: b.qty,
+              sortOrder: b.sortOrder ?? i,
+            },
+          })
+        )
+      );
+    }
+
     if (input.termOfPayments && input.termOfPayments.length > 0) {
       ops.push(
         ...input.termOfPayments.map((t) =>
@@ -1486,6 +1504,8 @@ export async function editBooking(data: unknown) {
     // NOTE: complimentaries are intentionally excluded from material-change detection.
     // They are managed independently via saveSnapComplimentaries (EditComplimentaryDrawer)
     // which does NOT reset approval or client agreement.
+    // NOTE: bonuses (new bonus-based) are likewise excluded from material-change
+    // detection in this iteration — they are not managed by this action at all.
     // Snapshot freeze gate. Once the client signs (snapshotFrozenAt set), the frozen
     // snapshot (SnapCustomer, pricing, internal items) must not be silently overwritten.
     // A material change is the legitimate re-edit path: it spins a NEW revision the
@@ -1846,6 +1866,7 @@ export async function editBooking(data: unknown) {
 
     // NOTE: complimentaries are NOT managed here. They are edited independently via
     // saveSnapComplimentaries (EditComplimentaryDrawer) which does not affect approval.
+    // NOTE: bonuses (new bonus-based) are likewise NOT managed here in this iteration.
 
     // Term of payments — re-write when structure OR sort-order changed. TOP kini
     // jadwal murni (name/amount/dueDate/sortOrder); status pembayaran DERIVED dari Ledger.

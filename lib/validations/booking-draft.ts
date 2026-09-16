@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { bonusRowSchema } from "@/lib/validations/bonus";
+
 // ─── Step 1: Create Draft ─────────────────────────────────────────────────────
 
 export const createDraftStep1Schema = z.object({
@@ -94,6 +96,7 @@ export const updateDraftStep2Schema = z.object({
     )
     .optional()
     .default([]),
+  draftBonuses: z.array(bonusRowSchema).optional(),
   // Editable package items (Item Paket step). Snapshotted into snap_package_* on
   // finalize; empty arrays fall back to the package template at finalize time.
   draftInternalItems: z
@@ -194,6 +197,9 @@ export const finalizeDraftSchema = z.object({
     )
     .optional()
     .default([]),
+
+  // Bonuses — new bonus-based, snapped at finalize time (parallel to complimentaries)
+  bookingBonuses: z.array(bonusRowSchema).optional().default([]),
 
   // Category toggles for snap creation
   categoryToggles: z
