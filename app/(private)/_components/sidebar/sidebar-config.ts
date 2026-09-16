@@ -26,6 +26,7 @@ import {
   DocumentAdd,
   Sledgehammer,
   Gift,
+  MedalStar,
   TagPrice,
   ClipboardCheck,
   ChartSquare,
@@ -136,6 +137,7 @@ export const MODULE_NAV_MAP: Record<ModuleKey, NavItem[]> = {
     { name: "Mice Package", href: "/booking/package-mice", icon: Case, subtitle: "Kelola paket MICE per venue", permission: { module: "package-mice", action: "view" } },
     { name: "Groups", href: "/booking/groups", icon: UsersGroupRounded, subtitle: "Kelola tim dan pantau kinerja penjualan", permission: { module: "groups", action: "view" } },
     { name: "Complimentary", href: "/booking/complimentary", icon: Gift, subtitle: "Kelola master item complimentary untuk booking", permission: { module: "complimentary", action: "view" } },
+    { name: "Bonus", href: "/booking/bonus", icon: MedalStar, subtitle: "Kelola master item bonus untuk booking", permission: { module: "bonus", action: "view" } },
     { name: "Voucher / Program", href: "/booking/voucher", icon: TagPrice, subtitle: "Program voucher & discount aktif", permission: { module: "promo", action: "view" } },
   ],
   purchase: [
