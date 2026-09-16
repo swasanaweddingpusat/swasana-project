@@ -983,6 +983,7 @@ model Booking {
   // Draft-only fields: persisted during multi-step form, cleared on finalize (kept as null for saved bookings)
   draftCategoryToggles      Json? // { categoryName: string, isTakeout: boolean, takeoutNominal: number }[]
   draftComplimentaries      Json? // { complimentaryId: string | null, name: string, price: number, isShowPrice: boolean, description: string | null, qty: number }[]
+  draftBonuses              Json? // { bonusId: string | null, name: string, price: number, description: string | null, qty: number }[]
   draftInternalItems        Json? // { itemName: string, itemDescription: string }[] — editable package internal items during draft
   draftVendorItems          Json? // { categoryId: string | null, categoryName: string, itemText: string }[] — editable package vendor items during draft
   // Tracks the active revision for approval step filtering (snapshot approach)
@@ -1022,6 +1023,7 @@ model Booking {
   snapBonuses               SnapBonus[]
   snapVendorItems           SnapVendorItem[]
   snapComplimentaries       SnapComplimentary[]
+  snapBookingBonuses        SnapBookingBonus[]
 
   // Live relations
   termOfPayments     TermOfPayment[]
@@ -1283,6 +1285,40 @@ model SnapComplimentary {
   @@index([bookingId])
   @@index([complimentaryId])
   @@map("snap_complimentaries")
+}
+
+// ─── Bonus Master ─────────────────────────────────────────────────────────────
+
+model Bonus {
+  id                 String             @id @default(uuid())
+  name               String
+  price              Int
+  description        String?
+  isActive           Boolean            @default(true)
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+  snapBookingBonuses SnapBookingBonus[]
+
+  @@map("bonuses")
+}
+
+model SnapBookingBonus {
+  id          String   @id @default(uuid())
+  bookingId   String
+  bonusId     String?
+  name        String
+  price       Int
+  description String?
+  qty         Int      @default(1)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  booking     Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  bonus       Bonus?   @relation(fields: [bonusId], references: [id], onDelete: SetNull)
+
+  @@index([bookingId])
+  @@index([bonusId])
+  @@map("snap_booking_bonuses")
 }
 
 model QuotationComplimentary {
