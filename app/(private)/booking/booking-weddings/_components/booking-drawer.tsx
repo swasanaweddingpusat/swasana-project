@@ -313,7 +313,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
   const { data: resumeDraftDetail } = useDraftBookingDetail(pendingResumeDraftId);
 
   const [currentStep, setCurrentStep] = useState(1);
-  const totalSteps = 7;
+  const totalSteps = 8;
 
   const sigSalesRef = useRef<SignatureCanvas>(null);
   const [signatureSales, setSignatureSales] = useState("");
@@ -800,31 +800,34 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
   // explicitly advances to step 3, making it "sticky" from that point.
   const step2Price = Math.max(0, (originalPackagePrice || selectedPackagePrice) - totalTakeoutNominal);
 
-  // Step 3 complete: Item Paket — items are optional, so this step never blocks.
+  // Step 3 complete: Bonus & Complimentary — placeholder step, real gate added in Task 11.
   const isStep3Complete = true;
 
-  // Step 4 complete: takeout (at least one category must remain included)
-  const isStep4Complete =
+  // Step 4 complete: Item Paket — items are optional, so this step never blocks.
+  const isStep4Complete = true;
+
+  // Step 5 complete: takeout (at least one category must remain included)
+  const isStep5Complete =
     visibleCategories.length === 0 ||
     visibleCategories.some((c) => !(categoryToggles[c.categoryName] ?? false));
 
-  // Step 5 complete: term of payments — TOP is schedule-only (jadwal + discount).
-  // Completeness judged on the balance/dueDate rules; payment recording moves to step 6.
-  const isStep5Complete =
+  // Step 6 complete: term of payments — TOP is schedule-only (jadwal + discount).
+  // Completeness judged on the balance/dueDate rules; payment recording moves to step 7.
+  const isStep6Complete =
     getBasePrice() === 0 || (
       (terms[0]?.amount ?? 0) > 0 &&
       getDifference() === 0 &&
       terms.every((t) => !!t.dueDate)
     );
-  // Step 6 complete: booking fee (termin pertama) sudah tertutup oleh salah satu
+  // Step 7 complete: booking fee (termin pertama) sudah tertutup oleh salah satu
   // pembayaran yang dicatat (payment menunjuk ke uid termin pertama).
   const firstTermUid = terms[0]?.uid;
-  const isStep6Complete =
+  const isStep7Complete =
     !!firstTermUid &&
     (terms[0]?.amount ?? 0) > 0 &&
     createPayments.some((p) => p.amount > 0 && !!p.paymentMethodId && p.termUids.includes(firstTermUid));
-  // Step 7 complete: signing location (+ signature when user IS the sales)
-  const isStep7Complete = !!signingLocation.trim() && (!currentUserIsSales || !!signatureSales);
+  // Step 8 complete: signing location (+ signature when user IS the sales)
+  const isStep8Complete = !!signingLocation.trim() && (!currentUserIsSales || !!signatureSales);
 
   // Recalc term dates when event date changes
   useEffect(() => {
@@ -1047,9 +1050,9 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
 
     // Clear pending flag so this effect doesn't run again on unrelated re-renders
     setPendingResumeDraftId(null);
-    // If the draft already has a package, skip to step 3 (Takeout);
+    // If the draft already has a package, skip to step 4 (Item Paket);
     // otherwise resume at step 2 (Venue & Paket) so user can complete it.
-    setCurrentStep(resumeDraftDetail.packageId ? 3 : 2);
+    setCurrentStep(resumeDraftDetail.packageId ? 4 : 2);
     toast.info("Draft dilanjutkan. Semua data berhasil dipulihkan.");
   }, [resumeDraftDetail]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -1223,10 +1226,13 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
       return;
     }
 
-    // ── Step 3 → 4: Item Paket — persist edited package items, advance to takeout ──
-    if (currentStep === 3) {
+    // ── Step 3 → 4: Bonus & Complimentary — placeholder, no persistence yet (Task 11) ──
+    // (No explicit branch needed: falls through to the generic advance below.)
+
+    // ── Step 4 → 5: Item Paket — persist edited package items, advance to takeout ──
+    if (currentStep === 4) {
       // Advance immediately (optimistic) — items are optional.
-      setCurrentStep(4);
+      setCurrentStep(5);
 
       if (draftId) {
         const capturedDraftId = draftId;
@@ -1238,13 +1244,13 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
       return;
     }
 
-    // ── Step 4 → 5: Takeout — optimistic advance, save takeout data in background ──
-    if (currentStep === 4 && !isStep4Complete) {
+    // ── Step 5 → 6: Takeout — optimistic advance, save takeout data in background ──
+    if (currentStep === 5 && !isStep5Complete) {
       toast.error("Minimal satu kategori harus tetap included.");
       return;
     }
 
-    if (currentStep === 4) {
+    if (currentStep === 5) {
       setSelectedPackagePrice(step2Price);
       // Clear the resume guard: the user is now actively editing, so future
       // package/session changes should trigger allocatePrice normally.
@@ -1268,7 +1274,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
       }
 
       // Advance immediately (optimistic)
-      setCurrentStep(5);
+      setCurrentStep(6);
 
       if (draftId) {
         const capturedDraftId = draftId;
@@ -1281,11 +1287,11 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
       return;
     }
 
-    // ── Step 5 → 6: Term of Payments (jadwal murni) ──────────────────────────
-    // TOP = jadwal + discount. Step-5 hanya validasi jadwal + simpan draft
-    // (nama/nominal/tanggal). Pencatatan pembayaran (cash-in) dilakukan di step 6
+    // ── Step 6 → 7: Term of Payments (jadwal murni) ──────────────────────────
+    // TOP = jadwal + discount. Step-6 hanya validasi jadwal + simpan draft
+    // (nama/nominal/tanggal). Pencatatan pembayaran (cash-in) dilakukan di step 7
     // (Payment) dan disimpan saat finalize.
-    if (currentStep === 5) {
+    if (currentStep === 6) {
       const firstTerm = terms[0];
       if (!firstTerm || !firstTerm.amount || firstTerm.amount <= 0) {
         toast.error("Nominal term pertama (Booking Fee) wajib diisi dan harus lebih dari 0.");
@@ -1311,7 +1317,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
         };
         const capturedDraftId = draftId;
 
-        // Simpan step-3 di background — advance ke step-6 (Payment) tak perlu menunggu.
+        // Simpan step-3 di background — advance ke step-7 (Payment) tak perlu menunggu.
         const prev = step3SaveInFlightRef.current;
         const savePromise = backgroundSave(
           async () => {
@@ -1323,7 +1329,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
         step3SaveInFlightRef.current = savePromise;
       }
 
-      setCurrentStep(6);
+      setCurrentStep(7);
       return;
     }
 
@@ -1332,7 +1338,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
 
   const handlePrevious = () => {
     if (currentStep > 1) {
-      if (currentStep === 7) { sigSalesRef.current?.clear(); setSignatureSales(""); setUseDefaultSignature(false); }
+      if (currentStep === 8) { sigSalesRef.current?.clear(); setSignatureSales(""); setUseDefaultSignature(false); }
       setCurrentStep(currentStep - 1);
     }
   };
@@ -1536,7 +1542,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
     createMut.isPending;
 
   // Continue is disabled if:
-  // - The current step's required fields aren't complete (step 1/2/3/4 completeness checks)
+  // - The current step's required fields aren't complete (step 1/2/3/4/5 completeness checks)
   // - A mutation is in-flight (step 1 is await, finalize is await)
   // - hasPendingWriteError: a background save failed and hasn't been retried successfully.
   //   When this flag is set, clicking Continue fires the retry instead of advancing.
@@ -1548,9 +1554,10 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
     (currentStep === 5 && !isStep5Complete) ||
     (currentStep === 6 && !isStep6Complete) ||
     (currentStep === 7 && !isStep7Complete) ||
+    (currentStep === 8 && !isStep8Complete) ||
     (currentStep === 2 && isDraftMutating) ||
-    (currentStep === 7 && isDraftMutating) ||
-    (currentStep === 7 && isSubmitting);
+    (currentStep === 8 && isDraftMutating) ||
+    (currentStep === 8 && isSubmitting);
 
   return (
     <Drawer isOpen={open} onClose={() => onOpenChange(false)} title="New Booking" maxWidth="sm:max-w-xl" steps={currentStep} totalSteps={totalSteps} isCloseButton={false}>
@@ -2352,8 +2359,16 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
                   </div>
                 </div>
               )}
-              {/* ─── Step 3: Item Paket (Internal & Vendor items) ─── */}
+              {/* ─── Step 3: Bonus & Complimentary ─── */}
               {currentStep === 3 && (
+                <div className="space-y-6">
+                  <div className="rounded-2xl border bg-card p-6 text-sm text-muted-foreground">
+                    Bonus &amp; Complimentary — diisi pada tahap berikutnya.
+                  </div>
+                </div>
+              )}
+              {/* ─── Step 4: Item Paket (Internal & Vendor items) ─── */}
+              {currentStep === 4 && (
                 <div className="space-y-4">
                   <div>
                     <p className={cn('text-sm', 'font-medium', 'text-foreground')}>Item Paket</p>
@@ -2371,8 +2386,8 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
                   />
                 </div>
               )}
-              {/* ─── Step 4: Takeout (Package Prices) ─── */}
-              {currentStep === 4 && (
+              {/* ─── Step 5: Takeout (Package Prices) ─── */}
+              {currentStep === 5 && (
                 <div className="space-y-4">
                   {/* Sticky price summary — second sticky (footer is first) */}
                   <div className="sticky top-0 z-10 bg-background pb-2">
@@ -2459,8 +2474,8 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
                   </div>
                 </div>
               )}
-              {/* ─── Step 5: Term of Payments (jadwal murni) ─── */}
-              {currentStep === 5 && (
+              {/* ─── Step 6: Term of Payments (jadwal murni) ─── */}
+              {currentStep === 6 && (
                 <CreatePaymentStep
                   terms={terms}
                   setTerms={(updater) => {
@@ -2498,18 +2513,18 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
                   packagePrice={getBasePrice()}
                 />
               )}
-              {/* ─── Step 6: Payment (pencatatan cash-in) ─── */}
-              {currentStep === 6 && (
+              {/* ─── Step 7: Payment (pencatatan cash-in) ─── */}
+              {currentStep === 7 && (
                 <CreatePaymentRecordStep
                   terms={terms}
                   payments={createPayments}
                   setPayments={setCreatePayments}
                   defaultPaymentMethodId={wPaymentMethodId ?? ""}
-                  bookingFeeRecorded={isStep6Complete}
+                  bookingFeeRecorded={isStep7Complete}
                 />
               )}
-              {/* ─── Step 7: Signature ─── */}
-              {currentStep === 7 && (
+              {/* ─── Step 8: Signature ─── */}
+              {currentStep === 8 && (
                 <div className="space-y-6">
                   <div>
                     <FormLabel className={cn('text-sm', 'font-medium', 'text-foreground', 'mb-2', 'block')}>Lokasi Tanda Tangan <span className="text-destructive">*</span></FormLabel>
