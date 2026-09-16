@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, type ForwardRefExoticComponent, type RefAttributes } from "react";
 import { createPortal } from "react-dom";
 import Image from "next/image";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Drawer } from "@/components/shared/drawer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -58,6 +58,8 @@ import { useVenues } from "@/hooks/use-venues";
 import { useSalesUsers } from "@/hooks/use-sales-users";
 import { usePermissions } from "@/hooks/use-permissions";
 import { useCurrentUser } from "@/hooks/use-current-user";
+import { createSourceOfInformation } from "@/actions/source-of-information";
+import { createDailyActivitySegment } from "@/actions/daily-activity-segment";
 import type { GuestbookEntryItem } from "@/lib/queries/guestbookEntries";
 import type { FileDescriptor, ProofFiles } from "@/lib/validations/guestbook";
 import { resolveGuestbookPhotoUrl } from "./photo-url";
@@ -483,6 +485,7 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
   const salesOptions = salesUsers.map((u) => ({ id: u.id, name: u.fullName ?? u.id }));
   const { can } = usePermissions();
   const { user: currentUser } = useCurrentUser();
+  const queryClient = useQueryClient();
 
   // Sales PIC lock — kalau yang create sales, hostId dikunci ke dirinya sendiri.
   const isSalesRole =
@@ -695,8 +698,8 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
       toast.error("Pilih venue");
       return false;
     }
-    if (!isEditMode && !form.proofPhotoFile && !form.proofPhotoPreview) {
-      toast.error("Bukti foto visit wajib diupload");
+    if (!isEditMode && !form.proofChatFile && !form.proofChatPreview) {
+      toast.error("Bukti chat wajib diupload");
       return false;
     }
     return true;
@@ -913,6 +916,16 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
                 onChange={(v) => {
                   setField("segmentId", v);
                 }}
+                onAdd={async (name) => {
+                  const res = await createDailyActivitySegment(name);
+                  if (!res.success) {
+                    toast.error(res.error ?? "Gagal menambah segmen");
+                    return;
+                  }
+                  await queryClient.invalidateQueries({ queryKey: ["daily-activity-segments"] });
+                  if (res.item) setField("segmentId", res.item.id);
+                  toast.success(`Segmen "${name}" berhasil ditambahkan`);
+                }}
                 placeholder="Pilih segmen / kategori"
                 searchPlaceholder="Cari segmen..."
                 emptyText="Segmen tidak ditemukan"
@@ -928,6 +941,16 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
                 value={form.sourceOfInformationId}
                 onChange={(v) => {
                   setField("sourceOfInformationId", v);
+                }}
+                onAdd={async (name) => {
+                  const res = await createSourceOfInformation(name);
+                  if (!res.success) {
+                    toast.error(res.error ?? "Gagal menambah sumber");
+                    return;
+                  }
+                  await queryClient.invalidateQueries({ queryKey: ["source-of-informations"] });
+                  if (res.item) setField("sourceOfInformationId", res.item.id);
+                  toast.success(`Sumber "${name}" berhasil ditambahkan`);
                 }}
                 placeholder="Pilih sumber informasi"
                 searchPlaceholder="Cari sumber..."
@@ -1193,20 +1216,20 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
             <SectionHeader icon={Camera} title="Bukti" />
             <div className="grid grid-cols-2 gap-4">
               <PhotoUpload
-                label="Bukti Foto Visit"
+                label="Bukti Chat"
                 required
+                fullWidth
+                preview={form.proofChatPreview}
+                onFileChange={(f) => handlePhotoChange("proofChatFile", "proofChatPreview", f)}
+                onClear={() => handlePhotoChange("proofChatFile", "proofChatPreview", null)}
+              />
+              <PhotoUpload
+                label="Bukti Foto Visit"
                 fullWidth
                 withCamera
                 preview={form.proofPhotoPreview}
                 onFileChange={(f) => handlePhotoChange("proofPhotoFile", "proofPhotoPreview", f)}
                 onClear={() => handlePhotoChange("proofPhotoFile", "proofPhotoPreview", null)}
-              />
-              <PhotoUpload
-                label="Bukti Chat"
-                fullWidth
-                preview={form.proofChatPreview}
-                onFileChange={(f) => handlePhotoChange("proofChatFile", "proofChatPreview", f)}
-                onClear={() => handlePhotoChange("proofChatFile", "proofChatPreview", null)}
               />
               <PhotoUpload
                 label="Bukti Lost"
