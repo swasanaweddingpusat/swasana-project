@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { bonusRowSchema } from "@/lib/validations/bonus";
 
 const idTypeEnum = z.enum(["KTP", "Paspor"]);
 
@@ -45,15 +46,10 @@ export const bookingSchema = z.object({
     qty: z.coerce.number().int().min(1).default(1),
     sortOrder: z.coerce.number().int().default(0),
   })).optional().default([]),
-  // Bonuses — new bonus-based, snapped at create time (parallel to complimentaries)
-  bookingBonuses: z.array(z.object({
-    bonusId: z.string().optional().nullable(),
-    name: z.string().min(1),
-    price: z.coerce.number().int().min(0).default(0),
-    description: z.string().optional().nullable(),
-    qty: z.coerce.number().int().min(1).default(1),
-    sortOrder: z.coerce.number().int().default(0),
-  })).optional().default([]),
+  // Bonuses — new bonus-based, snapped at create time (parallel to complimentaries).
+  // Reuse bonusRowSchema (single source of truth: price min(1) enforced) + retain
+  // sortOrder for the createBooking consumer (actions/booking.ts reads b.sortOrder).
+  bookingBonuses: z.array(bonusRowSchema.extend({ sortOrder: z.coerce.number().int().default(0) })).optional().default([]),
   categoryToggles: z.array(z.object({
     categoryName: z.string().min(1),
     basePrice: z.coerce.number().int().min(0),
