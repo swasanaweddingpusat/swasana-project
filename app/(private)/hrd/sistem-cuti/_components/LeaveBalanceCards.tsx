@@ -38,8 +38,13 @@ export function LeaveBalanceCards() {
   return (
     <Card className="rounded-2xl shadow-sm">
       <CardHeader className="pb-3">
-        <div className="flex items-center justify-between">
-          <CardTitle className="font-heading text-lg">Saldo Cuti</CardTitle>
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <CardTitle className="font-heading text-lg">Saldo Cuti</CardTitle>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Ringkasan hak cuti yang tersedia untuk digunakan.
+            </p>
+          </div>
           <Select
             value={String(year)}
             onValueChange={(v) => setYear(Number(v))}
@@ -93,21 +98,21 @@ export function LeaveBalanceCards() {
               return (
                 <Card
                   key={balance.id}
-                  className="rounded-xl border shadow-sm p-4"
+                  className="rounded-xl border bg-muted/20 p-4 shadow-none transition-colors hover:bg-muted/40"
                 >
-                  <p className="font-heading text-sm font-semibold">
+                  <p className="text-sm font-semibold">
                     {balance.leaveType.name}
                   </p>
 
                   <div className="mt-3">
-                    <Progress value={usedPercent} className="h-2" />
+                    <Progress value={usedPercent} className="h-2 bg-background" />
                     <div className="mt-1 flex items-center justify-between text-xs text-muted-foreground">
                       <span>Terpakai: {balance.usedDays} hari</span>
                       <span>Total: {total} hari</span>
                     </div>
                   </div>
 
-                  <p className="mt-3 text-lg font-bold">
+                  <p className="mt-4 font-heading text-2xl font-semibold tracking-tight">
                     Tersedia: {available} hari
                   </p>
 

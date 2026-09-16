@@ -83,6 +83,9 @@ export function getNotificationUrl(
   if (type === "payslip_generated") {
     return "/hrd/slip-gaji";
   }
+  if (entityType === "announcement" && entityId) {
+    return `/announcement/${entityId}`;
+  }
   if (type === "comment_mention" && entityId) {
     return `/booking/booking-weddings/${entityId}?openComments=true`;
   }

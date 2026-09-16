@@ -388,30 +388,6 @@ export function AddProcurementDrawer({
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label htmlFor="ap-total-wedding">Total Wedding</Label>
-                <Input
-                  id="ap-total-wedding"
-                  type="number"
-                  min={0}
-                  placeholder="0"
-                  className="rounded-xl"
-                  {...register("totalWedding", { valueAsNumber: true, setValueAs: (v) => v === "" ? null : Number(v) })}
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="ap-total-non-wedding">Total Non Wedding</Label>
-                <Input
-                  id="ap-total-non-wedding"
-                  type="number"
-                  min={0}
-                  placeholder="0"
-                  className="rounded-xl"
-                  {...register("totalNonWedding", { valueAsNumber: true, setValueAs: (v) => v === "" ? null : Number(v) })}
-                />
-              </div>
-            </div>
           </fieldset>
 
           <div className="border-t border-border" />

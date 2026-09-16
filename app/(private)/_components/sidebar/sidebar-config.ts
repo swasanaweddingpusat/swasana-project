@@ -169,7 +169,7 @@ export const GENERAL_NAV: NavItem[] = [
       { name: "Percakapan", href: "/bitrix24/percakapan", icon: ChatRound, title: "Percakapan Bitrix24", subtitle: "Data percakapan Contact Center (Open Lines) dari Bitrix24", permission: { module: "bitrix", action: "view" } },
       { name: "Response Sales", href: "/bitrix24/response-sales", icon: GraphUp, title: "Response Sales Bitrix24", subtitle: "Rata-rata waktu respons sales per percakapan", permission: { module: "bitrix", action: "view" } },
     ] },
-  { name: "Buku Tamu", href: "/guestbook", icon: Notebook, subtitle: "Catat kunjungan tamu, vendor, dan client ke kantor", permission: { module: "guestbook", action: "view" } },
+  { name: "Guestbook", href: "/guestbook", icon: Notebook, subtitle: "Catat kunjungan tamu, vendor, dan client ke kantor", permission: { module: "guestbook", action: "view" } },
   { name: "Customers", href: "/customers", icon: UserRounded, subtitle: "Kelola data customer, member status, dan riwayat booking", permission: { module: "customers", action: "view" } },
   { name: "Indikator Pernikahan", href: "/wedding-indicators", icon: Heart, subtitle: "Kelola kuesioner penilaian kepuasan pasangan pernikahan", permission: { module: "vendor-specialist", action: "view" } },
   { name: "Absensi", href: "/absensi", icon: CheckSquare, subtitle: "Catat kehadiran dengan foto dan lokasi", permission: { module: "attendance", action: "view" } },
@@ -188,12 +188,15 @@ export const GENERAL_NAV: NavItem[] = [
       { name: "Pengumuman", href: "/procurement/pengumuman", icon: BellBing, permission: { module: "procurement-announcement", action: "view" } },
       { name: "Anggaran Venue", href: "/procurement/anggaran-venue", icon: Wallet2, permission: { module: "procurement-budget", action: "view" } },
     ] },
-  { name: "Internal FAQ", href: "/internal-faq", icon: Documents, subtitle: "Kelola memo internal dan product knowledge", permission: { module: "internal-faq", action: "view" },
+  { name: "Announcement", href: "/announcement", icon: BellBing, subtitle: "Kelola pengumuman, memo internal, dan product knowledge", anyPermission: [
+      { module: "announcement", action: "view" },
+      { module: "internal-faq", action: "view" },
+    ],
     submenu: [
-      { name: "Memo", href: "/internal-faq/memo", icon: FileText, subtitle: "Kelola memo internal perusahaan" },
-      { name: "Product Knowledge", href: "/internal-faq/product-knowledge", icon: Notebook, subtitle: "Kelola dokumen product knowledge" },
+      { name: "Announcement", href: "/announcement", icon: BellBing, subtitle: "Kumpulan pengumuman untuk seluruh karyawan", permission: { module: "announcement", action: "view" } },
+      { name: "Memo", href: "/internal-faq/memo", icon: FileText, subtitle: "Kelola memo internal perusahaan", permission: { module: "internal-faq", action: "view" } },
+      { name: "Product Knowledge", href: "/internal-faq/product-knowledge", icon: Notebook, subtitle: "Kelola dokumen product knowledge", permission: { module: "internal-faq", action: "view" } },
     ] },
-  { name: "Announcement", href: "/announcement", icon: BellBing, subtitle: "Kumpulan pengumuman untuk seluruh karyawan", permission: { module: "announcement", action: "view" } },
   { name: "Pengajuan Cuti", href: "/cuti", icon: CalendarDate, subtitle: "Pengajuan dan saldo cuti" },
   { name: "Slip Gaji", href: "/slip-gaji", icon: FileText, subtitle: "Lihat slip gaji bulanan saya" },
 ];

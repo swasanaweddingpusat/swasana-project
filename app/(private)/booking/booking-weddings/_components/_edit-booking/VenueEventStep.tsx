@@ -9,9 +9,16 @@ import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { TimeRangePicker } from "@/components/shared/time-range-picker";
-import { cn, toDateOnly, parseDateOnly } from "@/lib/utils";
+import { cn, formatRupiah, toDateOnly, parseDateOnly } from "@/lib/utils";
 import { LBL } from "./useEditBookingForm";
 import type { EditBookingForm } from "./useEditBookingForm";
+
+function getPackagePrice(p: { sellingPrice?: number; margin?: number; categoryPrices?: Array<{ basePrice: number | string }> }) {
+  const sellingPrice = Number(p.sellingPrice ?? 0);
+  if (sellingPrice > 0) return sellingPrice;
+  const base = (p.categoryPrices ?? []).reduce((sum, c) => sum + Number(c.basePrice ?? 0), 0);
+  return base + Math.round(base * ((p.margin ?? 0) / 100));
+}
 
 // ─── VenueEventStep ───────────────────────────────────────────────────────────
 
@@ -72,7 +79,10 @@ export function VenueEventStep({ form }: { form: EditBookingForm }) {
       <div>
         <label className={LBL}>Pilih Paket <span className="text-destructive">*</span></label>
         <SearchableSelect
-          options={packages.map((p) => ({ id: p.id, name: `${p.packageName}${p.pax ? ` · ${p.pax} PAX` : ""}` }))}
+          options={packages.map((p) => ({
+            id: p.id,
+            name: `${p.packageName}${p.pax ? ` — ${p.pax} pax` : ""} — ${formatRupiah(getPackagePrice(p))}`,
+          }))}
           value={packageId}
           onChange={(id) => { setPackageId(id); clearError("packageId"); }}
           placeholder={venueId ? "Pilih paket..." : "Pilih venue dulu"}

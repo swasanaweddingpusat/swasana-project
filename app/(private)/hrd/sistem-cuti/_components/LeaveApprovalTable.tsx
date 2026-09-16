@@ -196,7 +196,7 @@ export function LeaveApprovalTable() {
             <CardHeader className="pb-3">
               <CardTitle className="font-heading text-lg flex items-center gap-2">
                 <ClockCircle weight="BoldDuotone" className="h-5 w-5" />
-                Menunggu Persetujuan Anda
+                Persetujuan Manager
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -226,7 +226,7 @@ export function LeaveApprovalTable() {
             <CardHeader className="pb-3">
               <CardTitle className="font-heading text-lg flex items-center gap-2">
                 <ClockCircle weight="BoldDuotone" className="h-5 w-5" />
-                Menunggu Persetujuan HR
+                Persetujuan HR
                 {pendingHr && pendingHr.length > 0 && (
                   <Badge variant="secondary" className="rounded-full ml-2">
                     {pendingHr.length}

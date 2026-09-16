@@ -36,11 +36,11 @@ type BadgeVariant = "default" | "secondary" | "destructive" | "outline";
 function getStatusBadge(status: string): { label: string; variant: BadgeVariant } {
   switch (status) {
     case "pending":
-      return { label: "Menunggu", variant: "secondary" };
+      return { label: "Menunggu Manager", variant: "secondary" };
     case "manager_approved":
-      return { label: "Disetujui Manager", variant: "outline" };
+      return { label: "Menunggu HR", variant: "outline" };
     case "approved":
-      return { label: "Disetujui", variant: "default" };
+      return { label: "Disetujui HR", variant: "default" };
     case "rejected":
       return { label: "Ditolak", variant: "destructive" };
     case "cancelled":
@@ -77,6 +77,8 @@ function getApprovalInfo(request: LeaveRequestItem): string {
   if (request.managerApprover) {
     return `Manager: ${request.managerApprover.fullName}${request.managerApprovedAt ? ` (${formatDate(request.managerApprovedAt)})` : ""}`;
   }
+  if (request.status === "pending") return "Menunggu persetujuan Manager";
+  if (request.status === "manager_approved") return "Menunggu persetujuan HR";
   if (request.status === "cancelled") {
     return request.cancelledAt ? `Dibatalkan ${formatDate(request.cancelledAt)}` : "Dibatalkan";
   }
@@ -128,6 +130,9 @@ export function LeaveRequestHistory() {
       <Card className="rounded-2xl shadow-sm">
         <CardHeader className="pb-3">
           <CardTitle className="font-heading text-lg">Riwayat Pengajuan</CardTitle>
+          <p className="text-sm text-muted-foreground">
+            Lihat status pengajuan cuti yang pernah Anda kirim.
+          </p>
         </CardHeader>
         <CardContent>
           {isLoading && (
@@ -151,10 +156,10 @@ export function LeaveRequestHistory() {
           )}
 
           {!isLoading && requests && requests.length > 0 && (
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto rounded-xl border">
               <Table>
                 <TableHeader>
-                  <TableRow>
+                  <TableRow className="bg-muted/40 hover:bg-muted/40">
                     <TableHead>Jenis Cuti</TableHead>
                     <TableHead>Tanggal</TableHead>
                     <TableHead>Hari</TableHead>
@@ -167,14 +172,14 @@ export function LeaveRequestHistory() {
                   {requests.map((req) => {
                     const statusBadge = getStatusBadge(req.status);
                     return (
-                      <TableRow key={req.id}>
+                      <TableRow key={req.id} className="group">
                         <TableCell className="font-medium">
                           {req.leaveType.name}
                         </TableCell>
                         <TableCell className="text-sm">
                           {formatDate(req.startDate)} - {formatDate(req.endDate)}
                         </TableCell>
-                        <TableCell>{req.totalDays}</TableCell>
+                        <TableCell className="font-semibold">{req.totalDays}</TableCell>
                         <TableCell>
                           <Badge
                             variant={statusBadge.variant}

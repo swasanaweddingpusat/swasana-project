@@ -5,6 +5,7 @@ export const submitLeaveRequestSchema = z.object({
   startDate: z.coerce.date(),
   endDate: z.coerce.date(),
   reason: z.string().optional(),
+  documentKey: z.string().max(500).optional(),
 });
 
 export const approveLeaveSchema = z.object({
