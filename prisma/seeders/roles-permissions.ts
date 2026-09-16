@@ -47,6 +47,7 @@ export const moduleActions: Record<string, string[]> = {
   // booking Wedding + MICE. View-only: tidak ada mutasi dari halaman ini.
   "settings-booking-log": ["view"],
   complimentary: ["view", "create", "edit", "delete"],
+  bonus: ["view", "create", "edit", "delete"],
   // CRM modules
   "daily-activity": ["view", "create", "edit", "delete"],
   quotations: ["view", "create", "edit", "delete"],
@@ -124,6 +125,7 @@ export const rolePermissionMap: Record<string, Record<string, string[]>> = {
     quotations: ["view", "create", "edit", "delete"],
     "settings-quotation-templates": ["view", "create", "edit", "delete"],
     complimentary: ["view", "create", "edit", "delete"],
+    bonus: ["view", "create", "edit", "delete"],
     guestbook: ["view", "create", "edit", "delete"],
     promo: ["view"],
     bitrix: ["view"],
@@ -144,6 +146,7 @@ export const rolePermissionMap: Record<string, Record<string, string[]>> = {
     package: ["view", "create", "edit", "delete", "set-harga", "term-&-condition", "set-status"],
     vendor: ["view", "create", "edit", "delete"],
     complimentary: ["view", "create", "edit", "delete"],
+    bonus: ["view", "create", "edit", "delete"],
     guestbook: ["view", "create", "edit", "delete"],
     promo: ["view"],
     procurement: ["view", "create", "edit", "delete", "approve"],
@@ -212,6 +215,7 @@ export const rolePermissionMap: Record<string, Record<string, string[]>> = {
     booking: ["view", "create", "edit", "print", "approve", "cancel", "transfer", "transfer-manager", "comment", "client-agreement", "edit-set-harga"],
     "booking-mice": ["view"],
     complimentary: ["view", "create"],
+    bonus: ["view", "create"],
     bitrix: ["view"],
   },
   // Finance AR only — Accounts Receivable + Cashflow (+ Overview). Can record/ack
@@ -248,6 +252,7 @@ export const rolePermissionMap: Record<string, Record<string, string[]>> = {
     guestbook: ["view", "create", "edit", "delete"],
     // Full CRUD — sales kelola master complimentary sendiri.
     complimentary: ["view", "create", "edit", "delete"],
+    bonus: ["view", "create", "edit", "delete"],
     promo: ["view", "create", "edit", "delete"],
     // Only tab Pengadaan — Ringkasan/Pengumuman/Anggaran Venue reserved for management roles.
     procurement: ["view"],
@@ -293,6 +298,7 @@ export const rolePermissionMap: Record<string, Record<string, string[]>> = {
     "daily-activity": ["view", "create", "edit", "delete"],
     // Full CRUD — sales-mice kelola master complimentary sendiri.
     complimentary: ["view", "create", "edit", "delete"],
+    bonus: ["view", "create", "edit", "delete"],
     guestbook: ["view", "create", "edit", "delete"],
     // sales-mice can view/create/edit packages but NOT set-harga and NOT delete
     "package-mice": ["view", "create", "edit", "term-&-condition"],
@@ -312,6 +318,7 @@ export const rolePermissionMap: Record<string, Record<string, string[]>> = {
     "settings-quotation-templates": ["view", "create", "edit", "delete"],
     "package-mice": ["view", "create", "edit", "delete", "set-harga", "set-status", "term-&-condition"],
     complimentary: ["view", "create", "edit", "delete"],
+    bonus: ["view", "create", "edit", "delete"],
     bitrix: ["view"],
     "daily-report-manager": ["view", "create", "edit", "delete"],
     "internal-faq": ["view"],

@@ -47,6 +47,7 @@ export const MODULE_REGISTRY: ModuleSeed[] = [
       "package",
       "package-mice",
       "complimentary",
+      "bonus",
       "promo",
       "daily-report-manager",
     ],
