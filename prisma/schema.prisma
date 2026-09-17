@@ -2294,12 +2294,12 @@ model Attendance {
   date      DateTime
 
   clockInAt       DateTime?
-  clockInPhotoUrl String?
+  clockInEvidence Json?
   clockInLat      Float?
   clockInLng      Float?
 
   clockOutAt       DateTime?
-  clockOutPhotoUrl String?
+  clockOutEvidence Json?
   clockOutLat      Float?
   clockOutLng      Float?
 
@@ -2310,18 +2310,25 @@ model Attendance {
   attendantType   AttendantType    @default(WORKDAY)
   isPublicHoliday Boolean          @default(false)
 
+  // Selected "Hari Besar" when jenis libur = PUBLIC_HOLIDAY. FK links to the master;
+  // publicHolidayName is a snapshot so the attendance survives a rename/delete.
+  publicHolidayId   String?
+  publicHolidayName String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  profile      Profile       @relation(fields: [profileId], references: [id], onDelete: Cascade)
-  workLocation WorkLocation? @relation(fields: [workLocationId], references: [id], onDelete: SetNull)
-  workShift    WorkShift?    @relation(fields: [workShiftId], references: [id], onDelete: SetNull)
+  profile       Profile        @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  workLocation  WorkLocation?  @relation(fields: [workLocationId], references: [id], onDelete: SetNull)
+  workShift     WorkShift?     @relation(fields: [workShiftId], references: [id], onDelete: SetNull)
+  publicHoliday PublicHoliday? @relation(fields: [publicHolidayId], references: [id], onDelete: SetNull)
 
   @@unique([profileId, date])
   @@index([profileId])
   @@index([date])
   @@index([workLocationId])
   @@index([workShiftId])
+  @@index([publicHolidayId])
   @@map("attendances")
 }
 
@@ -2332,6 +2339,9 @@ model PublicHoliday {
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  attendances   Attendance[]
+  leaveRequests LeaveRequest[]
 
   @@index([date])
   @@map("public_holidays")
@@ -2585,15 +2595,18 @@ model LeaveBalance {
 }
 
 model LeaveRequest {
-  id          String             @id @default(uuid())
-  profileId   String
-  leaveTypeId String
-  startDate   DateTime
-  endDate     DateTime
-  totalDays   Int
-  reason      String?
-  documentKey String?
-  status      LeaveRequestStatus @default(pending)
+  id                String             @id @default(uuid())
+  profileId         String
+  leaveTypeId       String
+  startDate         DateTime
+  endDate           DateTime
+  totalDays         Int
+  reason            String?
+  documentKey       String?
+  evidence          Json?
+  status            LeaveRequestStatus @default(pending)
+  publicHolidayId   String?
+  publicHolidayName String?
 
   managerApprovedBy String?
   managerApprovedAt DateTime?
@@ -2613,17 +2626,19 @@ model LeaveRequest {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  profile         Profile   @relation(fields: [profileId], references: [id], onDelete: Cascade)
-  leaveType       LeaveType @relation(fields: [leaveTypeId], references: [id], onDelete: Cascade)
-  managerApprover Profile?  @relation("LeaveManagerApprover", fields: [managerApprovedBy], references: [id], onDelete: SetNull)
-  hrApprover      Profile?  @relation("LeaveHrApprover", fields: [hrApprovedBy], references: [id], onDelete: SetNull)
-  rejector        Profile?  @relation("LeaveRejector", fields: [rejectedBy], references: [id], onDelete: SetNull)
+  profile         Profile        @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  leaveType       LeaveType      @relation(fields: [leaveTypeId], references: [id], onDelete: Cascade)
+  managerApprover Profile?       @relation("LeaveManagerApprover", fields: [managerApprovedBy], references: [id], onDelete: SetNull)
+  hrApprover      Profile?       @relation("LeaveHrApprover", fields: [hrApprovedBy], references: [id], onDelete: SetNull)
+  rejector        Profile?       @relation("LeaveRejector", fields: [rejectedBy], references: [id], onDelete: SetNull)
+  publicHoliday   PublicHoliday? @relation(fields: [publicHolidayId], references: [id], onDelete: SetNull)
 
   @@index([profileId])
   @@index([leaveTypeId])
   @@index([status])
   @@index([startDate])
   @@index([endDate])
+  @@index([publicHolidayId])
   @@map("leave_requests")
 }
 

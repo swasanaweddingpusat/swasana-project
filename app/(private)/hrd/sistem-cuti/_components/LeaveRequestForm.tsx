@@ -18,6 +18,7 @@ import {
 import { useLeaveTypes } from "@/hooks/use-leave-types";
 import { useLeaveBalances } from "@/hooks/use-leave-balances";
 import { useSubmitLeaveRequest } from "@/hooks/use-leave-requests";
+import { useHolidayTokens } from "@/hooks/use-holiday-tokens";
 import { countWeekdays, getAvailableBalance } from "@/lib/leave-helpers";
 import { uploadFileDirect } from "@/lib/upload-client";
 import { MAX_UPLOAD_SIZE_BYTES } from "@/lib/validations/upload";
@@ -28,6 +29,9 @@ interface FormState {
   startDate: string;
   endDate: string;
   reason: string;
+  photoBase64: string;
+  photoName: string;
+  publicHolidayId: string;
 }
 
 interface LeaveRequestFormProps {
@@ -40,6 +44,9 @@ const EMPTY_FORM: FormState = {
   startDate: "",
   endDate: "",
   reason: "",
+  photoBase64: "",
+  photoName: "",
+  publicHolidayId: "",
 };
 
 export function LeaveRequestForm({ inDialog = false, onSubmitted }: LeaveRequestFormProps) {
@@ -63,13 +70,17 @@ export function LeaveRequestForm({ inDialog = false, onSubmitted }: LeaveRequest
     [leaveTypes, form.leaveTypeId]
   );
 
+  const isHolidayToken = selectedType?.code === "public_holiday";
+  const { data: holidayTokens } = useHolidayTokens();
+
   const calculatedDays = useMemo(() => {
+    if (isHolidayToken) return form.startDate ? 1 : 0;
     if (!form.startDate || !form.endDate) return 0;
     const start = new Date(form.startDate);
     const end = new Date(form.endDate);
     if (start > end) return 0;
     return countWeekdays(start, end);
-  }, [form.startDate, form.endDate]);
+  }, [isHolidayToken, form.startDate, form.endDate]);
 
   const balanceForType = useMemo(() => {
     if (!selectedType?.isDeductible || !balances) return null;
@@ -84,17 +95,47 @@ export function LeaveRequestForm({ inDialog = false, onSubmitted }: LeaveRequest
   const isInsufficientBalance =
     availableDays !== null && calculatedDays > 0 && calculatedDays > availableDays;
 
+  const handleFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      toast.error("Bukti harus berupa gambar");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      setForm((f) => ({ ...f, photoBase64: reader.result as string, photoName: file.name }));
+    };
+    reader.onerror = () => toast.error("Gagal membaca file");
+    reader.readAsDataURL(file);
+  }, []);
+
   const handleSubmit = useCallback(async () => {
     if (!form.leaveTypeId) {
       toast.error("Pilih jenis cuti terlebih dahulu");
       return;
     }
-    if (!form.startDate || !form.endDate) {
-      toast.error("Tanggal mulai dan selesai wajib diisi");
-      return;
+    if (isHolidayToken) {
+      if (!form.publicHolidayId) {
+        toast.error("Pilih token hari besar terlebih dahulu");
+        return;
+      }
+      if (!form.startDate) {
+        toast.error("Tanggal libur wajib diisi");
+        return;
+      }
+    } else {
+      if (!form.startDate || !form.endDate) {
+        toast.error("Tanggal mulai dan selesai wajib diisi");
+        return;
+      }
+      if (calculatedDays === 0) {
+        toast.error("Periode cuti tidak mengandung hari kerja");
+        return;
+      }
     }
-    if (calculatedDays === 0) {
-      toast.error("Periode cuti tidak mengandung hari kerja");
+    if (!form.photoBase64) {
+      toast.error("Bukti wajib diupload");
       return;
     }
 
@@ -115,9 +156,11 @@ export function LeaveRequestForm({ inDialog = false, onSubmitted }: LeaveRequest
       {
         leaveTypeId: form.leaveTypeId,
         startDate: form.startDate,
-        endDate: form.endDate,
+        endDate: isHolidayToken ? form.startDate : form.endDate,
         reason: form.reason || undefined,
         documentKey,
+        photoBase64: form.photoBase64,
+        publicHolidayId: isHolidayToken ? form.publicHolidayId : undefined,
       },
       {
         onSuccess: (result) => {
@@ -139,7 +182,7 @@ export function LeaveRequestForm({ inDialog = false, onSubmitted }: LeaveRequest
         },
       }
     );
-  }, [form, calculatedDays, onSubmitted, selectedFile, submitMutation]);
+  }, [form, isHolidayToken, calculatedDays, onSubmitted, selectedFile, submitMutation]);
 
   return (
     <Card className={inDialog ? "border-0 shadow-none" : "rounded-2xl shadow-sm"}>
@@ -161,7 +204,11 @@ export function LeaveRequestForm({ inDialog = false, onSubmitted }: LeaveRequest
             <Select
               value={form.leaveTypeId}
               onValueChange={(v) =>
-                setForm((f) => ({ ...f, leaveTypeId: v }))
+                setForm((f) => ({
+                  ...EMPTY_FORM,
+                  leaveTypeId: v,
+                  reason: f.reason,
+                }))
               }
             >
               <SelectTrigger id="leave-type" className="rounded-xl">
@@ -177,31 +224,82 @@ export function LeaveRequestForm({ inDialog = false, onSubmitted }: LeaveRequest
             </Select>
           </div>
 
-          <div className="grid gap-2">
-            <Label htmlFor="start-date">Tanggal Mulai *</Label>
-            <Input
-              id="start-date"
-              type="date"
-              value={form.startDate}
-              onChange={(e) =>
-                setForm((f) => ({ ...f, startDate: e.target.value }))
-              }
-              className="rounded-xl"
-            />
-          </div>
+          <div className="hidden sm:block" />
 
-          <div className="grid gap-2">
-            <Label htmlFor="end-date">Tanggal Selesai *</Label>
-            <Input
-              id="end-date"
-              type="date"
-              value={form.endDate}
-              onChange={(e) =>
-                setForm((f) => ({ ...f, endDate: e.target.value }))
-              }
-              className="rounded-xl"
-            />
-          </div>
+          {isHolidayToken ? (
+            <>
+              <div className="grid gap-2">
+                <Label htmlFor="holiday-token">Hari Besar (Token) *</Label>
+                <Select
+                  value={form.publicHolidayId}
+                  onValueChange={(v) =>
+                    setForm((f) => ({ ...f, publicHolidayId: v }))
+                  }
+                >
+                  <SelectTrigger id="holiday-token" className="rounded-xl">
+                    <SelectValue placeholder="Pilih hari besar" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {holidayTokens?.map((h) => (
+                      <SelectItem key={h.id} value={h.id}>
+                        {h.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {holidayTokens && holidayTokens.length === 0 ? (
+                  <p className="text-xs text-destructive">
+                    Tidak ada token libur hari besar tersisa.
+                  </p>
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    Sisa token: {holidayTokens?.length ?? 0}
+                  </p>
+                )}
+              </div>
+
+              <div className="grid gap-2">
+                <Label htmlFor="token-date">Tanggal Libur (bebas) *</Label>
+                <Input
+                  id="token-date"
+                  type="date"
+                  value={form.startDate}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, startDate: e.target.value }))
+                  }
+                  className="rounded-xl"
+                />
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="grid gap-2">
+                <Label htmlFor="start-date">Tanggal Mulai *</Label>
+                <Input
+                  id="start-date"
+                  type="date"
+                  value={form.startDate}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, startDate: e.target.value }))
+                  }
+                  className="rounded-xl"
+                />
+              </div>
+
+              <div className="grid gap-2">
+                <Label htmlFor="end-date">Tanggal Selesai *</Label>
+                <Input
+                  id="end-date"
+                  type="date"
+                  value={form.endDate}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, endDate: e.target.value }))
+                  }
+                  className="rounded-xl"
+                />
+              </div>
+            </>
+          )}
 
           <div className="grid gap-2 sm:col-span-2">
             <Label htmlFor="leave-document">Surat Cuti (opsional)</Label>
@@ -258,6 +356,26 @@ export function LeaveRequestForm({ inDialog = false, onSubmitted }: LeaveRequest
             />
           </div>
 
+          <div className="sm:col-span-2 grid gap-2">
+            <Label htmlFor="evidence">Bukti *</Label>
+            <Input
+              id="evidence"
+              type="file"
+              accept="image/*"
+              onChange={handleFileChange}
+              className="rounded-xl"
+            />
+            {form.photoName ? (
+              <p className="text-xs text-muted-foreground truncate">
+                Terpilih: {form.photoName}
+              </p>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                Wajib lampirkan foto bukti (mis. surat, dokumen pendukung).
+              </p>
+            )}
+          </div>
+
           <div className="sm:col-span-2 flex justify-end border-t pt-5">
             <Button
               className="w-full rounded-xl sm:w-auto"
@@ -267,7 +385,8 @@ export function LeaveRequestForm({ inDialog = false, onSubmitted }: LeaveRequest
                 isUploading ||
                 !form.leaveTypeId ||
                 !form.startDate ||
-                !form.endDate ||
+                !form.photoBase64 ||
+                (isHolidayToken ? !form.publicHolidayId : !form.endDate) ||
                 isInsufficientBalance
               }
             >

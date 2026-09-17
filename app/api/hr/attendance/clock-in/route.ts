@@ -1,10 +1,13 @@
+import type { Prisma } from "@prisma/client";
 import { requirePermissionForRoute } from "@/lib/permissions";
 import { mutationLimiter, rateLimitResponse } from "@/lib/rate-limit";
 import { clockInSchema } from "@/lib/validations/attendance";
+import type { FileDescriptor } from "@/lib/validations/common";
 import { getAttendanceToday, todayMidnightUTC } from "@/lib/queries/attendance";
 import { validateGpsAgainstLocations, determineStatus } from "@/lib/attendance-helpers";
 import { db } from "@/lib/db";
-import { uploadToStorage } from "@/lib/storage";
+import { uploadToStorage, randomId12 } from "@/lib/storage";
+import { compressToWebp } from "@/lib/image";
 import { logAudit } from "@/lib/audit";
 
 export async function POST(req: Request) {
@@ -43,11 +46,51 @@ export async function POST(req: Request) {
   }
 
   const ip = req.headers.get("x-forwarded-for") ?? "unknown";
-  const holiday = await db.publicHoliday.findUnique({ where: { date: today }, select: { id: true } });
-  const isPublicHoliday = holiday !== null;
+  const { attendanceStatus } = parsed.data;
 
-  // --- Off flow: employee self-reports a day off, no selfie/GPS required ---
-  if (parsed.data.isOff) {
+  // --- Off flow: employee self-reports a day off, and picks the jenis libur (Libur Biasa
+  // vs Public Holiday). Selfie required as proof of presence, but no venue/GPS (not tied to
+  // a work location). ---
+  if (attendanceStatus !== "WORKDAY") {
+    const { photoBase64, dayOffType } = parsed.data;
+    if (!dayOffType) {
+      return Response.json({ error: "Jenis libur wajib dipilih" }, { status: 422 });
+    }
+    if (!photoBase64) {
+      return Response.json({ error: "Foto wajib disertakan" }, { status: 422 });
+    }
+
+    // Karyawan memilih apakah hari ini Public Holiday (tanggal merah) atau libur biasa.
+    // Identitas "hari besar" (nama) ditentukan HRD lewat master PublicHoliday: server
+    // mencocokkan tanggal absen dengan master by-date lalu meng-snapshot namanya supaya
+    // absensi tetap tampil benar bila master di-rename/hapus. Karyawan tak memilih nama.
+    const isPublicHoliday = dayOffType === "PUBLIC_HOLIDAY";
+    const holiday = isPublicHoliday
+      ? await db.publicHoliday.findFirst({
+          where: { date: today, isActive: true },
+          select: { id: true, name: true },
+        })
+      : null;
+    const resolvedHolidayId: string | null = holiday?.id ?? null;
+    const resolvedHolidayName: string | null = holiday?.name ?? null;
+
+    // SOP upload: random-id filename, webp, 50% quality, JSON descriptor
+    const dateStr = today.toISOString().slice(0, 10);
+    const base64Data = photoBase64.replace(/^data:image\/\w+;base64,/, "");
+    const rawBuffer = Buffer.from(base64Data, "base64");
+
+    let clockInEvidence: FileDescriptor;
+    try {
+      const compressed = await compressToWebp(rawBuffer);
+      const id = randomId12();
+      const path = `attendance/clock-in/${id}.webp`;
+      await uploadToStorage(compressed, path, "image/webp");
+      clockInEvidence = { id, name_file_origin: `day-off-${dateStr}.jpg`, mimetype: "image/webp", path };
+    } catch (err) {
+      console.error("[clock-in][day-off] upload error:", err);
+      return Response.json({ error: "Gagal mengupload foto" }, { status: 500 });
+    }
+
     try {
       const attendance = await db.attendance.upsert({
         where: { profileId_date: { profileId, date: today } },
@@ -56,10 +99,16 @@ export async function POST(req: Request) {
           date: today,
           attendantType: "DAY_OFF",
           isPublicHoliday,
+          publicHolidayId: resolvedHolidayId,
+          publicHolidayName: resolvedHolidayName,
+          clockInEvidence: clockInEvidence as Prisma.InputJsonValue,
         },
         update: {
           attendantType: "DAY_OFF",
           isPublicHoliday,
+          publicHolidayId: resolvedHolidayId,
+          publicHolidayName: resolvedHolidayName,
+          clockInEvidence: clockInEvidence as Prisma.InputJsonValue,
         },
       });
 
@@ -73,7 +122,8 @@ export async function POST(req: Request) {
       });
 
       return Response.json(attendance, { status: 201 });
-    } catch {
+    } catch (err) {
+      console.error("[clock-in][day-off] save error:", err);
       return Response.json({ error: "Gagal menyimpan absensi" }, { status: 500 });
     }
   }
@@ -116,22 +166,26 @@ export async function POST(req: Request) {
     resolvedLocationId = gpsResult.nearestLocationId;
   }
 
-  // 5. Upload photo
+  // 5. Upload photo — SOP: random-id filename, webp, 50% quality, JSON descriptor
   const now = new Date();
   const dateStr = today.toISOString().slice(0, 10);
   const base64Data = photoBase64.replace(/^data:image\/\w+;base64,/, "");
-  const photoBuffer = Buffer.from(base64Data, "base64");
-  const photoKey = `attendance/${profileId}/${dateStr}/clock-in-${Date.now()}.jpg`;
+  const rawBuffer = Buffer.from(base64Data, "base64");
 
-  let photoUrl: string;
+  let clockInEvidence: FileDescriptor;
   try {
-    photoUrl = await uploadToStorage(photoBuffer, photoKey, "image/jpeg");
+    const compressed = await compressToWebp(rawBuffer);
+    const id = randomId12();
+    const path = `attendance/clock-in/${id}.webp`;
+    await uploadToStorage(compressed, path, "image/webp");
+    clockInEvidence = { id, name_file_origin: `clock-in-${dateStr}.jpg`, mimetype: "image/webp", path };
   } catch (err) {
-    console.error("[clock-in] R2 upload error:", err);
+    console.error("[clock-in] upload error:", err);
     return Response.json({ error: "Gagal mengupload foto" }, { status: 500 });
   }
 
-  // 6. Determine status
+  // 6. Determine status. Public Holiday is a jenis libur chosen on the off flow, never a
+  // workday marker — a WORKDAY attendance is never flagged as tanggal merah.
   const status = determineStatus(now, workShift.startTime, workShift.lateToleranceMinutes, workShift.isOvernight);
 
   // 7. Upsert attendance with the employee's self-selected shift + location
@@ -142,7 +196,7 @@ export async function POST(req: Request) {
         profileId,
         date: today,
         clockInAt: now,
-        clockInPhotoUrl: photoUrl,
+        clockInEvidence: clockInEvidence as Prisma.InputJsonValue,
         clockInLat: lat,
         clockInLng: lng,
         status,
@@ -150,11 +204,13 @@ export async function POST(req: Request) {
         workShiftId: workShift.id,
         workType,
         attendantType: "WORKDAY",
-        isPublicHoliday,
+        isPublicHoliday: false,
+        publicHolidayId: null,
+        publicHolidayName: null,
       },
       update: {
         clockInAt: now,
-        clockInPhotoUrl: photoUrl,
+        clockInEvidence: clockInEvidence as Prisma.InputJsonValue,
         clockInLat: lat,
         clockInLng: lng,
         status,
@@ -162,7 +218,9 @@ export async function POST(req: Request) {
         workShiftId: workShift.id,
         workType,
         attendantType: "WORKDAY",
-        isPublicHoliday,
+        isPublicHoliday: false,
+        publicHolidayId: null,
+        publicHolidayName: null,
       },
     });
 
@@ -176,7 +234,8 @@ export async function POST(req: Request) {
     });
 
     return Response.json(attendance, { status: 201 });
-  } catch {
+  } catch (err) {
+    console.error("[clock-in] save error:", err);
     return Response.json({ error: "Gagal menyimpan absensi" }, { status: 500 });
   }
 }

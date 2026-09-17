@@ -1,10 +1,13 @@
+import type { Prisma } from "@prisma/client";
 import { requirePermissionForRoute } from "@/lib/permissions";
 import { mutationLimiter, rateLimitResponse } from "@/lib/rate-limit";
 import { clockOutSchema } from "@/lib/validations/attendance";
+import type { FileDescriptor } from "@/lib/validations/common";
 import { getAttendanceToday, getAttendanceSettings, todayMidnightUTC } from "@/lib/queries/attendance";
 import { validateGpsAgainstLocations } from "@/lib/attendance-helpers";
 import { db } from "@/lib/db";
-import { uploadToStorage } from "@/lib/storage";
+import { uploadToStorage, randomId12 } from "@/lib/storage";
+import { compressToWebp } from "@/lib/image";
 import { logAudit } from "@/lib/audit";
 
 export async function POST(req: Request) {
@@ -58,14 +61,17 @@ export async function POST(req: Request) {
   const now = new Date();
   const dateStr = existing.date.toISOString().slice(0, 10);
   const base64Data = parsed.data.photoBase64.replace(/^data:image\/\w+;base64,/, "");
-  const photoBuffer = Buffer.from(base64Data, "base64");
-  const photoKey = `attendance/${profileId}/${dateStr}/clock-out-${Date.now()}.jpg`;
+  const rawBuffer = Buffer.from(base64Data, "base64");
 
-  let photoUrl: string;
+  let clockOutEvidence: FileDescriptor;
   try {
-    photoUrl = await uploadToStorage(photoBuffer, photoKey, "image/jpeg");
+    const compressed = await compressToWebp(rawBuffer);
+    const id = randomId12();
+    const path = `attendance/clock-out/${id}.webp`;
+    await uploadToStorage(compressed, path, "image/webp");
+    clockOutEvidence = { id, name_file_origin: `clock-out-${dateStr}.jpg`, mimetype: "image/webp", path };
   } catch (err) {
-    console.error("[clock-out] R2 upload error:", err);
+    console.error("[clock-out] upload error:", err);
     return Response.json({ error: "Gagal mengupload foto" }, { status: 500 });
   }
 
@@ -74,7 +80,7 @@ export async function POST(req: Request) {
       where: { id: existing.id },
       data: {
         clockOutAt: now,
-        clockOutPhotoUrl: photoUrl,
+        clockOutEvidence: clockOutEvidence as Prisma.InputJsonValue,
         clockOutLat: parsed.data.lat,
         clockOutLng: parsed.data.lng,
       },

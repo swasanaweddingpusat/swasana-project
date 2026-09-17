@@ -1,14 +1,8 @@
 import { z } from 'zod';
+import { fileDescriptorSchema, type FileDescriptor } from '@/lib/validations/common';
 
 /** Descriptor persisted for every guestbook photo/proof file — path is a storage KEY, never a full URL. */
-export const fileDescriptorSchema = z.object({
-  id: z.string().nullable().optional(),
-  name_file_origin: z.string().nullable().optional(),
-  mimetype: z.string().nullable().optional(),
-  path: z.string(),
-});
-
-export type FileDescriptor = z.infer<typeof fileDescriptorSchema>;
+export { fileDescriptorSchema, type FileDescriptor };
 
 export interface ProofFiles {
   photo?: FileDescriptor | null;
