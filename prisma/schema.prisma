@@ -166,8 +166,9 @@ model Profile {
   bookingRevisions             BookingRevision[]
   userTargets                  UserTarget[]               @relation("UserTargets")
   userTargetsSet               UserTarget[]               @relation("UserTargetsSetBy")
-  leadsCreated                 DailyActivity[]
-  leadsAssigned                DailyActivity[]            @relation("LeadAssignee")
+  leadsCreated                 Lead[]
+  leadsAssigned                Lead[]            @relation("LeadAssignee")
+  dailyActivities              DailyActivity[]            @relation("DailyActivitySales")
   quotations                   Quotation[]
   ledgersCreated               Ledger[]                   @relation("LedgerCreator")
   ledgersAcknowledged          Ledger[]                   @relation("LedgerAcknowledger")
@@ -372,8 +373,8 @@ model Venue {
   packages                  Package[]
   paymentMethods            PaymentMethod[]
   bookings                  Booking[]
-  leads                     DailyActivity[]            @relation("LeadPrimaryVenue")
-  leadsSecondary            DailyActivity[]            @relation("LeadSecondaryVenue")
+  leads                     Lead[]            @relation("LeadPrimaryVenue")
+  leadsSecondary            Lead[]            @relation("LeadSecondaryVenue")
   quotations                Quotation[]
   quotationTemplates        QuotationTemplate[]
   maintenanceTickets        MaintenanceTicket[]
@@ -553,7 +554,7 @@ model Package {
   miceItems        PackageMiceItem[]
   categoryPrices   PackageCategoryPrice[]
   bookings         Booking[]
-  leads            DailyActivity[]
+  leads            Lead[]
   guestbookEntries GuestbookEntry[]
 
   @@index([venueId])
@@ -667,7 +668,7 @@ model Customer {
   updatedAt             DateTime             @updatedAt
   bookings              Booking[]
   sourceOfInformation   SourceOfInformation? @relation(fields: [sourceOfInformationId], references: [id], onDelete: SetNull)
-  convertedFromLeads    DailyActivity[]      @relation("LeadConvertedCustomer")
+  convertedFromLeads    Lead[]      @relation("LeadConvertedCustomer")
 
   @@index([name])
   @@map("customers")
@@ -691,7 +692,8 @@ model SourceOfInformation {
   createdAt        DateTime         @default(now())
   bookings         Booking[]
   customers        Customer[]
-  leads            DailyActivity[]
+  leads            Lead[]
+  dailyActivities  DailyActivity[] @relation("DailyActivitySource")
   guestbookEntries GuestbookEntry[]
 
   @@map("source_of_informations")
@@ -1007,7 +1009,7 @@ model Booking {
   paymentMethod       PaymentMethod?       @relation(fields: [paymentMethodId], references: [id], onDelete: SetNull)
   sourceOfInformation SourceOfInformation? @relation(fields: [sourceOfInformationId], references: [id], onDelete: SetNull)
   currentRevision     BookingRevision?     @relation("BookingCurrentRevision", fields: [currentRevisionId], references: [id], onDelete: SetNull)
-  lead                DailyActivity?       @relation("BookingFromLead", fields: [leadId], references: [id], onDelete: SetNull)
+  lead                Lead?       @relation("BookingFromLead", fields: [leadId], references: [id], onDelete: SetNull)
   recognizedBy        Profile?             @relation("BookingRecognizer", fields: [recognizedById], references: [id], onDelete: SetNull)
 
   // Snapshot relations (1:1)
@@ -1036,7 +1038,7 @@ model Booking {
   bookingComments    BookingComment[]
   commentReads       BookingCommentRead[]
   revisions          BookingRevision[]
-  convertedFromLeads DailyActivity[]            @relation("LeadConvertedBooking")
+  convertedFromLeads Lead[]            @relation("LeadConvertedBooking")
   editDraft          BookingEditDraft?
   eventEvaluations   EventEvaluation[]
   creditBalance      CreditBalance?
@@ -1925,7 +1927,7 @@ model EventType {
   isActive   Boolean         @default(true)
   createdAt  DateTime        @default(now())
   updatedAt  DateTime        @updatedAt
-  leads      DailyActivity[]
+  leads      Lead[]
   quotations Quotation[]
 
   @@index([category])
@@ -1962,7 +1964,7 @@ model LeadStatus {
   isActive  Boolean         @default(true)
   createdAt DateTime        @default(now())
   updatedAt DateTime        @updatedAt
-  leads     DailyActivity[]
+  leads     Lead[]
 
   @@index([sortOrder])
   @@map("lead_statuses")
@@ -1975,7 +1977,8 @@ model DailyActivitySegment {
   sortOrder        Int              @default(0)
   createdAt        DateTime         @default(now())
   updatedAt        DateTime         @updatedAt
-  leads            DailyActivity[]
+  leads            Lead[]
+  dailyActivities  DailyActivity[] @relation("DailyActivitySegmentRel")
   guestbookEntries GuestbookEntry[]
 
   // Physical table kept as "lead_segments" — no data migration needed.
@@ -1983,7 +1986,7 @@ model DailyActivitySegment {
   @@map("lead_segments")
 }
 
-model DailyActivity {
+model Lead {
   id             String    @id @default(uuid())
   name           String
   contactNumbers Json      @default("[]") // Array of { label: string, number: string }
@@ -2068,6 +2071,49 @@ model DailyActivity {
   // Composite index buat listing "assigned to me" urut terbaru
   @@index([assignedToId, createdAt])
   @@map("leads")
+}
+
+enum ProgressStatus {
+  COLD
+  WARM
+  HOT
+  FREEZE
+  DEAL
+  LOST
+}
+
+model DailyActivity {
+  id                    String         @id @default(uuid())
+  salesId               String
+  activityDate          DateTime       @db.Date
+  companyName           String?
+  segmentId             String
+  sourceOfInformationId String
+  sourceOfInformationDetail String?
+  bitrixId              String?
+  contactName           String?
+  phoneNumber           String?
+  email                 String?
+  location              String?
+  siteVisitAt           DateTime?
+  milestone             String
+  progressStatus        ProgressStatus
+  notes                 String?
+  createdAt             DateTime       @default(now())
+  updatedAt             DateTime       @updatedAt
+  deletedAt             DateTime?
+
+  sales               Profile              @relation("DailyActivitySales", fields: [salesId], references: [id])
+  segment             DailyActivitySegment @relation("DailyActivitySegmentRel", fields: [segmentId], references: [id])
+  sourceOfInformation SourceOfInformation  @relation("DailyActivitySource", fields: [sourceOfInformationId], references: [id])
+
+  @@index([salesId])
+  @@index([segmentId])
+  @@index([sourceOfInformationId])
+  @@index([activityDate])
+  @@index([progressStatus])
+  @@index([deletedAt])
+  @@map("daily_activities")
 }
 
 model UserTarget {
