@@ -1,8 +1,17 @@
 import { z } from "zod";
 
+export const attendanceStatusEnum = z.enum(["WORKDAY", "DAY_OFF"]);
+export type AttendanceStatusValue = z.infer<typeof attendanceStatusEnum>;
+
+// Jenis libur yang dipilih karyawan saat Day Off. "Hari besar" spesifik (nama) TIDAK dipilih
+// karyawan — itu ditentukan HRD lewat master PublicHoliday (dicocokkan server by-date).
+export const dayOffTypeEnum = z.enum(["REGULAR", "PUBLIC_HOLIDAY"]);
+export type DayOffTypeValue = z.infer<typeof dayOffTypeEnum>;
+
 export const clockInSchema = z
   .object({
-    isOff: z.boolean().optional().default(false),
+    attendanceStatus: attendanceStatusEnum,
+    dayOffType: dayOffTypeEnum.optional(),
     workShiftId: z.string().optional(),
     workLocationId: z.string().optional(),
     workType: z.enum(["WFO", "WFH", "WFA"]).optional(),
@@ -11,7 +20,15 @@ export const clockInSchema = z
     lng: z.number().optional(),
   })
   .superRefine((data, ctx) => {
-    if (data.isOff) return;
+    if (data.attendanceStatus !== "WORKDAY") {
+      if (!data.dayOffType) {
+        ctx.addIssue({ code: "custom", message: "Jenis libur wajib dipilih", path: ["dayOffType"] });
+      }
+      if (!data.photoBase64) {
+        ctx.addIssue({ code: "custom", message: "Foto wajib disertakan", path: ["photoBase64"] });
+      }
+      return;
+    }
     if (!data.workShiftId) {
       ctx.addIssue({ code: "custom", message: "Shift wajib dipilih", path: ["workShiftId"] });
     }

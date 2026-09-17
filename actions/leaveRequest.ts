@@ -13,6 +13,9 @@ import {
   cancelLeaveSchema,
 } from "@/lib/validations/leaveRequest";
 import { countWeekdays, getAvailableBalance, getWeekdaysBetween } from "@/lib/leave-helpers";
+import { uploadToStorage, randomId12 } from "@/lib/storage";
+import { compressToWebp } from "@/lib/image";
+import type { FileDescriptor } from "@/lib/validations/common";
 import type { Prisma } from "@prisma/client";
 
 export async function submitLeaveRequest(data: unknown): Promise<{ success: boolean; error?: string }> {
@@ -32,6 +35,7 @@ export async function submitLeaveRequest(data: unknown): Promise<{ success: bool
       select: {
         id: true,
         name: true,
+        code: true,
         isActive: true,
         isDeductible: true,
         maxConsecutiveDays: true,
@@ -41,53 +45,89 @@ export async function submitLeaveRequest(data: unknown): Promise<{ success: bool
     if (!leaveType) return { success: false, error: "Jenis cuti tidak ditemukan." };
     if (!leaveType.isActive) return { success: false, error: "Jenis cuti tidak aktif." };
 
+    const isHolidayToken = leaveType.code === "public_holiday";
+
     const startDate = new Date(parsed.data.startDate);
-    const endDate = new Date(parsed.data.endDate);
+    // Holiday-token: floating date is a single day — force endDate=startDate server-side
+    // regardless of what the client sent, since this type never spans a range.
+    const endDate = isHolidayToken ? startDate : new Date(parsed.data.endDate);
 
     if (startDate > endDate) return { success: false, error: "Tanggal mulai harus sebelum tanggal selesai." };
 
-    const totalDays = countWeekdays(startDate, endDate);
-    if (totalDays === 0) return { success: false, error: "Periode cuti tidak mengandung hari kerja." };
+    let totalDays: number;
+    let publicHolidayName: string | null = null;
 
-    if (leaveType.minDaysBeforeRequest > 0) {
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const minDate = new Date(today);
-      minDate.setDate(minDate.getDate() + leaveType.minDaysBeforeRequest);
-      if (startDate < minDate) {
+    if (isHolidayToken) {
+      if (!parsed.data.publicHolidayId) {
+        return { success: false, error: "Token hari besar wajib dipilih." };
+      }
+
+      const holiday = await db.publicHoliday.findUnique({
+        where: { id: parsed.data.publicHolidayId },
+        select: { id: true, name: true, isActive: true },
+      });
+      if (!holiday || !holiday.isActive) {
+        return { success: false, error: "Hari besar tidak ditemukan atau tidak aktif." };
+      }
+
+      const usedToken = await db.leaveRequest.findFirst({
+        where: {
+          profileId,
+          publicHolidayId: holiday.id,
+          status: { in: ["pending", "manager_approved", "approved"] },
+        },
+        select: { id: true },
+      });
+      if (usedToken) {
+        return { success: false, error: "Token libur hari besar ini sudah dipakai/diajukan." };
+      }
+
+      totalDays = 1;
+      publicHolidayName = holiday.name;
+    } else {
+      totalDays = countWeekdays(startDate, endDate);
+      if (totalDays === 0) return { success: false, error: "Periode cuti tidak mengandung hari kerja." };
+
+      if (leaveType.minDaysBeforeRequest > 0) {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const minDate = new Date(today);
+        minDate.setDate(minDate.getDate() + leaveType.minDaysBeforeRequest);
+        if (startDate < minDate) {
+          return {
+            success: false,
+            error: `Pengajuan cuti ${leaveType.name} harus diajukan minimal ${leaveType.minDaysBeforeRequest} hari sebelumnya.`,
+          };
+        }
+      }
+
+      if (leaveType.maxConsecutiveDays && totalDays > leaveType.maxConsecutiveDays) {
         return {
           success: false,
-          error: `Pengajuan cuti ${leaveType.name} harus diajukan minimal ${leaveType.minDaysBeforeRequest} hari sebelumnya.`,
+          error: `Maksimal ${leaveType.maxConsecutiveDays} hari berturut-turut untuk ${leaveType.name}.`,
         };
       }
-    }
 
-    if (leaveType.maxConsecutiveDays && totalDays > leaveType.maxConsecutiveDays) {
-      return {
-        success: false,
-        error: `Maksimal ${leaveType.maxConsecutiveDays} hari berturut-turut untuk ${leaveType.name}.`,
-      };
-    }
-
-    if (leaveType.isDeductible) {
-      const currentYear = startDate.getFullYear();
-      const balance = await db.leaveBalance.findUnique({
-        where: {
-          profileId_leaveTypeId_year: {
-            profileId,
-            leaveTypeId: leaveType.id,
-            year: currentYear,
+      if (leaveType.isDeductible) {
+        const currentYear = startDate.getFullYear();
+        const balance = await db.leaveBalance.findUnique({
+          where: {
+            profileId_leaveTypeId_year: {
+              profileId,
+              leaveTypeId: leaveType.id,
+              year: currentYear,
+            },
           },
-        },
-        select: { totalDays: true, usedDays: true, carryOverDays: true, adjustmentDays: true },
-      });
-      if (!balance) return { success: false, error: "Saldo cuti belum digenerate untuk tahun ini." };
-      const available = getAvailableBalance(balance);
-      if (totalDays > available) {
-        return {
-          success: false,
-          error: `Saldo cuti tidak cukup. Tersedia: ${available} hari, dibutuhkan: ${totalDays} hari.`,
-        };
+          select: { totalDays: true, usedDays: true, carryOverDays: true, adjustmentDays: true },
+        });
+        if (!balance) return { success: false, error: "Saldo cuti belum digenerate untuk tahun ini." };
+        const available = getAvailableBalance(balance);
+        if (totalDays > available) {
+          return {
+            success: false,
+            error: `Saldo cuti tidak cukup. Tersedia: ${available} hari, dibutuhkan: ${totalDays} hari.`,
+          };
+        }
       }
     }
 
@@ -101,6 +141,24 @@ export async function submitLeaveRequest(data: unknown): Promise<{ success: bool
     });
     if (overlap) return { success: false, error: "Terdapat pengajuan cuti yang overlap dengan tanggal ini." };
 
+    // Upload evidence — SOP: random-id filename, webp, 50% quality, JSON descriptor.
+    // path is a storage KEY, never a full URL.
+    const dateStr = startDate.toISOString().slice(0, 10);
+    const base64Data = parsed.data.photoBase64.replace(/^data:image\/\w+;base64,/, "");
+    const rawBuffer = Buffer.from(base64Data, "base64");
+
+    let evidence: FileDescriptor;
+    try {
+      const compressed = await compressToWebp(rawBuffer);
+      const id = randomId12();
+      const path = `leave-requests/${id}.webp`;
+      await uploadToStorage(compressed, path, "image/webp");
+      evidence = { id, name_file_origin: `cuti-${dateStr}.jpg`, mimetype: "image/webp", path };
+    } catch (err) {
+      console.error("[submitLeaveRequest] upload error:", err);
+      return { success: false, error: "Gagal mengupload bukti." };
+    }
+
     const request = await db.leaveRequest.create({
       data: {
         profileId,
@@ -110,7 +168,10 @@ export async function submitLeaveRequest(data: unknown): Promise<{ success: bool
         totalDays,
         reason: parsed.data.reason ?? null,
         documentKey: parsed.data.documentKey ?? null,
+        evidence: evidence as Prisma.InputJsonValue,
         status: "pending",
+        publicHolidayId: isHolidayToken ? parsed.data.publicHolidayId : null,
+        publicHolidayName: isHolidayToken ? publicHolidayName : null,
       },
     });
 
@@ -254,7 +315,7 @@ export async function hrApproveLeave(data: unknown): Promise<{ success: boolean;
   try {
     const request = await db.leaveRequest.findUnique({
       where: { id: parsed.data.requestId },
-      include: { leaveType: { select: { isDeductible: true } } },
+      include: { leaveType: { select: { isDeductible: true, code: true } } },
     });
     if (!request) return { success: false, error: "Pengajuan tidak ditemukan." };
     if (request.status !== "manager_approved") {
@@ -300,24 +361,50 @@ export async function hrApproveLeave(data: unknown): Promise<{ success: boolean;
       }
     }
 
-    const weekdays = getWeekdaysBetween(request.startDate, request.endDate);
-    const existingDates = await db.attendance.findMany({
-      where: { profileId: request.profileId, date: { in: weekdays } },
-      select: { date: true },
-    });
-    const existingDateSet = new Set(existingDates.map((a) => a.date.toISOString()));
+    const isHolidayToken = request.leaveType.code === "public_holiday";
 
-    for (const date of weekdays) {
-      if (!existingDateSet.has(date.toISOString())) {
+    if (isHolidayToken) {
+      // Token: single floating date, may fall on a weekend — create exactly one
+      // Day Off attendance row directly, bypassing the weekday-only helper below.
+      const existingAttendance = await db.attendance.findUnique({
+        where: { profileId_date: { profileId: request.profileId, date: request.startDate } },
+      });
+      if (!existingAttendance) {
         ops.push(
           db.attendance.create({
             data: {
               profileId: request.profileId,
-              date,
+              date: request.startDate,
+              attendantType: "DAY_OFF",
+              isPublicHoliday: true,
+              publicHolidayId: request.publicHolidayId,
+              publicHolidayName: request.publicHolidayName,
               status: "on_leave",
+              clockInEvidence: (request.evidence as Prisma.InputJsonValue) ?? undefined,
             },
           })
         );
+      }
+    } else {
+      const weekdays = getWeekdaysBetween(request.startDate, request.endDate);
+      const existingDates = await db.attendance.findMany({
+        where: { profileId: request.profileId, date: { in: weekdays } },
+        select: { date: true },
+      });
+      const existingDateSet = new Set(existingDates.map((a) => a.date.toISOString()));
+
+      for (const date of weekdays) {
+        if (!existingDateSet.has(date.toISOString())) {
+          ops.push(
+            db.attendance.create({
+              data: {
+                profileId: request.profileId,
+                date,
+                status: "on_leave",
+              },
+            })
+          );
+        }
       }
     }
 
@@ -398,7 +485,7 @@ export async function cancelLeaveRequest(data: unknown): Promise<{ success: bool
   try {
     const request = await db.leaveRequest.findUnique({
       where: { id: parsed.data.requestId },
-      include: { leaveType: { select: { isDeductible: true } } },
+      include: { leaveType: { select: { isDeductible: true, code: true } } },
     });
     if (!request) return { success: false, error: "Pengajuan tidak ditemukan." };
     if (request.profileId !== profileId) {
@@ -453,12 +540,18 @@ export async function cancelLeaveRequest(data: unknown): Promise<{ success: bool
         }
       }
 
-      const weekdays = getWeekdaysBetween(request.startDate, request.endDate);
+      const isHolidayToken = request.leaveType.code === "public_holiday";
+      // Token: floating single date may fall on a weekend, so getWeekdaysBetween
+      // (weekday-only) would miss it and leave the attendance row orphaned.
+      // Delete by the exact request date instead.
+      const dates = isHolidayToken
+        ? [request.startDate]
+        : getWeekdaysBetween(request.startDate, request.endDate);
       ops.push(
         db.attendance.deleteMany({
           where: {
             profileId,
-            date: { in: weekdays },
+            date: { in: dates },
             status: "on_leave",
           },
         })

@@ -21,8 +21,8 @@ const STATUS_BADGE: Record<string, { label: string; variant: "default" | "second
 };
 
 const ATTENDANT_TYPE_BADGE: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
-  WORKDAY: { label: "Hari Kerja", variant: "outline" },
-  DAY_OFF: { label: "Libur Mingguan", variant: "secondary" },
+  WORKDAY: { label: "Work Day", variant: "outline" },
+  DAY_OFF: { label: "Day Off", variant: "secondary" },
 };
 
 const WORK_TYPE_LABEL: Record<string, string> = {
@@ -150,19 +150,27 @@ export function AttendanceTable() {
                           </TableCell>
                           <TableCell>
                             {(() => {
+                              if (record.isPublicHoliday) {
+                                return <Badge variant="destructive">Public Holiday</Badge>;
+                              }
                               const atBadge = ATTENDANT_TYPE_BADGE[record.attendantType] ?? ATTENDANT_TYPE_BADGE.WORKDAY;
                               return <Badge variant={atBadge.variant}>{atBadge.label}</Badge>;
                             })()}
                           </TableCell>
                           <TableCell>
                             {record.isPublicHoliday ? (
-                              <Badge variant="destructive">Ya</Badge>
+                              <div className="flex flex-col gap-1">
+                                <Badge variant="destructive" className="w-fit">Ya</Badge>
+                                {record.publicHolidayName && (
+                                  <span className="text-xs text-muted-foreground">{record.publicHolidayName}</span>
+                                )}
+                              </div>
                             ) : (
                               <Badge variant="outline">Tidak</Badge>
                             )}
                           </TableCell>
                           <TableCell>
-                            {(record.clockInPhotoUrl || record.clockOutPhotoUrl) && (
+                            {(record.clockInEvidence || record.clockOutEvidence) && (
                               <Button
                                 variant="ghost"
                                 size="icon"

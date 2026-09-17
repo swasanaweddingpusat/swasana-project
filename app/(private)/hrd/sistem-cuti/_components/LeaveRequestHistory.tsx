@@ -28,8 +28,9 @@ import {
   useMyLeaveRequests,
   useCancelLeaveRequest,
 } from "@/hooks/use-leave-requests";
-import { CloseCircle, CalendarMinimalistic } from "@solar-icons/react";
+import { CloseCircle, CalendarMinimalistic, Gallery } from "@solar-icons/react";
 import type { LeaveRequestItem } from "@/lib/queries/leaveRequests";
+import { LeaveEvidenceModal } from "./LeaveEvidenceModal";
 
 type BadgeVariant = "default" | "secondary" | "destructive" | "outline";
 
@@ -91,6 +92,7 @@ export function LeaveRequestHistory() {
 
   const [cancelTarget, setCancelTarget] = useState<LeaveRequestItem | null>(null);
   const [cancelReason, setCancelReason] = useState("");
+  const [evidenceTarget, setEvidenceTarget] = useState<LeaveRequestItem | null>(null);
 
   const handleCancelConfirm = useCallback(() => {
     if (!cancelTarget) return;
@@ -165,6 +167,7 @@ export function LeaveRequestHistory() {
                     <TableHead>Hari</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Info Approval</TableHead>
+                    <TableHead className="w-16">Bukti</TableHead>
                     <TableHead className="w-20">Aksi</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -174,7 +177,14 @@ export function LeaveRequestHistory() {
                     return (
                       <TableRow key={req.id} className="group">
                         <TableCell className="font-medium">
-                          {req.leaveType.name}
+                          <div className="flex flex-col gap-1">
+                            <span>{req.leaveType.name}</span>
+                            {req.publicHolidayName && (
+                              <Badge variant="secondary" className="w-fit rounded-full text-xs font-normal">
+                                Libur Hari Besar — {req.publicHolidayName}
+                              </Badge>
+                            )}
+                          </div>
                         </TableCell>
                         <TableCell className="text-sm">
                           {formatDate(req.startDate)} - {formatDate(req.endDate)}
@@ -190,6 +200,19 @@ export function LeaveRequestHistory() {
                         </TableCell>
                         <TableCell className="text-xs text-muted-foreground max-w-48">
                           {getApprovalInfo(req)}
+                        </TableCell>
+                        <TableCell>
+                          {req.evidence && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 rounded-full"
+                              onClick={() => setEvidenceTarget(req)}
+                              title="Lihat bukti"
+                            >
+                              <Gallery weight="BoldDuotone" className="h-4 w-4" />
+                            </Button>
+                          )}
                         </TableCell>
                         <TableCell>
                           {canBeCancelled(req) && (
@@ -266,6 +289,11 @@ export function LeaveRequestHistory() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <LeaveEvidenceModal
+        request={evidenceTarget}
+        onClose={() => setEvidenceTarget(null)}
+      />
     </>
   );
 }

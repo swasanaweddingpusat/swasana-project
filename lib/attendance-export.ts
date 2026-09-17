@@ -11,8 +11,8 @@ const STATUS_LABEL: Record<string, string> = {
 };
 
 const ATTENDANT_TYPE_LABEL: Record<string, string> = {
-  WORKDAY: "Hari Kerja",
-  DAY_OFF: "Libur Mingguan",
+  WORKDAY: "Work Day",
+  DAY_OFF: "Day Off",
 };
 
 const WORK_TYPE_LABEL: Record<string, string> = {
@@ -53,7 +53,7 @@ function buildRows(data: AttendanceExportItem[]) {
     lokasi: r.workLocation?.name ?? "-",
     shift: r.workShift?.name ?? "-",
     tipeKerja: r.workType ? (WORK_TYPE_LABEL[r.workType] ?? r.workType) : "-",
-    tipeHari: ATTENDANT_TYPE_LABEL[r.attendantType] ?? r.attendantType,
+    tipeHari: r.isPublicHoliday ? "Public Holiday" : (ATTENDANT_TYPE_LABEL[r.attendantType] ?? r.attendantType),
     tanggalMerah: r.isPublicHoliday ? "Ya" : "Tidak",
     koordinatMasuk: formatCoord(r.clockInLat, r.clockInLng),
     koordinatKeluar: formatCoord(r.clockOutLat, r.clockOutLng),
