@@ -205,17 +205,22 @@ function recalcTermDates(terms: TermRow[], eventDate: string, force = false): Te
   const event = new Date(eventDate);
   event.setHours(0, 0, 0, 0);
 
-  // Anchor = pelunasan harus lunas 1 bulan sebelum acara.
-  const anchor = subMonths(event, 1);
-  anchor.setHours(0, 0, 0, 0);
-  if (anchor.getTime() <= now.getTime()) return terms; // event terlalu dekat — biarkan
+  // Anchor = pelunasan harus lunas 1 bulan sebelum acara. Kalau event < 1 bulan
+  // lagi (atau sudah lewat), anchor jatuh di masa lalu — dulu di sini langsung
+  // `return terms` dan termin kosong (DP/Angsuran/dst) DIBIARKAN KOSONG SELAMANYA,
+  // padahal docblock di atas sudah janji fallback bagi rata. Sekarang anchor
+  // di-clamp ke event date sendiri supaya selalu ada target buat bagi rata.
+  const anchorRaw = subMonths(event, 1);
+  anchorRaw.setHours(0, 0, 0, 0);
+  const anchor = anchorRaw.getTime() > now.getTime() ? anchorRaw : event;
 
   const n = terms.length;
   // Kandidat tanggal per termin (mundur 1 bln dari anchor). Index 0 = paling awal.
   const spaced = terms.map((_, i) => subMonths(anchor, n - 1 - i));
-  // Kalau termin paling awal jatuh sebelum hari ini → mepet, pakai bagi rata.
-  const tooTight = n > 1 && spaced[0].getTime() < now.getTime();
-  const totalMs = anchor.getTime() - now.getTime();
+  // Kalau termin paling awal jatuh sebelum/sama hari ini → mepet, pakai bagi rata
+  // dari hari ini s/d anchor (anchor bisa == event date kalau event sendiri mepet).
+  const tooTight = n > 1 && spaced[0].getTime() <= now.getTime();
+  const totalMs = Math.max(0, anchor.getTime() - now.getTime());
 
   return terms.map((t, i) => {
     if (!force && t.dueDate) return t; // tanggal manual user — jangan timpa
@@ -257,6 +262,35 @@ function saveWeddingDraftToStorage(id: string) {
 }
 function clearWeddingDraftFromStorage() {
   try { localStorage.removeItem(WEDDING_DRAFT_LS_KEY); } catch { /* noop */ }
+}
+
+// ─── localStorage safety net for step-6 (TOP) term edits ────────────────────
+// `terms` (name/amount/dueDate) is only persisted to the DB draft when the user
+// clicks Continue on step 6 (see step3Payload below) — while the user is still
+// on step 6, every manually-typed due date/amount lives only in React state.
+// An accidental refresh or drawer close before that Continue click would lose
+// it, since resuming the draft only restores `terms` from DB (empty until then).
+// This is NOT a general draft store (that's the DB) — just a narrow mirror of
+// `terms`, scoped to the current draft (or "new" pre-draftId), cleared as soon
+// as the data reaches the DB or the wizard is reset/discarded.
+const TERMS_BACKUP_LS_KEY = "swasana_wedding_terms_backup";
+
+function readTermsBackup(scopeId: string): TermRow[] | null {
+  try {
+    const raw = localStorage.getItem(TERMS_BACKUP_LS_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { scopeId?: string; terms?: TermRow[] };
+    if (parsed.scopeId !== scopeId || !Array.isArray(parsed.terms) || parsed.terms.length === 0) return null;
+    return parsed.terms;
+  } catch {
+    return null;
+  }
+}
+function saveTermsBackup(scopeId: string, terms: TermRow[]) {
+  try { localStorage.setItem(TERMS_BACKUP_LS_KEY, JSON.stringify({ scopeId, terms })); } catch { /* noop */ }
+}
+function clearTermsBackup() {
+  try { localStorage.removeItem(TERMS_BACKUP_LS_KEY); } catch { /* noop */ }
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -680,6 +714,12 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
         // The resume prompt (showResumePrompt) will show via the unfinishedDraft effect.
         setDraftId(storedDraftId);
       }
+      // Restore any step-6 term edits that never reached the DB (safety net —
+      // see TERMS_BACKUP_LS_KEY above). If the user later clicks "Lanjutkan" and
+      // the DB draft *does* have termOfPayments, that effect (resumeDraftDetail)
+      // overwrites this with the DB copy — DB always wins once it has data.
+      const backupTerms = readTermsBackup(storedDraftId ?? "new");
+      if (backupTerms) setTerms(backupTerms);
     }
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -810,6 +850,13 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
   useEffect(() => {
     if (wBookingDate) setTerms((prev) => recalcTermDates(prev, wBookingDate));
   }, [wBookingDate]);
+
+  // Mirror `terms` to the localStorage safety net (see TERMS_BACKUP_LS_KEY) so
+  // step-6 edits survive an accidental refresh/close before they reach the DB.
+  useEffect(() => {
+    if (!open) return;
+    saveTermsBackup(draftId ?? "new", terms);
+  }, [open, draftId, terms]);
 
   // Resolve package price once packages load for a prefilled package (price
   // starts at 0 because the lead only carries the package id, not its pricing).
@@ -1299,6 +1346,9 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
         step3SaveInFlightRef.current = savePromise;
       }
 
+      // `terms` is now captured in step3Payload (in flight or retried on failure
+      // independent of live state) — the localStorage safety net's job is done.
+      clearTermsBackup();
       setCurrentStep(7);
       return;
     }
@@ -1443,6 +1493,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
 
       clearLocalDraftArtifacts();
       clearWeddingDraftFromStorage();
+      clearTermsBackup();
       toast.success("Booking berhasil dibuat.");
       onSuccess?.();
       onOpenChange(false);
@@ -1488,6 +1539,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
 
     clearLocalDraftArtifacts();
     clearWeddingDraftFromStorage();
+    clearTermsBackup();
     toast.success("Booking berhasil dibuat.");
     onSuccess?.();
     onOpenChange(false);
@@ -1547,7 +1599,10 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
                   setShowResumePrompt(false);
                   // Clear localStorage pointer and draftId so a new draft is created
                   clearWeddingDraftFromStorage();
+                  // Discard any step-6 backup that belonged to the abandoned draft
+                  clearTermsBackup();
                   setDraftId(null);
+                  setTerms(makeDefaultTerms());
                   // Old draft stays in DB and will be cleaned up by cron
                 }}
               >
@@ -2090,7 +2145,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
                 <Tabs defaultValue="bonus">
                   <TabsList
                     variant="line"
-                    className="h-auto w-full justify-start gap-1 rounded-none border-b border-border bg-transparent p-0"
+                    className="h-auto w-full justify-start gap-1 rounded-none border-b border-border bg-transparent p-0 group-data-horizontal/tabs:h-auto"
                   >
                     <TabsTrigger
                       value="bonus"
