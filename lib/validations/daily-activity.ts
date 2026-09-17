@@ -51,6 +51,10 @@ export const dailyActivityFilterSchema = z.object({
   progressStatus: progressStatusSchema.optional(),
   segmentId: z.string().optional(),
   salesId: z.string().optional(),
+  activityDateFrom: z.string().optional(),
+  activityDateTo: z.string().optional(),
+  siteVisitFrom: z.string().optional(),
+  siteVisitTo: z.string().optional(),
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(10),
 });

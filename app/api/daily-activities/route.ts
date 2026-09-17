@@ -20,6 +20,10 @@ export async function GET(req: Request): Promise<Response> {
     progressStatus: searchParams.get("progressStatus") ?? undefined,
     segmentId: searchParams.get("segmentId") ?? undefined,
     salesId: searchParams.get("salesId") ?? undefined,
+    activityDateFrom: searchParams.get("activityDateFrom") ?? undefined,
+    activityDateTo: searchParams.get("activityDateTo") ?? undefined,
+    siteVisitFrom: searchParams.get("siteVisitFrom") ?? undefined,
+    siteVisitTo: searchParams.get("siteVisitTo") ?? undefined,
     page: searchParams.get("page") ?? "1",
     pageSize: searchParams.get("pageSize") ?? "10",
   };

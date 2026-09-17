@@ -2,18 +2,13 @@
 
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { startOfMonth, endOfMonth, isSameDay } from "date-fns";
+import type { DateRange } from "react-day-picker";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -24,12 +19,11 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { AddCircle, PenNewSquare, TrashBinTrash, Refresh, Magnifer, Eye } from "@solar-icons/react";
+import { AddCircle, PenNewSquare, TrashBinTrash, Refresh, Magnifer, Eye, Filter } from "@solar-icons/react";
 import { PaginationBar } from "@/components/shared/pagination-bar";
 import { useDailyActivities, useDeleteDailyActivity } from "@/hooks/use-daily-activities";
 import { usePermissions } from "@/hooks/use-permissions";
 import { cn } from "@/lib/utils";
-import { PROGRESS_STATUS_VALUES } from "@/lib/validations/daily-activity";
 import type { ProgressStatus } from "@/lib/validations/daily-activity";
 import type {
   DailyActivitiesResult,
@@ -39,13 +33,13 @@ import type {
 import type { SalesMiceProfile } from "@/lib/queries/bookings";
 import type { SourceOfInformationItem } from "@/lib/queries/source-of-information";
 import type { FetchDailyActivitiesParams } from "@/services/daily-activity-service";
-import { PROGRESS_STATUS_LABELS, ProgressStatusBadge } from "./progress-status";
+import { ProgressStatusBadge } from "./progress-status";
 import { DailyActivityDrawer } from "./daily-activity-drawer";
 import { DailyActivityDetailModal } from "./daily-activity-detail-modal";
+import { DailyActivityFilterDrawer } from "./DailyActivityFilterDrawer";
 
 const ROWS_PER_PAGE = 10;
 const DEBOUNCE_DELAY_MS = 400;
-const ALL_FILTER_VALUE = "all";
 
 function formatShortDate(date: Date | string | null | undefined): string {
   if (!date) return "—";
@@ -54,6 +48,30 @@ function formatShortDate(date: Date | string | null | undefined): string {
     month: "short",
     year: "numeric",
   }).format(new Date(date));
+}
+
+// Local calendar day (not UTC) — avoids the off-by-one from toISOString().
+// Duplicated here (not imported from lib/queries/daily-activity.ts) because
+// that file imports `db` (Prisma/Neon) at module scope and would break the
+// client bundle if pulled into a "use client" component.
+function toIsoDay(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+/** Current calendar month as a range — the default "Tanggal Aktivitas" filter
+ * when the user hasn't picked a custom range. Must mirror the default computed
+ * server-side in `app/(private)/booking/daily-activity/page.tsx` so the
+ * initial render and this component agree. */
+function getDefaultMonthRange(): DateRange {
+  const now = new Date();
+  return { from: startOfMonth(now), to: endOfMonth(now) };
+}
+
+function isSameRange(a: DateRange | undefined, b: DateRange | undefined): boolean {
+  if (!a?.from || !b?.from) return !a?.from && !b?.from;
+  if (!isSameDay(a.from, b.from)) return false;
+  if (!a.to || !b.to) return !a.to && !b.to;
+  return isSameDay(a.to, b.to);
 }
 
 interface DailyActivityTableProps {
@@ -78,10 +96,15 @@ export function DailyActivityTable({
   const [progressStatus, setProgressStatus] = useState<ProgressStatus | "">("");
   const [segmentId, setSegmentId] = useState("");
   const [salesId, setSalesId] = useState("");
+  const [activityDateRange, setActivityDateRange] = useState<DateRange | undefined>(
+    getDefaultMonthRange,
+  );
+  const [siteVisitRange, setSiteVisitRange] = useState<DateRange | undefined>(undefined);
   const [editingItem, setEditingItem] = useState<DailyActivityItem | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [detailItem, setDetailItem] = useState<DailyActivityItem | null>(null);
   const [deletingItem, setDeletingItem] = useState<DailyActivityItem | null>(null);
+  const [filterOpen, setFilterOpen] = useState(false);
 
   useEffect(() => {
     const t = setTimeout(() => {
@@ -91,6 +114,33 @@ export function DailyActivityTable({
     return () => clearTimeout(t);
   }, [search]);
 
+  // Filter setters below each also reset page to 1 (event handlers, not an
+  // effect — avoids the cascading-render setState-in-effect lint rule).
+  function handleProgressStatusChange(value: ProgressStatus | ""): void {
+    setProgressStatus(value);
+    setPage(1);
+  }
+
+  function handleSegmentIdChange(value: string): void {
+    setSegmentId(value);
+    setPage(1);
+  }
+
+  function handleSalesIdChange(value: string): void {
+    setSalesId(value);
+    setPage(1);
+  }
+
+  function handleActivityDateRangeChange(range: DateRange | undefined): void {
+    setActivityDateRange(range);
+    setPage(1);
+  }
+
+  function handleSiteVisitRangeChange(range: DateRange | undefined): void {
+    setSiteVisitRange(range);
+    setPage(1);
+  }
+
   const params: FetchDailyActivitiesParams = {
     page,
     pageSize: ROWS_PER_PAGE,
@@ -98,17 +148,38 @@ export function DailyActivityTable({
     ...(progressStatus && { progressStatus }),
     ...(segmentId && { segmentId }),
     ...(salesId && { salesId }),
+    ...(activityDateRange?.from && { activityDateFrom: toIsoDay(activityDateRange.from) }),
+    ...(activityDateRange?.to && { activityDateTo: toIsoDay(activityDateRange.to) }),
+    ...(siteVisitRange?.from && { siteVisitFrom: toIsoDay(siteVisitRange.from) }),
+    ...(siteVisitRange?.to && { siteVisitTo: toIsoDay(siteVisitRange.to) }),
   };
 
   const isDefaultParams =
-    page === 1 && !debouncedSearch.trim() && !progressStatus && !segmentId && !salesId;
+    page === 1 &&
+    !debouncedSearch.trim() &&
+    !progressStatus &&
+    !segmentId &&
+    !salesId &&
+    isSameRange(activityDateRange, getDefaultMonthRange()) &&
+    !siteVisitRange?.from;
 
   const query = useDailyActivities(params, isDefaultParams ? initialData : undefined);
   const rows = query.data?.data ?? [];
   const totalPages = query.data?.totalPages ?? 1;
 
-  function handleFilterChange(setter: (value: string) => void, value: string): void {
-    setter(value === ALL_FILTER_VALUE ? "" : value);
+  const activeFilterCount =
+    (isSameRange(activityDateRange, getDefaultMonthRange()) ? 0 : 1) +
+    (siteVisitRange?.from ? 1 : 0) +
+    (progressStatus ? 1 : 0) +
+    (segmentId ? 1 : 0) +
+    (salesId ? 1 : 0);
+
+  function resetFilters(): void {
+    setProgressStatus("");
+    setSegmentId("");
+    setSalesId("");
+    setActivityDateRange(getDefaultMonthRange());
+    setSiteVisitRange(undefined);
     setPage(1);
   }
 
@@ -199,6 +270,20 @@ export function DailyActivityTable({
                 <Button
                   variant="outline"
                   size="sm"
+                  className={cn("h-9", "w-9", "p-0", "cursor-pointer", "rounded-xl", "relative")}
+                  onClick={() => setFilterOpen(true)}
+                  aria-label="Filter"
+                >
+                  <Filter weight="BoldDuotone" className="w-4 h-4" />
+                  {activeFilterCount > 0 && (
+                    <span className="absolute -top-1.5 -right-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[9px] font-bold text-primary-foreground leading-none">
+                      {activeFilterCount}
+                    </span>
+                  )}
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
                   onClick={handleRefresh}
                   disabled={query.isFetching}
                   className={cn("h-9", "w-9", "p-0", "cursor-pointer", "rounded-xl")}
@@ -212,60 +297,6 @@ export function DailyActivityTable({
                   </Button>
                 )}
               </div>
-            </div>
-
-            {/* Filter row */}
-            <div className={cn("flex", "flex-wrap", "items-center", "gap-2", "px-4", "sm:px-6", "py-3", "border-b")}>
-              <Select
-                value={progressStatus || ALL_FILTER_VALUE}
-                onValueChange={(v) => handleFilterChange((val) => setProgressStatus(val as ProgressStatus | ""), v)}
-              >
-                <SelectTrigger className="h-9 w-40 rounded-xl">
-                  <SelectValue placeholder="Semua Progress" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={ALL_FILTER_VALUE}>Semua Progress</SelectItem>
-                  {PROGRESS_STATUS_VALUES.map((value) => (
-                    <SelectItem key={value} value={value}>
-                      {PROGRESS_STATUS_LABELS[value]}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              <Select
-                value={segmentId || ALL_FILTER_VALUE}
-                onValueChange={(v) => handleFilterChange(setSegmentId, v)}
-              >
-                <SelectTrigger className="h-9 w-44 rounded-xl">
-                  <SelectValue placeholder="Semua Segment" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={ALL_FILTER_VALUE}>Semua Segment</SelectItem>
-                  {segments.map((s) => (
-                    <SelectItem key={s.id} value={s.id}>
-                      {s.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              <Select
-                value={salesId || ALL_FILTER_VALUE}
-                onValueChange={(v) => handleFilterChange(setSalesId, v)}
-              >
-                <SelectTrigger className="h-9 w-44 rounded-xl">
-                  <SelectValue placeholder="Semua Sales" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={ALL_FILTER_VALUE}>Semua Sales</SelectItem>
-                  {salesProfiles.map((s) => (
-                    <SelectItem key={s.id} value={s.id}>
-                      {s.fullName}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
             </div>
 
             {/* Mobile: card list (<sm) */}
@@ -388,6 +419,24 @@ export function DailyActivityTable({
         salesProfiles={salesProfiles}
         segments={segments}
         sources={sources}
+      />
+
+      <DailyActivityFilterDrawer
+        open={filterOpen}
+        onClose={() => setFilterOpen(false)}
+        activityDateRange={activityDateRange}
+        onActivityDateRangeChange={handleActivityDateRangeChange}
+        siteVisitRange={siteVisitRange}
+        onSiteVisitRangeChange={handleSiteVisitRangeChange}
+        progressStatus={progressStatus}
+        onProgressStatusChange={handleProgressStatusChange}
+        segmentId={segmentId}
+        onSegmentIdChange={handleSegmentIdChange}
+        salesId={salesId}
+        onSalesIdChange={handleSalesIdChange}
+        segments={segments}
+        salesProfiles={salesProfiles}
+        onReset={resetFilters}
       />
 
       <DailyActivityDetailModal

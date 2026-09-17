@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { startOfMonth, endOfMonth } from "date-fns";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import type { DataScope } from "@/types/user";
@@ -18,6 +19,21 @@ export const metadata: Metadata = {
 
 const DEFAULT_PAGE_SIZE = 10;
 
+// Local calendar day (not UTC). Duplicated (not imported from a shared date
+// util) to keep this server page self-contained — mirrors the same helper
+// duplicated client-side in daily-activity-table.tsx so the initial render
+// and the client's default filter agree.
+function toIsoDay(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+/** Current calendar month — the default "Tanggal Aktivitas" filter window,
+ * must mirror `getDefaultMonthRange()` in daily-activity-table.tsx. */
+function getDefaultMonthRange(): { from: Date; to: Date } {
+  const now = new Date();
+  return { from: startOfMonth(now), to: endOfMonth(now) };
+}
+
 export default async function DailyActivityPage() {
   await requirePagePermission("daily-activity");
   const session = await auth();
@@ -33,9 +49,18 @@ export default async function DailyActivityPage() {
   }
 
   const caller = profileId ? { profileId, dataScope } : undefined;
+  const defaultRange = getDefaultMonthRange();
 
   const [initialData, salesProfiles, segments, sources] = await Promise.all([
-    getDailyActivities({ page: 1, pageSize: DEFAULT_PAGE_SIZE }, caller),
+    getDailyActivities(
+      {
+        page: 1,
+        pageSize: DEFAULT_PAGE_SIZE,
+        activityDateFrom: toIsoDay(defaultRange.from),
+        activityDateTo: toIsoDay(defaultRange.to),
+      },
+      caller,
+    ),
     getSalesMiceProfiles(),
     getDailyActivitySegmentOptions(),
     getSourceOfInformations(),

@@ -77,7 +77,18 @@ export async function getDailyActivities(
 ) {
   // No "use cache": may receive an identity-scoped filter; caching a per-user
   // result without a per-user key would leak data across callers.
-  const { search, progressStatus, segmentId, salesId, page, pageSize } = filter;
+  const {
+    search,
+    progressStatus,
+    segmentId,
+    salesId,
+    activityDateFrom,
+    activityDateTo,
+    siteVisitFrom,
+    siteVisitTo,
+    page,
+    pageSize,
+  } = filter;
 
   const dataScopeFilter = caller
     ? await resolveDailyActivityScopeFilter(caller.profileId, caller.dataScope)
@@ -97,6 +108,18 @@ export async function getDailyActivities(
     ...(segmentId && { segmentId }),
     // salesId from param is an additional narrowing filter on top of dataScopeFilter
     ...(salesId && { salesId }),
+    ...((activityDateFrom || activityDateTo) && {
+      activityDate: {
+        ...(activityDateFrom && { gte: new Date(`${activityDateFrom}T00:00:00`) }),
+        ...(activityDateTo && { lte: new Date(`${activityDateTo}T23:59:59.999`) }),
+      },
+    }),
+    ...((siteVisitFrom || siteVisitTo) && {
+      siteVisitAt: {
+        ...(siteVisitFrom && { gte: new Date(`${siteVisitFrom}T00:00:00`) }),
+        ...(siteVisitTo && { lte: new Date(`${siteVisitTo}T23:59:59.999`) }),
+      },
+    }),
   };
 
   const skip = (page - 1) * pageSize;
