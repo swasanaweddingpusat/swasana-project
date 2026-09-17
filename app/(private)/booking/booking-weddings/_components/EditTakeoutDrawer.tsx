@@ -63,26 +63,29 @@ function TakeoutContent({ bookingId, onClose, onPrevious, initialRows, fullPrice
       return;
     }
     setSaving(true);
-    const result = await saveSnapTakeout({
-      bookingId,
-      items: rows.map((r) => ({
-        categoryName: r.categoryName,
-        isTakeout: r.isTakeout,
-        takeoutNominal: r.isTakeout ? r.takeoutNominal : 0,
-      })),
-    });
-    setSaving(false);
-    if (!result.success) {
-      toast.error(result.error ?? "Gagal menyimpan takeout.");
-      return;
+    try {
+      const result = await saveSnapTakeout({
+        bookingId,
+        items: rows.map((r) => ({
+          categoryName: r.categoryName,
+          isTakeout: r.isTakeout,
+          takeoutNominal: r.isTakeout ? r.takeoutNominal : 0,
+        })),
+      });
+      if (!result.success) {
+        toast.error(result.error ?? "Gagal menyimpan takeout.");
+        return;
+      }
+      toast.success("Takeout berhasil diupdate");
+      qc.invalidateQueries({ queryKey: ["bookings"] });
+      qc.invalidateQueries({ queryKey: ["booking-detail", bookingId] });
+      // Takeout now recomputes the stored price server-side — refresh the finance detail
+      // so the TOP tab reads the new price (and its "Selisih") instead of a stale cache.
+      qc.invalidateQueries({ queryKey: ["booking-finance-detail", bookingId] });
+      onClose();
+    } finally {
+      setSaving(false);
     }
-    toast.success("Takeout berhasil diupdate");
-    qc.invalidateQueries({ queryKey: ["bookings"] });
-    qc.invalidateQueries({ queryKey: ["booking-detail", bookingId] });
-    // Takeout now recomputes the stored price server-side — refresh the finance detail
-    // so the TOP tab reads the new price (and its "Selisih") instead of a stale cache.
-    qc.invalidateQueries({ queryKey: ["booking-finance-detail", bookingId] });
-    onClose();
   };
 
   return (

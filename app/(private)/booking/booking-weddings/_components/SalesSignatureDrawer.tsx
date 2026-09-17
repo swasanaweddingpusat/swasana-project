@@ -5,7 +5,6 @@ import Image from "next/image";
 import { toast } from "sonner";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import SignatureCanvas from "react-signature-canvas";
-import { Drawer } from "@/components/shared/drawer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
@@ -16,30 +15,6 @@ import { useMySignature } from "@/hooks/use-my-signature";
 import { updateBookingSignature } from "@/actions/booking";
 import { validateBookingField } from "@/lib/validations/booking-form";
 import type { BookingDetail } from "@/lib/queries/bookings";
-
-interface Props {
-  isOpen: boolean;
-  bookingId: string;
-  onDone: () => void;
-  onPrevious?: () => void;
-  step?: number;
-  totalSteps?: number;
-}
-
-export function SalesSignatureDrawer({ isOpen, bookingId, onDone, onPrevious, step, totalSteps }: Props): React.ReactElement {
-  return (
-    <Drawer
-      isOpen={isOpen}
-      onClose={onDone}
-      title="Tanda Tangan Sales"
-      headerActions={step && totalSteps ? (
-        <span className="text-sm text-muted-foreground">Step {step} / {totalSteps}</span>
-      ) : undefined}
-    >
-      <SalesSignatureContent bookingId={bookingId} onDone={onDone} onPrevious={onPrevious} />
-    </Drawer>
-  );
-}
 
 // ─── Content (no Drawer shell) ──────────────────────────────────────────────────
 // Fetches the booking detail so the signing location + already-saved sales

@@ -249,48 +249,48 @@ function TopContent({
     }
 
     setLoading(true);
+    try {
+      // ── Simpan jadwal termin (schedule-only; pembayaran pindah ke step Payment) ──
+      const existingTerms = ordered.filter((x) => !x.term.id.startsWith("new-"));
+      const newTerms = ordered.filter((x) => x.term.id.startsWith("new-"));
 
-    // ── Simpan jadwal termin (schedule-only; pembayaran pindah ke step Payment) ──
-    const existingTerms = ordered.filter((x) => !x.term.id.startsWith("new-"));
-    const newTerms = ordered.filter((x) => x.term.id.startsWith("new-"));
+      const result = await updateTermOfPayments(
+        bookingId,
+        existingTerms.map(({ term: t, sortOrder }) => ({
+          id: t.id,
+          name: t.name,
+          amount: t.amount,
+          dueDate: t.dueDate,
+          notes: t.notes,
+          sortOrder,
+        })),
+        newTerms.map(({ term: t, sortOrder }) => ({
+          name: t.name,
+          amount: t.amount,
+          dueDate: t.dueDate,
+          sortOrder,
+        })),
+        { discountName, discountAmount },
+      );
 
-    const result = await updateTermOfPayments(
-      bookingId,
-      existingTerms.map(({ term: t, sortOrder }) => ({
-        id: t.id,
-        name: t.name,
-        amount: t.amount,
-        dueDate: t.dueDate,
-        notes: t.notes,
-        sortOrder,
-      })),
-      newTerms.map(({ term: t, sortOrder }) => ({
-        name: t.name,
-        amount: t.amount,
-        dueDate: t.dueDate,
-        sortOrder,
-      })),
-      { discountName, discountAmount },
-    );
+      if (!result.success) {
+        // Guard errors (FIX A) name the specific term + cash amount attached — surface
+        // them as a persistent banner (not just a toast) so the instruction stays
+        // visible while the user goes to void/move the payment in Cashbook.
+        setGuardError(result.error ?? "Terjadi kesalahan.");
+        toast.error(result.error);
+        return;
+      }
 
-    if (!result.success) {
+      void qc.invalidateQueries({ queryKey: ["bookings"] });
+      void qc.invalidateQueries({ queryKey: ["booking-detail", bookingId] });
+      void qc.invalidateQueries({ queryKey: ["booking-finance-detail", bookingId] });
+      toast.success("Jadwal termin disimpan");
+
+      if (onSaved) onSaved();
+    } finally {
       setLoading(false);
-      // Guard errors (FIX A) name the specific term + cash amount attached — surface
-      // them as a persistent banner (not just a toast) so the instruction stays
-      // visible while the user goes to void/move the payment in Cashbook.
-      setGuardError(result.error ?? "Terjadi kesalahan.");
-      toast.error(result.error);
-      return;
     }
-
-    void qc.invalidateQueries({ queryKey: ["bookings"] });
-    void qc.invalidateQueries({ queryKey: ["booking-detail", bookingId] });
-    void qc.invalidateQueries({ queryKey: ["booking-finance-detail", bookingId] });
-    toast.success("Jadwal termin disimpan");
-
-    setLoading(false);
-
-    if (onSaved) onSaved();
   };
 
   return (

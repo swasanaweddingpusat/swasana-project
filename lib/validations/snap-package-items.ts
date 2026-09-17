@@ -8,13 +8,7 @@ export const snapInternalItemSchema = z.object({
   sortOrder: z.number().int().min(0).default(0),
 });
 
-export const saveSnapInternalItemsSchema = z.object({
-  bookingId: z.string().min(1, "Booking ID wajib diisi"),
-  items: z.array(snapInternalItemSchema),
-});
-
 export type SnapInternalItemInput = z.infer<typeof snapInternalItemSchema>;
-export type SaveSnapInternalItemsInput = z.infer<typeof saveSnapInternalItemsSchema>;
 
 // ─── Vendor Items ─────────────────────────────────────────────────────────────
 
@@ -26,13 +20,20 @@ export const snapVendorItemSchema = z.object({
   isTakeout: z.boolean().default(false),
 });
 
-export const saveSnapVendorItemsSchema = z.object({
+export type SnapVendorItemInput = z.infer<typeof snapVendorItemSchema>;
+
+// ─── Internal + Vendor Items (combined, single transaction) ───────────────────
+// Used by EditPackageItemsDrawer so internal + vendor sections commit atomically
+// instead of as two independent $transaction calls. `null` means "this section
+// is unchanged, don't touch it". `[]` means "changed to empty — delete all rows".
+
+export const saveSnapPackageItemsSchema = z.object({
   bookingId: z.string().min(1, "Booking ID wajib diisi"),
-  items: z.array(snapVendorItemSchema),
+  internalItems: z.array(snapInternalItemSchema).nullable().default(null),
+  vendorItems: z.array(snapVendorItemSchema).nullable().default(null),
 });
 
-export type SnapVendorItemInput = z.infer<typeof snapVendorItemSchema>;
-export type SaveSnapVendorItemsInput = z.infer<typeof saveSnapVendorItemsSchema>;
+export type SaveSnapPackageItemsInput = z.infer<typeof saveSnapPackageItemsSchema>;
 
 // ─── Complimentaries ──────────────────────────────────────────────────────────
 

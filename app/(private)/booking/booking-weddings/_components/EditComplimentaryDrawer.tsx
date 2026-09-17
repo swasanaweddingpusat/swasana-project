@@ -158,23 +158,26 @@ const ComplimentaryBody = forwardRef<ComplimentaryHandle, ComplimentaryBodyProps
       const compErr = firstError(complimentaryRowsSchema, complimentaries);
       if (compErr) { toast.error(compErr); return; }
       setSaving(true);
-      const res = await saveSnapComplimentaries({
-        bookingId: target.bookingId,
-        items: complimentaries.map((c, i) => ({
-          complimentaryId: c.complimentaryId ?? null,
-          name: c.name,
-          price: c.price,
-          isShowPrice: c.isShowPrice,
-          description: c.description.trim() || null,
-          qty: c.qty,
-          sortOrder: i,
-        })),
-      });
-      setSaving(false);
-      if (!res.success) { toast.error(res.error ?? "Gagal menyimpan."); return; }
-      toast.success("Complimentary berhasil disimpan.");
-      await qc.invalidateQueries({ queryKey: ["booking-detail", target.bookingId] });
-      onClose();
+      try {
+        const res = await saveSnapComplimentaries({
+          bookingId: target.bookingId,
+          items: complimentaries.map((c, i) => ({
+            complimentaryId: c.complimentaryId ?? null,
+            name: c.name,
+            price: c.price,
+            isShowPrice: c.isShowPrice,
+            description: c.description.trim() || null,
+            qty: c.qty,
+            sortOrder: i,
+          })),
+        });
+        if (!res.success) { toast.error(res.error ?? "Gagal menyimpan."); return; }
+        toast.success("Complimentary berhasil disimpan.");
+        await qc.invalidateQueries({ queryKey: ["booking-detail", target.bookingId] });
+        onClose();
+      } finally {
+        setSaving(false);
+      }
     }, [target.bookingId, complimentaries, qc, onClose]);
 
     const getItems = useCallback((): SnapComplimentaryItemInput[] =>

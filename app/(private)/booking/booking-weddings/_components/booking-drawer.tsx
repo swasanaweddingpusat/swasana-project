@@ -45,6 +45,7 @@ import { useSalesUsers } from "@/hooks/use-sales-users";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { EditComplimentaryContent, type ComplimentaryHandle } from "./EditComplimentaryDrawer";
 import { EditBonusContent, type BonusHandle } from "./EditBonusDrawer";
+import { saveSnapBonusesAndComplimentaries } from "@/actions/snap-package-items";
 import {
   PackageItemsEditor,
   type PackageInternalItemDraft,
@@ -313,6 +314,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
   // Refs to the embedded Bonus/Complimentary editors in Step 3 (live-save, mirrors edit-booking-drawer)
   const complimentaryRef = useRef<ComplimentaryHandle>(null);
   const bonusRef = useRef<BonusHandle>(null);
+  const [isSavingStep3, setIsSavingStep3] = useState(false);
 
   // ── Optimistic save state ──
   // Tracks whether a background save (step 2/3) is in-flight or has failed.
@@ -1229,20 +1231,40 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
       return;
     }
 
-    // ── Step 3 → 4: Bonus & Complimentary — save dirty tabs, then advance ──
+    // ── Step 3 → 4: Bonus & Complimentary — save dirty tabs in one transaction, then advance ──
     if (currentStep === 3) {
-      const saves: Promise<void>[] = [];
-      if (complimentaryRef.current?.isDirty()) saves.push(complimentaryRef.current.save());
-      if (bonusRef.current?.isDirty()) saves.push(bonusRef.current.save());
-      if (saves.length > 0) {
-        try {
-          await Promise.all(saves);
-        } catch {
-          toast.error("Gagal menyimpan Bonus/Complimentary. Coba lagi.");
+      const bonusDirty = bonusRef.current?.isDirty() ?? false;
+      const complimentaryDirty = complimentaryRef.current?.isDirty() ?? false;
+
+      if (!bonusDirty && !complimentaryDirty) {
+        setCurrentStep(4);
+        return;
+      }
+
+      if (bonusDirty) {
+        const err = bonusRef.current!.validate();
+        if (err) { toast.error(err); return; }
+      }
+      if (complimentaryDirty) {
+        const err = complimentaryRef.current!.validate();
+        if (err) { toast.error(err); return; }
+      }
+
+      setIsSavingStep3(true);
+      try {
+        const res = await saveSnapBonusesAndComplimentaries({
+          bookingId: draftId!,
+          bonusItems: bonusDirty ? bonusRef.current!.getItems() : null,
+          complimentaryItems: complimentaryDirty ? complimentaryRef.current!.getItems() : null,
+        });
+        if (!res.success) {
+          toast.error(res.error ?? "Gagal menyimpan Bonus/Complimentary. Coba lagi.");
           return;
         }
+        setCurrentStep(4);
+      } finally {
+        setIsSavingStep3(false);
       }
-      setCurrentStep(4);
       return;
     }
 
@@ -1551,7 +1573,8 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
     updateStep3Mut.isPending ||
     updateStep4Mut.isPending ||
     finalizeMut.isPending ||
-    createMut.isPending;
+    createMut.isPending ||
+    isSavingStep3;
 
   // Continue is disabled if:
   // - The current step's required fields aren't complete (step 1/2/3/4/5 completeness checks)
@@ -1568,6 +1591,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
     (currentStep === 7 && !isStep7Complete) ||
     (currentStep === 8 && !isStep8Complete) ||
     (currentStep === 2 && isDraftMutating) ||
+    (currentStep === 3 && isSavingStep3) ||
     (currentStep === 8 && isDraftMutating) ||
     (currentStep === 8 && isSubmitting);
 

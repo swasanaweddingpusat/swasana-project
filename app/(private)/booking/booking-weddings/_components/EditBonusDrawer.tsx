@@ -153,22 +153,25 @@ const BonusBody = forwardRef<BonusHandle, BonusBodyProps>(
       const bonusErr = firstError(bonusRowsSchema, bonuses);
       if (bonusErr) { toast.error(bonusErr); return; }
       setSaving(true);
-      const res = await saveSnapBookingBonuses({
-        bookingId: target.bookingId,
-        items: bonuses.map((b, i) => ({
-          bonusId: b.bonusId ?? null,
-          name: b.name,
-          price: b.price,
-          description: b.description.trim() || null,
-          qty: b.qty,
-          sortOrder: i,
-        })),
-      });
-      setSaving(false);
-      if (!res.success) { toast.error(res.error ?? "Gagal menyimpan."); return; }
-      toast.success("Bonus berhasil disimpan.");
-      await qc.invalidateQueries({ queryKey: ["booking-detail", target.bookingId] });
-      onClose();
+      try {
+        const res = await saveSnapBookingBonuses({
+          bookingId: target.bookingId,
+          items: bonuses.map((b, i) => ({
+            bonusId: b.bonusId ?? null,
+            name: b.name,
+            price: b.price,
+            description: b.description.trim() || null,
+            qty: b.qty,
+            sortOrder: i,
+          })),
+        });
+        if (!res.success) { toast.error(res.error ?? "Gagal menyimpan."); return; }
+        toast.success("Bonus berhasil disimpan.");
+        await qc.invalidateQueries({ queryKey: ["booking-detail", target.bookingId] });
+        onClose();
+      } finally {
+        setSaving(false);
+      }
     }, [target.bookingId, bonuses, qc, onClose]);
 
     const getItems = useCallback((): SnapBookingBonusItemInput[] =>
