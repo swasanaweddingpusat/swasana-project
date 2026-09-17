@@ -14,6 +14,7 @@ import {
   saveSnapVendorItemsSchema,
   saveSnapComplimentariesSchema,
   saveSnapBookingBonusesSchema,
+  saveSnapBonusesAndComplimentariesSchema,
   saveSnapTakeoutSchema,
 } from "@/lib/validations/snap-package-items";
 import { calcFinalFromFullPrice } from "@/lib/package-prices";
@@ -341,6 +342,112 @@ export async function saveSnapBookingBonuses(
   } catch (e) {
     console.error("[saveSnapBookingBonuses]", e);
     return { success: false, error: "Gagal menyimpan bonus." };
+  }
+}
+
+// ─── Save snap booking bonuses + complimentaries (combined, single transaction) ──
+// Used by the edit-booking drawer's step 3 (Bonus + Complimentary tabs) so both
+// sections commit atomically instead of as two independent $transaction calls.
+// `bonusItems`/`complimentaryItems` is null for a section that isn't dirty.
+
+export async function saveSnapBonusesAndComplimentaries(
+  data: unknown,
+): Promise<{ success: boolean; error?: string }> {
+  const { session, error } = await requirePermission({ module: "booking", action: "edit-package" });
+  if (error) return { success: false, error };
+  if (!mutationLimiter.check(`snap-bonus-compl:${session!.user.id}`)) return { success: false, ...rateLimitError() };
+
+  const parsed = saveSnapBonusesAndComplimentariesSchema.safeParse(data);
+  if (!parsed.success) {
+    return { success: false, error: parsed.error.issues[0]?.message ?? "Input tidak valid." };
+  }
+  const { bookingId, bonusItems, complimentaryItems } = parsed.data;
+
+  if (!bonusItems && !complimentaryItems) {
+    return { success: true };
+  }
+
+  const scope = session!.user.dataScope ?? "own";
+  if (!(await canAccessBooking(session!.user.profileId, scope, bookingId))) {
+    return { success: false, error: "Anda tidak memiliki akses ke booking ini." };
+  }
+
+  try {
+    const ops: Prisma.PrismaPromise<unknown>[] = [];
+
+    if (bonusItems) {
+      ops.push(
+        db.snapBookingBonus.deleteMany({ where: { bookingId } }),
+        ...bonusItems.map((item, idx) =>
+          db.snapBookingBonus.create({
+            data: {
+              bookingId,
+              bonusId: item.bonusId ?? null,
+              name: item.name,
+              price: item.price,
+              description: item.description ?? null,
+              qty: item.qty ?? 1,
+              sortOrder: item.sortOrder ?? idx,
+            },
+          }),
+        ),
+      );
+    }
+
+    if (complimentaryItems) {
+      ops.push(
+        db.snapComplimentary.deleteMany({ where: { bookingId } }),
+        ...complimentaryItems.map((item, idx) =>
+          db.snapComplimentary.create({
+            data: {
+              bookingId,
+              complimentaryId: item.complimentaryId ?? null,
+              name: item.name,
+              price: item.price ?? 0,
+              isShowPrice: item.isShowPrice ?? false,
+              description: item.description ?? null,
+              qty: item.qty ?? 1,
+              sortOrder: item.sortOrder ?? idx,
+            },
+          }),
+        ),
+      );
+    }
+
+    await db.$transaction(ops);
+
+    // Keep the PO PDF in sync: refresh the in-flight revision when still unfrozen,
+    // or — post-signature — patch just the changed section(s) into the signed
+    // snapshot (bonus/complimentary are non-trigger fields, editable after
+    // signature without re-approval). Best-effort.
+    try {
+      const refreshed = await refreshCurrentRevisionSnapshot(bookingId);
+      if (!refreshed) {
+        if (bonusItems) await patchSnapshotBookingBonuses(bookingId);
+        if (complimentaryItems) await patchSnapshotComplimentaries(bookingId);
+      }
+    } catch (e) {
+      console.error("[saveSnapBonusesAndComplimentaries] revision snapshot refresh failed:", e);
+    }
+
+    await logAudit({
+      userId: session!.user.id,
+      action: "booking.snap_bonuses_complimentaries_updated",
+      result: "success",
+      entityType: "booking",
+      entityId: bookingId,
+      changes: {
+        bonusCount: bonusItems?.length ?? null,
+        complimentaryCount: complimentaryItems?.length ?? null,
+      },
+      description: "Updated booking bonuses and/or complimentaries",
+    });
+
+    revalidateTag("bookings", "max");
+    return { success: true };
+  } catch (e) {
+    console.error("[saveSnapBonusesAndComplimentaries]", e);
+    return { success: false, error: "Gagal menyimpan bonus/complimentary." };
   }
 }
 

@@ -19,6 +19,7 @@ import { useComplimentaries } from "@/hooks/use-complimentaries";
 import { usePermissions } from "@/hooks/use-permissions";
 import { ComplimentarySelect } from "@/components/shared/ComplimentarySelect";
 import type { BookingDetail } from "@/lib/queries/bookings";
+import type { SnapComplimentaryItemInput } from "@/lib/validations/snap-package-items";
 
 // --- Types -------------------------------------------------------------------
 
@@ -41,6 +42,10 @@ interface ComplimentaryRow {
 export interface ComplimentaryHandle {
   save: () => Promise<void>;
   isDirty: () => boolean;
+  /** Validate current rows without saving. Returns an error message, or null if valid. */
+  validate: () => string | null;
+  /** Current rows mapped to the save-payload shape, without saving. */
+  getItems: () => SnapComplimentaryItemInput[];
 }
 
 function fmtRp(n: number): string {
@@ -172,11 +177,24 @@ const ComplimentaryBody = forwardRef<ComplimentaryHandle, ComplimentaryBodyProps
       onClose();
     }, [target.bookingId, complimentaries, qc, onClose]);
 
+    const getItems = useCallback((): SnapComplimentaryItemInput[] =>
+      complimentariesRef.current.map((c, i) => ({
+        complimentaryId: c.complimentaryId ?? null,
+        name: c.name,
+        price: c.price,
+        isShowPrice: c.isShowPrice,
+        description: c.description.trim() || null,
+        qty: c.qty,
+        sortOrder: i,
+      })), []);
+
     // Expose save + isDirty to parent when embedded via ref.
     useImperativeHandle(ref, () => ({
       save: handleSave,
       isDirty: () => JSON.stringify(complimentariesRef.current) !== initialJsonRef.current,
-    }), [handleSave]);
+      validate: () => firstError(complimentaryRowsSchema, complimentariesRef.current),
+      getItems,
+    }), [handleSave, getItems]);
 
     return (
       <div className="flex flex-col min-h-full">

@@ -18,6 +18,7 @@ import { useBonuses } from "@/hooks/use-bonuses";
 import { usePermissions } from "@/hooks/use-permissions";
 import { BonusSelect } from "@/components/shared/BonusSelect";
 import type { BookingDetail } from "@/lib/queries/bookings";
+import type { SnapBookingBonusItemInput } from "@/lib/validations/snap-package-items";
 
 // --- Types -------------------------------------------------------------------
 
@@ -39,6 +40,10 @@ interface BonusRow {
 export interface BonusHandle {
   save: () => Promise<void>;
   isDirty: () => boolean;
+  /** Validate current rows without saving. Returns an error message, or null if valid. */
+  validate: () => string | null;
+  /** Current rows mapped to the save-payload shape, without saving. */
+  getItems: () => SnapBookingBonusItemInput[];
 }
 
 function fmtRp(n: number): string {
@@ -166,11 +171,23 @@ const BonusBody = forwardRef<BonusHandle, BonusBodyProps>(
       onClose();
     }, [target.bookingId, bonuses, qc, onClose]);
 
+    const getItems = useCallback((): SnapBookingBonusItemInput[] =>
+      bonusesRef.current.map((b, i) => ({
+        bonusId: b.bonusId ?? null,
+        name: b.name,
+        price: b.price,
+        description: b.description.trim() || null,
+        qty: b.qty,
+        sortOrder: i,
+      })), []);
+
     // Expose save + isDirty to parent when embedded via ref.
     useImperativeHandle(ref, () => ({
       save: handleSave,
       isDirty: () => JSON.stringify(bonusesRef.current) !== initialJsonRef.current,
-    }), [handleSave]);
+      validate: () => firstError(bonusRowsSchema, bonusesRef.current),
+      getItems,
+    }), [handleSave, getItems]);
 
     return (
       <div className="flex flex-col min-h-full">

@@ -1,6 +1,8 @@
 ﻿"use client";
 
-import { useRef } from "react";
+import { useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { MedalStar, Gift } from "@solar-icons/react";
 import { cn } from "@/lib/utils";
 import { Drawer } from "@/components/shared/drawer";
@@ -14,6 +16,7 @@ import { EditTakeoutContent } from "./EditTakeoutDrawer";
 import { EditPackageItemsContent } from "./EditPackageItemsDrawer";
 import { EditComplimentaryContent, type ComplimentaryHandle } from "./EditComplimentaryDrawer";
 import { EditBonusContent, type BonusHandle } from "./EditBonusDrawer";
+import { saveSnapBonusesAndComplimentaries } from "@/actions/snap-package-items";
 import { useEditBookingForm, STEP_LABELS } from "./_edit-booking/useEditBookingForm";
 import { ClientInfoStep } from "./_edit-booking/ClientInfoStep";
 import { VenueEventStep } from "./_edit-booking/VenueEventStep";
@@ -56,6 +59,8 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
   // Refs to the embedded complimentary/bonus editors in step 3
   const complimentaryRef = useRef<ComplimentaryHandle>(null);
   const bonusRef = useRef<BonusHandle>(null);
+  const [isSavingStep3, setIsSavingStep3] = useState(false);
+  const qc = useQueryClient();
 
   // â”€â”€â”€ Step 2 save: editBooking only â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   async function handleStep2Save() {
@@ -72,11 +77,35 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
 
   // â”€â”€â”€ Step 3 save: complimentary + bonus, whichever is dirty â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   async function handleStep3Save() {
-    const saves: Promise<void>[] = [];
-    if (complimentaryRef.current?.isDirty()) saves.push(complimentaryRef.current.save());
-    if (bonusRef.current?.isDirty()) saves.push(bonusRef.current.save());
-    if (saves.length === 0) return;
-    await Promise.all(saves);
+    const bonusDirty = bonusRef.current?.isDirty() ?? false;
+    const complimentaryDirty = complimentaryRef.current?.isDirty() ?? false;
+    if (!bonusDirty && !complimentaryDirty) return;
+
+    if (bonusDirty) {
+      const err = bonusRef.current!.validate();
+      if (err) { toast.error(err); return; }
+    }
+    if (complimentaryDirty) {
+      const err = complimentaryRef.current!.validate();
+      if (err) { toast.error(err); return; }
+    }
+
+    setIsSavingStep3(true);
+    try {
+      const res = await saveSnapBonusesAndComplimentaries({
+        bookingId: booking!.id,
+        bonusItems: bonusDirty ? bonusRef.current!.getItems() : null,
+        complimentaryItems: complimentaryDirty ? complimentaryRef.current!.getItems() : null,
+      });
+      if (!res.success) {
+        toast.error(res.error ?? "Gagal menyimpan.");
+        return;
+      }
+      toast.success("Bonus & Complimentary berhasil disimpan.");
+      await qc.invalidateQueries({ queryKey: ["booking-detail", booking!.id] });
+    } finally {
+      setIsSavingStep3(false);
+    }
   }
 
   // â”€â”€â”€ Free-mode per-tab save handlers for steps 4â€“6 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -183,7 +212,7 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
             <Tabs defaultValue="bonus">
               <TabsList
                 variant="line"
-                className="h-auto w-full justify-start gap-1 rounded-none border-b border-border bg-transparent p-0"
+                className="h-auto w-full justify-start gap-1 rounded-none border-b border-border bg-transparent p-0 group-data-horizontal/tabs:h-auto"
               >
                 <TabsTrigger
                   value="bonus"
@@ -294,8 +323,12 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
                   {isSubmitting ? "Menyimpan..." : hasVenueTabChange ? "Continue" : "Simpan"}
                 </Button>
               ) : (
-                <Button onClick={handleStep3Save} className="w-full cursor-pointer">
-                  Simpan
+                <Button
+                  onClick={handleStep3Save}
+                  disabled={isSavingStep3}
+                  className={cn("w-full cursor-pointer", isSavingStep3 && "opacity-50 cursor-not-allowed")}
+                >
+                  {isSavingStep3 ? "Menyimpan..." : "Simpan"}
                 </Button>
               )}
             </div>
