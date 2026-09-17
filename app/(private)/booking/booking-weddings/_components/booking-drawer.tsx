@@ -6,11 +6,10 @@ import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { useQuery } from "@tanstack/react-query";
 import { format, startOfMonth } from "date-fns";
-import { Calendar as CalendarIcon, CloseCircle, AltArrowDown } from "@solar-icons/react";
+import { Calendar as CalendarIcon, CloseCircle, MedalStar, Gift } from "@solar-icons/react";
 import { CreatePaymentStep } from "@/app/(private)/booking/booking-weddings/_components/_create-booking/CreatePaymentStep";
 import { CreatePaymentRecordStep, type CreatePaymentEntry } from "@/app/(private)/booking/booking-weddings/_components/_create-booking/CreatePaymentRecordStep";
 import { BitrixIdField } from "@/components/shared/BitrixIdField";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import SignatureCanvas from "react-signature-canvas";
 import { Drawer } from "@/components/shared/drawer";
 import { ApprovalWarningDialog } from "@/components/shared/approval-warning-dialog";
@@ -23,6 +22,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { ContactEntry, parseStoredPhone } from "@/components/shared/PhoneInput";
 import { TimeRangePicker } from "@/components/shared/time-range-picker";
 import { cn, formatRupiah, toDateOnly, parseDateOnly } from "@/lib/utils";
@@ -43,10 +43,8 @@ import {
 } from "@/hooks/use-booking-draft";
 import { useSalesUsers } from "@/hooks/use-sales-users";
 import { useCurrentUser } from "@/hooks/use-current-user";
-import { useComplimentaries } from "@/hooks/use-complimentaries";
-import { createComplimentary } from "@/actions/complimentary";
-import { usePermissions } from "@/hooks/use-permissions";
-import { ComplimentarySelect } from "@/components/shared/ComplimentarySelect";
+import { EditComplimentaryContent, type ComplimentaryHandle } from "./EditComplimentaryDrawer";
+import { EditBonusContent, type BonusHandle } from "./EditBonusDrawer";
 import {
   PackageItemsEditor,
   type PackageInternalItemDraft,
@@ -124,7 +122,6 @@ interface PackageData {
   vendorItems?: PackageVendorItemEntry[];
 }
 interface BonusRow { vendorId: string; vendorCategoryId: string; vendorName: string; description: string; qty: number; nominal: number }
-interface ComplimentaryRow { id: string; complimentaryId: string | null; name: string; price: number; isShowPrice: boolean; description: string; qty: number }
 // Fase 5: TOP = jadwal murni. Status/bukti bayar dilacak di Cashbook (Ledger),
 // bukan lagi di termin. Step-5 hanya mengatur jadwal cicilan (nama/nominal/tanggal).
 interface TermRow {
@@ -278,6 +275,10 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
   const [showResumePrompt, setShowResumePrompt] = useState(false);
   // Guard against double-click creating two drafts before the first mutateAsync resolves.
   const isCreatingDraftRef = useRef(false);
+
+  // Refs to the embedded Bonus/Complimentary editors in Step 3 (live-save, mirrors edit-booking-drawer)
+  const complimentaryRef = useRef<ComplimentaryHandle>(null);
+  const bonusRef = useRef<BonusHandle>(null);
 
   // ── Optimistic save state ──
   // Tracks whether a background save (step 2/3) is in-flight or has failed.
@@ -443,29 +444,6 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
   // Vendor bonus UI deprecated (diganti Complimentary). `bonuses` dipreserve (selalu []) agar payload tetap konsisten.
   const [bonuses, setBonuses] = useState<BonusRow[]>([]);
 
-  // New complimentary state (replaces vendor-based bonus in booking drawer UI)
-  const [complimentaries, setComplimentaries] = useState<ComplimentaryRow[]>([]);
-  // "none" = collapsed button | "picker" = SearchableSelect dropdown | "create-new" = inline mini-form
-  const [complimentaryMode, setComplimentaryMode] = useState<"none" | "picker" | "create-new">("none");
-  // Tracks which complimentary rows are collapsed (by c.id). Default = none → all open.
-  const [collapsedComplimentaries, setCollapsedComplimentaries] = useState<Set<string>>(new Set());
-  // Inline "buat baru" form state
-  const [createNewComp, setCreateNewComp] = useState({ name: "", price: 0, description: "", isShowPrice: false });
-  const [isCreatingComp, setIsCreatingComp] = useState(false);
-  const { data: complimentaryResult } = useComplimentaries({ activeOnly: true, pageSize: 100 });
-  const complimentaryOptions = complimentaryResult?.items ?? [];
-  const { can: canPermission, isAdmin: isPermAdmin } = usePermissions();
-
-  function toggleComplimentaryCollapse(id: string) {
-    setCollapsedComplimentaries((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) { next.delete(id); } else { next.add(id); }
-      return next;
-    });
-  }
-
-  const canCreateComplimentary = canPermission("complimentary", "create") || isPermAdmin;
-
   const [terms, setTerms] = useState<TermRow[]>(makeDefaultTerms);
   // Track COLLAPSED terms by uid (stable across drag-reorder) — default empty = semua kebuka
   const [collapsedTerms, setCollapsedTerms] = useState<Set<string>>(new Set());
@@ -504,7 +482,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
   function resetToClean() {
     form.reset();
     setSelectedVenueId(""); setSelectedPackageId(""); setSelectedPackagePrice(0); setOriginalPackagePrice(0); setLastAllocatedPrice(0);
-    setBonuses([]); setComplimentaries([]); setCollapsedComplimentaries(new Set()); setComplimentaryMode("none"); setCreateNewComp({ name: "", price: 0, description: "", isShowPrice: false }); setIsCreatingComp(false); setTerms(makeDefaultTerms()); setCreatePayments([]);
+    setBonuses([]); setTerms(makeDefaultTerms()); setCreatePayments([]);
     setCurrentStep(1); setSignatureSales(""); setSigningLocation(""); setUseDefaultSignature(false);
     setSpecialBonusName("Discount"); setSpecialBonusAmount(0);
     setContactNumbers([]); setContactEmailCpp(""); setContactEmailCpw(""); setContactNikCpp(""); setContactNikCpw(""); setContactIdTypeCpp("KTP"); setContactIdTypeCpw("KTP");
@@ -581,7 +559,6 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
 
   useEffect(() => {
     if (open) {
-      setComplimentaryMode("none");
       setShowResumePrompt(false);
       setHasPendingWriteError(false);
       setPendingWriteErrorMsg(null);
@@ -1011,19 +988,6 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
       setTakeoutPrices(priceMap);
     }
 
-    // ── Step 2: complimentaries from draft ──
-    if (resumeDraftDetail.draftComplimentaries.length > 0) {
-      setComplimentaries(resumeDraftDetail.draftComplimentaries.map((c) => ({
-        id: crypto.randomUUID(),
-        complimentaryId: c.complimentaryId ?? null,
-        name: c.name,
-        price: c.price,
-        isShowPrice: c.isShowPrice,
-        description: c.description ?? "",
-        qty: c.qty,
-      })));
-    }
-
     // ── Step 3: package items from draft (fall back to template prefill effect
     // when the draft carries none, e.g. an older draft created before this step). ──
     if (resumeDraftDetail.draftInternalItems.length > 0 || resumeDraftDetail.draftVendorItems.length > 0) {
@@ -1102,7 +1066,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
   }
 
   // Single source of truth for the step-2 draft payload (package/takeout data +
-  // complimentaries + editable package items). Reused across step 2→3, 3→4, 4→5
+  // editable package items). Reused across step 2→3, 3→4, 4→5
   // background saves so package items are never dropped on any advance.
   const buildStep2Payload = () => ({
     packageId: form.getValues("packageId") || null,
@@ -1114,14 +1078,6 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
       takeoutNominal: c.isShow && (categoryToggles[c.categoryName] ?? false)
         ? (takeoutPrices[c.categoryName] ?? c.basePrice)
         : 0,
-    })),
-    draftComplimentaries: complimentaries.map((c) => ({
-      complimentaryId: c.complimentaryId ?? null,
-      name: c.name,
-      price: c.price,
-      isShowPrice: c.isShowPrice,
-      description: c.description || null,
-      qty: c.qty,
     })),
     draftInternalItems: packageInternalItems
       .filter((i) => i.itemName.trim())
@@ -1214,7 +1170,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
         setDraftId(confirmedDraftId);
         saveWeddingDraftToStorage(confirmedDraftId);
 
-        // Persist current step-2 data (complimentaries + prefilled package items) to
+        // Persist current step-2 data (prefilled package items) to
         // draft in background so nothing is lost if the user closes before finalize.
         void backgroundSave(
           () => updateStep2Mut.mutateAsync({ draftId: confirmedDraftId, data: buildStep2Payload() }),
@@ -1226,8 +1182,22 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
       return;
     }
 
-    // ── Step 3 → 4: Bonus & Complimentary — placeholder, no persistence yet (Task 11) ──
-    // (No explicit branch needed: falls through to the generic advance below.)
+    // ── Step 3 → 4: Bonus & Complimentary — save dirty tabs, then advance ──
+    if (currentStep === 3) {
+      const saves: Promise<void>[] = [];
+      if (complimentaryRef.current?.isDirty()) saves.push(complimentaryRef.current.save());
+      if (bonusRef.current?.isDirty()) saves.push(bonusRef.current.save());
+      if (saves.length > 0) {
+        try {
+          await Promise.all(saves);
+        } catch {
+          toast.error("Gagal menyimpan Bonus/Complimentary. Coba lagi.");
+          return;
+        }
+      }
+      setCurrentStep(4);
+      return;
+    }
 
     // ── Step 4 → 5: Item Paket — persist edited package items, advance to takeout ──
     if (currentStep === 4) {
@@ -1455,15 +1425,6 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
           qty: b.qty,
           nominal: b.nominal,
         })),
-        complimentaries: complimentaries.map((c, i) => ({
-          complimentaryId: c.complimentaryId ?? null,
-          name: c.name,
-          price: c.price,
-          isShowPrice: c.isShowPrice,
-          description: c.description || null,
-          qty: c.qty,
-          sortOrder: i,
-        })),
         categoryToggles: allCategoryPrices.map((c) => {
           const isTakeout = c.isShow ? (categoryToggles[c.categoryName] ?? false) : false;
           return {
@@ -1509,7 +1470,6 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
       signatureSales: signatureSales || null,
       leadId: selectedLeadId || null,
       bonuses: bonuses.map((b) => ({ vendorId: b.vendorId, vendorCategoryId: b.vendorCategoryId, vendorName: b.vendorName, description: b.description || null, qty: b.qty, nominal: b.nominal })),
-      complimentaries: complimentaries.map((c, i) => ({ complimentaryId: c.complimentaryId ?? null, name: c.name, price: c.price, isShowPrice: c.isShowPrice, description: c.description || null, qty: c.qty, sortOrder: i })),
       termOfPayments: terms.filter((t) => t.dueDate).map((t) => ({ name: t.name, amount: t.amount, dueDate: t.dueDate, sortOrder: t.sortOrder })),
       categoryToggles: allCategoryPrices.map((c) => {
         const isTakeout = c.isShow ? (categoryToggles[c.categoryName] ?? false) : false;
@@ -1620,14 +1580,17 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
             <form
               className="space-y-4"
               onKeyDown={(e) => {
-                // Enter must NOT advance the wizard or submit — the user moves on
-                // only by clicking Continue. We still block the browser's native
-                // form submission (buttons default to type="submit"), so Enter is a
-                // no-op here. Excluded: shift+Enter and Enter inside a textarea or a
-                // combobox/select (role="option"/"listbox"), which need it themselves.
+                // Enter must NOT advance the wizard or submit — Continue lives
+                // outside this <form> (footer), only reachable by Tab+Enter on
+                // the button itself. We only need to stop Enter's native
+                // form-submit default on plain text/number inputs. Buttons
+                // (dropdown/popover triggers, Tambah Nomor, Tambah, dst) keep
+                // native Enter-activates-click so they open naturally.
+                // Excluded: shift+Enter, textarea, buttons, and
+                // combobox/listbox content (role="option"/"listbox").
                 if (e.key !== "Enter" || e.shiftKey) return;
                 const target = e.target as HTMLElement;
-                if (target.tagName === "TEXTAREA") return;
+                if (target.tagName === "TEXTAREA" || target.tagName === "BUTTON") return;
                 if (target.closest("[role='listbox']") || target.closest("[role='option']")) return;
                 e.preventDefault();
               }}
@@ -2120,252 +2083,48 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
                     <FormLabel className={cn('text-sm', 'font-medium', 'text-foreground')}>Note Date Event</FormLabel>
                     <Textarea placeholder="Add note for date event" value={noteDateEvent} onChange={(e) => setNoteDateEvent(e.target.value)} rows={3} className="mt-1" />
                   </div>
-
-                  {/* ─── Complimentary (Bonus) ─── */}
-                  <div className="space-y-2">
-                    <FormLabel className={cn('text-sm', 'font-medium', 'text-foreground')}>Complimentary (Bonus)</FormLabel>
-
-                    {/* Pilih dari daftar (dropdown inline) — "Tambah" muncul di dalam dropdown saat search tidak exact-match */}
-                    {complimentaryMode !== "create-new" && (
-                      <ComplimentarySelect
-                        options={complimentaryOptions
-                          .filter((opt) => !complimentaries.some((c) => c.complimentaryId === opt.id))
-                          .map((opt) => ({ id: opt.id, name: opt.name, badge: formatRupiah(opt.price), description: opt.description ?? undefined }))}
-                        value=""
-                        onChange={(selectedId) => {
-                          const found = complimentaryOptions.find((x) => x.id === selectedId);
-                          if (found) {
-                            setComplimentaries((prev) => [...prev, {
-                              id: crypto.randomUUID(),
-                              complimentaryId: found.id,
-                              name: found.name,
-                              price: found.price,
-                              isShowPrice: found.isShowPrice,
-                              description: found.description ?? "",
-                              qty: 1,
-                            }]);
-                          }
-                        }}
-                        onAddTrigger={canCreateComplimentary ? (text) => {
-                          setComplimentaryMode("create-new");
-                          setCreateNewComp({ name: text, price: 0, description: "", isShowPrice: false });
-                        } : undefined}
-                        placeholder="Pilih dari daftar complimentary..."
-                        searchPlaceholder="Cari complimentary..."
-                        emptyText="Tidak ada complimentary"
-                      />
-                    )}
-
-                    {/* Mode: buat baru */}
-                    {complimentaryMode === "create-new" && (
-                      <div className="rounded-xl border border-border bg-card p-3 space-y-3">
-                        <div className="flex items-center justify-between">
-                          <p className="text-xs font-medium text-muted-foreground">Tambah complimentary baru ke master</p>
-                          <button
-                            type="button"
-                            className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-                            onClick={() => setComplimentaryMode("none")}
-                          >
-                            Batal
-                          </button>
-                        </div>
-
-                        {/* Nama */}
-                        <div>
-                          <label className="text-xs font-medium text-foreground block mb-1">Nama <span className="text-destructive">*</span></label>
-                          <Input
-                            value={createNewComp.name}
-                            onChange={(e) => setCreateNewComp((p) => ({ ...p, name: e.target.value }))}
-                            placeholder="Nama complimentary..."
-                            className="h-8 text-sm"
-                          />
-                        </div>
-
-                        {/* Harga + Tampil harga */}
-                        <div className="flex items-center gap-2">
-                          <div className="relative flex-1">
-                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">Rp</span>
-                            <input
-                              type="text"
-                              inputMode="numeric"
-                              className="w-full pl-8 pr-3 py-1.5 text-sm border border-input rounded-md bg-background"
-                              placeholder="Harga (opsional)"
-                              value={createNewComp.price ? fmtRp(createNewComp.price) : ""}
-                              onChange={(e) => {
-                                const n = Number(e.target.value.replace(/\D/g, ""));
-                                setCreateNewComp((p) => ({ ...p, price: n }));
-                              }}
-                            />
-                          </div>
-                          <label className="flex items-center gap-1.5 shrink-0 cursor-pointer">
-                            <Switch
-                              checked={createNewComp.isShowPrice}
-                              onCheckedChange={(v) => setCreateNewComp((p) => ({ ...p, isShowPrice: v }))}
-                            />
-                            <span className="text-xs text-muted-foreground">Tampil harga</span>
-                          </label>
-                        </div>
-
-                        {/* Deskripsi */}
-                        <div>
-                          <label className="text-xs font-medium text-foreground block mb-1">Deskripsi</label>
-                          <Textarea
-                            value={createNewComp.description}
-                            onChange={(e) => setCreateNewComp((p) => ({ ...p, description: e.target.value }))}
-                            placeholder="Keterangan complimentary (opsional)..."
-                            rows={2}
-                            className="resize-none text-sm"
-                          />
-                        </div>
-
-                        {/* Tombol simpan */}
-                        <Button
-                          type="button"
-                          className="w-full rounded-xl"
-                          disabled={!createNewComp.name.trim() || isCreatingComp}
-                          onClick={async () => {
-                            if (!createNewComp.name.trim() || isCreatingComp) return;
-                            setIsCreatingComp(true);
-                            try {
-                              const result = await createComplimentary({
-                                name: createNewComp.name.trim(),
-                                price: createNewComp.price,
-                                description: createNewComp.description.trim() || null,
-                                isShowPrice: createNewComp.isShowPrice,
-                                isActive: true,
-                              });
-                              if (result.success && result.item) {
-                                setComplimentaries((prev) => [...prev, {
-                                  id: crypto.randomUUID(),
-                                  complimentaryId: result.item!.id,
-                                  name: result.item!.name,
-                                  price: result.item!.price,
-                                  isShowPrice: result.item!.isShowPrice,
-                                  description: result.item!.description ?? "",
-                                  qty: 1,
-                                }]);
-                                setComplimentaryMode("none");
-                                toast.success(`"${result.item.name}" berhasil ditambahkan`);
-                              } else {
-                                toast.error(result.error ?? "Gagal menambahkan complimentary");
-                              }
-                            } finally {
-                              setIsCreatingComp(false);
-                            }
-                          }}
-                        >
-                          {isCreatingComp ? "Menyimpan..." : "Simpan & Tambahkan"}
-                        </Button>
-                      </div>
-                    )}
-
-                    {/* List complimentary yang sudah ditambahkan — collapsible rows */}
-                    {complimentaries.map((c) => {
-                      const isOpen = !collapsedComplimentaries.has(c.id);
-                      return (
-                        <Collapsible
-                          key={c.id}
-                          open={isOpen}
-                          onOpenChange={() => toggleComplimentaryCollapse(c.id)}
-                          className="rounded-xl border border-border bg-muted/30 overflow-hidden"
-                        >
-                          {/* Header */}
-                          <div className="flex items-center gap-1 px-3 py-2.5">
-                            <CollapsibleTrigger className="flex flex-1 items-center gap-2 min-w-0 cursor-pointer text-left">
-                              <AltArrowDown
-                                weight="BoldDuotone"
-                                className={cn(
-                                  "h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200",
-                                  isOpen && "rotate-180",
-                                )}
-                              />
-                              <div className="flex-1 min-w-0">
-                                <p className="text-sm font-medium text-foreground truncate">{c.name}</p>
-                                {!isOpen && (
-                                  <p className="text-xs text-muted-foreground tabular-nums">
-                                    {c.isShowPrice && c.price ? `Rp${fmtRp(c.price)}` : "Harga tidak ditampilkan"}
-                                  </p>
-                                )}
-                              </div>
-                            </CollapsibleTrigger>
-                            <button
-                              type="button"
-                              className="shrink-0 p-1 rounded-lg text-destructive hover:bg-destructive/10 transition-colors"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setComplimentaries((prev) => prev.filter((x) => x.id !== c.id));
-                                setCollapsedComplimentaries((prev) => {
-                                  const next = new Set(prev);
-                                  next.delete(c.id);
-                                  return next;
-                                });
-                              }}
-                              aria-label="Hapus complimentary"
-                            >
-                              <CloseCircle weight="BoldDuotone" className="h-3.5 w-3.5" />
-                            </button>
-                          </div>
-
-                          {/* Body */}
-                          <CollapsibleContent>
-                            <div className="px-3 pb-3 space-y-2 border-t border-border/60 pt-2">
-                              <div>
-                                <label className="text-xs font-medium text-foreground block mb-1">Nama <span className="text-destructive">*</span></label>
-                                <Input
-                                  value={c.name}
-                                  onChange={(e) => setComplimentaries((prev) => prev.map((x) => x.id === c.id ? { ...x, name: e.target.value } : x))}
-                                  placeholder="Nama complimentary..."
-                                  className="h-8 text-sm"
-                                />
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <div className="relative flex-1">
-                                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">Rp</span>
-                                  <input
-                                    type="text"
-                                    inputMode="numeric"
-                                    className="w-full pl-8 pr-3 py-1.5 text-sm border border-input rounded-md bg-background"
-                                    placeholder="Harga"
-                                    value={c.price ? fmtRp(c.price) : ""}
-                                    onChange={(e) => {
-                                      const n = Number(e.target.value.replace(/\D/g, ""));
-                                      setComplimentaries((prev) => prev.map((x) => x.id === c.id ? { ...x, price: n } : x));
-                                    }}
-                                  />
-                                </div>
-                                <label className="flex items-center gap-1.5 shrink-0 cursor-pointer">
-                                  <Switch
-                                    checked={c.isShowPrice}
-                                    onCheckedChange={(v) => setComplimentaries((prev) => prev.map((x) => x.id === c.id ? { ...x, isShowPrice: v } : x))}
-                                  />
-                                  <span className="text-xs text-muted-foreground">Tampil harga</span>
-                                </label>
-                              </div>
-                              <Textarea
-                                value={c.description}
-                                onChange={(e) => setComplimentaries((prev) => prev.map((x) => x.id === c.id ? { ...x, description: e.target.value } : x))}
-                                placeholder="Keterangan complimentary..."
-                                rows={2}
-                                className="resize-none text-sm"
-                              />
-                            </div>
-                          </CollapsibleContent>
-                        </Collapsible>
-                      );
-                    })}
-                    {complimentaries.length === 0 && complimentaryMode === "none" && (
-                      <p className="text-xs text-muted-foreground italic text-center py-1">Belum ada complimentary</p>
-                    )}
-                  </div>
                 </div>
               )}
-              {/* ─── Step 3: Bonus & Complimentary ─── */}
-              {currentStep === 3 && (
-                <div className="space-y-6">
-                  <div className="rounded-2xl border bg-card p-6 text-sm text-muted-foreground">
-                    Bonus &amp; Complimentary — diisi pada tahap berikutnya.
-                  </div>
-                </div>
+              {/* ─── Step 3: Bonus & Complimentary — live-saved via EditBonus/EditComplimentary ─── */}
+              {currentStep === 3 && draftId && (
+                <Tabs defaultValue="bonus">
+                  <TabsList
+                    variant="line"
+                    className="h-auto w-full justify-start gap-1 rounded-none border-b border-border bg-transparent p-0"
+                  >
+                    <TabsTrigger
+                      value="bonus"
+                      className="h-auto flex-none items-center gap-1.5 rounded-none border-0 border-b border-b-transparent -mb-px bg-transparent px-4 py-2.5 text-sm font-medium text-muted-foreground shadow-none transition-colors after:hidden hover:border-b-border hover:text-foreground data-active:border-b-primary data-active:bg-transparent data-active:text-foreground data-active:shadow-none"
+                    >
+                      <MedalStar weight="BoldDuotone" className="size-4 shrink-0" />
+                      Bonus
+                    </TabsTrigger>
+                    <TabsTrigger
+                      value="complimentary"
+                      className="h-auto flex-none items-center gap-1.5 rounded-none border-0 border-b border-b-transparent -mb-px bg-transparent px-4 py-2.5 text-sm font-medium text-muted-foreground shadow-none transition-colors after:hidden hover:border-b-border hover:text-foreground data-active:border-b-primary data-active:bg-transparent data-active:text-foreground data-active:shadow-none"
+                    >
+                      <Gift weight="BoldDuotone" className="size-4 shrink-0" />
+                      Complimentary
+                    </TabsTrigger>
+                  </TabsList>
+
+                  <TabsContent value="bonus" keepMounted className="mt-4 animate-in fade-in duration-300">
+                    <EditBonusContent
+                      ref={bonusRef}
+                      bookingId={draftId}
+                      onClose={() => { /* stay on tab */ }}
+                      hideActions
+                    />
+                  </TabsContent>
+                  <TabsContent value="complimentary" keepMounted className="mt-4 animate-in fade-in duration-300">
+                    <EditComplimentaryContent
+                      ref={complimentaryRef}
+                      bookingId={draftId}
+                      onClose={() => { /* stay on tab */ }}
+                      hideActions
+                    />
+                  </TabsContent>
+                </Tabs>
               )}
               {/* ─── Step 4: Item Paket (Internal & Vendor items) ─── */}
               {currentStep === 4 && (

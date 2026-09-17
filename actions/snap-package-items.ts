@@ -8,11 +8,12 @@ import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
 import { logAudit } from "@/lib/audit";
 import { canAccessBooking } from "@/lib/access-control";
 import { isBookingSnapshotFrozen } from "@/lib/booking-freeze";
-import { refreshCurrentRevisionSnapshot, patchSnapshotPackageItems, patchSnapshotComplimentaries } from "@/lib/booking-revision";
+import { refreshCurrentRevisionSnapshot, patchSnapshotPackageItems, patchSnapshotComplimentaries, patchSnapshotBookingBonuses } from "@/lib/booking-revision";
 import {
   saveSnapInternalItemsSchema,
   saveSnapVendorItemsSchema,
   saveSnapComplimentariesSchema,
+  saveSnapBookingBonusesSchema,
   saveSnapTakeoutSchema,
 } from "@/lib/validations/snap-package-items";
 import { calcFinalFromFullPrice } from "@/lib/package-prices";
@@ -271,6 +272,75 @@ export async function saveSnapComplimentaries(
   } catch (e) {
     console.error("[saveSnapComplimentaries]", e);
     return { success: false, error: "Gagal menyimpan complimentaries." };
+  }
+}
+
+// ─── Save snap_booking_bonuses ────────────────────────────────────────────────
+
+export async function saveSnapBookingBonuses(
+  data: unknown,
+): Promise<{ success: boolean; error?: string }> {
+  const { session, error } = await requirePermission({ module: "booking", action: "edit-package" });
+  if (error) return { success: false, error };
+  if (!mutationLimiter.check(`snap-bonus:${session!.user.id}`)) return { success: false, ...rateLimitError() };
+
+  const parsed = saveSnapBookingBonusesSchema.safeParse(data);
+  if (!parsed.success) {
+    return { success: false, error: parsed.error.issues[0]?.message ?? "Input tidak valid." };
+  }
+  const { bookingId, items } = parsed.data;
+
+  const scope = session!.user.dataScope ?? "own";
+  if (!(await canAccessBooking(session!.user.profileId, scope, bookingId))) {
+    return { success: false, error: "Anda tidak memiliki akses ke booking ini." };
+  }
+
+  try {
+    const ops: Prisma.PrismaPromise<unknown>[] = [
+      db.snapBookingBonus.deleteMany({ where: { bookingId } }),
+      ...items.map((item, idx) =>
+        db.snapBookingBonus.create({
+          data: {
+            bookingId,
+            bonusId: item.bonusId ?? null,
+            name: item.name,
+            price: item.price,
+            description: item.description ?? null,
+            qty: item.qty ?? 1,
+            sortOrder: item.sortOrder ?? idx,
+          },
+        }),
+      ),
+    ];
+
+    await db.$transaction(ops);
+
+    // Keep the PO PDF in sync with the edited bonuses: refresh the in-flight
+    // revision when still unfrozen, or — post-signature — patch just the booking
+    // bonuses into the signed snapshot (bonus is a non-trigger field, editable
+    // after signature without re-approval). Mirrors saveSnapComplimentaries. Best-effort.
+    try {
+      const refreshed = await refreshCurrentRevisionSnapshot(bookingId);
+      if (!refreshed) await patchSnapshotBookingBonuses(bookingId);
+    } catch (e) {
+      console.error("[saveSnapBookingBonuses] revision snapshot refresh failed:", e);
+    }
+
+    await logAudit({
+      userId: session!.user.id,
+      action: "booking.snap_bonuses_updated",
+      result: "success",
+      entityType: "booking",
+      entityId: bookingId,
+      changes: { count: items.length },
+      description: `Updated ${items.length} booking bonuses`,
+    });
+
+    revalidateTag("bookings", "max");
+    return { success: true };
+  } catch (e) {
+    console.error("[saveSnapBookingBonuses]", e);
+    return { success: false, error: "Gagal menyimpan bonus." };
   }
 }
 

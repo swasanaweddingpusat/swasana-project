@@ -9,36 +9,34 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
-import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
-import { saveSnapComplimentaries } from "@/actions/snap-package-items";
-import { firstError, complimentaryRowsSchema } from "@/lib/validations/booking-form";
-import { createComplimentary } from "@/actions/complimentary";
-import { useComplimentaries } from "@/hooks/use-complimentaries";
+import { saveSnapBookingBonuses } from "@/actions/snap-package-items";
+import { firstError, bonusRowsSchema } from "@/lib/validations/booking-form";
+import { createBonus } from "@/actions/bonus";
+import { useBonuses } from "@/hooks/use-bonuses";
 import { usePermissions } from "@/hooks/use-permissions";
-import { ComplimentarySelect } from "@/components/shared/ComplimentarySelect";
+import { BonusSelect } from "@/components/shared/BonusSelect";
 import type { BookingDetail } from "@/lib/queries/bookings";
 
 // --- Types -------------------------------------------------------------------
 
-export interface EditComplimentaryTarget {
+export interface EditBonusTarget {
   bookingId: string;
   customerName: string;
 }
 
-interface ComplimentaryRow {
+interface BonusRow {
   uid: string;
-  complimentaryId: string | null;
+  bonusId: string | null;
   name: string;
   price: number;
-  isShowPrice: boolean;
   description: string;
   qty: number;
 }
 
-/** Imperative handle exposed to parent when embedded in step 2 of edit-booking drawer. */
-export interface ComplimentaryHandle {
+/** Imperative handle exposed to parent when embedded in step 3 of edit-booking drawer. */
+export interface BonusHandle {
   save: () => Promise<void>;
   isDirty: () => boolean;
 }
@@ -47,13 +45,13 @@ function fmtRp(n: number): string {
   return new Intl.NumberFormat("id-ID").format(n);
 }
 
-// --- ComplimentaryBody -- inner component with forwarded ref -----------------
+// --- BonusBody -- inner component with forwarded ref -------------------------
 // State initialized once from bookingDetail via useState lazy initializer.
 // The parent passes key={bookingId} to ensure a fresh remount per booking.
 
-interface ComplimentaryBodyProps {
+interface BonusBodyProps {
   bookingDetail: BookingDetail;
-  target: EditComplimentaryTarget;
+  target: EditBonusTarget;
   onClose: () => void;
   /** When true, hides the sticky footer (save/cancel buttons). Used when embedded
    *  inside the edit-booking drawer — the parent step footer handles saving via the
@@ -61,19 +59,18 @@ interface ComplimentaryBodyProps {
   hideActions?: boolean;
 }
 
-const ComplimentaryBody = forwardRef<ComplimentaryHandle, ComplimentaryBodyProps>(
-  function ComplimentaryBody({ bookingDetail, target, onClose, hideActions }, ref) {
+const BonusBody = forwardRef<BonusHandle, BonusBodyProps>(
+  function BonusBody({ bookingDetail, target, onClose, hideActions }, ref) {
     const qc = useQueryClient();
 
-    const [complimentaries, setComplimentaries] = useState<ComplimentaryRow[]>(() =>
-      (bookingDetail.snapComplimentaries ?? []).map((c) => ({
-        uid: c.id,
-        complimentaryId: c.complimentaryId ?? null,
-        name: c.name,
-        price: Number(c.price) || 0,
-        isShowPrice: Boolean(c.isShowPrice),
-        description: c.description ?? "",
-        qty: Number(c.qty) || 1,
+    const [bonuses, setBonuses] = useState<BonusRow[]>(() =>
+      (bookingDetail.snapBookingBonuses ?? []).map((b) => ({
+        uid: b.id,
+        bonusId: b.bonusId ?? null,
+        name: b.name,
+        price: Number(b.price) || 0,
+        description: b.description ?? "",
+        qty: Number(b.qty) || 1,
       })),
     );
 
@@ -81,22 +78,22 @@ const ComplimentaryBody = forwardRef<ComplimentaryHandle, ComplimentaryBodyProps
     // initialize exactly once (React's useState lazy init already ran above).
     const initialJsonRef = useRef<string | null>(null);
     if (initialJsonRef.current === null) {
-      initialJsonRef.current = JSON.stringify(complimentaries);
+      initialJsonRef.current = JSON.stringify(bonuses);
     }
     // Keep a current-value ref so the imperative handle always reads the latest state.
-    const complimentariesRef = useRef(complimentaries);
-    complimentariesRef.current = complimentaries;
+    const bonusesRef = useRef(bonuses);
+    bonusesRef.current = bonuses;
 
     const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
     const [mode, setMode] = useState<"none" | "create-new">("none");
-    const [createNewComp, setCreateNewComp] = useState({ name: "", price: 0, description: "", isShowPrice: false });
-    const [isCreatingComp, setIsCreatingComp] = useState(false);
+    const [createNewBonus, setCreateNewBonus] = useState({ name: "", price: 0, description: "" });
+    const [isCreatingBonus, setIsCreatingBonus] = useState(false);
     const [saving, setSaving] = useState(false);
 
-    const { data: complimentaryData } = useComplimentaries({ activeOnly: true });
-    const complimentaryOptions = complimentaryData?.items ?? [];
+    const { data: bonusData } = useBonuses({ activeOnly: true });
+    const bonusOptions = bonusData?.data ?? [];
     const { can: canPermission, isAdmin: isPermAdmin } = usePermissions();
-    const canCreateComplimentary = canPermission("complimentary", "create") || isPermAdmin;
+    const canCreateBonus = canPermission("bonus", "create") || isPermAdmin;
 
     const toggleCollapse = useCallback((uid: string) => {
       setCollapsed((prev) => {
@@ -107,7 +104,7 @@ const ComplimentaryBody = forwardRef<ComplimentaryHandle, ComplimentaryBodyProps
     }, []);
 
     const removeRow = useCallback((uid: string) => {
-      setComplimentaries((prev) => prev.filter((x) => x.uid !== uid));
+      setBonuses((prev) => prev.filter((x) => x.uid !== uid));
       setCollapsed((prev) => {
         const next = new Set(prev);
         next.delete(uid);
@@ -116,66 +113,63 @@ const ComplimentaryBody = forwardRef<ComplimentaryHandle, ComplimentaryBodyProps
     }, []);
 
     const handleCreateNew = useCallback(async () => {
-      if (!createNewComp.name.trim() || isCreatingComp) return;
-      setIsCreatingComp(true);
+      if (!createNewBonus.name.trim() || createNewBonus.price <= 0 || isCreatingBonus) return;
+      setIsCreatingBonus(true);
       try {
-        const result = await createComplimentary({
-          name: createNewComp.name.trim(),
-          price: createNewComp.price,
-          description: createNewComp.description.trim() || null,
-          isShowPrice: createNewComp.isShowPrice,
+        const result = await createBonus({
+          name: createNewBonus.name.trim(),
+          price: createNewBonus.price,
+          description: createNewBonus.description.trim() || null,
           isActive: true,
         });
-        if (result.success && result.item) {
-          setComplimentaries((prev) => [
+        if (result.success) {
+          setBonuses((prev) => [
             ...prev,
             {
               uid: `new-${Date.now()}`,
-              complimentaryId: result.item!.id,
-              name: result.item!.name,
-              price: result.item!.price,
-              isShowPrice: result.item!.isShowPrice,
-              description: result.item!.description ?? "",
+              bonusId: result.data.id,
+              name: result.data.name,
+              price: result.data.price,
+              description: result.data.description ?? "",
               qty: 1,
             },
           ]);
           setMode("none");
-          toast.success(`"${result.item.name}" berhasil ditambahkan`);
+          toast.success(`"${result.data.name}" berhasil ditambahkan`);
         } else {
-          toast.error(result.error ?? "Gagal menambahkan complimentary");
+          toast.error(result.error ?? "Gagal menambahkan bonus");
         }
       } finally {
-        setIsCreatingComp(false);
+        setIsCreatingBonus(false);
       }
-    }, [createNewComp, isCreatingComp]);
+    }, [createNewBonus, isCreatingBonus]);
 
     const handleSave = useCallback(async () => {
-      const compErr = firstError(complimentaryRowsSchema, complimentaries);
-      if (compErr) { toast.error(compErr); return; }
+      const bonusErr = firstError(bonusRowsSchema, bonuses);
+      if (bonusErr) { toast.error(bonusErr); return; }
       setSaving(true);
-      const res = await saveSnapComplimentaries({
+      const res = await saveSnapBookingBonuses({
         bookingId: target.bookingId,
-        items: complimentaries.map((c, i) => ({
-          complimentaryId: c.complimentaryId ?? null,
-          name: c.name,
-          price: c.price,
-          isShowPrice: c.isShowPrice,
-          description: c.description.trim() || null,
-          qty: c.qty,
+        items: bonuses.map((b, i) => ({
+          bonusId: b.bonusId ?? null,
+          name: b.name,
+          price: b.price,
+          description: b.description.trim() || null,
+          qty: b.qty,
           sortOrder: i,
         })),
       });
       setSaving(false);
       if (!res.success) { toast.error(res.error ?? "Gagal menyimpan."); return; }
-      toast.success("Complimentary berhasil disimpan.");
+      toast.success("Bonus berhasil disimpan.");
       await qc.invalidateQueries({ queryKey: ["booking-detail", target.bookingId] });
       onClose();
-    }, [target.bookingId, complimentaries, qc, onClose]);
+    }, [target.bookingId, bonuses, qc, onClose]);
 
     // Expose save + isDirty to parent when embedded via ref.
     useImperativeHandle(ref, () => ({
       save: handleSave,
-      isDirty: () => JSON.stringify(complimentariesRef.current) !== initialJsonRef.current,
+      isDirty: () => JSON.stringify(bonusesRef.current) !== initialJsonRef.current,
     }), [handleSave]);
 
     return (
@@ -183,9 +177,9 @@ const ComplimentaryBody = forwardRef<ComplimentaryHandle, ComplimentaryBodyProps
         <div className="flex-1 space-y-3">
           {/* Picker -- hidden when in create-new mode */}
           {mode !== "create-new" && (
-            <ComplimentarySelect
-              options={complimentaryOptions
-                .filter((opt) => !complimentaries.some((c) => c.complimentaryId === opt.id))
+            <BonusSelect
+              options={bonusOptions
+                .filter((opt) => !bonuses.some((b) => b.bonusId === opt.id))
                 .map((opt) => ({
                   id: opt.id,
                   name: opt.name,
@@ -193,30 +187,29 @@ const ComplimentaryBody = forwardRef<ComplimentaryHandle, ComplimentaryBodyProps
                   description: opt.description ?? undefined,
                 }))}
               value=""
-              onChange={(cId) => {
-                const opt = complimentaryOptions.find((c) => c.id === cId);
+              onChange={(bId) => {
+                const opt = bonusOptions.find((b) => b.id === bId);
                 if (opt) {
-                  setComplimentaries((prev) => [
+                  setBonuses((prev) => [
                     ...prev,
                     {
                       uid: `new-${Date.now()}`,
-                      complimentaryId: opt.id,
+                      bonusId: opt.id,
                       name: opt.name,
                       price: opt.price,
-                      isShowPrice: opt.isShowPrice,
                       description: "",
                       qty: 1,
                     },
                   ]);
                 }
               }}
-              onAddTrigger={canCreateComplimentary ? (text) => {
+              onAddTrigger={canCreateBonus ? (text) => {
                 setMode("create-new");
-                setCreateNewComp({ name: text, price: 0, description: "", isShowPrice: false });
+                setCreateNewBonus({ name: text, price: 0, description: "" });
               } : undefined}
-              placeholder="Pilih dari daftar complimentary..."
-              searchPlaceholder="Cari complimentary..."
-              emptyText="Tidak ada complimentary"
+              placeholder="Pilih dari daftar bonus..."
+              searchPlaceholder="Cari bonus..."
+              emptyText="Tidak ada bonus"
             />
           )}
 
@@ -224,47 +217,41 @@ const ComplimentaryBody = forwardRef<ComplimentaryHandle, ComplimentaryBodyProps
           {mode === "create-new" && (
             <div className="rounded-xl border border-border bg-card p-3 space-y-3">
               <div className="flex items-center justify-between">
-                <p className="text-xs font-medium text-muted-foreground">Tambah complimentary baru ke master</p>
+                <p className="text-xs font-medium text-muted-foreground">Tambah bonus baru ke master</p>
                 <button type="button" className="text-xs text-muted-foreground hover:text-foreground transition-colors" onClick={() => setMode("none")}>Batal</button>
               </div>
               <div>
                 <label className="text-xs font-medium text-foreground block mb-1">Nama <span className="text-destructive">*</span></label>
                 <Input
-                  value={createNewComp.name}
-                  onChange={(e) => setCreateNewComp((p) => ({ ...p, name: e.target.value }))}
-                  placeholder="Nama complimentary..."
+                  value={createNewBonus.name}
+                  onChange={(e) => setCreateNewBonus((p) => ({ ...p, name: e.target.value }))}
+                  placeholder="Nama bonus..."
                   className="h-8 text-sm"
                 />
               </div>
-              <div className="flex items-center gap-2">
-                <div className="relative flex-1">
+              <div>
+                <label className="text-xs font-medium text-foreground block mb-1">Harga <span className="text-destructive">*</span></label>
+                <div className="relative">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">Rp</span>
                   <input
                     type="text"
                     inputMode="numeric"
                     className="w-full pl-8 pr-3 py-1.5 text-sm border border-input rounded-md bg-background"
-                    placeholder="Harga (opsional)"
-                    value={createNewComp.price ? fmtRp(createNewComp.price) : ""}
+                    placeholder="Harga (wajib diisi)"
+                    value={createNewBonus.price ? fmtRp(createNewBonus.price) : ""}
                     onChange={(e) => {
                       const n = Number(e.target.value.replace(/\D/g, ""));
-                      setCreateNewComp((p) => ({ ...p, price: n }));
+                      setCreateNewBonus((p) => ({ ...p, price: n }));
                     }}
                   />
                 </div>
-                <label className="flex items-center gap-1.5 shrink-0 cursor-pointer">
-                  <Switch
-                    checked={createNewComp.isShowPrice}
-                    onCheckedChange={(v) => setCreateNewComp((p) => ({ ...p, isShowPrice: v }))}
-                  />
-                  <span className="text-xs text-muted-foreground">Tampil harga</span>
-                </label>
               </div>
               <div>
                 <label className="text-xs font-medium text-foreground block mb-1">Deskripsi</label>
                 <Textarea
-                  value={createNewComp.description}
-                  onChange={(e) => setCreateNewComp((p) => ({ ...p, description: e.target.value }))}
-                  placeholder="Keterangan complimentary (opsional)..."
+                  value={createNewBonus.description}
+                  onChange={(e) => setCreateNewBonus((p) => ({ ...p, description: e.target.value }))}
+                  placeholder="Keterangan bonus (opsional)..."
                   rows={2}
                   className="resize-none text-sm"
                 />
@@ -272,22 +259,22 @@ const ComplimentaryBody = forwardRef<ComplimentaryHandle, ComplimentaryBodyProps
               <Button
                 type="button"
                 className="w-full rounded-xl"
-                disabled={!createNewComp.name.trim() || isCreatingComp}
+                disabled={!createNewBonus.name.trim() || createNewBonus.price <= 0 || isCreatingBonus}
                 onClick={handleCreateNew}
               >
-                {isCreatingComp ? "Menyimpan..." : "Simpan & Tambahkan"}
+                {isCreatingBonus ? "Menyimpan..." : "Simpan & Tambahkan"}
               </Button>
             </div>
           )}
 
           {/* Selected rows */}
-          {complimentaries.map((c) => {
-            const isOpen = !collapsed.has(c.uid);
+          {bonuses.map((b) => {
+            const isOpen = !collapsed.has(b.uid);
             return (
               <Collapsible
-                key={c.uid}
+                key={b.uid}
                 open={isOpen}
-                onOpenChange={() => toggleCollapse(c.uid)}
+                onOpenChange={() => toggleCollapse(b.uid)}
                 className="rounded-xl border border-border bg-muted/30 overflow-hidden"
               >
                 <div className="flex items-center gap-1 px-3 py-2.5">
@@ -297,10 +284,10 @@ const ComplimentaryBody = forwardRef<ComplimentaryHandle, ComplimentaryBodyProps
                       className={cn("h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200", isOpen && "rotate-180")}
                     />
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-foreground truncate">{c.name}</p>
+                      <p className="text-sm font-medium text-foreground truncate">{b.name}</p>
                       {!isOpen && (
                         <p className="text-xs text-muted-foreground tabular-nums">
-                          {c.isShowPrice && c.price ? `Rp${fmtRp(c.price)}` : "Harga tidak ditampilkan"}
+                          {b.price ? `Rp${fmtRp(b.price)}` : "Harga belum diisi"}
                         </p>
                       )}
                     </div>
@@ -308,8 +295,8 @@ const ComplimentaryBody = forwardRef<ComplimentaryHandle, ComplimentaryBodyProps
                   <button
                     type="button"
                     className="shrink-0 p-1 rounded-lg text-destructive hover:bg-destructive/10 transition-colors"
-                    onClick={(e) => { e.stopPropagation(); removeRow(c.uid); }}
-                    aria-label="Hapus complimentary"
+                    onClick={(e) => { e.stopPropagation(); removeRow(b.uid); }}
+                    aria-label="Hapus bonus"
                   >
                     <CloseCircle weight="BoldDuotone" className="h-3.5 w-3.5" />
                   </button>
@@ -321,39 +308,35 @@ const ComplimentaryBody = forwardRef<ComplimentaryHandle, ComplimentaryBodyProps
                         Nama <span className="text-destructive">*</span>
                       </label>
                       <Input
-                        value={c.name}
-                        onChange={(e) => setComplimentaries((prev) => prev.map((x) => x.uid === c.uid ? { ...x, name: e.target.value } : x))}
-                        placeholder="Nama complimentary..."
+                        value={b.name}
+                        onChange={(e) => setBonuses((prev) => prev.map((x) => x.uid === b.uid ? { ...x, name: e.target.value } : x))}
+                        placeholder="Nama bonus..."
                         className="h-8 text-sm"
                       />
                     </div>
-                    <div className="flex items-center gap-2">
-                      <div className="relative flex-1">
+                    <div>
+                      <label className="text-xs font-medium text-foreground block mb-1">
+                        Harga <span className="text-destructive">*</span>
+                      </label>
+                      <div className="relative">
                         <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">Rp</span>
                         <input
                           type="text"
                           inputMode="numeric"
                           className="w-full pl-8 pr-3 py-1.5 text-sm border border-input rounded-md bg-background"
                           placeholder="Harga"
-                          value={c.price ? fmtRp(c.price) : ""}
+                          value={b.price ? fmtRp(b.price) : ""}
                           onChange={(e) => {
                             const n = Number(e.target.value.replace(/\D/g, ""));
-                            setComplimentaries((prev) => prev.map((x) => x.uid === c.uid ? { ...x, price: n } : x));
+                            setBonuses((prev) => prev.map((x) => x.uid === b.uid ? { ...x, price: n } : x));
                           }}
                         />
                       </div>
-                      <label className="flex items-center gap-1.5 shrink-0 cursor-pointer">
-                        <Switch
-                          checked={c.isShowPrice}
-                          onCheckedChange={(v) => setComplimentaries((prev) => prev.map((x) => x.uid === c.uid ? { ...x, isShowPrice: v } : x))}
-                        />
-                        <span className="text-xs text-muted-foreground">Tampil harga</span>
-                      </label>
                     </div>
                     <Textarea
-                      value={c.description}
-                      onChange={(e) => setComplimentaries((prev) => prev.map((x) => x.uid === c.uid ? { ...x, description: e.target.value } : x))}
-                      placeholder="Keterangan complimentary..."
+                      value={b.description}
+                      onChange={(e) => setBonuses((prev) => prev.map((x) => x.uid === b.uid ? { ...x, description: e.target.value } : x))}
+                      placeholder="Keterangan bonus..."
                       rows={2}
                       className="resize-none text-sm"
                     />
@@ -363,9 +346,9 @@ const ComplimentaryBody = forwardRef<ComplimentaryHandle, ComplimentaryBodyProps
             );
           })}
 
-          {complimentaries.length === 0 && mode === "none" && (
+          {bonuses.length === 0 && mode === "none" && (
             <p className="text-sm text-muted-foreground text-center py-6 rounded-2xl border border-dashed border-border">
-              Belum ada complimentary.
+              Belum ada bonus.
             </p>
           )}
         </div>
@@ -378,7 +361,7 @@ const ComplimentaryBody = forwardRef<ComplimentaryHandle, ComplimentaryBodyProps
                 Batal
               </Button>
               <Button type="button" onClick={handleSave} disabled={saving} className="flex-1 rounded-xl">
-                {saving ? "Menyimpan..." : "Simpan Complimentary"}
+                {saving ? "Menyimpan..." : "Simpan Bonus"}
               </Button>
             </div>
           </div>
@@ -388,15 +371,15 @@ const ComplimentaryBody = forwardRef<ComplimentaryHandle, ComplimentaryBodyProps
   },
 );
 
-// --- EditComplimentaryContent -- exported embeddable wrapper -----------------
-// Fetches booking-detail independently and renders ComplimentaryBody with a
-// forwarded ref. Used by edit-booking-drawer step 2 to embed complimentary
-// editing without a Drawer shell of its own.
+// --- EditBonusContent -- exported embeddable wrapper --------------------------
+// Fetches booking-detail independently and renders BonusBody with a forwarded
+// ref. Used by edit-booking-drawer step 3 to embed bonus editing without a
+// Drawer shell of its own.
 
-export const EditComplimentaryContent = forwardRef<
-  ComplimentaryHandle,
+export const EditBonusContent = forwardRef<
+  BonusHandle,
   { bookingId: string; onClose: () => void; hideActions?: boolean }
->(function EditComplimentaryContent({ bookingId, onClose, hideActions }, ref) {
+>(function EditBonusContent({ bookingId, onClose, hideActions }, ref) {
   const { data: bookingDetail, isLoading } = useQuery<BookingDetail>({
     queryKey: ["booking-detail", bookingId],
     queryFn: async () => {
@@ -419,7 +402,7 @@ export const EditComplimentaryContent = forwardRef<
   }
 
   return (
-    <ComplimentaryBody
+    <BonusBody
       key={bookingId}
       ref={ref}
       bookingDetail={bookingDetail}
@@ -429,4 +412,3 @@ export const EditComplimentaryContent = forwardRef<
     />
   );
 });
-

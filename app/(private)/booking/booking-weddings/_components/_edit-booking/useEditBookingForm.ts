@@ -23,11 +23,12 @@ type DayAvail = { morning: boolean; evening: boolean; fullday: boolean };
 export const STEP_LABELS: Record<number, string> = {
   1: "Client",
   2: "Venue & Paket",
-  3: "Item Paket",
-  4: "Takeout",
-  5: "TOP",
-  6: "Payment",
-  7: "TTD",
+  3: "Complimentary & Bonus",
+  4: "Item Paket",
+  5: "Takeout",
+  6: "TOP",
+  7: "Payment",
+  8: "TTD",
 };
 export const LBL = "text-sm font-medium text-foreground";
 
@@ -48,7 +49,7 @@ export interface EditBookingForm {
   // step navigation
   currentStep: number;
   setCurrentStep: (s: number) => void;
-  /** Legacy alias for backward compat â€” maps to currentStep 3-7 names. */
+  /** Legacy alias for backward compat â€” maps to currentStep 4-8 names. */
   continueFlowStep: null | "package-items" | "takeout" | "top" | "payment" | "signature";
   setContinueFlowStep: (s: null | "package-items" | "takeout" | "top" | "payment" | "signature") => void;
   /** When true, tab clicks are disabled and continue buttons advance linearly. */
@@ -184,17 +185,17 @@ export function useEditBookingForm(
   // We still expose this so the render block in edit-booking-drawer can read it.
   // It is purely derived â€” setting it is a no-op alias that sets currentStep.
   const continueFlowStepMap: Record<number, null | "package-items" | "takeout" | "top" | "payment" | "signature"> = {
-    1: null, 2: null, 3: "package-items", 4: "takeout", 5: "top", 6: "payment", 7: "signature",
+    1: null, 2: null, 3: null, 4: "package-items", 5: "takeout", 6: "top", 7: "payment", 8: "signature",
   };
   const continueFlowStep = continueFlowStepMap[currentStep] ?? null;
 
   function setContinueFlowStep(s: null | "package-items" | "takeout" | "top" | "payment" | "signature") {
     if (s === null) { setCurrentStep(2); return; }
-    if (s === "package-items") { setCurrentStep(3); return; }
-    if (s === "takeout") { setCurrentStep(4); return; }
-    if (s === "top") { setCurrentStep(5); return; }
-    if (s === "payment") { setCurrentStep(6); return; }
-    if (s === "signature") { setCurrentStep(7); return; }
+    if (s === "package-items") { setCurrentStep(4); return; }
+    if (s === "takeout") { setCurrentStep(5); return; }
+    if (s === "top") { setCurrentStep(6); return; }
+    if (s === "payment") { setCurrentStep(7); return; }
+    if (s === "signature") { setCurrentStep(8); return; }
   }
 
   // â”€â”€ Step 1: Client info â”€â”€
@@ -435,17 +436,18 @@ export function useEditBookingForm(
     salesUsers.find((s) => s.id === salesId)?.fullName ??
     (isSalesPIC ? (currentUser?.name ?? "â€”") : "â€”");
 
-  const TOTAL_FLOW_STEPS = 7;
+  const TOTAL_FLOW_STEPS = 8;
   const flowStepNumber = currentStep;
 
   const STEP_TITLES: Record<number, string> = {
     1: "Edit Booking",
     2: "Edit Booking",
-    3: "Item Paket",
-    4: "Edit Takeout",
-    5: "Term of Payment",
-    6: "Pembayaran",
-    7: "Tanda Tangan Sales",
+    3: "Complimentary & Bonus",
+    4: "Item Paket",
+    5: "Edit Takeout",
+    6: "Term of Payment",
+    7: "Pembayaran",
+    8: "Tanda Tangan Sales",
   };
   const drawerTitle = STEP_TITLES[currentStep] ?? "Edit Booking";
   const stepHeader = `Step ${flowStepNumber} / ${TOTAL_FLOW_STEPS}`;
@@ -526,9 +528,11 @@ export function useEditBookingForm(
       qc.invalidateQueries({ queryKey: ["booking-detail", booking.id] });
       toast.success("Booking berhasil diupdate");
       if (hasVenueTabChange) {
-        // Enter linear mode: force user to walk steps 3â†’4â†’5â†’6.
+        // Enter linear mode: force user to walk steps 4â†’5â†’6â†’7. Deliberately skips
+        // the new step 3 "Complimentary & Bonus" â€” those are non-trigger fields
+        // that don't need re-confirmation after a venue/package change.
         setLinearMode(true);
-        setCurrentStep(3);
+        setCurrentStep(4);
       } else {
         setOriginalVenueId(venueId);
         setOriginalPackageId(packageId);
@@ -542,7 +546,7 @@ export function useEditBookingForm(
   function handleGoToStep(step: number): void {
     // In linear mode, tab navigation is disabled â€” user must follow Continue buttons.
     if (linearMode) return;
-    if (step >= 1 && step <= 7) setCurrentStep(step);
+    if (step >= 1 && step <= 8) setCurrentStep(step);
   }
 
   function handleCloseAll(): void {

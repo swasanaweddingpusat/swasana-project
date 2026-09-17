@@ -57,7 +57,7 @@ export async function createBooking(data: unknown) {
     let didLockLeadConversion = false;
 
     if (leadId) {
-      leadRecord = await db.dailyActivity.findUnique({
+      leadRecord = await db.lead.findUnique({
         where: { id: leadId },
         select: {
           id: true,
@@ -117,7 +117,7 @@ export async function createBooking(data: unknown) {
         });
 
         // Step 2: claim the conversion lock — FK is now valid.
-        const lockResult = await db.dailyActivity.updateMany({
+        const lockResult = await db.lead.updateMany({
           where: { id: leadRecord.id, convertedToCustomerId: null },
           data: { convertedToCustomerId: customerId },
         });
@@ -128,7 +128,7 @@ export async function createBooking(data: unknown) {
           await db.customer.delete({ where: { id: customerId } }).catch(() => {
             // Deletion is best-effort; if it fails the row stays as a harmless orphan.
           });
-          const refreshed = await db.dailyActivity.findUnique({
+          const refreshed = await db.lead.findUnique({
             where: { id: leadRecord.id },
             select: { convertedToCustomerId: true },
           });
@@ -456,7 +456,7 @@ export async function createBooking(data: unknown) {
         leadUpdateData.statusId = convertedStatus.id;
       }
       ops.push(
-        db.dailyActivity.update({
+        db.lead.update({
           where: { id: leadRecord.id },
           data: leadUpdateData,
         })

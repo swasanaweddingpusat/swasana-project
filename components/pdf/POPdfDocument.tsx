@@ -23,6 +23,7 @@ export interface POPdfBooking {
   snapVendorItems: { id: string; vendorCategoryName: string; vendorName: string; itemName: string; itemPrice: number; qty: number; unit?: string | null; totalPrice: number; isAddons: boolean }[];
   snapBonuses: { id: string; vendorName: string; description?: string | null; qty: number }[];
   snapComplimentaries?: { id: string; name: string; description?: string | null; price: number; isShowPrice: boolean; qty: number }[];
+  snapBookingBonuses?: { id: string; name: string; price: number; description?: string | null; qty: number; sortOrder: number }[];
   termOfPayments: { id: string; name: string; amount: number; dueDate: Date | null }[];
   paymentMethod: { bankName: string; bankAccountNumber: string; bankRecipient: string } | null;
   sales: { fullName: string } | null;
@@ -394,6 +395,27 @@ function buildTableRows(booking: POPdfBooking): TableRow[] {
     }
   });
 
+  // Complimentary — merged into the same detail table as its own lettered group(s),
+  // continuing the same A/B/C... scheme as internal/vendor items above. Falls back to
+  // the legacy pre-split snapBonuses model (no price) when snapComplimentaries is empty.
+  const compItems = booking.snapComplimentaries ?? [];
+  if (compItems.length > 0) {
+    compItems.forEach((c) => {
+      const letter = String.fromCharCode(65 + alphaCounter);
+      alphaCounter++;
+      rows.push({ no: "", desc: `${letter}. Complimentary: ${c.name}`, descBold: true, total: c.isShowPrice ? fmtRp(c.price) : "" });
+      if (c.description) rows.push({ no: "", desc: c.description, total: "" });
+      rows.push({ no: "", desc: "", total: "", isSpacer: true });
+    });
+  } else if (booking.snapBonuses.length > 0) {
+    booking.snapBonuses.forEach((b) => {
+      const letter = String.fromCharCode(65 + alphaCounter);
+      alphaCounter++;
+      rows.push({ no: "", desc: `${letter}. Complimentary: ${b.vendorName}`, descBold: true, total: "" });
+      if (b.description) rows.push({ no: "", desc: b.description, total: "" });
+      rows.push({ no: "", desc: "", total: "", isSpacer: true });
+    });
+  }
 
   return rows;
 }
@@ -687,86 +709,46 @@ export function POPdfDocument({ booking, logoBase64, termAndConditionHtml, emate
           </View>
           </View>
 
-          {/* Complimentary — table full-width (No | Complimentary | Harga) */}
-          {(booking.snapComplimentaries ?? []).length > 0 ? (
+          {/* Bonus — table full-width (No | Bonus | Harga). Complimentary is merged into the
+              detail table above (buildTableRows); this box is Bonus-only (price mandatory,
+              no isShowPrice toggle). */}
+          {(booking.snapBookingBonuses ?? []).length > 0 ? (
             (() => {
-              const compItems = booking.snapComplimentaries!;
-              // Hide the price column entirely when NO item has isShowPrice === true
-              const showPriceCol = compItems.some((c) => c.isShowPrice);
+              const bonusItems = booking.snapBookingBonuses!;
               const colNo = "6%";
-              const colName = showPriceCol ? "74%" : "94%";
+              const colName = "74%";
               const colPrice = "20%";
               return (
                 <View wrap={false} style={[s.complimentarySection, { marginTop: 16 }]}>
-                  <Text style={{ fontWeight: "bold", fontSize: 7, color: "red", marginBottom: 4 }}>*Complimentary :</Text>
+                  <Text style={{ fontWeight: "bold", fontSize: 7, color: "red", marginBottom: 4 }}>*Bonus :</Text>
                   <View style={{ borderWidth: 1, borderColor: "#000" }}>
                     {/* Header */}
                     <View style={{ flexDirection: "row", backgroundColor: "#eee", borderBottomWidth: 1, borderColor: "#000" }}>
                       <Text style={{ width: colNo, fontSize: 6, fontWeight: "bold", padding: 2, borderRightWidth: 1, borderColor: "#000" }}>No</Text>
-                      <Text style={showPriceCol
-                        ? { width: colName, fontSize: 6, fontWeight: "bold", padding: 2, borderRightWidth: 1, borderColor: "#000" }
-                        : { width: colName, fontSize: 6, fontWeight: "bold", padding: 2 }
-                      }>Complimentary</Text>
-                      {showPriceCol && (
-                        <Text style={{ width: colPrice, fontSize: 6, fontWeight: "bold", padding: 2 }}>Harga</Text>
-                      )}
+                      <Text style={{ width: colName, fontSize: 6, fontWeight: "bold", padding: 2, borderRightWidth: 1, borderColor: "#000" }}>Bonus</Text>
+                      <Text style={{ width: colPrice, fontSize: 6, fontWeight: "bold", padding: 2 }}>Harga</Text>
                     </View>
                     {/* Rows */}
-                    {compItems.map((c, idx) => (
+                    {bonusItems.map((b, idx) => (
                       <View
-                        key={c.id}
-                        style={idx < compItems.length - 1
+                        key={b.id}
+                        style={idx < bonusItems.length - 1
                           ? { flexDirection: "row", borderBottomWidth: 1, borderColor: "#000" }
                           : { flexDirection: "row" }
                         }
                       >
                         <Text style={{ width: colNo, fontSize: 6, padding: 2, borderRightWidth: 1, borderColor: "#000" }}>{idx + 1}</Text>
-                        <View style={showPriceCol
-                          ? { width: colName, padding: 2, borderRightWidth: 1, borderColor: "#000" }
-                          : { width: colName, padding: 2 }
-                        }>
-                          <Text style={{ fontSize: 6, fontWeight: "bold" }}>{c.name}</Text>
-                          {c.description ? renderHtmlToPdf(c.description) : null}
+                        <View style={{ width: colName, padding: 2, borderRightWidth: 1, borderColor: "#000" }}>
+                          <Text style={{ fontSize: 6, fontWeight: "bold" }}>{b.name}{b.qty > 1 ? ` (x${b.qty})` : ""}</Text>
+                          {b.description ? renderHtmlToPdf(b.description) : null}
                         </View>
-                        {showPriceCol && (
-                          <Text style={{ width: colPrice, fontSize: 6, padding: 2 }}>
-                            {c.isShowPrice ? fmtRp(c.price) : ""}
-                          </Text>
-                        )}
+                        <Text style={{ width: colPrice, fontSize: 6, padding: 2 }}>{fmtRp(b.price)}</Text>
                       </View>
                     ))}
                   </View>
                 </View>
               );
             })()
-          ) : booking.snapBonuses.length > 0 ? (
-            <View wrap={false} style={[s.complimentarySection, { marginTop: 16 }]}>
-              <Text style={{ fontWeight: "bold", fontSize: 7, color: "red", marginBottom: 4 }}>*Complimentary :</Text>
-              {/* Table — legacy snapBonuses (no price, no qty) */}
-              <View style={{ borderWidth: 1, borderColor: "#000" }}>
-                {/* Header */}
-                <View style={{ flexDirection: "row", backgroundColor: "#eee", borderBottomWidth: 1, borderColor: "#000" }}>
-                  <Text style={{ width: "6%", fontSize: 6, fontWeight: "bold", padding: 2, borderRightWidth: 1, borderColor: "#000" }}>No</Text>
-                  <Text style={{ width: "94%", fontSize: 6, fontWeight: "bold", padding: 2 }}>Complimentary</Text>
-                </View>
-                {/* Rows */}
-                {booking.snapBonuses.map((b, idx) => (
-                  <View
-                    key={b.id}
-                    style={idx < booking.snapBonuses.length - 1
-                      ? { flexDirection: "row", borderBottomWidth: 1, borderColor: "#000" }
-                      : { flexDirection: "row" }
-                    }
-                  >
-                    <Text style={{ width: "6%", fontSize: 6, padding: 2, borderRightWidth: 1, borderColor: "#000" }}>{idx + 1}</Text>
-                    <View style={{ width: "94%", padding: 2 }}>
-                      <Text style={{ fontSize: 6, fontWeight: "bold" }}>{b.vendorName}</Text>
-                      {b.description ? renderHtmlToPdf(b.description) : null}
-                    </View>
-                  </View>
-                ))}
-              </View>
-            </View>
           ) : null}
 
           {/* Payment Summary — table full-width, header SUMMARY PAYMENT | NOMINAL; mulai halaman baru (break) */}

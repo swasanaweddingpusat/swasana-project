@@ -198,7 +198,7 @@ export async function createDraftBooking(data: unknown): Promise<DraftResult> {
     } | null = null;
 
     if (input.leadId) {
-      leadRecord = await db.dailyActivity.findUnique({
+      leadRecord = await db.lead.findUnique({
         where: { id: input.leadId },
         select: {
           id: true,
@@ -242,7 +242,7 @@ export async function createDraftBooking(data: unknown): Promise<DraftResult> {
           },
         });
 
-        const lockResult = await db.dailyActivity.updateMany({
+        const lockResult = await db.lead.updateMany({
           where: { id: leadRecord.id, convertedToCustomerId: null },
           data: { convertedToCustomerId: customerId },
         });
@@ -250,7 +250,7 @@ export async function createDraftBooking(data: unknown): Promise<DraftResult> {
         if (lockResult.count === 0) {
           // Lost race — cleanup and reuse winner's customer
           await db.customer.delete({ where: { id: customerId } }).catch(() => undefined);
-          const refreshed = await db.dailyActivity.findUnique({
+          const refreshed = await db.lead.findUnique({
             where: { id: leadRecord.id },
             select: { convertedToCustomerId: true },
           });
@@ -1102,7 +1102,7 @@ export async function finalizeDraftBooking(data: unknown): Promise<FinalizeDraft
         select: { id: true },
       });
       ops.push(
-        db.dailyActivity.update({
+        db.lead.update({
           where: { id: input.leadId },
           data: {
             convertedToBookingId: draftId,

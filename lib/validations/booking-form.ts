@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { bonusRowSchema } from "@/lib/validations/bonus";
 
 // ─── Client-side field validators for the booking drawers ─────────────────────
 //
@@ -75,6 +76,9 @@ export const complimentaryRowsSchema = z.array(
     qty: z.number().int().min(1, "Qty complimentary minimal 1"),
   }),
 );
+
+/** Bonus rows (step 3, alongside complimentary): reuses the master bonusRowSchema. */
+export const bonusRowsSchema = z.array(bonusRowSchema);
 
 /** Returns the first Zod error message for a value, or null when it passes. */
 export function firstError(schema: z.ZodType, value: unknown): string | null {

@@ -54,6 +54,25 @@ export const saveSnapComplimentariesSchema = z.object({
 export type SnapComplimentaryItemInput = z.infer<typeof snapComplimentaryItemSchema>;
 export type SaveSnapComplimentariesInput = z.infer<typeof saveSnapComplimentariesSchema>;
 
+// ─── Booking Bonuses ──────────────────────────────────────────────────────────
+
+export const snapBookingBonusItemSchema = z.object({
+  bonusId: z.string().nullable().default(null),
+  name: z.string().min(1, "Nama wajib diisi").max(255, "Nama maksimal 255 karakter"),
+  price: z.number().int().min(1, "Harga wajib diisi dan lebih dari 0"),
+  description: z.string().max(1000, "Deskripsi maksimal 1000 karakter").nullable().default(null),
+  qty: z.number().int().min(1, "Qty minimal 1").default(1),
+  sortOrder: z.number().int().min(0).default(0),
+});
+
+export const saveSnapBookingBonusesSchema = z.object({
+  bookingId: z.string().min(1, "Booking ID wajib diisi"),
+  items: z.array(snapBookingBonusItemSchema),
+});
+
+export type SnapBookingBonusItemInput = z.infer<typeof snapBookingBonusItemSchema>;
+export type SaveSnapBookingBonusesInput = z.infer<typeof saveSnapBookingBonusesSchema>;
+
 // ─── Takeout ──────────────────────────────────────────────────────────────────
 
 export const snapTakeoutItemSchema = z.object({
