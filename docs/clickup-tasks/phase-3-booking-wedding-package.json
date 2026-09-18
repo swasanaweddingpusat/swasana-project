@@ -6,13 +6,13 @@
     "style_reference": "Parent task = fitur singkat + 1 kalimat desc. Subtask prefix [BE]/[FE] + bullet konkret (mengikuti gaya Phase 2 Auth & Access Control).",
     "note": "Field yang diawali underscore (_review_note, _status_hint) HANYA catatan internal buat kita, JANGAN ikut ke-push sebagai description ke ClickUp.",
     "structure_note": "File ini nampung >1 phase sekaligus (per instruksi user).",
-    "list_targeting_status": "PENDING — user udah hapus list per-phase lama di ClickUp (dicek ulang 2026-09-18: cuma 'Phase 1 Infra & Setup' (901821113669) & 'Phase 2 Auth & Access Control' (901821113616) yang masih ada di space Kediaman Project 901810589678; Phase 3/4/6 SUDAH TIDAK ADA). Semua target_list_id/target_list_name di bawah adalah id LAMA yang sudah tidak valid — jangan dipakai untuk push. User akan rapihin ulang pemetaan list saat proses push nanti."
+    "list_targeting_status": "RESOLVED 2026-09-18 — 5 list baru dibikin di space Kediaman Project (901810589678), sejajar Phase 1 & 2 yang udah ada, tanpa folder (approved by user): Phase 3=1100480000000516, Phase 4=1100480000000517, Phase 5=1100480000000518, Phase 6=1100480000000519, Phase 7=1100480000000520. Push sedang berjalan."
   },
   "phases": [
     {
       "phase": 3,
-      "target_list_id": null,
-      "target_list_name": "TBD — list lama 'Phase 3 Booking system, PO, Packages' (901821802858) sudah dihapus user, menunggu list baru/pemetaan ulang saat push",
+      "target_list_id": "1100480000000516",
+      "target_list_name": "Phase 3 Booking Wedding Package",
       "phase_note": "Booking Wedding + Master Paket + fitur-fitur eks-'Phase 5' yang digabung ke sini atas instruksi user (Calendar Event, Groups, Voucher/Program, Vendor, Customer — Complimentary & Bonus udah lebih dulu ada di list ini).",
       "tasks": [
         {
@@ -292,8 +292,8 @@
     },
     {
       "phase": 4,
-      "target_list_id": null,
-      "target_list_name": "TBD — list lama 'Phase 4 Setting Master data' (1100480000000511) sudah dihapus user, menunggu list baru/pemetaan ulang saat push",
+      "target_list_id": "1100480000000517",
+      "target_list_name": "Phase 4 Setting Master Data",
       "phase_note": "Semua menu di Settings (app/(private)/(general)/settings) KECUALI User Management dan Role & Permission — dua itu udah masuk Phase 2 Auth & Access Control, sengaja gak diulang di sini.",
       "_pending_note": "Draft ini disusun dari hasil investigasi subagent, belum di-cross-check manual line-by-line sama orchestrator — kalau ada nama field/endpoint yang meleset dikit, wajar, tandain _review_note di masing-masing subtask kalau nemu.",
       "tasks": [
@@ -453,8 +453,8 @@
     },
     {
       "phase": 5,
-      "target_list_id": null,
-      "target_list_name": "TBD — belum ada list ClickUp untuk HRD, akan dipetakan user saat push",
+      "target_list_id": "1100480000000518",
+      "target_list_name": "Phase 5 HRD",
       "phase_note": "Seluruh fitur di app/(private)/hrd/ (world HRD) + 2 general-nav yang numpang komponen sama (slip-gaji, cuti). _status_hint diisi 'complete' default kecuali disebutkan lain di _review_note. Rekrutmen/Onboarding (submodul paling kompleks) sudah masuk di akhir array ini.",
       "tasks": [
         {
@@ -697,8 +697,8 @@
     },
     {
       "phase": 6,
-      "target_list_id": null,
-      "target_list_name": "TBD — list lama 'Phase 6 Procurement' (901821802860) sudah dihapus user, menunggu list baru/pemetaan ulang saat push",
+      "target_list_id": "1100480000000519",
+      "target_list_name": "Phase 6 Procurement & Profile Utilities",
       "phase_note": "Digabung atas instruksi user (Phase 7 lama dilebur ke sini): Procurement + Profile/Reset Password Dashboard/Logout/Notifications. Bukan satu modul yang sama, cuma disatukan phase-nya.",
       "tasks": [
         {
@@ -848,8 +848,8 @@
     },
     {
       "phase": 7,
-      "target_list_id": null,
-      "target_list_name": "TBD — belum ada list ClickUp untuk sisa menu general-nav ini, akan dipetakan user saat push",
+      "target_list_id": "1100480000000520",
+      "target_list_name": "Phase 7 General Nav Features",
       "phase_note": "Sisa menu/modul general-nav di luar Purchase, Finance, dan Stakeholder (masing-masing dapat phase sendiri) DAN di luar semua fitur track MICE (daily activity/quotation/booking/package MICE — belum di-dev). Scope: Daily Activity (wedding/general track), Quotation (wedding track), Bitrix24, Maintenance, Guestbook, Tutorial, Wedding Indicators.",
       "_pending_note": "Semua 7 task Phase 7 (Maintenance, Tutorial, Daily Activity, Quotation, Bitrix24, Guestbook, Wedding Indicators) sudah didraft lengkap per 2026-09-18 — tidak ada lagi yang pending. Temuan paling signifikan yang perlu perhatian user sebelum push: (1) Wedding Indicators — unbounded rating validation di public save endpoint yang feed ke kalkulasi bonus cash (security/business-logic risk); (2) Maintenance & Wedding Indicators sama-sama belum ada dataScope enforcement di listing query, beda dari Guestbook yang sudah jadi referensi best-practice.",
       "tasks": [
