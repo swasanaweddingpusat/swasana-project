@@ -97,6 +97,15 @@ export const moduleActions: Record<string, string[]> = {
   // Performance Sales — read-only monitoring hub for the STAKEHOLDER world.
   // View-only: no mutation surface (dashboard reads getGroupsWithPerformance).
   "performance-sales": ["view"],
+  // KPI & Insentif — modul Sales/Manager KPI + komisi + bonus.
+  // Terbagi per aksi: kpi-insentif = main view; kpi-master = CRUD master data;
+  // kpi-assignment = penugasan target per orang; kpi-simulation = jalankan kalkulasi;
+  // kpi-report = laporan final (FINALIZED only).
+  "kpi-insentif": ["view", "create", "edit", "delete", "finalize"],
+  "kpi-master": ["view", "create", "edit", "delete"],
+  "kpi-assignment": ["view", "create", "edit", "delete"],
+  "kpi-simulation": ["view", "run"],
+  "kpi-report": ["view"],
 };
 
 // Modules removed (not used in code):
@@ -134,6 +143,12 @@ export const rolePermissionMap: Record<string, Record<string, string[]>> = {
     "internal-faq": ["view"],
     announcement: ["view"],
     "settings-booking-log": ["view"],
+    // KPI & Insentif — direktur-sales bisa lihat simulasi + laporan semua Sales
+    "kpi-insentif": ["view"],
+    "kpi-master": ["view"],
+    "kpi-assignment": ["view"],
+    "kpi-simulation": ["view", "run"],
+    "kpi-report": ["view"],
   },
   // Manager: CRUD only on dashboard, calendar-event, groups, booking-weddings,
   // package, complimentary, vendors, and customers.
@@ -161,6 +176,11 @@ export const rolePermissionMap: Record<string, Record<string, string[]>> = {
     "internal-faq": ["view", "create", "edit", "delete"],
     announcement: ["view", "create", "edit", "delete"],
     "settings-booking-log": ["view"],
+    // KPI & Insentif — manager bisa lihat/run simulasi timnya sendiri
+    "kpi-insentif": ["view"],
+    "kpi-assignment": ["view", "create", "edit"],
+    "kpi-simulation": ["view", "run"],
+    "kpi-report": ["view"],
   },
   "direktur-operational": {
     booking: ["view", "create", "edit", "approve", "comment", "print"],
@@ -284,6 +304,12 @@ export const rolePermissionMap: Record<string, Record<string, string[]>> = {
     "hr-recruitment": ["view", "create", "edit", "delete", "hire", "approve"],
     procurement: ["view"],
     "settings-public-holiday": ["view", "create", "edit", "delete"],
+    // KPI & Insentif — HR mengelola master data + assignment + finalisasi
+    "kpi-insentif": ["view", "create", "edit", "delete", "finalize"],
+    "kpi-master": ["view", "create", "edit", "delete"],
+    "kpi-assignment": ["view", "create", "edit", "delete"],
+    "kpi-simulation": ["view", "run"],
+    "kpi-report": ["view"],
   },
   // Sales MICE — persis daftar menu yang disepakati (11 item):
   //   Groups · Daily Activity · Bookings MICE · Quotations · Mice Package ·

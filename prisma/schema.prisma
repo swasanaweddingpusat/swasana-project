@@ -235,6 +235,13 @@ model Profile {
   announcementComments         AnnouncementComment[]      @relation("AnnouncementCommentAuthor")
   announcementReads            AnnouncementReader[]       @relation("AnnouncementReader")
   onboardingFormLinksCreated   OnboardingFormLink[]       @relation("OnboardingFormLinkCreator")
+  kpiMastersCreated            KpiMaster[]                @relation("KpiMasterCreatedBy")
+  kpiAssignments               KpiAssignment[]            @relation("KpiAssignments")
+  kpiAssignmentsCreated        KpiAssignment[]            @relation("KpiAssignmentCreatedBy")
+  kpiResults                   KpiCalculationResult[]     @relation("KpiResults")
+  kpiResultsFinalized          KpiCalculationResult[]     @relation("KpiResultFinalizedBy")
+  kpiCommissionPoliciesApproved KpiCommissionPolicy[]     @relation("KpiCommissionPolicyApprovedBy")
+  kpiPolicySnapshotsCreated    KpiPolicySnapshot[]        @relation("KpiPolicySnapshotCreatedBy")
 
   @@index([roleId])
   @@index([managerId])
@@ -404,6 +411,8 @@ model Venue {
   announcements             Announcement[]
   onboardingFormSubmissions OnboardingFormSubmission[]
   groupAssignments          UserGroupVenue[]
+  kpiAssignments            KpiAssignment[]            @relation("KpiAssignmentVenue")
+  kpiResults                KpiCalculationResult[]     @relation("KpiResultVenue")
 
   @@index([brandId])
   @@map("venues")
@@ -4010,4 +4019,342 @@ model DailyReport {
   @@index([submittedById])
   @@index([reportDate])
   @@map("daily_reports")
+}
+
+// ─── KPI & Insentif Module ────────────────────────────────────────────────────
+//
+// Tiga entitas inti sesuai gambar (master_kpi / target_item / achievement) +
+// ekstensi teknis (assignment, commission policy, calculation result).
+//
+// KEPUTUSAN BISNIS BELUM FINAL — lihat catatan DRAFT di masing-masing model.
+// Aktifkan hanya setelah konfirmasi: arti achievement, periode Manager,
+// batas tier (inclusive/exclusive), sumber komisi dasar, dan definisi homebase.
+
+enum KpiTargetType {
+  qty   // count (dealing)
+  price // nominal Rupiah (omset)
+}
+
+enum KpiIndicatorType {
+  dealing   // Jumlah dealing
+  omset     // Jumlah omset
+  homebase  // Mandatory home base venue
+}
+
+enum KpiBusinessRole {
+  sales
+  manager
+}
+
+enum KpiTierAction {
+  bonus             // eligible bonus amount
+  deduction         // potongan komisi %
+  warning           // surat peringatan (flag only, no auto-send)
+  under_performance // status, bukan angka
+}
+
+// Status hasil kalkulasi — pisahkan simulasi dari produksi
+enum KpiResultStatus {
+  DRAFT             // belum lengkap / sedang diedit
+  SIMULATED         // preview dengan asumsi, belum bisa finalisasi
+  PENDING_REVIEW    // menunggu approval HR/manager
+  FINALIZED         // dikunci — tidak boleh dihitung ulang dengan data berbeda
+}
+
+// ── TargetItem — master ukuran KPI ──────────────────────────────────────────
+
+model KpiTargetItem {
+  id               String           @id @default(cuid())
+  name             String
+  indicatorType    KpiIndicatorType
+  type             KpiTargetType
+  // Total target — gunakan qty untuk dealing/homebase, price untuk omset
+  qty              Int?
+  price            Decimal?         @db.Decimal(15, 2)
+  // Rincian per kategori paket (opsional — Reguler & Hadjatan)
+  // KEPUTUSAN: mapping Reguler/Hadjatan ke EventCategory belum dikonfirmasi.
+  // Placeholder: null = belum dipetakan. Konfirmasi sebelum realisasi otomatis diaktifkan.
+  qtyReguler       Int?
+  qtyHadjatan      Int?
+  priceReguler     Decimal?         @db.Decimal(15, 2)
+  priceHadjatan    Decimal?         @db.Decimal(15, 2)
+  // EventCategory yang mewakili "Reguler" dan "Hadjatan" — diisi admin saat konfigurasi
+  regulerCategory  EventCategory?
+  hadjatanCategory EventCategory?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  kpiMasters KpiMaster[]
+
+  @@map("kpi_target_items")
+}
+
+// ── AchievementSchema — profil matriks bonus/potongan per role ───────────────
+
+model KpiAchievementSchema {
+  id           String          @id @default(cuid())
+  name         String
+  description  String?
+  businessRole KpiBusinessRole
+  // DRAFT: batas tier dan nilai bonus dari sumber MASIH ASUMSI.
+  // isDraft=true = belum aktif untuk kalkulasi produksi.
+  isDraft      Boolean         @default(true)
+  // Untuk Manager: minimal N indikator tercapai agar bonus unlock.
+  // KEPUTUSAN: definisi "tercapai" (≥100%? >100%? kombinasi mana?) belum dikonfirmasi.
+  gatingMinIndicators Int?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tiers      KpiAchievementTier[]
+  kpiMasters KpiMaster[]
+
+  @@map("kpi_achievement_schemas")
+}
+
+// ── AchievementTier — satu baris pada matriks bonus/potongan ─────────────────
+
+model KpiAchievementTier {
+  id                  String               @id @default(cuid())
+  achievementSchemaId String
+  sortOrder           Int                  @default(0)
+  label               String               // label tampilan, e.g. ">100%–105%"
+  // Batas persentase — stored 4 decimal places (e.g. 100.0000 = 100%)
+  // KEPUTUSAN: inclusive/exclusive per batas masih asumsi; gunakan isDraftBounds=true
+  lowerBound          Decimal              @db.Decimal(8, 4)
+  upperBound          Decimal?             @db.Decimal(8, 4) // null = tidak terbatas atas
+  lowerInclusive      Boolean              @default(false)   // false = > (exclusive)
+  upperInclusive      Boolean              @default(true)    // true = ≤ (inclusive)
+  isDraftBounds       Boolean              @default(true)    // true = normalisasi batas belum disahkan
+  actionType          KpiTierAction
+  // Bonus per indikator — null = tidak berlaku (tier Under Performance/Warning tidak ada bonus)
+  dealingBonus        Decimal?             @db.Decimal(15, 2)
+  omsetBonus          Decimal?             @db.Decimal(15, 2)
+  homebaseBonus       Decimal?             @db.Decimal(15, 2)
+  // Potongan persentase — berlaku untuk tier deduction (e.g. 50.00 = 50%)
+  deductionPct        Decimal?             @db.Decimal(5, 2)
+  // Warning flag — hanya Manager tier <70% (flag, tidak auto-publish)
+  isWarningFlag       Boolean              @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  achievementSchema KpiAchievementSchema @relation(fields: [achievementSchemaId], references: [id], onDelete: Restrict)
+
+  @@index([achievementSchemaId])
+  @@map("kpi_achievement_tiers")
+}
+
+// ── KpiMaster — definisi KPI per periode, role, dan indikator ─────────────────
+
+model KpiMaster {
+  id                  String               @id @default(cuid())
+  name                String
+  description         String?
+  // Disimpan sebagai tanggal pertama bulan (e.g. 2026-10-01 00:00:00 UTC)
+  month               DateTime             @db.Date
+  businessRole        KpiBusinessRole
+  isDraft             Boolean              @default(true)
+  targetItemId        String
+  achievementSchemaId String
+  createdById         String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  targetItem        KpiTargetItem        @relation(fields: [targetItemId], references: [id], onDelete: Restrict)
+  achievementSchema KpiAchievementSchema @relation(fields: [achievementSchemaId], references: [id], onDelete: Restrict)
+  createdBy         Profile?             @relation("KpiMasterCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  assignments       KpiAssignment[]
+
+  @@index([month])
+  @@index([businessRole])
+  @@index([targetItemId])
+  @@map("kpi_masters")
+}
+
+// ── KpiCommissionPolicy — kebijakan komisi dasar (belum ada formula dari sumber) ──
+
+model KpiCommissionPolicy {
+  id              String          @id @default(cuid())
+  name            String
+  description     String?
+  businessRole    KpiBusinessRole
+  // KEPUTUSAN: formula/tarif komisi dasar BELUM TERSEDIA dari sumber.
+  // isDraft=true = tidak bisa dipakai untuk kalkulasi final.
+  isDraft         Boolean         @default(true)
+  // Jika komisi per-deal: nominalPerDeal Decimal
+  nominalPerDeal  Decimal?        @db.Decimal(15, 2)
+  // Jika komisi % omset: pctOfRevenue Decimal
+  pctOfRevenue    Decimal?        @db.Decimal(5, 4) // e.g. 0.0089 = 0.89%
+  // Berlaku untuk kategori paket tertentu (null = semua)
+  packageCategory EventCategory?
+  effectiveFrom   DateTime?       @db.Date
+  effectiveTo     DateTime?       @db.Date
+  approvedById    String?
+  approvedAt      DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  approvedBy Profile? @relation("KpiCommissionPolicyApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+
+  @@index([businessRole])
+  @@map("kpi_commission_policies")
+}
+
+// ── KpiAssignment — penugasan KPI ke orang/tim/venue untuk suatu periode ─────
+
+model KpiAssignment {
+  id          String          @id @default(cuid())
+  kpiMasterId String
+  profileId   String
+  venueId     String?         // null = semua venue dalam cakupan profile
+  period      DateTime        @db.Date  // first of month
+  // Override target per orang (null = pakai dari KpiTargetItem master)
+  targetQty   Int?
+  targetPrice Decimal?        @db.Decimal(15, 2)
+  // KEPUTUSAN: periode Manager belum dikonfirmasi → isDraft=true untuk Manager assignments
+  isDraft     Boolean         @default(false)
+  notes       String?
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  createdById String?
+
+  kpiMaster KpiMaster @relation(fields: [kpiMasterId], references: [id], onDelete: Restrict)
+  profile   Profile   @relation("KpiAssignments", fields: [profileId], references: [id], onDelete: Restrict)
+  venue     Venue?    @relation("KpiAssignmentVenue", fields: [venueId], references: [id], onDelete: SetNull)
+  createdBy Profile?  @relation("KpiAssignmentCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@unique([kpiMasterId, profileId, period])
+  @@index([profileId])
+  @@index([period])
+  @@index([kpiMasterId])
+  @@map("kpi_assignments")
+}
+
+// ── KpiCalculationResult — hasil kalkulasi per orang per periode ──────────────
+//
+// Satu record = satu orang, satu periode, SEMUA indikator KPI-nya.
+// Simpan snapshot versi kebijakan agar hasil final tidak berubah jika master diubah.
+
+model KpiCalculationResult {
+  id                    String          @id @default(cuid())
+  profileId             String
+  venueId               String?
+  period                DateTime        @db.Date
+
+  // ── Realisasi (dihitung dari Booking atau input terotorisasi) ──────────────
+  realDealingTotal      Int?
+  realDealingReguler    Int?
+  realDealingHadjatan   Int?
+  realOmsetTotal        Decimal?        @db.Decimal(15, 2)
+  realOmsetReguler      Decimal?        @db.Decimal(15, 2)
+  realOmsetHadjatan     Decimal?        @db.Decimal(15, 2)
+  realHomebase          Int?
+
+  // ── Target (dari KpiAssignment / KpiTargetItem) ────────────────────────────
+  targetDealingTotal    Int?
+  targetOmsetTotal      Decimal?        @db.Decimal(15, 2)
+  targetHomebase        Int?
+
+  // ── Pencapaian % (presisi penuh, tampilan dibulatkan) ─────────────────────
+  dealingAchievementPct Decimal?        @db.Decimal(8, 4)
+  omsetAchievementPct   Decimal?        @db.Decimal(8, 4)
+  homebaseAchievementPct Decimal?       @db.Decimal(8, 4)
+
+  // ── Tier yang digunakan ────────────────────────────────────────────────────
+  dealingTierId         String?
+  omsetTierId           String?
+  homebaseTierId        String?
+
+  // ── Bonus per indikator (null = Under Performance / tidak eligible) ────────
+  dealingBonus          Decimal?        @db.Decimal(15, 2)
+  omsetBonus            Decimal?        @db.Decimal(15, 2)
+  homebaseBonus         Decimal?        @db.Decimal(15, 2)
+  totalBonus            Decimal?        @db.Decimal(15, 2)
+
+  // ── Komisi dasar (null = belum dikonfigurasi / missing) ───────────────────
+  baseCommissionReguler Decimal?        @db.Decimal(15, 2)
+  baseCommissionHadjatan Decimal?       @db.Decimal(15, 2)
+  baseCommissionTotal   Decimal?        @db.Decimal(15, 2)
+
+  // ── Potongan ───────────────────────────────────────────────────────────────
+  // KEPUTUSAN: basis dan pemicu potongan belum dikonfirmasi
+  deductionTriggerIndicator String?     // indicator yang memicu (dealing/omset/homebase)
+  deductionPct              Decimal?    @db.Decimal(5, 2)
+  deductionAmount           Decimal?    @db.Decimal(15, 2)
+
+  // ── Hasil ─────────────────────────────────────────────────────────────────
+  grossAmount               Decimal?    @db.Decimal(15, 2) // komisi + bonus sebelum potongan
+  netAmount                 Decimal?    @db.Decimal(15, 2) // gross - potongan
+
+  // ── Status & metadata ─────────────────────────────────────────────────────
+  status                    KpiResultStatus @default(DRAFT)
+  // Versi snapshot kebijakan yang dipakai (hash atau ID referensi)
+  policySnapshotId          String?
+  // Alasan tidak bisa difinalisasi (daftar kode/pesan)
+  missingDataReasons        String[]    @default([])
+  // Grade — BELUM DIKONFIGURASI: hanya ditampilkan jika ada mapping
+  grade                     String?
+  calculatedAt              DateTime?
+  finalizedAt               DateTime?
+  finalizedById             String?
+  notes                     String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  profile        Profile                       @relation("KpiResults", fields: [profileId], references: [id], onDelete: Restrict)
+  venue          Venue?                        @relation("KpiResultVenue", fields: [venueId], references: [id], onDelete: SetNull)
+  finalizedBy    Profile?                      @relation("KpiResultFinalizedBy", fields: [finalizedById], references: [id], onDelete: SetNull)
+  details        KpiCalculationDetail[]
+  policySnapshot KpiPolicySnapshot?            @relation(fields: [policySnapshotId], references: [id], onDelete: SetNull)
+
+  @@unique([profileId, period, venueId])
+  @@index([profileId])
+  @@index([period])
+  @@index([status])
+  @@map("kpi_calculation_results")
+}
+
+// ── KpiCalculationDetail — breakdown per baris KPI untuk transparansi ─────────
+
+model KpiCalculationDetail {
+  id             String           @id @default(cuid())
+  resultId       String
+  indicatorType  KpiIndicatorType
+  targetValue    Decimal?         @db.Decimal(15, 2)
+  realValue      Decimal?         @db.Decimal(15, 2)
+  achievementPct Decimal?         @db.Decimal(8, 4)
+  tierId         String?
+  tierLabel      String?
+  actionType     KpiTierAction?
+  bonusAmount    Decimal?         @db.Decimal(15, 2)
+  deductionPct   Decimal?         @db.Decimal(5, 2)
+  isGatingFailed Boolean          @default(false)
+  notes          String?
+
+  createdAt DateTime @default(now())
+
+  result KpiCalculationResult @relation(fields: [resultId], references: [id], onDelete: Cascade)
+
+  @@index([resultId])
+  @@map("kpi_calculation_details")
+}
+
+// ── KpiPolicySnapshot — snapshot versi aturan yang dipakai saat kalkulasi final ─
+
+model KpiPolicySnapshot {
+  id         String   @id @default(cuid())
+  snapshotData Json   // full copy of achievement schema + tiers + commission policy at finalization time
+  createdAt  DateTime @default(now())
+  createdById String?
+
+  createdBy Profile? @relation("KpiPolicySnapshotCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  results   KpiCalculationResult[]
+
+  @@map("kpi_policy_snapshots")
 }
