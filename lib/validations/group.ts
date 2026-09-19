@@ -35,6 +35,13 @@ export const updateGroupLeaderSchema = z.object({
   leaderId: z.string().min(1),
 });
 
+// ─── Group Venues (many-to-many, informational/filter only) ──────────────────
+
+export const updateGroupVenuesSchema = z.object({
+  groupId: z.string().min(1),
+  venueIds: z.array(z.string().min(1)).max(200),
+});
+
 // ─── Inferred types ───────────────────────────────────────────────────────────
 
 export type CreateGroupInput = z.infer<typeof createGroupSchema>;
@@ -42,3 +49,4 @@ export type UpdateGroupInput = z.infer<typeof updateGroupSchema>;
 export type SetMemberTargetInput = z.infer<typeof setMemberTargetSchema>;
 export type DeleteMemberTargetInput = z.infer<typeof deleteMemberTargetSchema>;
 export type UpdateGroupLeaderInput = z.infer<typeof updateGroupLeaderSchema>;
+export type UpdateGroupVenuesInput = z.infer<typeof updateGroupVenuesSchema>;

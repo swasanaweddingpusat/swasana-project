@@ -193,17 +193,24 @@ export async function getGroupDetail(groupId: string) {
         },
         orderBy: { sortOrder: "asc" },
       },
+      venues: {
+        select: { venue: { select: { id: true, name: true } } },
+        orderBy: { venue: { name: "asc" } },
+      },
     },
   });
 
   if (!g) return null;
 
+  const { venues: rawVenues, ...groupBase } = g;
+
   return {
-    ...g,
+    ...groupBase,
     members: g.members.map((m) => ({
       ...m,
       profile: { ...m.profile, avatarUrl: resolveAvatarUrl(m.profile.avatarUrl) },
     })),
+    venues: rawVenues.map((v) => v.venue),
   };
 }
 
@@ -491,6 +498,10 @@ export async function getGroupsWithPerformance(
         select: { userId: true },
         orderBy: { sortOrder: "asc" },
       },
+      venues: {
+        select: { venue: { select: { id: true, name: true } } },
+        orderBy: { venue: { name: "asc" } },
+      },
     },
     orderBy: { name: "asc" },
   });
@@ -619,8 +630,8 @@ export async function getGroupsWithPerformance(
 
     const avgAchievement = memberCount > 0 ? Math.round(totalAchievement / memberCount) : 0;
 
-    // Spread g without members (keep shape: id, name, description, leaderId, leader, _count)
-    const { members: _members, ...groupBase } = g;
+    // Spread g without members/venues (keep shape: id, name, description, leaderId, leader, _count)
+    const { members: _members, venues: rawVenues, ...groupBase } = g;
     return {
       ...groupBase,
       leader: groupBase.leader ? { ...groupBase.leader, avatarUrl: resolveAvatarUrl(groupBase.leader.avatarUrl) } : null,
@@ -630,6 +641,7 @@ export async function getGroupsWithPerformance(
       confirmedCount,
       piutang,
       totalRevenue,
+      venues: rawVenues.map((v) => v.venue),
     };
   });
 }
