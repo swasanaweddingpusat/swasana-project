@@ -395,28 +395,6 @@ function buildTableRows(booking: POPdfBooking): TableRow[] {
     }
   });
 
-  // Complimentary — merged into the same detail table as its own lettered group(s),
-  // continuing the same A/B/C... scheme as internal/vendor items above. Falls back to
-  // the legacy pre-split snapBonuses model (no price) when snapComplimentaries is empty.
-  const compItems = booking.snapComplimentaries ?? [];
-  if (compItems.length > 0) {
-    compItems.forEach((c) => {
-      const letter = String.fromCharCode(65 + alphaCounter);
-      alphaCounter++;
-      rows.push({ no: "", desc: `${letter}. Complimentary: ${c.name}`, descBold: true, total: c.isShowPrice ? fmtRp(c.price) : "" });
-      if (c.description) rows.push({ no: "", desc: c.description, total: "" });
-      rows.push({ no: "", desc: "", total: "", isSpacer: true });
-    });
-  } else if (booking.snapBonuses.length > 0) {
-    booking.snapBonuses.forEach((b) => {
-      const letter = String.fromCharCode(65 + alphaCounter);
-      alphaCounter++;
-      rows.push({ no: "", desc: `${letter}. Complimentary: ${b.vendorName}`, descBold: true, total: "" });
-      if (b.description) rows.push({ no: "", desc: b.description, total: "" });
-      rows.push({ no: "", desc: "", total: "", isSpacer: true });
-    });
-  }
-
   return rows;
 }
 
@@ -709,9 +687,52 @@ export function POPdfDocument({ booking, logoBase64, termAndConditionHtml, emate
           </View>
           </View>
 
-          {/* Bonus — table full-width (No | Bonus | Harga). Complimentary is merged into the
-              detail table above (buildTableRows); this box is Bonus-only (price mandatory,
-              no isShowPrice toggle). */}
+          {/* Complimentary — table full-width (No | Complimentary | Harga), own page (break)
+              separate from the package detail table above. Sourced from snapComplimentaries;
+              falls back to legacy snapBonuses when empty, same fallback used elsewhere in this file. */}
+          {(() => {
+            const compItems = (booking.snapComplimentaries ?? []).length > 0
+              ? (booking.snapComplimentaries ?? []).map((c) => ({ id: c.id, name: c.name, qty: c.qty, description: c.description, price: c.isShowPrice ? fmtRp(c.price) : "" }))
+              : booking.snapBonuses.map((b) => ({ id: b.id, name: b.vendorName, qty: b.qty, description: b.description, price: "" }));
+            if (compItems.length === 0) return null;
+            const colNo = "6%";
+            const colName = "74%";
+            const colPrice = "20%";
+            return (
+              <View break wrap={false} style={[s.complimentarySection, { marginTop: 16 }]}>
+                <Text style={{ fontWeight: "bold", fontSize: 7, color: "red", marginBottom: 4 }}>*Complimentary :</Text>
+                <View style={{ borderWidth: 1, borderColor: "#000" }}>
+                  {/* Header */}
+                  <View style={{ flexDirection: "row", backgroundColor: "#eee", borderBottomWidth: 1, borderColor: "#000" }}>
+                    <Text style={{ width: colNo, fontSize: 6, fontWeight: "bold", padding: 2, borderRightWidth: 1, borderColor: "#000" }}>No</Text>
+                    <Text style={{ width: colName, fontSize: 6, fontWeight: "bold", padding: 2, borderRightWidth: 1, borderColor: "#000" }}>Complimentary</Text>
+                    <Text style={{ width: colPrice, fontSize: 6, fontWeight: "bold", padding: 2 }}>Harga</Text>
+                  </View>
+                  {/* Rows */}
+                  {compItems.map((c, idx) => (
+                    <View
+                      key={c.id}
+                      style={idx < compItems.length - 1
+                        ? { flexDirection: "row", borderBottomWidth: 1, borderColor: "#000" }
+                        : { flexDirection: "row" }
+                      }
+                    >
+                      <Text style={{ width: colNo, fontSize: 6, padding: 2, borderRightWidth: 1, borderColor: "#000" }}>{idx + 1}</Text>
+                      <View style={{ width: colName, padding: 2, borderRightWidth: 1, borderColor: "#000" }}>
+                        <Text style={{ fontSize: 6, fontWeight: "bold" }}>{c.name}{c.qty > 1 ? ` (x${c.qty})` : ""}</Text>
+                        {c.description ? renderHtmlToPdf(c.description) : null}
+                      </View>
+                      <Text style={{ width: colPrice, fontSize: 6, padding: 2 }}>{c.price}</Text>
+                    </View>
+                  ))}
+                </View>
+              </View>
+            );
+          })()}
+
+          {/* Bonus — table full-width (No | Bonus | Harga). Complimentary now renders as its
+              own table above (break); this box is Bonus-only (price mandatory, no isShowPrice
+              toggle). */}
           {(booking.snapBookingBonuses ?? []).length > 0 ? (
             (() => {
               const bonusItems = booking.snapBookingBonuses!;

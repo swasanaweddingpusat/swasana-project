@@ -72,6 +72,7 @@ export interface DraftBookingDetail {
   sourceOfInformationId: string | null;
   sourceOfInformationDetail: string | null;
   eventDate: string | null;
+  dealingDate: string | null;
   paymentMethodId: string | null;
   discountName: string | null;
   discountAmount: number;
@@ -318,6 +319,7 @@ export async function createDraftBooking(data: unknown): Promise<DraftResult> {
           where: { id: draftId },
           data: {
             eventDate: new Date(`${input.eventDate}T00:00:00.000Z`),
+            dealingDate: input.dealingDate ? new Date(`${input.dealingDate}T00:00:00.000Z`) : undefined,
             salesId,
             managerId,
             customerId,
@@ -351,6 +353,7 @@ export async function createDraftBooking(data: unknown): Promise<DraftResult> {
         data: {
           id: draftId,
           eventDate: new Date(input.eventDate),
+          dealingDate: input.dealingDate ? new Date(`${input.dealingDate}T00:00:00.000Z`) : new Date(),
           recordStatus: "draft",
           bookingStatus: "Pending",
           category: input.category ?? "WEDDINGS",
@@ -1310,6 +1313,7 @@ export async function getDraftBookingDetail(
       sourceOfInformationId: true,
       sourceOfInformationDetail: true,
       eventDate: true,
+      dealingDate: true,
       paymentMethodId: true,
       discountName: true,
       discountAmount: true,
@@ -1453,6 +1457,9 @@ export async function getDraftBookingDetail(
     sourceOfInformationDetail: draft.sourceOfInformationDetail ?? null,
     eventDate: draft.eventDate
       ? `${draft.eventDate.getUTCFullYear()}-${String(draft.eventDate.getUTCMonth() + 1).padStart(2, "0")}-${String(draft.eventDate.getUTCDate()).padStart(2, "0")}`
+      : null,
+    dealingDate: draft.dealingDate
+      ? `${draft.dealingDate.getUTCFullYear()}-${String(draft.dealingDate.getUTCMonth() + 1).padStart(2, "0")}-${String(draft.dealingDate.getUTCDate()).padStart(2, "0")}`
       : null,
     paymentMethodId: draft.paymentMethodId ?? null,
     discountName: draft.discountName ?? null,

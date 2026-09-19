@@ -960,6 +960,7 @@ model Booking {
   poNumber                  String?
   poYear                    Int?
   poSeq                     Int?
+  dealingDate               DateTime? // tanggal dealing booking; user-editable, default hari ini saat create, backfilled dari createdAt untuk data lama
   eventDate                 DateTime? // required for saved bookings; null only during MICE draft steps
   quotationId               String?
   salesSignature            String?

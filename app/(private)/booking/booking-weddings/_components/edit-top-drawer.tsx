@@ -19,6 +19,7 @@ import {
   AltArrowDown,
   CheckCircle,
   ClockCircle,
+  Copy,
   DangerTriangle,
 } from "@solar-icons/react";
 import {
@@ -161,6 +162,15 @@ function TopContent({
   const priceAfterDiscount = Math.max(0, packagePrice - discountAmount);
   const totalTerms = terms.reduce((s, t) => s + (t.amount || 0), 0);
   const difference = totalTerms - priceAfterDiscount;
+  const differenceText =
+    difference === 0
+      ? "Sesuai"
+      : `${difference < 0 ? "−" : "+"} Rp${fmtRp(Math.abs(difference))}`;
+
+  function handleCopyDifference(): void {
+    navigator.clipboard.writeText(differenceText);
+    toast.success("Selisih disalin");
+  }
 
   const isChanged = useMemo(() => {
     if (terms.length !== initialTerms.length) return true;
@@ -562,16 +572,24 @@ function TopContent({
           </div>
           <div className="flex min-w-0 flex-col gap-0.5">
             <span className="text-[10px] text-muted-foreground">Selisih</span>
-            <span
-              className={cn(
-                "truncate text-xs font-semibold tabular-nums",
-                difference === 0 ? "text-foreground" : "text-destructive",
-              )}
-            >
-              {difference === 0
-                ? "Sesuai"
-                : `${difference < 0 ? "−" : "+"} Rp${fmtRp(Math.abs(difference))}`}
-            </span>
+            <div className="flex min-w-0 items-center gap-1">
+              <span
+                className={cn(
+                  "truncate text-xs font-semibold tabular-nums",
+                  difference === 0 ? "text-foreground" : "text-destructive",
+                )}
+              >
+                {differenceText}
+              </span>
+              <button
+                type="button"
+                onClick={handleCopyDifference}
+                aria-label="Salin selisih"
+                className="shrink-0 rounded-md p-0.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              >
+                <Copy weight="BoldDuotone" className="size-3" />
+              </button>
+            </div>
           </div>
         </div>
         <div className="flex items-center gap-2">

@@ -31,6 +31,7 @@ export const bookingFieldSchemas = {
   venueId: z.string().min(1, "Venue wajib dipilih"),
   packageId: z.string().min(1, "Paket wajib dipilih"),
   eventDate: z.string().min(1, "Tanggal event wajib diisi"),
+  dealingDate: z.string().min(1, "Tanggal dealing wajib diisi"),
   weddingSession: z.string().min(1, "Sesi event wajib dipilih"),
   weddingType: z.string().min(1, "Tipe event wajib dipilih"),
   // Signature step

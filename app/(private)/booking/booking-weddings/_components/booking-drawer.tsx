@@ -190,44 +190,34 @@ function subMonths(date: Date, months: number): Date {
   return d;
 }
 
+/** Tambah `months` bulan ke `date` (clamp hari akhir bulan). */
+function addMonths(date: Date, months: number): Date {
+  return subMonths(date, -months);
+}
+
 /**
- * Isi due date termin yang masih kosong, dihitung MUNDUR dari event date.
- * Termin terakhir (pelunasan) jatuh 1 bulan SEBELUM event; tiap termin di atasnya
- * mundur 1 bulan lagi. Kalau event terlalu mepet (termin awal jatuh sebelum hari
- * ini), fallback bagi rata dari hari ini s/d anchor (event − 1 bln) — biar tak ada
- * termin yang jatuh di masa lalu. Hanya create flow (edit pakai edit-top-drawer).
- *
- * Termin yang tanggalnya sudah diisi user dibiarkan, kecuali `force = true`.
+ * Auto-isi due date tiap termin secara BERANTAI maju: Booking Fee (index 0)
+ * default ke hari ini, lalu tiap termin berikutnya (DP, Angsuran, Pelunasan,
+ * Final) = tanggal termin sebelumnya + 1 bulan. Termin yang tanggalnya sudah
+ * diisi manual oleh user dijadikan anchor buat chain berikutnya (dibiarkan,
+ * tidak ditimpa), kecuali `force = true`. Hanya create flow (edit pakai
+ * edit-top-drawer). `eventDate` tidak dipakai untuk hitung tanggal — cuma
+ * gate "wedding date sudah dipilih" di semua call site, tetap wajib truthy.
  */
 function recalcTermDates(terms: TermRow[], eventDate: string, force = false): TermRow[] {
   if (!eventDate || terms.length === 0) return terms;
   const now = new Date();
   now.setHours(0, 0, 0, 0);
-  const event = new Date(eventDate);
-  event.setHours(0, 0, 0, 0);
 
-  // Anchor = pelunasan harus lunas 1 bulan sebelum acara. Kalau event < 1 bulan
-  // lagi (atau sudah lewat), anchor jatuh di masa lalu — dulu di sini langsung
-  // `return terms` dan termin kosong (DP/Angsuran/dst) DIBIARKAN KOSONG SELAMANYA,
-  // padahal docblock di atas sudah janji fallback bagi rata. Sekarang anchor
-  // di-clamp ke event date sendiri supaya selalu ada target buat bagi rata.
-  const anchorRaw = subMonths(event, 1);
-  anchorRaw.setHours(0, 0, 0, 0);
-  const anchor = anchorRaw.getTime() > now.getTime() ? anchorRaw : event;
-
-  const n = terms.length;
-  // Kandidat tanggal per termin (mundur 1 bln dari anchor). Index 0 = paling awal.
-  const spaced = terms.map((_, i) => subMonths(anchor, n - 1 - i));
-  // Kalau termin paling awal jatuh sebelum/sama hari ini → mepet, pakai bagi rata
-  // dari hari ini s/d anchor (anchor bisa == event date kalau event sendiri mepet).
-  const tooTight = n > 1 && spaced[0].getTime() <= now.getTime();
-  const totalMs = Math.max(0, anchor.getTime() - now.getTime());
-
+  let chainDate = now;
   return terms.map((t, i) => {
-    if (!force && t.dueDate) return t; // tanggal manual user — jangan timpa
-    const date = tooTight
-      ? new Date(now.getTime() + Math.round((totalMs * i) / (n - 1 || 1)))
-      : spaced[i];
+    if (!force && t.dueDate) {
+      const parsed = new Date(t.dueDate);
+      if (!Number.isNaN(parsed.getTime())) chainDate = parsed;
+      return t; // tanggal manual user — jangan timpa, tapi tetap jadi anchor chain
+    }
+    const date = i === 0 ? now : addMonths(chainDate, 1);
+    chainDate = date;
     return { ...t, dueDate: toLocalISO(date) };
   });
 }
@@ -504,7 +494,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
 
   const form = useForm<BookingInput>({
     defaultValues: {
-      eventDate: "", customerId: "", venueId: "", packageId: "",
+      eventDate: "", dealingDate: toDateOnly(new Date()), customerId: "", venueId: "", packageId: "",
       salesId: null,
       paymentMethodId: null, sourceOfInformationId: null, sourceOfInformationDetail: null,
       weddingSession: null, weddingType: null, bonuses: [], termOfPayments: [],
@@ -517,6 +507,10 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
   // Helper: reset all form state to clean slate
   function resetToClean() {
     form.reset();
+    // form.reset() falls back to the ORIGINAL defaultValues object (captured once at
+    // first render), so a stale "today" would stick around across sessions — force
+    // a freshly-computed default here.
+    form.setValue("dealingDate", toDateOnly(new Date()));
     setSelectedVenueId(""); setSelectedPackageId(""); setSelectedPackagePrice(0); setOriginalPackagePrice(0); setLastAllocatedPrice(0);
     setBonuses([]); setTerms(makeDefaultTerms()); setCreatePayments([]);
     setCurrentStep(1); setSignatureSales(""); setSigningLocation(""); setUseDefaultSignature(false);
@@ -969,6 +963,10 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
     if (resumeDraftDetail.eventDate) {
       form.setValue("eventDate", resumeDraftDetail.eventDate);
     }
+    // dealingDate
+    if (resumeDraftDetail.dealingDate) {
+      form.setValue("dealingDate", resumeDraftDetail.dealingDate);
+    }
     // customerId
     if (resumeDraftDetail.customerId) {
       form.setValue("customerId", resumeDraftDetail.customerId);
@@ -1184,6 +1182,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
         const draftPayload = {
           id: pendingDraftId,
           eventDate: form.getValues("eventDate"),
+          dealingDate: form.getValues("dealingDate"),
           category: "WEDDINGS" as const,
           venueId: form.getValues("venueId"),
           packageId: form.getValues("packageId") || null,
@@ -1299,15 +1298,15 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
         setLastAllocatedPrice(step2Price);
       }
 
-      // Ensure all terms have a dueDate before entering the TOP step.
+      // Ensure every term has a dueDate before entering the TOP step.
       // allocatePrice above only updates amounts (spread ...t preserves dueDate).
       // The recalcTermDates effect fires when wBookingDate changes, but may not
       // have run yet if the user changed eventDate and the component hasn't re-rendered,
       // or if allocatePrice replaced the terms array before the effect could apply.
-      // Calling recalcTermDates here guarantees every term with an empty dueDate
-      // gets a date spread between today and the event date — force=false so any
-      // date the user already set manually (or Booking Fee = today) is untouched.
-      // Resume-draft terms already have dates in DB → they are not empty → also untouched.
+      // Calling recalcTermDates here guarantees the whole chain (Booking Fee = today,
+      // each next term = previous + 1 bulan) gets applied — force=false so any date
+      // the user already set manually is untouched (and still anchors the chain).
+      // Resume-draft terms already have dates in DB → also untouched.
       if (wBookingDate) {
         setTerms((prev) => recalcTermDates(prev, wBookingDate));
       }
@@ -2015,7 +2014,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
                   <FormField control={form.control} name="venueId" render={({ field }) => (
                     <FormItem>
                       <FormLabel className={cn('text-sm', 'font-medium', 'text-foreground')}>Venue <span className="text-destructive">*</span></FormLabel>
-                      <SearchableSelect options={venues} value={field.value} onChange={(id) => { field.onChange(id); setSelectedVenueId(id); setSelectedPackageId(""); setSelectedPackagePrice(0); setOriginalPackagePrice(0); setCategoryToggles({}); setTakeoutPrices({}); form.setValue("packageId", ""); form.setValue("paymentMethodId", null); clearError("venueId"); }} placeholder="Pilih venue..." searchPlaceholder="Cari venue..." emptyText="Tidak ada venue" />
+                      <SearchableSelect options={venues} value={field.value} onChange={(id) => { field.onChange(id); setSelectedVenueId(id); setSelectedPackageId(""); setSelectedPackagePrice(0); setOriginalPackagePrice(0); setCategoryToggles({}); setTakeoutPrices({}); form.setValue("packageId", ""); form.setValue("paymentMethodId", null); clearError("venueId"); }} placeholder="Select venue..." searchPlaceholder="Search venue..." emptyText="No venue" />
                       <FormMessage />
                       {errors.venueId && <p className="mt-1 text-sm text-destructive">{errors.venueId}</p>}
                     </FormItem>
@@ -2024,9 +2023,9 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
                   {/* Pilih Paket */}
                   <FormField control={form.control} name="packageId" render={({ field }) => (
                     <FormItem>
-                      <FormLabel className={cn('text-sm', 'font-medium', 'text-foreground')}>Pilih Paket <span className="text-destructive">*</span></FormLabel>
-                      <SearchableSelect options={packages.map((p) => ({ id: p.id, name: `${p.packageName}${p.pax ? ` — ${p.pax} pax` : ""} — ${formatRupiah(getPackagePrice(p))}` }))} value={field.value} onChange={(id) => { field.onChange(id); setSelectedPackageId(id); setSelectedPackagePrice(0); setOriginalPackagePrice(0); setLastAllocatedPrice(0); setCategoryToggles({}); setTakeoutPrices({}); setUserHasCustomizedTerms(false); const pkg = packages.find((x: PackageData) => x.id === id); if (pkg) { const p = getPackagePrice(pkg); setSelectedPackagePrice(p); setOriginalPackagePrice(p); allocatePrice(p, specialBonusAmount); setLastAllocatedPrice(p); /* Re-prefill Item Paket from the newly chosen package template. */ packageItemsDirtyRef.current = false; setPackageInternalItems((pkg.internalItems ?? []).map((it) => ({ uid: safeRandomUUID(), itemName: it.itemName, itemDescription: it.itemDescription }))); setPackageVendorItems((pkg.vendorItems ?? []).map((it) => ({ uid: safeRandomUUID(), categoryId: it.categoryId ?? null, categoryName: it.categoryName, itemText: it.itemText }))); } clearError("packageId"); }} placeholder={!selectedVenueId ? "Pilih venue dulu" : packagesLoading ? "Memuat paket..." : packagesError ? "Gagal memuat paket" : "Pilih paket..."} disabled={!selectedVenueId || packagesLoading} searchPlaceholder="Cari paket..." emptyText="Tidak ada paket" />
-                      {packagesError && <p className="text-xs text-destructive mt-1">Gagal memuat paket. Coba pilih venue ulang.</p>}
+                      <FormLabel className={cn('text-sm', 'font-medium', 'text-foreground')}>Select Package <span className="text-destructive">*</span></FormLabel>
+                      <SearchableSelect options={packages.map((p) => ({ id: p.id, name: `${p.packageName}${p.pax ? ` — ${p.pax} pax` : ""} — ${formatRupiah(getPackagePrice(p))}` }))} value={field.value} onChange={(id) => { field.onChange(id); setSelectedPackageId(id); setSelectedPackagePrice(0); setOriginalPackagePrice(0); setLastAllocatedPrice(0); setCategoryToggles({}); setTakeoutPrices({}); setUserHasCustomizedTerms(false); const pkg = packages.find((x: PackageData) => x.id === id); if (pkg) { const p = getPackagePrice(pkg); setSelectedPackagePrice(p); setOriginalPackagePrice(p); allocatePrice(p, specialBonusAmount); setLastAllocatedPrice(p); /* Re-prefill Item Paket from the newly chosen package template. */ packageItemsDirtyRef.current = false; setPackageInternalItems((pkg.internalItems ?? []).map((it) => ({ uid: safeRandomUUID(), itemName: it.itemName, itemDescription: it.itemDescription }))); setPackageVendorItems((pkg.vendorItems ?? []).map((it) => ({ uid: safeRandomUUID(), categoryId: it.categoryId ?? null, categoryName: it.categoryName, itemText: it.itemText }))); } clearError("packageId"); }} placeholder={!selectedVenueId ? "Select venue first" : packagesLoading ? "Loading packages..." : packagesError ? "Failed to load packages" : "Select package..."} disabled={!selectedVenueId || packagesLoading} searchPlaceholder="Search package..." emptyText="No package" />
+                      {packagesError && <p className="text-xs text-destructive mt-1">Failed to load packages. Try selecting a venue again.</p>}
                       <FormMessage />
                       {errors.packageId && <p className="mt-1 text-sm text-destructive">{errors.packageId}</p>}
                     </FormItem>
@@ -2039,10 +2038,10 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
                       <FormControl>
                         <SearchableSelect
                           options={[
-                            { id: "R", name: "Resepsi" },
-                            { id: "AR", name: "Akad & Resepsi" },
-                            { id: "TR", name: "Teapai & Resepsi" },
-                            { id: "PR", name: "Pemberkatan Resepsi" },
+                            { id: "R", name: "Reception" },
+                            { id: "AR", name: "Akad & Reception" },
+                            { id: "TR", name: "Teapai & Reception" },
+                            { id: "PR", name: "Blessing & Reception" },
                             { id: "VO", name: "Venue Only" },
                           ]}
                           value={field.value ?? ""}
@@ -2052,13 +2051,44 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
                             field.onChange(v || null);
                             clearError("weddingType");
                           }}
-                          placeholder="Pilih type"
-                          searchPlaceholder="Cari event type..."
-                          emptyText="Tidak ada event type"
+                          placeholder="Select type"
+                          searchPlaceholder="Search event type..."
+                          emptyText="No event type"
                         />
                       </FormControl>
                       <FormMessage />
                       {errors.weddingType && <p className="mt-1 text-sm text-destructive">{errors.weddingType}</p>}
+                    </FormItem>
+                  )} />
+
+                  {/* Dealing Date */}
+                  <FormField control={form.control} name="dealingDate" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className={cn('text-sm', 'font-medium', 'text-foreground')}>Dealing Date <span className="text-destructive">*</span></FormLabel>
+                      <Popover>
+                        <PopoverTrigger render={
+                          <Button
+                            variant="outline"
+                            className={cn("w-full justify-start text-left font-normal", !field.value && "text-muted-foreground")}
+                          >
+                            <CalendarIcon weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4')} />
+                            {field.value ? format(parseDateOnly(field.value), "PPP") : "Select dealing date"}
+                          </Button>
+                        } />
+                        <PopoverContent className={cn('w-auto', 'p-0')} align="start">
+                          <Calendar
+                            mode="single"
+                            captionLayout="dropdown"
+                            selected={field.value ? parseDateOnly(field.value) : undefined}
+                            onSelect={(date) => { field.onChange(date ? toDateOnly(date) : ""); clearError("dealingDate"); }}
+                            startMonth={new Date(new Date().getFullYear() - 10, 0)}
+                            endMonth={new Date(new Date().getFullYear() + 10, 11)}
+                            defaultMonth={field.value ? parseDateOnly(field.value) : new Date()}
+                          />
+                        </PopoverContent>
+                      </Popover>
+                      <FormMessage />
+                      {errors.dealingDate && <p className="mt-1 text-sm text-destructive">{errors.dealingDate}</p>}
                     </FormItem>
                   )} />
 
@@ -2075,8 +2105,8 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
                           >
                             <CalendarIcon weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4')} />
                             {selectedVenueId
-                              ? (field.value ? format(parseDateOnly(field.value), "PPP") : "Pilih tanggal event")
-                              : "Pilih venue terlebih dahulu"}
+                              ? (field.value ? format(parseDateOnly(field.value), "PPP") : "Select event date")
+                              : "Select venue first"}
                           </Button>
                         } />
                         <PopoverContent className={cn('w-auto', 'p-0')} align="start">
@@ -2103,7 +2133,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
                           />
                         </PopoverContent>
                       </Popover>
-                      {availLoading && <p className={cn('text-xs', 'text-muted-foreground', 'mt-1')}>Mengecek ketersediaan...</p>}
+                      {availLoading && <p className={cn('text-xs', 'text-muted-foreground', 'mt-1')}>Checking availability...</p>}
                       <FormMessage />
                       {errors.eventDate && <p className="mt-1 text-sm text-destructive">{errors.eventDate}</p>}
                     </FormItem>
@@ -2114,7 +2144,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
                     // wBookingDate is stored as "yyyy-MM-dd" — use it directly as the key.
                     const dateStr = wBookingDate || null;
                     const sessions = dateStr ? getAvailableSessions(dateStr) : ["morning", "evening", "fullday"];
-                    const SESSION_LABELS: Record<string, string> = { morning: "Pagi", evening: "Malam", fullday: "Fullday" };
+                    const SESSION_LABELS: Record<string, string> = { morning: "Morning", evening: "Evening", fullday: "Full day" };
                     return (
                       <FormItem>
                         <FormLabel className={cn('text-sm', 'font-medium', 'text-foreground')}>Event Session <span className="text-destructive">*</span></FormLabel>
@@ -2128,9 +2158,9 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
                               field.onChange(v || null);
                               clearError("weddingSession");
                             }}
-                            placeholder={!wBookingDate ? "Pilih tanggal dulu" : "Pilih session"}
-                            searchPlaceholder="Cari session..."
-                            emptyText="Tidak ada session tersedia"
+                            placeholder={!wBookingDate ? "Select date first" : "Select session"}
+                            searchPlaceholder="Search session..."
+                            emptyText="No session available"
                             disabled={!wBookingDate}
                           />
                         </FormControl>
@@ -2146,14 +2176,14 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
                       Time <span className="text-destructive">*</span>
                       {wWeddingSession && mapWeddingTypeToEventType(wWeddingType ?? null) && (
                         <span className="ml-2 font-normal text-muted-foreground text-xs">
-                          (auto-filled, bisa diubah manual)
+                          (auto-filled, can be changed manually)
                         </span>
                       )}
                     </FormLabel>
                     <TimeRangePicker
                       value={time}
                       onChange={setTime}
-                      placeholder="Pilih waktu (bisa rentang)..."
+                      placeholder="Select time (can be range)..."
                     />
                   </div>
 

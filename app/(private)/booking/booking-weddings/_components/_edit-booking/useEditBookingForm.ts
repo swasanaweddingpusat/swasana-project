@@ -23,7 +23,7 @@ type DayAvail = { morning: boolean; evening: boolean; fullday: boolean };
 export const STEP_LABELS: Record<number, string> = {
   1: "Client",
   2: "Venue & Paket",
-  3: "Complimentary & Bonus",
+  3: "Compliment & Bonus",
   4: "Item Paket",
   5: "Takeout",
   6: "TOP",
@@ -88,10 +88,6 @@ export interface EditBookingForm {
   setSourceOfInformationDetail: (v: string) => void;
   salesId: string | null;
   setSalesId: (v: string | null) => void;
-  /** "Dealing date" override (booking.createdAt) — empty string when the caller
-   *  lacks the `booking:dealing-date` permission (field stays hidden in the UI). */
-  dealingDate: string;
-  setDealingDate: (v: string) => void;
 
   // step 2: venue/event state
   venueId: string;
@@ -100,6 +96,10 @@ export interface EditBookingForm {
   setPackageId: (v: string) => void;
   bookingDate: string;
   setBookingDate: (v: string) => void;
+  /** Dealing date (booking.dealingDate) — empty string when the caller lacks
+   *  the `booking:dealing-date` permission (field stays hidden in the UI). */
+  dealingDate: string;
+  setDealingDate: (v: string) => void;
   weddingSession: string;
   setWeddingSession: (v: string) => void;
   weddingType: string;
@@ -215,12 +215,12 @@ export function useEditBookingForm(
   const [sourceOfInformationId, setSourceOfInformationId] = useState("");
   const [sourceOfInformationDetail, setSourceOfInformationDetail] = useState("");
   const [salesId, setSalesId] = useState<string | null>(null);
-  const [dealingDate, setDealingDate] = useState("");
 
   // â”€â”€ Step 2: Venue / Package / Event â”€â”€
   const [venueId, setVenueId] = useState("");
   const [packageId, setPackageId] = useState("");
   const [bookingDate, setBookingDate] = useState("");
+  const [dealingDate, setDealingDate] = useState("");
   const [weddingSession, setWeddingSession] = useState("");
   const [weddingType, setWeddingType] = useState("");
   const [time, setTime] = useState("");
@@ -254,6 +254,7 @@ export function useEditBookingForm(
     const v = validateBookingField("venueId", venueId); if (v) next.venueId = v;
     const p = validateBookingField("packageId", packageId); if (p) next.packageId = p;
     const d = validateBookingField("eventDate", bookingDate); if (d) next.eventDate = d;
+    const dd = validateBookingField("dealingDate", dealingDate); if (dd) next.dealingDate = dd;
     const s = validateBookingField("weddingSession", weddingSession); if (s) next.weddingSession = s;
     const t = validateBookingField("weddingType", weddingType); if (t) next.weddingType = t;
     setErrors(next);
@@ -331,7 +332,6 @@ export function useEditBookingForm(
     }
 
     setSalesId(booking.salesId ?? null);
-    setDealingDate(booking.createdAt ? toDateOnly(new Date(booking.createdAt)) : "");
     setSourceOfInformationId(booking.sourceOfInformationId ?? "");
     setSourceOfInformationDetail(booking.sourceOfInformationDetail ?? "");
 
@@ -339,6 +339,7 @@ export function useEditBookingForm(
     setPackageId(booking.packageId ?? "");
     const eventDateStr = booking.eventDate ? toDateOnly(new Date(booking.eventDate)) : "";
     setBookingDate(eventDateStr);
+    setDealingDate(booking.dealingDate ? toDateOnly(new Date(booking.dealingDate)) : "");
     setWeddingSession(booking.weddingSession ?? "");
     setWeddingType(booking.weddingType ?? "");
     setTime(booking.eventTime ?? "");
@@ -428,9 +429,9 @@ export function useEditBookingForm(
       bookingDate !== originalBookingDate);
 
   const isStep1Complete = !!(customerName.trim() && contactNumbers.length > 0 && (!isBitrixSource || contactBitrixId.trim()));
-  const isStep2Complete = !!(venueId && packageId && bookingDate && weddingSession && weddingType);
+  const isStep2Complete = !!(venueId && packageId && bookingDate && dealingDate && weddingSession && weddingType);
 
-  const sessionLabels: Record<string, string> = { morning: "Pagi", evening: "Malam", fullday: "Fullday" };
+  const sessionLabels: Record<string, string> = { morning: "Morning", evening: "Evening", fullday: "Full day" };
 
   const lockedSalesName =
     salesUsers.find((s) => s.id === salesId)?.fullName ??
@@ -442,7 +443,7 @@ export function useEditBookingForm(
   const STEP_TITLES: Record<number, string> = {
     1: "Edit Booking",
     2: "Edit Booking",
-    3: "Complimentary & Bonus",
+    3: "Compliment & Bonus",
     4: "Item Paket",
     5: "Edit Takeout",
     6: "Term of Payment",
@@ -479,7 +480,6 @@ export function useEditBookingForm(
         salesId: salesId || null,
         sourceOfInformationId: sourceOfInformationId || null,
         sourceOfInformationDetail: sourceOfInformationDetail || null,
-        createdAt: dealingDate || undefined,
       });
       if (!r.success) { toast.error(r.error); return; }
       qc.invalidateQueries({ queryKey: ["bookings"] });
@@ -514,6 +514,7 @@ export function useEditBookingForm(
         venueId,
         packageId,
         eventDate: bookingDate,
+        dealingDate,
         weddingSession: weddingSession as "morning" | "evening" | "fullday",
         weddingType,
         eventTime: time || null,

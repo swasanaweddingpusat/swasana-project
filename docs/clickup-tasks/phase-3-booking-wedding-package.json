@@ -6,7 +6,8 @@
     "style_reference": "Parent task = fitur singkat + 1 kalimat desc. Subtask prefix [BE]/[FE] + bullet konkret (mengikuti gaya Phase 2 Auth & Access Control).",
     "note": "Field yang diawali underscore (_review_note, _status_hint) HANYA catatan internal buat kita, JANGAN ikut ke-push sebagai description ke ClickUp.",
     "structure_note": "File ini nampung >1 phase sekaligus (per instruksi user).",
-    "list_targeting_status": "RESOLVED 2026-09-18 — 5 list baru dibikin di space Kediaman Project (901810589678), sejajar Phase 1 & 2 yang udah ada, tanpa folder (approved by user): Phase 3=1100480000000516, Phase 4=1100480000000517, Phase 5=1100480000000518, Phase 6=1100480000000519, Phase 7=1100480000000520. Push sedang berjalan."
+    "list_targeting_status": "RESOLVED 2026-09-18 — 5 list baru dibikin di space Kediaman Project (901810589678), sejajar Phase 1 & 2 yang udah ada, tanpa folder (approved by user): Phase 3=1100480000000516, Phase 4=1100480000000517, Phase 5=1100480000000518, Phase 6=1100480000000519, Phase 7=1100480000000520. Push sedang berjalan.",
+    "push_status_phase4_7": "STALLED, retry re-scheduled LAGI 2026-09-18 12:37 SEAST — cron sebelumnya (dijadwalkan 12:15 SEAST buat fire 23:35) ternyata hilang karena session reset sebelum jam tsb (cron bersifat session-only, mati kalau session mati/exit). Re-checked jam 12:37 SEAST: MASIH kena limit ClickUp MCP (100/100 calls), retryAfter=38616s → reset ~2026-09-18 23:22 SEAST (konsisten). Cron auto-retry baru berhasil di-buat jam 12:37 SEAST buat fire 2026-09-18 23:36 SEAST (job id 51fc9f35) — TAPI ini juga session-only, jadi kalau session INI mati sebelum 23:36, cron ini juga bakal hilang lagi tanpa notifikasi apapun. BELUM DIKETAHUI persis berapa task yg berhasil kebuat sebelum fork sebelumnya mati — progress belum pernah diverifikasi karena rate limit keburu kena tiap kali mau cek. Kalau session ini (atau cron-nya) udah gak hidup pas dibaca lagi nanti: lanjutin manual — LANGKAH PERTAMA WAJIB cek isi 4 list (clickup_filter_tasks list_ids=[1100480000000517,1100480000000518,1100480000000519,1100480000000520], subtasks:true, include_closed:true) buat tau task apa yang UDAH ada sebelum lanjut create, biar gak dobel-dobel banget (user oke duplikat dikit tapi jangan push ulang 100% dari nol). Push task yang BELUM ada aja. Jangan pakai fork besar sekaligus lagi — pecah per-phase (4 dulu, verify, baru 5, dst) biar gak kena context thrashing lagi."
   },
   "phases": [
     {
@@ -455,7 +456,7 @@
       "phase": 5,
       "target_list_id": "1100480000000518",
       "target_list_name": "Phase 5 HRD",
-      "phase_note": "Seluruh fitur di app/(private)/hrd/ (world HRD) + 2 general-nav yang numpang komponen sama (slip-gaji, cuti). _status_hint diisi 'complete' default kecuali disebutkan lain di _review_note. Rekrutmen/Onboarding (submodul paling kompleks) sudah masuk di akhir array ini.",
+      "phase_note": "Seluruh fitur di app/(private)/hrd/ (world HRD) + 2 general-nav yang numpang komponen sama (slip-gaji, cuti). _status_hint diisi 'complete' default kecuali disebutkan lain di _review_note. Rekrutmen/Onboarding (submodul paling kompleks) sudah masuk di akhir array ini. Catatan: 2 task Absensi (Clock In/Out & Riwayat; Manajemen Lokasi, Shift & Assignment) DIPINDAH ke Phase 8 (digabung dengan KPI Performance) per instruksi user 2026-09-18 — bukan dihapus, cuma relokasi. Manajemen Kinerja — Review & KPI TETAP di sini.",
       "tasks": [
         {
           "name": "Payroll — Generate & Kelola Periode Gaji",
@@ -517,37 +518,6 @@
             {
               "name": "[FE] Leave Type & Balance Manager",
               "markdown_description": "- Form pengaturan tipe cuti + kuota\n- Manajemen saldo cuti per karyawan (tab Settings di sistem-cuti)"
-            }
-          ]
-        },
-        {
-          "name": "Absensi — Clock In/Out & Riwayat",
-          "markdown_description": "Karyawan absen masuk/pulang lewat web dengan foto selfie wajib dan validasi lokasi (geofence), lalu bisa lihat riwayat kehadiran sendiri.",
-          "_status_hint": "complete",
-          "subtasks": [
-            {
-              "name": "[BE] API Clock-in/Clock-out & Riwayat",
-              "markdown_description": "- Validasi geofence radius per WorkLocation, dukung workType WFO/WFH/WFA\n- Simpan foto selfie + koordinat lat/lng saat clock-in dan clock-out\n- Status otomatis on_time/late/absent berdasarkan shift & jam masuk\n- Endpoint my-history + export rekap"
-            },
-            {
-              "name": "[FE] Attendance Clock & History",
-              "markdown_description": "- Live clock + modal kamera untuk selfie wajib\n- Pilih shift/lokasi kerja saat clock-in\n- Riwayat kehadiran pribadi (general-nav /absensi)"
-            }
-          ]
-        },
-        {
-          "name": "Absensi — Manajemen Lokasi, Shift & Assignment",
-          "markdown_description": "HR mengatur lokasi kerja (geofence), shift, dan penugasan shift per karyawan termasuk hari libur individual dan override shift harian.",
-          "_status_hint": "complete",
-          "_review_note": "Gap keamanan: GET /api/hr/{work-shifts,work-locations,work-assignments,shift-overrides} TIDAK ada requirePermission/requirePermissionForRoute — cuma cek session ada, jadi semua authenticated user bisa baca list ini. Juga permission module gado-gado: 'attendance', 'hr:view-all', 'hr-attendance' dipakai gantian untuk fitur yang konsepnya sama. Tidak ditemukan proses auto-generate attendantType DAY_OFF dari EmployeeWorkAssignment.offdayDays — 'Off' masih self-report manual saat clock-in.",
-          "subtasks": [
-            {
-              "name": "[BE] CRUD Work Location/Shift/Assignment/Override",
-              "markdown_description": "- WorkLocation: geofence radius per lokasi, opsional reuse Venue booking\n- WorkShift, EmployeeWorkAssignment (offdayDays[], effectiveDate/endDate, lokasi clock-in/out beda), ShiftOverride harian\n- bulkCreateWorkAssignment pakai $transaction array form (contoh implementasi benar)"
-            },
-            {
-              "name": "[FE] Attendance Management Admin",
-              "markdown_description": "- Tab Rekap, Lokasi, Shift, Assignment, Pengaturan\n- Export rekap kehadiran"
             }
           ]
         },
@@ -967,6 +937,112 @@
         }
       ],
       "_scope_conflict_note": "TEMUAN PENTING dari investigasi Daily Activity & Quotation: kedua fitur ini di kode SAAT INI justru MICE-only (bukan Wedding seperti asumsi awal scope Phase 7). Daily Activity: sales picker terkunci struktural ke getSalesMiceProfiles() di semua titik (drawer/table/filter), ada komentar eksplisit di kode soal ini. Quotation: onSubmit hardcode category:\"MICE\" walau Zod/Prisma support WEDDINGS, plus branding dokumen masih \"Kediaman\" (project referensi lama, bukan Swasana). Role Wedding sales juga sengaja belum di-grant akses ke kedua module ini. User perlu putuskan: (a) tetap masukkan ke Phase 7 dengan framing \"sudah built untuk MICE, perlu extend ke Wedding\", atau (b) pindahkan ke phase MICE nanti karena substansinya MICE-track. Untuk sekarang task di bawah didokumentasikan APA ADANYA (as-built MICE) + gap Wedding-nya, TIDAK mengasumsikan keputusan."
+    },
+    {
+      "phase": 8,
+      "target_list_id": null,
+      "target_list_name": "Phase 8 KPI Performance & Absensi",
+      "phase_note": "Scope: KPI Performance (Master Data KPI, KPI per Sales, KPI for Stakeholder — area baru, belum pernah diaudit di phase manapun sebelumnya) digabung dengan Absensi (2 task dipindah dari Phase 5 HRD atas instruksi user 2026-09-18 — HRD tetap punya Manajemen Kinerja, cuma Absensi yang direlokasi), DAN Booking MICE + MICE Package (2 task baru, area track MICE yang belum pernah diaudit — sudah dev penuh & live di working tree branch feat/bonus-booking saat ini, BUKAN unmerged branch feat/crm seperti catatan project lama; feat/crm branch sudah tidak ada, kemungkinan sudah di-merge). CATATAN: Daily Activity dan Quotation (2 area track MICE lainnya) SENGAJA TIDAK diduplikasi ke sini — keduanya SUDAH punya task audit lengkap di Phase 7 (\"Daily Activity — Sales Pipeline Tracking (as-built: MICE-only)\" dan \"Quotation — Create, Approval & Print (as-built: MICE-only)\") dengan gap konkret yang sudah tercatat; phase_note Phase 7 yang lama sempat menyebut area-area ini \"belum di-dev\" — itu SUDAH TIDAK AKURAT, task individualnya sendiri sudah correctly menandai MICE-nya complete/functional dengan gap spesifik. Kalau mau konsolidasi semua scope MICE dalam 1 phase, opsi: relokasi 2 task itu dari Phase 7 ke sini (bukan ditambah baru). target_list_id null karena list ClickUp Phase 8 belum dibikin (ClickUp API kena rate limit pas draft ini disusun) — dibikin manual nanti pas mau push.",
+      "tasks": [
+        {
+          "name": "KPI Performance — Master Data KPI",
+          "markdown_description": "Halaman admin untuk mendefinisikan master indikator KPI (metrik, satuan, target, scope) yang jadi acuan buat KPI per Sales & KPI for Stakeholder — belum ada implementasi sama sekali di codebase.",
+          "_status_hint": "not-started",
+          "_review_note": "Genuinely belum ada: grep project-wide untuk 'kpi' cuma nemu 3 hal, dan ketiganya BUKAN ini — (1) model Prisma `Kpi` (prisma/schema.prisma:3558-3573) standalone TANPA relasi FK sama sekali (department cuma string bebas), dipakai eksklusif oleh HRD Manajemen Kinerja (actions/hrPerformance.ts, lib/queries/hrPerformance.ts, app/api/hr/kpis/route.ts digate permission module \"hr\") — ini KPI individual employee review, BUKAN sales KPI. (2) model `UserTarget` (dipakai lib/queries/groups.ts & lib/queries/salesPerformance.ts) cuma 1 kolom `amount` per (profileId, type=\"sales\", year) — bukan \"KPI\" beneran, cuma angka target revenue flat, gak ada metric/unit/formula. (3) Tidak ada permission module \"kpi\"/\"kpi-master\"/\"kpi-sales\" apapun di prisma/seeders/roles-permissions.ts, tidak ada nav entry di sidebar-config.ts. Rekomendasi desain: bikin model BARU yang scoped ke sales/tim (misal `SalesKpiDefinition` atau `KpiMetric`) — JANGAN reuse/extend model `Kpi` yang udah dipakai HRD Manajemen Kinerja, karena beda konsep (individual performance review vs sales-team target metric) dan nge-share 1 tabel bakal bikin query/permission dua fitur collision. Kalau mau tetap 1 model, minimal butuh discriminator field (mis. `scope: HR | SALES`) plus FK yang bener (Group/Role) — bukan string bebas kayak `Kpi.department` sekarang.",
+          "subtasks": [
+            {
+              "name": "[BE] Model, Validasi & CRUD Master KPI (rencana build)",
+              "markdown_description": "- Model Prisma baru (mis. `SalesKpiDefinition`) TERPISAH dari `Kpi` (HRD) — field: name, metricType (revenue/bookingCount/custom), unit, defaultTarget, scope (individual/group), isActive, periodType (monthly/yearly)\n- Migration idempotent (`CREATE TABLE IF NOT EXISTS`) sesuai AGENTS.md §6\n- lib/validations/kpiDefinition.ts: Zod schema create/update\n- lib/queries/kpiDefinition.ts: getKpiDefinitions (SELECT only, cacheTag)\n- actions/kpiDefinition.ts: createKpiDefinition/updateKpiDefinition/deleteKpiDefinition — requirePermission({module:\"kpi-master\", action}) → mutationLimiter → Zod → db.$transaction array form (kalau nyentuh >1 tabel) → logAudit → revalidateTag(\"kpi\", \"max\")\n- Tambah permission module baru \"kpi-master\": [\"view\",\"create\",\"edit\",\"delete\"] di prisma/seeders/roles-permissions.ts (moduleActions), pastikan namanya gak collision sama REMOVED_MODULES"
+            },
+            {
+              "name": "[FE] Halaman Settings Master Data KPI (rencana build)",
+              "markdown_description": "- Route baru (kandidat: app/(private)/(general)/settings/kpi, karena sifatnya cross-world kayak settings-maintenance-*) — TBD final placement pas desain\n- Table list + drawer form CRUD (rounded-2xl card, pill button/badge — Bank Jago vibe)\n- hooks/useKpiDefinitions.ts: TanStack Query wrapper (useKpiDefinitions, useCreateKpiDefinition, useUpdateKpiDefinition, useDeleteKpiDefinition — invalidate onSuccess)\n- services/kpiDefinitionService.ts: fetch wrapper\n- Nav entry baru di GENERAL_NAV (sidebar-config.ts) kalau general, atau di world Booking kalau scope-nya sales-only — keputusan desain pending"
+            }
+          ]
+        },
+        {
+          "name": "KPI Performance — KPI per Sales",
+          "markdown_description": "Sales individual melihat target vs pencapaian KPI mereka sendiri secara periodik — sebagian datanya (leaderboard revenue-vs-target per sales) SUDAH ADA di dashboard Overview umum, tapi belum ada halaman personal yang ter-scope ke diri sendiri.",
+          "_status_hint": "partial — leaderboard target-vs-achievement per individual sales SUDAH ADA & jalan (bar chart + ranked list di general Overview \"/\"), tapi company-wide (semua sales, semua role bisa lihat), single-metric (revenue doang), dan belum ada halaman 'KPI Saya' yang scoped ke sales yang login sendiri.",
+          "_review_note": "lib/queries/salesPerformance.ts `_queryTopSales`/`getTopSalesByRecentBooking` (baris 52-211) sudah menghitung per-profileId: revenue booking (exclude Lost/Canceled, sesuai Group Revenue Rule), target dari `db.userTarget` (type=\"sales\", first-write-wins per createdAt desc), achievementPct = revenue/target, plus breakdown kategori weddings/mice — di-render oleh app/(private)/_components/SalesPerformanceSection.tsx (bar chart Recharts + ranked list dgn avatar/podium icon, month picker, drill-down ke booking list via useDashboardBookings). Dipanggil dari app/(private)/page.tsx (landing '/') dan di-fetch live lewat hooks/useDashboardSalesPerformance.ts → app/api/dashboard/sales-performance/route.ts. GAP: (1) route.ts baris 36-39 eksplisit comment \"Overview is company-wide: performance always ranks ALL sales, regardless of the viewer's dataScope\" — TIDAK ADA scoping ke 'own', dan endpoint-nya cuma cek `session?.user?.profileId` ada (baris 9), TANPA requirePermission sama sekali — artinya SEMUA authenticated user (termasuk role non-sales) bisa lihat revenue & target individual tiap sales lain di company lewat halaman landing. Worth dikonfirmasi ke user apakah ini intentional (leaderboard terbuka ala gamifikasi) atau harus di-restrict/di-scope. (2) Metric cuma revenue (dari UserTarget.amount) — belum ada dimensi KPI lain, nunggu Master Data KPI kalau mau multi-metric. (3) Belum ada halaman dedicated 'KPI Saya' yang cuma nunjukin data sales yang login (dataScope:own) terpisah dari leaderboard company-wide ini — kalau user maunya justru reuse leaderboard yang udah ada (bukan halaman baru), task ini effort-nya jauh lebih kecil dari yang dibayangin.",
+          "subtasks": [
+            {
+              "name": "[BE] Reuse Query Existing + Scoping 'Own' (partial — sudah ada, perlu extend)",
+              "markdown_description": "- Reuse lib/queries/salesPerformance.ts `getTopSalesByRecentBooking`/`getTopSalesByRecentBookingRaw` — parameter `allowedProfileIds` SUDAH mendukung filter per-profile, tinggal panggil dengan `[session.user.profileId]` buat personal view\n- app/api/dashboard/sales-performance/route.ts SAAT INI tanpa requirePermission (cuma session check) — kalau dipisah jadi endpoint personal, tambahin requirePermission/dataScope enforcement (lib/access-control.ts) sesuai pola project, JANGAN ikutin pola company-wide yang sekarang\n- Kalau nanti nyambung ke Master Data KPI baru (task lain): extend query biar gak cuma revenue"
+            },
+            {
+              "name": "[FE] Halaman/Section 'KPI Saya' (partial — reuse komponen existing)",
+              "markdown_description": "- Reuse pattern SalesChart/AvatarCircle/TotalRevenueCard dari SalesPerformanceSection.tsx tapi single-user (bukan leaderboard semua sales)\n- hooks/useDashboardSalesPerformance.ts sudah ada, tinggal extend/pakai varian profileId=own\n- Keputusan desain: tambah halaman baru, atau cukup expose 'posisi gue' di leaderboard existing (mis. highlight row sendiri) — lebih murah, worth didiskusiin ke user dulu sebelum build"
+            }
+          ]
+        },
+        {
+          "name": "KPI Performance — KPI for Stakeholder",
+          "markdown_description": "Dashboard read-only untuk role Stakeholder memantau performa tim sales (target vs achievement, revenue, piutang per Group) lintas tahun.",
+          "_status_hint": "complete",
+          "_review_note": "app/(private)/stakeholder/performance-sales/page.tsx gate pakai `hasPermission(session.user.roleId, \"performance-sales\", \"view\")` OR isSuperAdmin (baris 21-24), redirect /forbidden kalau gak punya akses — permission module \"performance-sales\" (prisma/seeders/roles-permissions.ts baris 98 & 337). Data dari `getGroupsWithPerformance(undefined, ...)` (lib/queries/groups.ts baris 463-624) dengan `profileId=undefined` = dataScope \"all\" (monitor semua tim), raw SQL aggregate booking+ledger per grup. Dirender PerformanceSalesClient.tsx: 6 KPI card (revenue/target/achievement/piutang/confirmed/total grup), ranking table per grup + progress bar achievement, year filter pill (5 tahun terakhir). Gap: (1) Granularitas cuma per-GROUP — getGroupsWithPerformance SEBENARNYA menghitung achievement per-member di dalam loop (baris 601-618: `for (const member of g.members)` hitung actual/target/achievement per profileId) TAPI hasil per-member ini DIBUANG, cuma di-rata-rata jadi `avgAchievement` per grup (baris 620) yang di-return — Stakeholder GAK BISA drill-down lihat kontribusi individual sales di dalam grupnya dari halaman ini (beda dari halaman KPI per Sales di Overview yang justru per-individual tapi gak per-grup). (2) Tidak ada export/print. (3) Year filter cuma pilih 1 tahun, gak ada perbandingan YoY built-in di UI (meski datanya bisa di-refetch per tahun).",
+          "subtasks": [
+            {
+              "name": "[BE] Query Aggregasi Performance per Group (existing, reuse)",
+              "markdown_description": "- lib/queries/groups.ts `getGroupsWithPerformance(profileId, startDate, endDate, year)` — raw SQL 3-query (booking agg, financial/ledger agg, userTarget) di-assemble in-memory per grup\n- Revenue = SUM snapPackagePricing.price exclude Lost/Canceled (Group Revenue Rule), piutang/totalRevenue derived dari Ledger cash-in ter-ack (bukan legacy TOP)\n- Permission module \"performance-sales\": [\"view\"] — cek hasPermission langsung di page.tsx (server component), bukan requirePermissionForRoute (bukan route handler)"
+            },
+            {
+              "name": "[FE] Halaman Performance Sales — Stakeholder World (existing, reuse)",
+              "markdown_description": "- app/(private)/stakeholder/performance-sales/page.tsx: server component, searchParams.year, redirect kalau !canView\n- PerformanceSalesClient.tsx: grid KPI card, YearFilter pill selector, ranking table (avatar leader, progress bar Math.min(avgAchievement,100))"
+            }
+          ]
+        },
+        {
+          "name": "Absensi — Clock In/Out & Riwayat",
+          "markdown_description": "Karyawan absen masuk/pulang lewat web dengan foto selfie wajib dan validasi lokasi (geofence), lalu bisa lihat riwayat kehadiran sendiri.",
+          "_status_hint": "complete",
+          "subtasks": [
+            {
+              "name": "[BE] API Clock-in/Clock-out & Riwayat",
+              "markdown_description": "- Validasi geofence radius per WorkLocation, dukung workType WFO/WFH/WFA\n- Simpan foto selfie + koordinat lat/lng saat clock-in dan clock-out\n- Status otomatis on_time/late/absent berdasarkan shift & jam masuk\n- Endpoint my-history + export rekap"
+            },
+            {
+              "name": "[FE] Attendance Clock & History",
+              "markdown_description": "- Live clock + modal kamera untuk selfie wajib\n- Pilih shift/lokasi kerja saat clock-in\n- Riwayat kehadiran pribadi (general-nav /absensi)"
+            }
+          ]
+        },
+        {
+          "name": "Absensi — Manajemen Lokasi, Shift & Assignment",
+          "markdown_description": "HR mengatur lokasi kerja (geofence), shift, dan penugasan shift per karyawan termasuk hari libur individual dan override shift harian.",
+          "_status_hint": "complete",
+          "_review_note": "Gap keamanan: GET /api/hr/{work-shifts,work-locations,work-assignments,shift-overrides} TIDAK ada requirePermission/requirePermissionForRoute — cuma cek session ada, jadi semua authenticated user bisa baca list ini. Juga permission module gado-gado: 'attendance', 'hr:view-all', 'hr-attendance' dipakai gantian untuk fitur yang konsepnya sama. Tidak ditemukan proses auto-generate attendantType DAY_OFF dari EmployeeWorkAssignment.offdayDays — 'Off' masih self-report manual saat clock-in.",
+          "subtasks": [
+            {
+              "name": "[BE] CRUD Work Location/Shift/Assignment/Override",
+              "markdown_description": "- WorkLocation: geofence radius per lokasi, opsional reuse Venue booking\n- WorkShift, EmployeeWorkAssignment (offdayDays[], effectiveDate/endDate, lokasi clock-in/out beda), ShiftOverride harian\n- bulkCreateWorkAssignment pakai $transaction array form (contoh implementasi benar)"
+            },
+            {
+              "name": "[FE] Attendance Management Admin",
+              "markdown_description": "- Tab Rekap, Lokasi, Shift, Assignment, Pengaturan\n- Export rekap kehadiran"
+            }
+          ]
+        },
+        {
+          "name": "Booking MICE — Draft, Finalize & Approval Lifecycle",
+          "markdown_description": "Booking kategori MICE (`Booking.category = \"MICE\"`, enum `EventCategory` di prisma/schema.prisma:1946-1949) — SATU model `Booking` dengan Wedding, dibedakan lewat field `category`, tapi punya action file terpisah (bukan cabang di action file wedding). Sudah implemented penuh: draft 3-step (Info Event → Term of Payment → TTD/Lokasi) → finalize dengan snapshot (SnapCustomer + SnapVenue) → approval Sales→Manager→Finance (tanpa step client TTD) → PO Number generation. UI: mice-table.tsx, MiceBookingDrawer.tsx (3-step drawer), MiceDetailModal/Content.tsx.",
+          "_status_hint": "complete dengan 2 bug konkret di approval-record module tagging",
+          "_review_note": "Feature-complete dan sudah live di working tree branch `feat/bonus-booking` saat ini (BUKAN cuma di branch lain yang belum merge — `git branch -a` gak nemu branch `feat/crm` sama sekali, kemungkinan sudah di-merge sebelumnya lalu branch-nya dihapus). Verified: actions/booking-mice.ts (566 baris, 6 action: createMiceBooking/updateMiceBooking/deleteMiceBooking/markMiceLost/restoreMiceBooking/cancelMiceBooking) dan actions/booking-mice-draft.ts (603 baris, draft step1-3 + finalizeDraftMiceBooking) — semua sudah requirePermission({module:\"booking-mice\"}) → mutationLimiter.check → Zod safeParse → db.$transaction array form → logAudit → revalidateTag, 100% sesuai AGENTS.md §4. finalizeDraftMiceBooking (actions/booking-mice-draft.ts:297-548) juga sudah bikin SnapCustomer (baris 402-420) & SnapVenue (baris 424-437) persis kayak wedding booking — snapshot pattern (ARCHITECTURE.md §4.1) TERPENUHI, bukan gap.\n\nBUG KONKRET #1 — approval module tag inconsistent antar 2 jalur create: createMiceBooking (jalur create instan, actions/booking-mice.ts:160-167) manggil `buildBookingApprovalSteps({module: \"booking-mice\", ...})` eksplisit dan bikin ApprovalRecord dengan `module: \"booking-mice\"` (baris 172-180). Tapi finalizeDraftMiceBooking (jalur draft→finalize, actions/booking-mice-draft.ts:371-377) — yang notabene jalur produksi utama karena UI drawer-nya 3-step draft — TIDAK pass parameter `module` ke buildBookingApprovalSteps sama sekali, sehingga default ke `\"booking\"` (lib/approval-flows.ts:193-203, `module?: string` defaults ke `opts.module ?? \"booking\"`), dan ApprovalRecord dibikin dengan `module: \"booking\"` hardcoded (baris 446-455) — bukan \"booking-mice\". Akibatnya booking MICE hasil finalize-draft ikut approval-flow config WEDDING (`ApprovalFlowConfig` where module=\"booking\"), bukan config booking-mice yang mungkin di-set beda di Settings — silent misrouting, bukan crash.\n\nBUG KONKRET #2 — turunan dari bug #1: restoreMiceBooking (actions/booking-mice.ts:472-477) filter approvalRecord.updateMany by `module: \"booking-mice\"` — HANYA match booking dari jalur create-instan, GAK match booking hasil finalize-draft (yang taggingnya \"booking\") — restore gak akan reset approval status buat mayoritas booking MICE real. Sebaliknya deleteMiceBooking (baris 352-355) filter `module: \"booking\"` — kebalikannya, cuma bersihin approval record dari jalur finalize-draft, bukan jalur create-instan. Fix: samain module tag di kedua jalur (pass `module: \"booking-mice\"` eksplisit di finalizeDraftMiceBooking, dan samain filter di restore/delete).",
+          "subtasks": [
+            {
+              "name": "[FIX] Samain approval module tag antara createMiceBooking dan finalizeDraftMiceBooking",
+              "markdown_description": "- Tambahin `module: \"booking-mice\"` eksplisit di call `buildBookingApprovalSteps` (actions/booking-mice-draft.ts:371-377)\n- Ganti `module: \"booking\"` hardcoded jadi `\"booking-mice\"` di ApprovalRecord.create (actions/booking-mice-draft.ts:450)\n- Audit ulang restoreMiceBooking (booking-mice.ts:472-477) & deleteMiceBooking (booking-mice.ts:352-355) — pastikan filter `module` konsisten satu nilai di semua query\n- Regression check: booking MICE existing di DB (kalau ada) yang udah kadung ke-tag \"booking\" dari jalur finalize-draft — butuh data-fix migration atau at least dokumentasi kalau restore-nya bakal gak jalan buat data lama"
+            }
+          ]
+        },
+        {
+          "name": "MICE Package — Master Paket & Item Non-Vendor",
+          "markdown_description": "Master paket khusus MICE (`Package.category = \"MICE\"`) — BUKAN model terpisah dari Master Paket Wedding (sudah di-cover Phase 3), tapi shared model `Package` dengan tambahan relasi `PackageMiceItem[]` (prisma/schema.prisma:629-643) buat item non-vendor (mis. sewa ruang meeting, coffee break) yang di-price per PAX atau NOMINAL (`enum MiceItemPriceType`, schema.prisma:1951+). UI: app/(private)/booking/package-mice/ (page.tsx + mice-packages-table.tsx, mice-package-drawer.tsx, mice-package-detail-modal.tsx, mice-package-finance-drawer.tsx).",
+          "_status_hint": "complete, thin extension di atas infrastruktur package wedding — no significant gap",
+          "_review_note": "Arsitekturnya SENGAJA beda dari Booking MICE: kalau Booking MICE punya action file sendiri (booking-mice.ts/booking-mice-draft.ts, paralel ke wedding), Package MICE REUSE penuh actions/package.ts yang sama dengan wedding lewat helper `permModuleFor(category)` (actions/package.ts:23-24) yang milih permission module `\"package\"` vs `\"package-mice\"` runtime berdasarkan `pkg.category` — dipakai di saveMiceItems (actions/package.ts:480-539, action satu-satunya yang MICE-spesifik: delete-then-recreate PackageMiceItem dalam db.$transaction array form, sudah requirePermission → mutationLimiter → Zod → transaction → logAudit → revalidateTag, compliant penuh). CRUD paket dasar, harga (via `MicePackageFinanceDrawer` yang reuse `DrawerFinanceBase` + `useSavePackagePrices` — komponen & hook SAMA PERSIS dengan wedding package, cuma beda wrapper) dan approval paket semuanya reuse 100% dari infrastruktur Phase 3 (Master Paket — Buat & Edit Paket / Harga & T&C / Approval Paket / Duplikasi) — jadi task ini fokusnya cuma DELTA MICE-spesifik (PackageMiceItem CRUD via saveMiceItems, permission module `package-mice`: view/create/edit/delete/set-harga/set-status/term-&-condition di prisma/seeders/roles-permissions.ts:56), bukan re-audit base package CRUD yang udah dicover Phase 3. Gak ketemu gap konkret dari baca actions/package.ts saveMiceItems maupun mice-packages-table.tsx — solid.",
+          "subtasks": []
+        }
+      ]
     }
   ]
 }

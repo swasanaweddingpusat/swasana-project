@@ -9,6 +9,8 @@ export const createDraftStep1Schema = z.object({
    *  so that retries don't create duplicate draft rows. */
   id: z.string().optional().nullable(),
   eventDate: z.string().min(1, "Tanggal event wajib diisi"),
+  // Tanggal dealing booking — wajib diisi. Default hari ini di client, boleh diubah user.
+  dealingDate: z.string().min(1, "Tanggal dealing wajib diisi"),
   category: z.enum(["WEDDINGS", "MICE"]).default("WEDDINGS"),
   venueId: z.string().min(1, "Venue wajib dipilih"),
   packageId: z.string().optional().nullable(),

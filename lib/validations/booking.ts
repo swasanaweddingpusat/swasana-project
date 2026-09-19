@@ -5,6 +5,9 @@ const idTypeEnum = z.enum(["KTP", "Paspor"]);
 
 export const bookingSchema = z.object({
   eventDate: z.string().min(1, "Tanggal event wajib diisi"),
+  // Tanggal dealing booking — wajib diisi. Default hari ini di client (create drawer),
+  // boleh diubah user, ditulis ke kolom dealingDate (bukan createdAt).
+  dealingDate: z.string().min(1, "Tanggal dealing wajib diisi"),
   weddingSession: z.enum(["morning", "evening", "fullday"]).optional().nullable(),
   weddingType: z.string().optional().nullable(),
   customerId: z.string().optional().default(""),
@@ -116,6 +119,9 @@ export const cancelBookingSchema = z.object({
 export const editBookingSchema = z.object({
   id: z.string().min(1),
   eventDate: z.string().min(1, "Tanggal event wajib diisi"),
+  // Tanggal dealing booking — wajib diisi, ditulis ke kolom dealingDate (bukan createdAt,
+  // createdAt tidak boleh diubah lagi setelah booking dibuat).
+  dealingDate: z.string().min(1, "Tanggal dealing wajib diisi"),
   weddingSession: z.enum(["morning", "evening", "fullday"]).optional().nullable(),
   weddingType: z.string().optional().nullable(),
   venueId: z.string().min(1, "Venue wajib dipilih"),
@@ -209,9 +215,6 @@ export const updateBookingClientInfoSchema = z.object({
   salesId: z.string().optional().nullable(),
   sourceOfInformationId: z.string().optional().nullable(),
   sourceOfInformationDetail: z.string().optional().nullable(),
-  // Dealing date override — gated by booking:dealing-date permission (super-admin only
-  // by default). Ignored server-side if the caller lacks the permission.
-  createdAt: z.string().optional(),
 }).superRefine((data, ctx) => {
   const nikCpp = data.contactNikCpp ?? "";
   if (nikCpp !== "") {
