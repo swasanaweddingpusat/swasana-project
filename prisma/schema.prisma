@@ -322,21 +322,32 @@ model EmailVerificationToken {
 // ─── Data Groups (untuk scope = 'group') ─────────────────────────────────────
 
 model UserGroup {
-  id          String            @id @default(uuid())
-  name        String
-  description String?
-  leaderId    String?
-  sortOrder   Int               @default(0)
-  createdBy   String?
-  createdAt   DateTime          @default(now())
-  updatedAt   DateTime          @updatedAt
-  leader       Profile?          @relation("GroupLeader", fields: [leaderId], references: [id], onDelete: SetNull)
+  id           String              @id @default(uuid())
+  name         String
+  description  String?
+  leaderId     String?
+  sortOrder    Int                 @default(0)
+  createdBy    String?
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+  leader       Profile?            @relation("GroupLeader", fields: [leaderId], references: [id], onDelete: SetNull)
+  homebases    UserGroupHomebase[]
   members      UserGroupMember[]
   venues       UserGroupVenue[]
   dailyReports DailyReport[]
 
   @@index([leaderId])
   @@map("user_groups")
+}
+
+model UserGroupHomebase {
+  groupId   String
+  venueId   String
+  group     UserGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  venue     Venue     @relation("GroupHomebases", fields: [venueId], references: [id], onDelete: Cascade)
+
+  @@id([groupId, venueId])
+  @@map("user_group_homebases")
 }
 
 model UserGroupMember {
@@ -413,6 +424,7 @@ model Venue {
   groupAssignments          UserGroupVenue[]
   kpiAssignments            KpiAssignment[]            @relation("KpiAssignmentVenue")
   kpiResults                KpiCalculationResult[]     @relation("KpiResultVenue")
+  homebases                 UserGroupHomebase[]         @relation("GroupHomebases")
 
   @@index([brandId])
   @@map("venues")

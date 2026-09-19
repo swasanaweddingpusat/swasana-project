@@ -43,6 +43,15 @@ export async function createGroup(data: unknown) {
       },
     });
 
+    // Sync homebase venues join table if provided
+    if (parsed.data.homebaseVenueIds?.length) {
+      await db.$transaction(
+        parsed.data.homebaseVenueIds.map((venueId) =>
+          db.userGroupHomebase.create({ data: { groupId: group.id, venueId } })
+        )
+      );
+    }
+
     // If leader is set, ensure they are a member and have dataScope = "group"
     if (newLeaderId) {
       // New group — leader can never be a member yet, so always create membership.
@@ -90,7 +99,7 @@ export async function updateGroup(data: unknown) {
   const parsed = updateGroupSchema.safeParse(data);
   if (!parsed.success) return { success: false, error: parsed.error.issues[0].message };
 
-  const { id, name, description, leaderId } = parsed.data;
+  const { id, name, description, leaderId, homebaseVenueIds } = parsed.data;
 
   try {
     // ── Phase 1: Reads (before any write) ──
@@ -164,6 +173,16 @@ export async function updateGroup(data: unknown) {
 
     // ── Phase 3: Single atomic transaction ──
     const [group] = await db.$transaction([groupUpdateOp, ...sideOps]);
+
+    // ── Phase 4: Sync homebase venues join table (if provided) ──
+    if (homebaseVenueIds !== undefined) {
+      await db.$transaction([
+        db.userGroupHomebase.deleteMany({ where: { groupId: id } }),
+        ...homebaseVenueIds.map((venueId) =>
+          db.userGroupHomebase.create({ data: { groupId: id, venueId } })
+        ),
+      ]);
+    }
 
     const groupName = name ?? currentGroup.name;
 

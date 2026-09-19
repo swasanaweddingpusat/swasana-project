@@ -15,6 +15,7 @@ import {
 import type {
   TargetItemRow,
   AchievementSchemaRow,
+  AchievementSchemaDetail,
   KpiMasterRow,
 } from "@/lib/queries/kpiInsentif";
 import {
@@ -93,6 +94,19 @@ export function useCreateAchievementSchema() {
     mutationFn: (data: Parameters<typeof createAchievementSchema>[0]) =>
       createAchievementSchema(data),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["kpi-insentif"] }),
+  });
+}
+
+export function useAchievementSchemaById(id?: string) {
+  return useQuery<AchievementSchemaDetail>({
+    queryKey: ["kpi-insentif", "achievement-schema", id],
+    queryFn: async () => {
+      const res = await fetch(`/api/kpi-insentif/achievement-schemas/${id}`);
+      if (!res.ok) throw new Error(`Gagal mengambil skema (${res.status})`);
+      return res.json() as Promise<AchievementSchemaDetail>;
+    },
+    enabled: !!id,
+    staleTime: 0,
   });
 }
 
@@ -230,9 +244,21 @@ export function useCalculationResults(filters?: ResultFilters) {
 export function useSaveCalculationResult() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (data: Record<string, unknown>) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    mutationFn: async (data: any) => {
       const { saveCalculationResult } = await import("@/actions/kpiInsentif");
       return saveCalculationResult(data);
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["kpi-insentif"] }),
+  });
+}
+
+export function useRunAutoCalculation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (data: { profileId: string; periodMonth: number; periodYear: number }) => {
+      const { runAutoCalculation } = await import("@/actions/kpiInsentif");
+      return runAutoCalculation(data);
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["kpi-insentif"] }),
   });

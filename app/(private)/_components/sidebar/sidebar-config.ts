@@ -201,42 +201,15 @@ export const GENERAL_NAV: NavItem[] = [
       { name: "Memo", href: "/internal-faq/memo", icon: FileText, subtitle: "Kelola memo internal perusahaan", permission: { module: "internal-faq", action: "view" } },
       { name: "Product Knowledge", href: "/internal-faq/product-knowledge", icon: Notebook, subtitle: "Kelola dokumen product knowledge", permission: { module: "internal-faq", action: "view" } },
     ] },
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    { name: "Pengajuan Cuti", href: "/cuti", icon: CalendarDate, subtitle: "Pengajuan dan saldo cuti" },
+  { name: "Pengajuan Cuti", href: "/cuti", icon: CalendarDate, subtitle: "Pengajuan dan saldo cuti" },
   { name: "Slip Gaji", href: "/slip-gaji", icon: FileText, subtitle: "Lihat slip gaji bulanan saya" },
   {
     name: "KPI & Insentif",
     href: "/kpi-insentif",
     icon: Wallet,
     subtitle: "Kelola KPI, komisi, dan bonus Sales & Manager",
-    anyPermission: [
-      { module: "kpi-insentif", action: "view" },
-      { module: "kpi-master", action: "view" },
-    ],
+    permission: { module: "kpi-insentif", action: "view" },
     submenu: [
-      { name: "Konfigurasi", href: "/kpi-insentif/konfigurasi", icon: Settings, subtitle: "Target item, skema achievement, dan master KPI", permission: { module: "kpi-master", action: "view" } },
       { name: "Penugasan Target", href: "/kpi-insentif/penugasan", icon: UserHands, subtitle: "Tugaskan KPI ke Sales atau Manager", permission: { module: "kpi-assignment", action: "view" } },
       { name: "Kalkulasi & Laporan", href: "/kpi-insentif/kalkulasi", icon: ChartSquare, subtitle: "Simulasi kalkulasi dan laporan final insentif", permission: { module: "kpi-simulation", action: "view" } },
     ],

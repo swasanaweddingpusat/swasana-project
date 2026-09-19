@@ -22,6 +22,7 @@ import {
   ClipboardList,
   GalleryWide,
   Tag,
+  Wallet,
   type IconProps,
 } from "@solar-icons/react";
 import type { ComponentType } from "react";
@@ -175,6 +176,19 @@ const GROUPS: SettingGroup[] = [
     ],
   },
   {
+    title: "KPI & Insentif",
+    description: "Konfigurasi master data KPI untuk Sales dan Manager.",
+    items: [
+      {
+        title: "Konfigurasi KPI",
+        description: "Kelola target item, skema achievement, dan master KPI.",
+        icon: Wallet,
+        href: "/settings/kpi-konfigurasi",
+        module: "kpi-master",
+      },
+    ],
+  },
+  {
     title: "Maintenance",
     description: "Pengaturan data master untuk modul maintenance.",
     items: [
@@ -217,6 +231,7 @@ export default async function SettingsHubPage() {
     "settings-booking-log",
     "settings-banner",
     "settings-package-category",
+    "kpi-master",
   ]);
 
   const session = await auth();

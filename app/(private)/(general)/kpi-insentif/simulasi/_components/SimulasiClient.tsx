@@ -28,7 +28,7 @@ import {
 } from "@solar-icons/react";
 import { PageHeader } from "@/components/shared/page-header";
 import { toast } from "sonner";
-import { useCalculationResults, useSaveCalculationResult, useFinalizeResult } from "@/hooks/useKpiInsentif";
+import { useCalculationResults, useRunAutoCalculation, useFinalizeResult } from "@/hooks/useKpiInsentif";
 import { useVenues } from "@/hooks/use-venues";
 import {
   formatRupiah,
@@ -81,7 +81,7 @@ export function SimulasiClient() {
     status: filterStatus !== "all" ? filterStatus : undefined,
   });
 
-  const saveCalcMutation = useSaveCalculationResult();
+  const autoCalcMutation = useRunAutoCalculation();
   const finalizeMutation = useFinalizeResult();
 
   const filtered = results.filter((r) => {
@@ -102,14 +102,13 @@ export function SimulasiClient() {
 
   async function handleRunCalc(result: KpiCalculationResultItem) {
     const d = new Date(result.period);
-    const res = await saveCalcMutation.mutateAsync({
+    const res = await autoCalcMutation.mutateAsync({
       profileId: result.profileId,
       periodMonth: d.getMonth() + 1,
       periodYear: d.getFullYear(),
-      venueId: result.venueId,
     });
     if (res.success) {
-      toast.success("Kalkulasi berhasil dijalankan");
+      toast.success("Kalkulasi otomatis berhasil dijalankan");
     } else {
       toast.error(res.error ?? "Gagal menjalankan kalkulasi");
     }
@@ -325,7 +324,7 @@ export function SimulasiClient() {
                                     size="icon"
                                     className="h-7 w-7 rounded-full"
                                     onClick={() => handleRunCalc(r)}
-                                    disabled={saveCalcMutation.isPending}
+                                    disabled={autoCalcMutation.isPending}
                                   >
                                     <Play weight="BoldDuotone" className="h-3.5 w-3.5" />
                                   </Button>
@@ -370,7 +369,7 @@ export function SimulasiClient() {
           onFinalize={handleFinalize}
           onRunCalc={handleRunCalc}
           isFinalizing={finalizeMutation.isPending}
-          isRunningCalc={saveCalcMutation.isPending}
+          isRunningCalc={autoCalcMutation.isPending}
         />
       )}
     </TooltipProvider>

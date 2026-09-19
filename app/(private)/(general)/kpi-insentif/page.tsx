@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
 
 export default function Page() {
-  redirect("/kpi-insentif/konfigurasi");
+  redirect("/kpi-insentif/penugasan");
 }

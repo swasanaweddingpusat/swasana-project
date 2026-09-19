@@ -5,6 +5,16 @@ import { revalidateTag } from "next/cache";
 import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/permissions";
 import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
+import { Decimal } from "@prisma/client/runtime/client";
+import {
+  computeKpiResult,
+  type KpiRealization,
+  type KpiTarget,
+  type AchievementSchemaInput,
+  type KpiTierAction,
+  type KpiBusinessRole,
+  type CommissionPolicyInput,
+} from "@/lib/services/kpiCalculation";
 import { logAudit } from "@/lib/audit";
 import {
   createTargetItemSchema,
@@ -999,5 +1009,453 @@ export async function finalizeResult(resultId: string) {
   } catch (e) {
     console.error("[finalizeResult]", e);
     return { success: false, error: "Terjadi kesalahan saat finalisasi hasil KPI." };
+  }
+}
+
+/**
+ * Auto-calculate KPI realization from actual booking data.
+ * Pulls bookings (eventDate within period, all statuses except Canceled/Lost),
+ * computes dealing/omset/homebase, loads assignment targets + achievement schema,
+ * runs the calculation engine, and persists the result.
+ */
+export async function runAutoCalculation(data: {
+  profileId: string;
+  periodMonth: number;
+  periodYear: number;
+}) {
+  const { session, error } = await requirePermission({
+    module: "kpi-simulation",
+    action: "run",
+  });
+  if (error) return { success: false, error };
+  if (!mutationLimiter.check(`kpi-auto-calc:${session!.user.id}`))
+    return { success: false, ...rateLimitError() };
+
+  const { profileId, periodMonth, periodYear } = data;
+  if (!profileId || !periodMonth || !periodYear) {
+    return { success: false, error: "Parameter tidak lengkap." };
+  }
+
+  const period = new Date(periodYear, periodMonth - 1, 1);
+  const periodEnd = new Date(periodYear, periodMonth, 1);
+
+  try {
+    const [bookings, assignments, commissionPolicies] = await Promise.all([
+      db.booking.findMany({
+        where: {
+          salesId: profileId,
+          recordStatus: "saved",
+          bookingStatus: { notIn: ["Canceled", "Lost"] },
+          eventDate: { gte: period, lt: periodEnd },
+        },
+        select: {
+          category: true,
+          venueId: true,
+          discountAmount: true,
+          snapPackagePricing: { select: { price: true } },
+          package: { select: { sellingPrice: true } },
+        },
+        take: 10000,
+      }),
+      db.kpiAssignment.findMany({
+        where: { profileId, period, isDraft: false },
+        select: {
+          targetQty: true,
+          targetPrice: true,
+          kpiMaster: {
+            select: {
+              businessRole: true,
+              achievementSchema: {
+                select: {
+                  id: true,
+                  businessRole: true,
+                  isDraft: true,
+                  gatingMinIndicators: true,
+                  tiers: {
+                    select: {
+                      id: true,
+                      label: true,
+                      lowerBound: true,
+                      upperBound: true,
+                      lowerInclusive: true,
+                      upperInclusive: true,
+                      isDraftBounds: true,
+                      actionType: true,
+                      dealingBonus: true,
+                      omsetBonus: true,
+                      homebaseBonus: true,
+                      deductionPct: true,
+                      isWarningFlag: true,
+                    },
+                    orderBy: { sortOrder: "asc" },
+                  },
+                },
+              },
+              targetItem: {
+                select: { indicatorType: true, qty: true, price: true },
+              },
+            },
+          },
+        },
+      }),
+      db.kpiCommissionPolicy.findMany({
+        where: {
+          isDraft: false,
+          OR: [{ effectiveFrom: null }, { effectiveFrom: { lte: period } }],
+          AND: [{ OR: [{ effectiveTo: null }, { effectiveTo: { gte: period } }] }],
+        },
+        select: {
+          id: true,
+          businessRole: true,
+          isDraft: true,
+          nominalPerDeal: true,
+          pctOfRevenue: true,
+          packageCategory: true,
+          effectiveFrom: true,
+          effectiveTo: true,
+        },
+      }),
+    ]);
+
+    // ── Compute realization from bookings ────────────────────────────────────
+    // homebaseVenueIds: query separately with fallback — table may not exist yet (pending migration)
+    let homebaseVenueIds: string[] = [];
+    try {
+      const profileGroup = await db.userGroupMember.findFirst({
+        where: { userId: profileId },
+        select: { group: { select: { homebases: { select: { venueId: true } } } } },
+      });
+      homebaseVenueIds = profileGroup?.group?.homebases?.map((h) => h.venueId) ?? [];
+    } catch {
+      // table may not exist yet — homebase realization will be 0
+    }
+
+    let dealingTotal = 0;
+    let dealingReguler = 0;
+    let dealingHadjatan = 0;
+    let omsetTotal = new Decimal(0);
+    let omsetReguler = new Decimal(0);
+    let omsetHadjatan = new Decimal(0);
+    let realHomebase = 0;
+
+    for (const b of bookings) {
+      const rawPrice =
+        b.snapPackagePricing?.price != null
+          ? Number(b.snapPackagePricing.price)
+          : Math.max(0, (b.package?.sellingPrice ?? 0) - b.discountAmount);
+      const price = new Decimal(rawPrice);
+
+      dealingTotal++;
+      omsetTotal = omsetTotal.add(price);
+
+      if (b.category === "WEDDINGS") {
+        dealingReguler++;
+        omsetReguler = omsetReguler.add(price);
+      } else {
+        dealingHadjatan++;
+        omsetHadjatan = omsetHadjatan.add(price);
+      }
+
+      if (homebaseVenueIds.length > 0 && homebaseVenueIds.includes(b.venueId ?? "")) {
+        realHomebase++;
+      }
+    }
+
+    const realization: KpiRealization = {
+      dealingTotal,
+      dealingReguler,
+      dealingHadjatan,
+      omsetTotal,
+      omsetReguler,
+      omsetHadjatan,
+      homebase: realHomebase,
+    };
+
+    // ── Build target + schema from assignments ───────────────────────────────
+    let dealingTarget: number | null = null;
+    let omsetTargetDecimal: Decimal | null = null;
+    let homebaseTarget: number | null = null;
+    let businessRole: KpiBusinessRole = "sales";
+    let schemaInput: AchievementSchemaInput | null = null;
+
+    for (const asgn of assignments) {
+      const ti = asgn.kpiMaster.targetItem;
+      if (asgn.kpiMaster.achievementSchema && !schemaInput) {
+        const s = asgn.kpiMaster.achievementSchema;
+        businessRole = s.businessRole as KpiBusinessRole;
+        schemaInput = {
+          id: s.id,
+          businessRole: s.businessRole as KpiBusinessRole,
+          isDraft: s.isDraft,
+          gatingMinIndicators: s.gatingMinIndicators,
+          tiers: s.tiers.map((t) => ({
+            id: t.id,
+            label: t.label,
+            lowerBound: new Decimal(t.lowerBound.toString()),
+            upperBound: t.upperBound ? new Decimal(t.upperBound.toString()) : null,
+            lowerInclusive: t.lowerInclusive,
+            upperInclusive: t.upperInclusive,
+            isDraftBounds: t.isDraftBounds,
+            actionType: t.actionType as KpiTierAction,
+            dealingBonus: t.dealingBonus ? new Decimal(t.dealingBonus.toString()) : null,
+            omsetBonus: t.omsetBonus ? new Decimal(t.omsetBonus.toString()) : null,
+            homebaseBonus: t.homebaseBonus ? new Decimal(t.homebaseBonus.toString()) : null,
+            deductionPct: t.deductionPct ? new Decimal(t.deductionPct.toString()) : null,
+            isWarningFlag: t.isWarningFlag,
+          })),
+        };
+      }
+
+      if (ti.indicatorType === "dealing") {
+        dealingTarget = asgn.targetQty ?? ti.qty ?? null;
+      } else if (ti.indicatorType === "omset") {
+        const raw = asgn.targetPrice ?? ti.price;
+        omsetTargetDecimal = raw != null ? new Decimal(raw.toString()) : null;
+      } else if (ti.indicatorType === "homebase") {
+        homebaseTarget = asgn.targetQty ?? ti.qty ?? null;
+      }
+    }
+
+    if (!schemaInput) {
+      schemaInput = {
+        id: "missing",
+        businessRole: "sales",
+        isDraft: true,
+        gatingMinIndicators: null,
+        tiers: [],
+      };
+    }
+
+    const target: KpiTarget = {
+      dealingTotal: dealingTarget,
+      omsetTotal: omsetTargetDecimal,
+      homebase: homebaseTarget,
+    };
+
+    // ── Run calculation engine ───────────────────────────────────────────────
+    const calcResult = computeKpiResult({
+      businessRole,
+      realization,
+      target,
+      schema: schemaInput,
+      commissionPolicies: commissionPolicies.map(
+        (p): CommissionPolicyInput => ({
+          id: p.id,
+          businessRole: p.businessRole as KpiBusinessRole,
+          isDraft: p.isDraft,
+          nominalPerDeal: p.nominalPerDeal
+            ? new Decimal(p.nominalPerDeal.toString())
+            : null,
+          pctOfRevenue: p.pctOfRevenue
+            ? new Decimal(p.pctOfRevenue.toString())
+            : null,
+          packageCategory: p.packageCategory as "WEDDINGS" | "MICE" | null,
+          effectiveFrom: p.effectiveFrom,
+          effectiveTo: p.effectiveTo,
+        })
+      ),
+      period,
+    });
+
+    // ── Map to DB output format ──────────────────────────────────────────────
+    const str = (d: Decimal | null | undefined): string | null =>
+      d != null ? d.toFixed(2) : null;
+
+    const output: KpiCalculationOutput = {
+      realDealingTotal: dealingTotal,
+      realDealingReguler: dealingReguler,
+      realDealingHadjatan: dealingHadjatan,
+      realOmsetTotal: omsetTotal.toFixed(2),
+      realOmsetReguler: omsetReguler.toFixed(2),
+      realOmsetHadjatan: omsetHadjatan.toFixed(2),
+      realHomebase,
+      targetDealingTotal: dealingTarget,
+      targetOmsetTotal: str(omsetTargetDecimal),
+      targetHomebase: homebaseTarget,
+      dealingAchievementPct: str(calcResult.dealing.achievementPct),
+      omsetAchievementPct: str(calcResult.omset.achievementPct),
+      homebaseAchievementPct: str(calcResult.homebase.achievementPct),
+      dealingTierId: calcResult.dealing.tierId,
+      omsetTierId: calcResult.omset.tierId,
+      homebaseTierId: calcResult.homebase.tierId,
+      dealingBonus: str(calcResult.dealing.bonusAmount),
+      omsetBonus: str(calcResult.omset.bonusAmount),
+      homebaseBonus: str(calcResult.homebase.bonusAmount),
+      totalBonus: str(calcResult.totalBonus),
+      baseCommissionReguler: str(calcResult.baseCommissionReguler),
+      baseCommissionHadjatan: str(calcResult.baseCommissionHadjatan),
+      baseCommissionTotal: str(calcResult.baseCommissionTotal),
+      deductionTriggerIndicator: calcResult.deductionTriggerIndicator,
+      deductionPct: str(calcResult.deductionPct),
+      deductionAmount: str(calcResult.deductionAmount),
+      grossAmount: str(calcResult.grossAmount),
+      netAmount: str(calcResult.netAmount),
+      grade: calcResult.dealing.tierLabel ?? calcResult.omset.tierLabel ?? null,
+      missingDataReasons: calcResult.missingDataReasons,
+      details: [
+        {
+          indicatorType: "dealing",
+          targetValue: str(calcResult.dealing.targetValue),
+          realValue: calcResult.dealing.realValue?.toString() ?? null,
+          achievementPct: str(calcResult.dealing.achievementPct),
+          tierId: calcResult.dealing.tierId,
+          tierLabel: calcResult.dealing.tierLabel,
+          actionType: calcResult.dealing.actionType ?? null,
+          bonusAmount: str(calcResult.dealing.bonusAmount),
+          deductionPct: str(calcResult.dealing.deductionPct),
+          isGatingFailed: calcResult.dealing.isGatingFailed,
+          notes: calcResult.dealing.notes,
+        },
+        {
+          indicatorType: "omset",
+          targetValue: str(calcResult.omset.targetValue),
+          realValue: calcResult.omset.realValue?.toString() ?? null,
+          achievementPct: str(calcResult.omset.achievementPct),
+          tierId: calcResult.omset.tierId,
+          tierLabel: calcResult.omset.tierLabel,
+          actionType: calcResult.omset.actionType ?? null,
+          bonusAmount: str(calcResult.omset.bonusAmount),
+          deductionPct: str(calcResult.omset.deductionPct),
+          isGatingFailed: calcResult.omset.isGatingFailed,
+          notes: calcResult.omset.notes,
+        },
+        {
+          indicatorType: "homebase",
+          targetValue: str(calcResult.homebase.targetValue),
+          realValue: calcResult.homebase.realValue?.toString() ?? null,
+          achievementPct: str(calcResult.homebase.achievementPct),
+          tierId: calcResult.homebase.tierId,
+          tierLabel: calcResult.homebase.tierLabel,
+          actionType: calcResult.homebase.actionType ?? null,
+          bonusAmount: str(calcResult.homebase.bonusAmount),
+          deductionPct: str(calcResult.homebase.deductionPct),
+          isGatingFailed: calcResult.homebase.isGatingFailed,
+          notes: calcResult.homebase.notes,
+        },
+      ],
+    };
+
+    // ── Upsert result to DB ──────────────────────────────────────────────────
+    const resultStatus = (calcResult.status === "ok" ? "SIMULATED" : "DRAFT") as "SIMULATED" | "DRAFT";
+
+    const existing = await db.kpiCalculationResult.findFirst({
+      where: { profileId, period, venueId: null },
+      select: { id: true, status: true },
+    });
+
+    if (existing?.status === "FINALIZED") {
+      return {
+        success: false,
+        error: "Hasil kalkulasi sudah difinalisasi dan tidak dapat diubah.",
+      };
+    }
+
+    const resultData = {
+      profileId,
+      venueId: null as string | null,
+      period,
+      status: resultStatus,
+      realDealingTotal: output.realDealingTotal ?? null,
+      realDealingReguler: output.realDealingReguler ?? null,
+      realDealingHadjatan: output.realDealingHadjatan ?? null,
+      realOmsetTotal: output.realOmsetTotal ?? null,
+      realOmsetReguler: output.realOmsetReguler ?? null,
+      realOmsetHadjatan: output.realOmsetHadjatan ?? null,
+      realHomebase: output.realHomebase ?? null,
+      targetDealingTotal: output.targetDealingTotal ?? null,
+      targetOmsetTotal: output.targetOmsetTotal ?? null,
+      targetHomebase: output.targetHomebase ?? null,
+      dealingAchievementPct: output.dealingAchievementPct ?? null,
+      omsetAchievementPct: output.omsetAchievementPct ?? null,
+      homebaseAchievementPct: output.homebaseAchievementPct ?? null,
+      dealingTierId: output.dealingTierId ?? null,
+      omsetTierId: output.omsetTierId ?? null,
+      homebaseTierId: output.homebaseTierId ?? null,
+      dealingBonus: output.dealingBonus ?? null,
+      omsetBonus: output.omsetBonus ?? null,
+      homebaseBonus: output.homebaseBonus ?? null,
+      totalBonus: output.totalBonus ?? null,
+      baseCommissionReguler: output.baseCommissionReguler ?? null,
+      baseCommissionHadjatan: output.baseCommissionHadjatan ?? null,
+      baseCommissionTotal: output.baseCommissionTotal ?? null,
+      deductionTriggerIndicator: output.deductionTriggerIndicator ?? null,
+      deductionPct: output.deductionPct ?? null,
+      deductionAmount: output.deductionAmount ?? null,
+      grossAmount: output.grossAmount ?? null,
+      netAmount: output.netAmount ?? null,
+      grade: output.grade ?? null,
+      missingDataReasons: output.missingDataReasons,
+      calculatedAt: new Date(),
+    };
+
+    let resultId: string;
+
+    if (existing) {
+      await db.$transaction([
+        db.kpiCalculationResult.update({ where: { id: existing.id }, data: resultData }),
+        db.kpiCalculationDetail.deleteMany({ where: { resultId: existing.id } }),
+        ...output.details.map((d) =>
+          db.kpiCalculationDetail.create({
+            data: {
+              resultId: existing.id,
+              indicatorType: d.indicatorType,
+              targetValue: d.targetValue ?? null,
+              realValue: d.realValue ?? null,
+              achievementPct: d.achievementPct ?? null,
+              tierId: d.tierId ?? null,
+              tierLabel: d.tierLabel ?? null,
+              actionType: d.actionType ?? null,
+              bonusAmount: d.bonusAmount ?? null,
+              deductionPct: d.deductionPct ?? null,
+              isGatingFailed: d.isGatingFailed,
+              notes: d.notes ?? null,
+            },
+          })
+        ),
+      ]);
+      resultId = existing.id;
+    } else {
+      const [newResult] = await db.$transaction([
+        db.kpiCalculationResult.create({ data: resultData }),
+      ]);
+      resultId = newResult.id;
+      if (output.details.length > 0) {
+        await db.$transaction(
+          output.details.map((d) =>
+            db.kpiCalculationDetail.create({
+              data: {
+                resultId,
+                indicatorType: d.indicatorType,
+                targetValue: d.targetValue ?? null,
+                realValue: d.realValue ?? null,
+                achievementPct: d.achievementPct ?? null,
+                tierId: d.tierId ?? null,
+                tierLabel: d.tierLabel ?? null,
+                actionType: d.actionType ?? null,
+                bonusAmount: d.bonusAmount ?? null,
+                deductionPct: d.deductionPct ?? null,
+                isGatingFailed: d.isGatingFailed,
+                notes: d.notes ?? null,
+              },
+            })
+          )
+        );
+      }
+    }
+
+    await logAudit({
+      userId: session!.user.id,
+      action: "kpi_calculation_result.auto_calculate",
+      result: "success",
+      entityType: "kpi_calculation_result",
+      entityId: resultId,
+      description: `Auto-kalkulasi KPI untuk profile ${profileId} periode ${period.toISOString().substring(0, 7)} (${dealingTotal} booking)`,
+    });
+
+    revalidateTag("kpi-insentif", "max");
+    return { success: true, data: { id: resultId } };
+  } catch (e) {
+    console.error("[runAutoCalculation]", e);
+    return { success: false, error: "Terjadi kesalahan saat kalkulasi otomatis." };
   }
 }

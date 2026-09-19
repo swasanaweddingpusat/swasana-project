@@ -239,7 +239,7 @@ export type AchievementSchemaDetail = Awaited<ReturnType<typeof getAchievementSc
 // ─── KpiMaster ────────────────────────────────────────────────────────────────
 
 export async function getKpiMasters(filters: {
-  businessRole?: string;
+  businessRole?: "sales" | "manager" | string;
   month?: Date;
 }) {
   "use cache";
@@ -250,7 +250,7 @@ export async function getKpiMasters(filters: {
     businessRole?: "sales" | "manager";
     month?: Date;
   } = {
-    ...(filters.businessRole ? { businessRole: filters.businessRole } : {}),
+    ...(filters.businessRole ? { businessRole: filters.businessRole as "sales" | "manager" } : {}),
     ...(filters.month ? { month: filters.month } : {}),
   };
 
@@ -301,6 +301,8 @@ export async function getAssignments(filters: {
   profileId?: string;
   period?: Date;
   kpiMasterId?: string;
+  venueId?: string;
+  isDraft?: boolean;
 }) {
   "use cache";
   cacheTag("kpi-insentif");
@@ -310,10 +312,14 @@ export async function getAssignments(filters: {
     profileId?: string;
     period?: Date;
     kpiMasterId?: string;
+    venueId?: string;
+    isDraft?: boolean;
   } = {
     ...(filters.profileId ? { profileId: filters.profileId } : {}),
     ...(filters.period ? { period: filters.period } : {}),
     ...(filters.kpiMasterId ? { kpiMasterId: filters.kpiMasterId } : {}),
+    ...(filters.venueId ? { venueId: filters.venueId } : {}),
+    ...(filters.isDraft !== undefined ? { isDraft: filters.isDraft } : {}),
   };
 
   const rows = await db.kpiAssignment.findMany({
@@ -379,7 +385,7 @@ export async function getCalculationResults(filters: {
   } = {
     ...(filters.profileId ? { profileId: filters.profileId } : {}),
     ...(filters.period ? { period: filters.period } : {}),
-    ...(filters.status ? { status: filters.status } : {}),
+    ...(filters.status ? { status: filters.status as "DRAFT" | "SIMULATED" | "PENDING_REVIEW" | "FINALIZED" } : {}),
     ...(filters.venueId ? { venueId: filters.venueId } : {}),
   };
 

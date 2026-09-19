@@ -30,8 +30,9 @@ import { updateAchievementSchema } from "@/actions/kpiInsentif";
 import {
   useCreateAchievementSchema,
   useUpsertSchemaWithTiers,
+  useAchievementSchemaById,
 } from "@/hooks/useKpiInsentif";
-import type { AchievementSchemaRow } from "@/lib/queries/kpiInsentif";
+import type { AchievementSchemaRow, AchievementSchemaDetail } from "@/lib/queries/kpiInsentif";
 
 interface AchievementSchemaDrawerProps {
   isOpen: boolean;
@@ -91,6 +92,24 @@ const ACTION_TYPE_LABELS: Record<string, string> = {
   under_performance: "Under Performance",
 };
 
+type DetailTier = NonNullable<AchievementSchemaDetail>["tiers"][number];
+
+function tierToFormRow(tier: DetailTier): TierFormRow {
+  return {
+    id: tier.id,
+    label: tier.label,
+    lowerBound: tier.lowerBound != null ? String(tier.lowerBound) : "0",
+    upperBound: tier.upperBound != null ? String(tier.upperBound) : "",
+    lowerInclusive: tier.lowerInclusive,
+    upperInclusive: tier.upperInclusive,
+    actionType: tier.actionType as TierFormRow["actionType"],
+    dealingBonus: tier.dealingBonus != null ? String(tier.dealingBonus) : "",
+    omsetBonus: tier.omsetBonus != null ? String(tier.omsetBonus) : "",
+    homebaseBonus: tier.homebaseBonus != null ? String(tier.homebaseBonus) : "",
+    deductionPct: tier.deductionPct != null ? String(tier.deductionPct) : "",
+  };
+}
+
 function SectionLabel({ text }: { text: string }) {
   return (
     <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground border-b border-border pb-1">
@@ -108,6 +127,11 @@ export function AchievementSchemaDrawer({
   const createMutation = useCreateAchievementSchema();
   const upsertMutation = useUpsertSchemaWithTiers();
   const isSaving = createMutation.isPending || upsertMutation.isPending;
+
+  // Fetch full schema with tiers when editing
+  const { data: schemaDetail } = useAchievementSchemaById(
+    isEditMode && isOpen ? editSchema?.id : undefined
+  );
 
   const {
     register,
@@ -140,12 +164,14 @@ export function AchievementSchemaDrawer({
           editSchema.gatingMinIndicators != null
             ? String(editSchema.gatingMinIndicators)
             : "",
-        tiers: [{ ...DEFAULT_TIER }],
+        tiers: schemaDetail?.tiers?.length
+          ? schemaDetail.tiers.map(tierToFormRow)
+          : [{ ...DEFAULT_TIER }],
       });
     } else {
       reset(DEFAULT_VALUES);
     }
-  }, [isOpen, isEditMode, editSchema, reset]);
+  }, [isOpen, isEditMode, editSchema, schemaDetail, reset]);
 
   function handleClose() {
     reset(DEFAULT_VALUES);

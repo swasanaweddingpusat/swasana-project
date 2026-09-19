@@ -492,6 +492,7 @@ export async function getGroupsWithPerformance(
       name: true,
       description: true,
       leaderId: true,
+      homebases: { select: { venueId: true, venue: { select: { id: true, name: true } } } },
       leader: { select: { fullName: true, avatarUrl: true } },
       _count: { select: { members: true } },
       members: {

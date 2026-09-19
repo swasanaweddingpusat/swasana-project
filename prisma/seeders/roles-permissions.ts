@@ -281,6 +281,8 @@ export const rolePermissionMap: Record<string, Record<string, string[]>> = {
     bitrix: ["view"],
     // Full CRUD — sales kelola customer sendiri.
     customers: ["view", "create", "edit", "delete"],
+    // KPI Saya — sales bisa lihat target & pencapaian KPI sendiri.
+    "kpi-insentif": ["view"],
   },
   "vendor-specialist": {
     "vendor-specialist": ["view", "create", "edit", "delete"],
@@ -335,6 +337,8 @@ export const rolePermissionMap: Record<string, Record<string, string[]>> = {
     bitrix: ["view"],
     // sales-mice bisa nambah customer baru.
     customers: ["view", "create"],
+    // KPI Saya — sales-mice bisa lihat target & pencapaian KPI sendiri.
+    "kpi-insentif": ["view"],
   },
   "manager-mice": {
     "booking-mice": ["view", "create", "edit", "delete", "print", "approve", "mark-lost", "restore", "transfer", "reject", "comment", "client-agreement"],

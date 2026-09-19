@@ -6,6 +6,7 @@ export const createGroupSchema = z.object({
   name: z.string().min(2, "Nama grup minimal 2 karakter"),
   description: z.string().optional(),
   leaderId: z.string().optional(),
+  homebaseVenueIds: z.array(z.string()).optional(),
 });
 
 export const updateGroupSchema = z.object({
@@ -13,6 +14,7 @@ export const updateGroupSchema = z.object({
   name: z.string().min(2, "Nama grup minimal 2 karakter").optional(),
   description: z.string().optional(),
   leaderId: z.string().nullable().optional(),
+  homebaseVenueIds: z.array(z.string()).optional(),
 });
 
 // ─── My Team ──────────────────────────────────────────────────────────────────
