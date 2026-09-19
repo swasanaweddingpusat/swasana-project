@@ -39,11 +39,6 @@ interface LeaveRequestFormProps {
   onSubmitted?: () => void;
 }
 
-interface LeaveRequestFormProps {
-  inDialog?: boolean;
-  onSubmitted?: () => void;
-}
-
 const EMPTY_FORM: FormState = {
   leaveTypeId: "",
   startDate: "",
@@ -143,19 +138,6 @@ export function LeaveRequestForm({ inDialog = false, onSubmitted }: LeaveRequest
     if (!form.photoBase64) {
       toast.error("Bukti wajib diupload");
       return;
-    }
-
-    let documentKey: string | undefined;
-    if (selectedFile) {
-      setIsUploading(true);
-      try {
-        const upload = await uploadFileDirect(selectedFile, "leave-documents");
-        documentKey = upload.key;
-      } catch (error) {
-        setIsUploading(false);
-        toast.error(error instanceof Error ? error.message : "Gagal mengunggah surat cuti");
-        return;
-      }
     }
 
     let documentKey: string | undefined;
@@ -319,30 +301,6 @@ export function LeaveRequestForm({ inDialog = false, onSubmitted }: LeaveRequest
               </div>
             </>
           )}
-
-          <div className="grid gap-2 sm:col-span-2">
-            <Label htmlFor="leave-document">Surat Cuti (opsional)</Label>
-            <Input
-              ref={fileInputRef}
-              id="leave-document"
-              type="file"
-              accept=".pdf,.doc,.docx,image/*"
-              className="h-auto rounded-xl py-2.5"
-              onChange={(event) => {
-                const file = event.target.files?.[0] ?? null;
-                if (file && file.size > MAX_UPLOAD_SIZE_BYTES) {
-                  toast.error("Ukuran surat cuti maksimal 10MB");
-                  event.target.value = "";
-                  setSelectedFile(null);
-                  return;
-                }
-                setSelectedFile(file);
-              }}
-            />
-            <p className="text-xs text-muted-foreground">
-              PDF, Word, atau gambar. Maksimal 10MB.
-            </p>
-          </div>
 
           <div className="grid gap-2 sm:col-span-2">
             <Label htmlFor="leave-document">Surat Cuti (opsional)</Label>
