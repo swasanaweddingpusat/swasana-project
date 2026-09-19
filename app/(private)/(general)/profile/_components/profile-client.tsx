@@ -12,7 +12,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Separator } from "@/components/ui/separator"
 import { toast } from "sonner"
-import { Lock, User, Eye, EyeClosed, Refresh, DangerTriangle, Card as CardIcon, UsersGroupRounded, Case, Pen, TrashBinTrash, Gallery } from "@solar-icons/react"
+import { Lock, User, Eye, EyeClosed, Refresh, DangerTriangle, Card as CardIcon, UsersGroupRounded, Case, Pen, TrashBinTrash, Gallery, Wallet } from "@solar-icons/react"
 import { SignaturePad } from "@/components/shared/signature-pad"
 import { cn } from "@/lib/utils"
 import { updateMyProfile, updateMyDefaultSignature } from "@/actions/profile"
@@ -20,6 +20,8 @@ import { createEducationLevel } from "@/actions/education-level"
 import { AvatarUpload } from "@/components/shared/avatar-upload"
 import { SearchableSelect } from "@/components/ui/searchable-select"
 import { PhoneInput } from "@/components/shared/PhoneInput"
+import { usePermissions } from "@/hooks/use-permissions"
+import { KpiSayaClient } from "@/app/(private)/(general)/kpi-insentif/kpi-saya/_components/KpiSayaClient"
 
 interface ProfileData {
   id: string
@@ -83,7 +85,10 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 }
 
 export function ProfileClient({ user, profile, educationLevels }: ProfileClientProps) {
-  const [activeTab, setActiveTab] = useState<"overview" | "security">(
+  const { can } = usePermissions()
+  const canViewKpi = can("kpi-insentif", "view")
+
+  const [activeTab, setActiveTab] = useState<"overview" | "security" | "kpi">(
     user.mustChangePassword ? "security" : "overview"
   )
 
@@ -224,6 +229,7 @@ export function ProfileClient({ user, profile, educationLevels }: ProfileClientP
   const tabs = [
     { id: "overview" as const, label: "Overview", icon: User },
     { id: "security" as const, label: "Keamanan", icon: Lock },
+    ...(canViewKpi ? [{ id: "kpi" as const, label: "KPI Saya", icon: Wallet }] : []),
   ]
 
   return (
@@ -491,6 +497,11 @@ export function ProfileClient({ user, profile, educationLevels }: ProfileClientP
             </CardContent>
           </Card>
         </div>
+      )}
+
+      {/* KPI Saya Tab */}
+      {activeTab === "kpi" && canViewKpi && (
+        <KpiSayaClient />
       )}
 
       {/* Security Tab */}

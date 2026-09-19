@@ -110,6 +110,7 @@ export function LeaveRequestForm({ inDialog = false, onSubmitted }: LeaveRequest
     reader.readAsDataURL(file);
   }, []);
 
+
   const handleSubmit = useCallback(async () => {
     if (!form.leaveTypeId) {
       toast.error("Pilih jenis cuti terlebih dahulu");
@@ -375,6 +376,7 @@ export function LeaveRequestForm({ inDialog = false, onSubmitted }: LeaveRequest
               </p>
             )}
           </div>
+
 
           <div className="sm:col-span-2 flex justify-end border-t pt-5">
             <Button

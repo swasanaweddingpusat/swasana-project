@@ -43,6 +43,7 @@ import {
   Bolt,
   ChatRound,
   UserRounded,
+  Wallet,
 } from "@solar-icons/react";
 
 type SolarIcon = ForwardRefExoticComponent<Omit<IconProps, "ref"> & RefAttributes<SVGSVGElement>>;
@@ -202,6 +203,17 @@ export const GENERAL_NAV: NavItem[] = [
     ] },
   { name: "Pengajuan Cuti", href: "/cuti", icon: CalendarDate, subtitle: "Pengajuan dan saldo cuti" },
   { name: "Slip Gaji", href: "/slip-gaji", icon: FileText, subtitle: "Lihat slip gaji bulanan saya" },
+  {
+    name: "KPI & Insentif",
+    href: "/kpi-insentif",
+    icon: Wallet,
+    subtitle: "Kelola KPI, komisi, dan bonus Sales & Manager",
+    permission: { module: "kpi-insentif", action: "view" },
+    submenu: [
+      { name: "Penugasan Target", href: "/kpi-insentif/penugasan", icon: UserHands, subtitle: "Tugaskan KPI ke Sales atau Manager", permission: { module: "kpi-assignment", action: "view" } },
+      { name: "Kalkulasi & Laporan", href: "/kpi-insentif/kalkulasi", icon: ChartSquare, subtitle: "Simulasi kalkulasi dan laporan final insentif", permission: { module: "kpi-simulation", action: "view" } },
+    ],
+  },
 ];
 
 /** Settings entry — pinned to the very bottom of the sidebar, always visible
