@@ -136,6 +136,21 @@ export async function createQuotation(
           },
         }),
       ),
+      // 2c. Create bonuses
+      ...input.bonuses.map((b, idx) =>
+        db.quotationBonus.create({
+          data: {
+            id: crypto.randomUUID(),
+            quotationId,
+            bonusId: b.bonusId ?? null,
+            name: b.name,
+            price: b.price,
+            description: b.description ?? null,
+            qty: b.qty,
+            sortOrder: idx,
+          },
+        }),
+      ),
     ];
 
     // 3. Create approval record + steps (if flow is resolved)
@@ -298,6 +313,26 @@ export async function updateQuotation(
                   isShowPrice: c.isShowPrice,
                   description: c.description ?? null,
                   qty: c.qty,
+                  sortOrder: idx,
+                },
+              }),
+            ),
+          ]
+        : []),
+      // 4. Replace bonuses — only when bonuses payload is present
+      ...(input.bonuses !== undefined
+        ? [
+            db.quotationBonus.deleteMany({ where: { quotationId: input.id } }),
+            ...(input.bonuses ?? []).map((b, idx) =>
+              db.quotationBonus.create({
+                data: {
+                  id: crypto.randomUUID(),
+                  quotationId: input.id,
+                  bonusId: b.bonusId ?? null,
+                  name: b.name,
+                  price: b.price,
+                  description: b.description ?? null,
+                  qty: b.qty,
                   sortOrder: idx,
                 },
               }),

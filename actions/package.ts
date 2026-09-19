@@ -3,7 +3,7 @@
 import { revalidateTag } from "next/cache";
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
-import { requirePermission } from "@/lib/permissions";
+import { requirePermission, hasPermission } from "@/lib/permissions";
 import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
 import { logAudit } from "@/lib/audit";
 import { resolveApprovalSteps } from "@/lib/approval-flows";
@@ -14,7 +14,12 @@ import {
   createVendorItemSchema,
   createInternalItemSchema,
   miceItemSchema,
+  saveMicePricesSchema,
+  savePackageComplimentariesSchema,
+  savePackageBonusesSchema,
+  savePackageTaxDepositsSchema,
 } from "@/lib/validations/package";
+import type { Session } from "next-auth";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -22,6 +27,29 @@ type PkgCategory = "WEDDINGS" | "MICE";
 
 function permModuleFor(category: PkgCategory): "package" | "package-mice" {
   return category === "MICE" ? "package-mice" : "package";
+}
+
+/**
+ * termAndCondition is normally edited via the dedicated updatePackageTC() action
+ * (gated by its own "term-&-condition" permission). The MICE drawer now also lets
+ * termAndCondition — and, alongside it, the newer cancellationRefundPolicy field
+ * (Step 4 "Cancellation & Refund Policy", same editor/gate as Term & Payment) —
+ * ride along inside create/update payloads for convenience. We re-check the same
+ * permission here and silently strip both fields when the caller lacks it,
+ * instead of failing the whole create/update.
+ */
+async function stripTermAndConditionIfUnauthorized<
+  T extends { termAndCondition?: string | null; cancellationRefundPolicy?: string | null }
+>(
+  data: T,
+  mod: "package" | "package-mice",
+  session: Session
+): Promise<T> {
+  if (data.termAndCondition === undefined && data.cancellationRefundPolicy === undefined) return data;
+  const allowed = await hasPermission(session.user.roleId, mod, "term-&-condition", session.user.isSuperAdmin);
+  if (allowed) return data;
+  const { termAndCondition: _ignoredTc, cancellationRefundPolicy: _ignoredCrp, ...rest } = data;
+  return rest as T;
 }
 
 // ─── Package CRUD ────────────────────────────────────────────────────────────
@@ -55,7 +83,8 @@ export async function createPackage(data: unknown): Promise<
   if (!mutationLimiter.check(`pkg-create:${session!.user.id}`)) return { success: false, ...rateLimitError() };
 
   try {
-    const { signature, ...pkgData } = parsed.data;
+    const { signature, ...rawPkgData } = parsed.data;
+    const pkgData = await stripTermAndConditionIfUnauthorized(rawPkgData, mod, session!);
 
     const steps = await resolveApprovalSteps(mod);
 
@@ -143,16 +172,18 @@ export async function updatePackage(id: string, data: unknown): Promise<
   if (!parsed.success) return { success: false, error: parsed.error.issues[0].message };
 
   // Strip category — editing must never flip a package between wedding/mice
-  const { signature, category: _ignoredCategory, ...pkgData } = parsed.data;
+  const { signature, category: _ignoredCategory, ...rawPkgData } = parsed.data;
 
   // Detect pax change (triggers approval reset) + fetch category for permission module
   const existing = await db.package.findUnique({ where: { id }, select: { pax: true, approvalStatus: true, category: true } });
-  const paxChanged = pkgData.pax !== undefined && existing?.pax !== pkgData.pax;
+  const paxChanged = rawPkgData.pax !== undefined && existing?.pax !== rawPkgData.pax;
   const mod = permModuleFor((existing?.category ?? "WEDDINGS") as PkgCategory);
 
   const { session, error } = await requirePermission({ module: mod, action: "edit" });
   if (error) return { success: false, error };
   if (!mutationLimiter.check(`pkg-update:${session!.user.id}`)) return { success: false, ...rateLimitError() };
+
+  const pkgData = await stripTermAndConditionIfUnauthorized(rawPkgData, mod, session!);
 
   // Read-only queries before transaction
   const [steps, existingApproval] = await Promise.all([
@@ -494,7 +525,7 @@ export async function saveInternalItems(
 
 export async function saveMiceItems(
   packageId: string,
-  items: { itemName: string; itemDescription: string; itemType: string; itemPrice: number }[]
+  items: { itemName: string; itemDescription: string }[]
 ): Promise<{ success: true } | { success: false; error: string }> {
   const pkg = await db.package.findUnique({ where: { id: packageId }, select: { category: true } });
   const mod = permModuleFor((pkg?.category ?? "MICE") as PkgCategory);
@@ -516,8 +547,6 @@ export async function saveMiceItems(
             packageId,
             itemName: item.itemName,
             itemDescription: item.itemDescription ?? "",
-            itemType: item.itemType as "PAX" | "NOMINAL",
-            itemPrice: item.itemPrice,
             sortOrder: i,
           },
         })
@@ -536,6 +565,213 @@ export async function saveMiceItems(
     return { success: true };
   } catch (e) {
     console.error("[saveMiceItems]", e);
+    return { success: false, error: "Terjadi kesalahan." };
+  }
+}
+
+// ─── MICE Prices ("Harga" step — separate collection from miceItems) ─────────
+
+export async function saveMicePrices(
+  packageId: string,
+  prices: { name: string; priceType: "QTY" | "NOMINAL"; qty?: number | null; price?: number | null; total: number }[]
+): Promise<{ success: true } | { success: false; error: string }> {
+  const pkg = await db.package.findUnique({ where: { id: packageId }, select: { category: true } });
+  const mod = permModuleFor((pkg?.category ?? "MICE") as PkgCategory);
+  const { session, error } = await requirePermission({ module: mod, action: "edit" });
+  if (error) return { success: false, error };
+  if (!mutationLimiter.check(`mice-prices:${session!.user.id}`)) return { success: false, ...rateLimitError() };
+
+  const parsed = saveMicePricesSchema.safeParse(prices);
+  if (!parsed.success) return { success: false, error: parsed.error.issues[0].message };
+
+  try {
+    await db.$transaction([
+      db.packageMicePrice.deleteMany({ where: { packageId } }),
+      ...parsed.data.map((item, i) =>
+        db.packageMicePrice.create({
+          data: {
+            packageId,
+            name: item.name,
+            priceType: item.priceType,
+            qty: item.priceType === "QTY" ? (item.qty ?? null) : null,
+            price: item.priceType === "QTY" ? (item.price ?? null) : null,
+            total: item.total,
+            sortOrder: i,
+          },
+        })
+      ),
+    ]);
+
+    await logAudit({
+      userId: session!.user.id,
+      action: "package.save_mice_prices",
+      entityType: mod,
+      entityId: packageId,
+      description: `Saved ${parsed.data.length} MICE price item(s) for package ${packageId}`,
+    });
+
+    revalidateTag("packages", "max");
+    return { success: true };
+  } catch (e) {
+    console.error("[saveMicePrices]", e);
+    return { success: false, error: "Terjadi kesalahan." };
+  }
+}
+
+// ─── MICE Tax & Deposit ("Item Paket" step 2 sub-collection) ─────────────────
+
+export async function saveTaxDeposits(
+  packageId: string,
+  items: { name: string; nominal: number; sortOrder?: number }[]
+): Promise<{ success: true } | { success: false; error: string }> {
+  const pkg = await db.package.findUnique({ where: { id: packageId }, select: { category: true } });
+  const mod = permModuleFor((pkg?.category ?? "MICE") as PkgCategory);
+  const { session, error } = await requirePermission({ module: mod, action: "edit" });
+  if (error) return { success: false, error };
+  if (!mutationLimiter.check(`pkg-tax-deposits:${session!.user.id}`)) return { success: false, ...rateLimitError() };
+
+  const parsed = savePackageTaxDepositsSchema.safeParse(items);
+  if (!parsed.success) return { success: false, error: parsed.error.issues[0].message };
+
+  try {
+    await db.$transaction([
+      db.packageMiceTaxDeposit.deleteMany({ where: { packageId } }),
+      ...parsed.data.map((item, i) =>
+        db.packageMiceTaxDeposit.create({
+          data: {
+            packageId,
+            name: item.name,
+            nominal: item.nominal,
+            sortOrder: i,
+          },
+        })
+      ),
+    ]);
+
+    await logAudit({
+      userId: session!.user.id,
+      action: "package.save_tax_deposits",
+      entityType: mod,
+      entityId: packageId,
+      description: `Saved ${parsed.data.length} tax/deposit item(s) for package ${packageId}`,
+    });
+
+    revalidateTag("packages", "max");
+    return { success: true };
+  } catch (e) {
+    console.error("[saveTaxDeposits]", e);
+    return { success: false, error: "Terjadi kesalahan." };
+  }
+}
+
+// ─── Package Complimentary & Bonus ("Complimentary & Bonus" step) ────────────
+
+export async function savePackageComplimentaries(
+  packageId: string,
+  items: {
+    complimentaryId?: string | null;
+    name: string;
+    price: number;
+    isShowPrice: boolean;
+    description?: string | null;
+    qty: number;
+    sortOrder?: number;
+  }[]
+): Promise<{ success: true } | { success: false; error: string }> {
+  const pkg = await db.package.findUnique({ where: { id: packageId }, select: { category: true } });
+  const mod = permModuleFor((pkg?.category ?? "MICE") as PkgCategory);
+  const { session, error } = await requirePermission({ module: mod, action: "edit" });
+  if (error) return { success: false, error };
+  if (!mutationLimiter.check(`pkg-complimentaries:${session!.user.id}`)) return { success: false, ...rateLimitError() };
+
+  const parsed = savePackageComplimentariesSchema.safeParse(items);
+  if (!parsed.success) return { success: false, error: parsed.error.issues[0].message };
+
+  try {
+    await db.$transaction([
+      db.packageComplimentary.deleteMany({ where: { packageId } }),
+      ...parsed.data.map((item, i) =>
+        db.packageComplimentary.create({
+          data: {
+            packageId,
+            complimentaryId: item.complimentaryId ?? null,
+            name: item.name,
+            price: item.price,
+            isShowPrice: item.isShowPrice,
+            description: item.description ?? null,
+            qty: item.qty,
+            sortOrder: i,
+          },
+        })
+      ),
+    ]);
+
+    await logAudit({
+      userId: session!.user.id,
+      action: "package.save_complimentaries",
+      entityType: mod,
+      entityId: packageId,
+      description: `Saved ${parsed.data.length} complimentary item(s) for package ${packageId}`,
+    });
+
+    revalidateTag("packages", "max");
+    return { success: true };
+  } catch (e) {
+    console.error("[savePackageComplimentaries]", e);
+    return { success: false, error: "Terjadi kesalahan." };
+  }
+}
+
+export async function savePackageBonuses(
+  packageId: string,
+  items: {
+    bonusId?: string | null;
+    name: string;
+    price: number;
+    description?: string | null;
+    qty: number;
+    sortOrder?: number;
+  }[]
+): Promise<{ success: true } | { success: false; error: string }> {
+  const pkg = await db.package.findUnique({ where: { id: packageId }, select: { category: true } });
+  const mod = permModuleFor((pkg?.category ?? "MICE") as PkgCategory);
+  const { session, error } = await requirePermission({ module: mod, action: "edit" });
+  if (error) return { success: false, error };
+  if (!mutationLimiter.check(`pkg-bonuses:${session!.user.id}`)) return { success: false, ...rateLimitError() };
+
+  const parsed = savePackageBonusesSchema.safeParse(items);
+  if (!parsed.success) return { success: false, error: parsed.error.issues[0].message };
+
+  try {
+    await db.$transaction([
+      db.packageBonus.deleteMany({ where: { packageId } }),
+      ...parsed.data.map((item, i) =>
+        db.packageBonus.create({
+          data: {
+            packageId,
+            bonusId: item.bonusId ?? null,
+            name: item.name,
+            price: item.price,
+            description: item.description ?? null,
+            qty: item.qty,
+            sortOrder: i,
+          },
+        })
+      ),
+    ]);
+
+    await logAudit({
+      userId: session!.user.id,
+      action: "package.save_bonuses",
+      entityType: mod,
+      entityId: packageId,
+      description: `Saved ${parsed.data.length} bonus item(s) for package ${packageId}`,
+    });
+
+    revalidateTag("packages", "max");
+    return { success: true };
+  } catch (e) {
+    console.error("[savePackageBonuses]", e);
     return { success: false, error: "Terjadi kesalahan." };
   }
 }

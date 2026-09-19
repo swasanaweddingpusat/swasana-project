@@ -91,6 +91,15 @@ export interface QuotationComplimentaryItem {
   qty: number;
 }
 
+export interface QuotationBonusItem {
+  id: string;
+  bonusId: string | null;
+  name: string;
+  price: number;
+  description?: string;
+  qty: number;
+}
+
 export interface QuotationItem {
   id: string;
   /** Nomor dokumen, mis. "#221-MICE". Optional — di-derive kalau kosong. */
@@ -125,6 +134,8 @@ export interface QuotationItem {
   items?: QuotationLineItem[];
   // ── Complimentary (bonus gratis, tidak masuk pricing) ───────────
   complimentaries?: QuotationComplimentaryItem[];
+  // ── Bonus (tidak masuk pricing) ─────────────────────────────────
+  bonuses?: QuotationBonusItem[];
   // ── Pricing ────────────────────────────────────────────────────
   price: number;
   discount: number;
@@ -185,6 +196,14 @@ function mapRowToQuotationItem(row: QuotationListRow): QuotationItem {
       isShowPrice: c.isShowPrice,
       description: c.description ?? undefined,
       qty: c.qty,
+    })),
+    bonuses: row.bonuses.map((b) => ({
+      id: b.id,
+      bonusId: b.bonusId,
+      name: b.name,
+      price: b.price,
+      description: b.description ?? undefined,
+      qty: b.qty,
     })),
     price: row.subtotal,
     discount: row.discount,

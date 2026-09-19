@@ -3,10 +3,15 @@ import { db } from "@/lib/db";
 
 const packageInclude = {
   venue: { select: { id: true, name: true, address: true, brandId: true } },
+  paymentMethod: { select: { id: true, bankName: true, bankAccountNumber: true, bankRecipient: true } },
   vendorItems: { orderBy: { sortOrder: "asc" as const } },
   internalItems: { orderBy: { sortOrder: "asc" as const } },
   miceItems: { orderBy: { sortOrder: "asc" as const } },
+  micePrices: { orderBy: { sortOrder: "asc" as const } },
+  taxDeposits: { orderBy: { sortOrder: "asc" as const } },
   categoryPrices: { orderBy: { sortOrder: "asc" as const } },
+  complimentaries: { orderBy: { sortOrder: "asc" as const }, include: { complimentary: true } },
+  bonuses: { orderBy: { sortOrder: "asc" as const }, include: { bonus: true } },
 } as const;
 
 export interface GetPackagesParams {
@@ -81,8 +86,8 @@ export async function getPackagesForBooking(venueId?: string, category: "WEDDING
 /**
  * MICE packages consumable by the quotation drawer. Deliberately NOT reusing
  * getPackagesForBooking: that filters on Σ categoryPrices.basePrice > 0, but MICE
- * packages carry their price on miceItems.itemPrice (categoryPrices is often empty),
- * so valid MICE packages would be filtered out. Here we filter on having miceItems
+ * packages often have empty categoryPrices (pricing is set later via "Set Harga",
+ * or filled in manually per quotation). Here we filter on having miceItems
  * instead, and only include the minimal shape the quotation explode needs.
  */
 export async function getMicePackagesForQuotation(venueId?: string) {

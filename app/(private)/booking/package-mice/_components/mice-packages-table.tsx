@@ -20,12 +20,10 @@ import {
   MenuDots,
   Magnifer,
   Filter,
-  SettingsMinimalistic,
   ClipboardCheck,
   Refresh,
   CloseCircle,
   Copy,
-  FileText,
 } from "@solar-icons/react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
@@ -52,28 +50,17 @@ import { toast } from "sonner";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { MicePackageDrawer } from "./mice-package-drawer";
 import { MicePackageDetailModal } from "./mice-package-detail-modal";
-import { MicePackageFinanceDrawer } from "./mice-package-finance-drawer";
 import { ApprovalDialog } from "../../packages/_components/approval-dialog";
 import { ApproveModal } from "../../packages/_components/approve-modal";
-import { PackageTCDrawer } from "@/components/shared/PackageTCDrawer";
-import { fetchPackages } from "@/services/package-service";
 
 const ROWS_PER_PAGE = 10;
 const PERM = "package-mice" as const;
 
-const formatCurrency = (amount: number): string =>
-  new Intl.NumberFormat("id-ID", {
-    style: "currency",
-    currency: "IDR",
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(amount);
-
-function getPackagePrice(pkg: PackageQueryItem): string {
-  if (pkg.sellingPrice > 0) return formatCurrency(pkg.sellingPrice);
-  const base = (pkg.categoryPrices ?? []).reduce((s, c) => s + Number(c.basePrice), 0);
-  if (!base) return "-";
-  return formatCurrency(base + Math.round(base * ((pkg.margin ?? 0) / 100)));
+// MICE packages don't have a "Set Harga" UI (pricing is shared with Package
+// Wedding at the schema level but never populated/used for MICE) — always
+// render the "no price" fallback, consistent with mice-package-detail-modal.tsx.
+function getPackagePrice(): string {
+  return "—";
 }
 
 function buildPageRange(current: number, total: number): (number | "...")[] {
@@ -202,12 +189,8 @@ export function MicePackagesTable() {
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailPkg, setDetailPkg] = useState<PackageQueryItem | null>(null);
-  const [financeOpen, setFinanceOpen] = useState(false);
-  const [financePkg, setFinancePkg] = useState<PackageQueryItem | null>(null);
   const [approvalPkg, setApprovalPkg] = useState<PackageQueryItem | null>(null);
   const [approveModal, setApproveModal] = useState<{ stepId: string; stepLabel: string; packageName: string } | null>(null);
-  const [tcDrawerOpen, setTcDrawerOpen] = useState(false);
-  const [tcPkg, setTcPkg] = useState<PackageQueryItem | null>(null);
 
   const { data: approvals = [], isLoading: approvalsLoading } = usePackageApprovals(PERM);
 
@@ -301,47 +284,6 @@ export function MicePackagesTable() {
   function renderPackageActions(pkg: PackageQueryItem) {
     return (
       <>
-        {can(PERM, "term-&-condition") && (
-          <Tooltip>
-            <TooltipTrigger
-              className={cn("p-1.5 rounded-md hover:bg-muted cursor-pointer")}
-              onClick={async () => {
-                // Open immediately with current data, then silently refresh just this
-                // package's T&C in the background — without touching the table query
-                // (refetchQueries would flip isFetching and flash the whole table).
-                setTcPkg(pkg);
-                setTcDrawerOpen(true);
-                try {
-                  const fresh = await fetchPackages({
-                    page: currentPage,
-                    pageSize: ROWS_PER_PAGE,
-                    search: debouncedSearch || undefined,
-                    venueId: selectedVenueId,
-                    category: "MICE",
-                  });
-                  const updated = fresh.data.find((p) => p.id === pkg.id);
-                  if (updated) setTcPkg(updated);
-                } catch {
-                  /* keep the already-shown data on failure */
-                }
-              }}
-            >
-              <FileText weight="BoldDuotone" className={cn("h-4 w-4 text-muted-foreground")} />
-            </TooltipTrigger>
-            <TooltipContent>Term & Payment</TooltipContent>
-          </Tooltip>
-        )}
-        {can(PERM, "set-harga") && (
-          <Tooltip>
-            <TooltipTrigger
-              className={cn("p-1.5 rounded-md hover:bg-muted cursor-pointer")}
-              onClick={() => { setFinancePkg(pkg); setFinanceOpen(true); }}
-            >
-              <SettingsMinimalistic weight="BoldDuotone" className={cn("h-4 w-4 text-muted-foreground")} />
-            </TooltipTrigger>
-            <TooltipContent>Set Harga</TooltipContent>
-          </Tooltip>
-        )}
         {approvalMap.has(pkg.id) && (() => {
           const record = approvalMap.get(pkg.id)!;
           if (record.status === "approved" || pkg.approvalStatus === "approved") return null;
@@ -461,15 +403,13 @@ export function MicePackagesTable() {
   // ─── Mobile actions ────────────────────────────────────────────────────────────
 
   function renderMobileActions(pkg: PackageQueryItem) {
-    const hasTc = can(PERM, "term-&-condition");
-    const hasSetHarga = can(PERM, "set-harga");
     const hasDuplicate = can(PERM, "create");
     const hasDelete = can(PERM, "delete");
     const approvalRecord = approvalMap.get(pkg.id);
     const hasApproval = !!approvalRecord && approvalRecord.status !== "approved" && pkg.approvalStatus !== "approved";
     const hasUnverify = can(PERM, "set-status") && pkg.approvalStatus === "approved";
 
-    const hasAnySecondary = hasTc || hasSetHarga || hasDuplicate || hasDelete || hasApproval || hasUnverify;
+    const hasAnySecondary = hasDuplicate || hasDelete || hasApproval || hasUnverify;
     if (!hasAnySecondary) return null;
 
     return (
@@ -484,36 +424,6 @@ export function MicePackagesTable() {
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="min-w-44">
-          {hasTc && (
-            <DropdownMenuItem
-              onSelect={async () => {
-                setTcPkg(pkg);
-                setTcDrawerOpen(true);
-                try {
-                  const fresh = await fetchPackages({
-                    page: currentPage,
-                    pageSize: ROWS_PER_PAGE,
-                    search: debouncedSearch || undefined,
-                    venueId: selectedVenueId,
-                    category: "MICE",
-                  });
-                  const updated = fresh.data.find((p) => p.id === pkg.id);
-                  if (updated) setTcPkg(updated);
-                } catch {
-                  /* keep the already-shown data on failure */
-                }
-              }}
-            >
-              <FileText weight="BoldDuotone" className="mr-2 h-4 w-4 text-primary" />
-              Term & Payment
-            </DropdownMenuItem>
-          )}
-          {hasSetHarga && (
-            <DropdownMenuItem onSelect={() => { setFinancePkg(pkg); setFinanceOpen(true); }}>
-              <SettingsMinimalistic weight="BoldDuotone" className="mr-2 h-4 w-4 text-primary" />
-              Set Harga
-            </DropdownMenuItem>
-          )}
           {hasApproval && approvalRecord && (() => {
             const steps = approvalRecord.steps;
             return steps.map((step) => {
@@ -553,7 +463,7 @@ export function MicePackagesTable() {
           )}
           {hasUnverify && (
             <>
-              {(hasTc || hasSetHarga || hasApproval || hasDuplicate) && <DropdownMenuSeparator />}
+              {(hasApproval || hasDuplicate) && <DropdownMenuSeparator />}
               <DropdownMenuItem
                 disabled={unverifyMutation.isPending}
                 onSelect={async () => {
@@ -570,7 +480,7 @@ export function MicePackagesTable() {
           )}
           {hasDelete && (
             <>
-              {(hasTc || hasSetHarga || hasApproval || hasDuplicate || hasUnverify) && <DropdownMenuSeparator />}
+              {(hasApproval || hasDuplicate || hasUnverify) && <DropdownMenuSeparator />}
               <DropdownMenuItem
                 onSelect={() => { setPkgToDelete(pkg.id); setDeleteConfirmOpen(true); }}
                 className="text-destructive focus:text-destructive"
@@ -786,11 +696,10 @@ export function MicePackagesTable() {
                             <div className="leading-tight">
                               <p className={cn("font-medium text-foreground truncate")}>{pkg.packageName}</p>
                               <p className={cn("text-xs text-muted-foreground mt-0.5 lg:hidden")}>{pkg.venue?.name ?? "—"}</p>
-                              <p className={cn("text-xs text-muted-foreground lg:hidden")}>{getPackagePrice(pkg)}</p>
                             </div>
                           </TableCell>
                           <TableCell className={cn("hidden sm:table-cell")}>{pkg.venue?.name ?? "-"}</TableCell>
-                          <TableCell className={cn("hidden md:table-cell tabular-nums")}>{getPackagePrice(pkg)}</TableCell>
+                          <TableCell className={cn("hidden md:table-cell tabular-nums")}>{getPackagePrice()}</TableCell>
                           <TableCell className={cn("hidden lg:table-cell")}>{(pkg.miceItems ?? []).length}</TableCell>
                           <TableCell>
                             {can(PERM, "set-status") ? (
@@ -902,12 +811,6 @@ export function MicePackagesTable() {
                           <span className="truncate">{pkg.venue?.name ?? "Venue —"}</span>
                           <span aria-hidden="true">·</span>
                           <span>{(pkg.miceItems ?? []).length} item</span>
-                          {getPackagePrice(pkg) !== "-" && (
-                            <>
-                              <span aria-hidden="true">·</span>
-                              <span className="text-foreground/70 font-medium">{getPackagePrice(pkg)}</span>
-                            </>
-                          )}
                         </div>
 
                         <div className={cn("flex items-center gap-1.5 flex-wrap text-xs")}>
@@ -1010,21 +913,6 @@ export function MicePackagesTable() {
           const p = paginated.find((x) => x.id === id);
           if (p) openEdit(p);
         }}
-      />
-
-      {/* Set Harga Drawer */}
-      <MicePackageFinanceDrawer
-        isOpen={financeOpen}
-        onClose={() => { setFinanceOpen(false); setFinancePkg(null); }}
-        pkg={financePkg}
-      />
-
-      {/* Term & Payment Drawer */}
-      <PackageTCDrawer
-        open={tcDrawerOpen}
-        onClose={() => { setTcDrawerOpen(false); setTcPkg(null); }}
-        pkg={tcPkg}
-        label="Term & Payment"
       />
 
       {/* Approval Dialog */}

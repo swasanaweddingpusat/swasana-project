@@ -571,6 +571,7 @@ model PaymentMethod {
   quotationTemplates QuotationTemplate[]
   ledgers            Ledger[]
   payables           BookingPayable[]
+  packages           Package[]
 
   @@index([vendorId])
   @@index([venueId])
@@ -587,19 +588,27 @@ model Package {
   approvalStatus         String                 @default("draft")
   venueId                String?
   packageTypeCategoryId  String?
+  paymentMethodId        String?
   notes                  String?
   pax                    Int                    @default(0)
   margin                 Float                  @default(0)
   sellingPrice           Int                    @default(0)
   termAndCondition       String?
+  securityDeposit        Int                    @default(0)
+  cancellationRefundPolicy String?
   createdAt              DateTime               @default(now())
   updatedAt              DateTime               @updatedAt
   venue                  Venue?                 @relation(fields: [venueId], references: [id], onDelete: SetNull)
   packageTypeCategory    PackageTypeCategory?   @relation(fields: [packageTypeCategoryId], references: [id], onDelete: SetNull)
+  paymentMethod          PaymentMethod?         @relation(fields: [paymentMethodId], references: [id], onDelete: SetNull)
   vendorItems            PackageVendorItem[]
   internalItems          PackageInternalItem[]
   miceItems              PackageMiceItem[]
+  micePrices             PackageMicePrice[]
+  taxDeposits            PackageMiceTaxDeposit[]
   categoryPrices         PackageCategoryPrice[]
+  complimentaries        PackageComplimentary[]
+  bonuses                PackageBonus[]
   bookings               Booking[]
   leads                  Lead[]
   guestbookEntries       GuestbookEntry[]
@@ -607,6 +616,7 @@ model Package {
   @@index([venueId])
   @@index([category])
   @@index([packageTypeCategoryId])
+  @@index([paymentMethodId])
   @@map("packages")
 }
 
@@ -691,19 +701,103 @@ model PackageInternalItem {
 }
 
 model PackageMiceItem {
-  id              String            @id @default(uuid())
+  id              String   @id @default(uuid())
   packageId       String
   itemName        String
-  itemDescription String            @default("")
-  itemType        MiceItemPriceType @default(PAX)
-  itemPrice       Int               @default(0)
-  sortOrder       Int               @default(0)
-  createdAt       DateTime          @default(now())
-  updatedAt       DateTime          @updatedAt
-  package         Package           @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  itemDescription String   @default("")
+  sortOrder       Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  package         Package  @relation(fields: [packageId], references: [id], onDelete: Cascade)
 
   @@index([packageId])
   @@map("package_mice_items")
+}
+
+// Separate collection from PackageMiceItem (which is deliberately plain
+// name+description, no pricing). This is a standalone "Harga" step for MICE
+// packages: QTY rows carry qty+price and derive total = qty*price on the client;
+// NOMINAL rows carry only a directly-editable total (qty/price stay null).
+model PackageMicePrice {
+  id        String        @id @default(uuid())
+  packageId String
+  name      String
+  priceType MicePriceType @default(QTY)
+  qty       Int?
+  price     Int?
+  total     Int           @default(0)
+  sortOrder Int           @default(0)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+  package   Package       @relation(fields: [packageId], references: [id], onDelete: Cascade)
+
+  @@index([packageId])
+  @@map("package_mice_prices")
+}
+
+enum MicePriceType {
+  QTY
+  NOMINAL
+}
+
+// Step 2 "Tax & Deposit" sub-collection for Package MICE — mirrors PackageMiceItem's
+// shape/conventions exactly (plain name + a single numeric column, sortOrder-driven).
+model PackageMiceTaxDeposit {
+  id        String   @id @default(uuid())
+  packageId String
+  name      String
+  nominal   Int      @default(0)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  package   Package  @relation(fields: [packageId], references: [id], onDelete: Cascade)
+
+  @@index([packageId])
+  @@map("package_mice_tax_deposits")
+}
+
+// Package-level Complimentary/Bonus, mirroring QuotationComplimentary/QuotationBonus
+// field-for-field (packageId instead of quotationId). Lets a MICE Package carry its
+// own Complimentary & Bonus lineup, copied into the quotation/booking snapshot later.
+model PackageComplimentary {
+  id              String         @id @default(uuid())
+  packageId       String
+  complimentaryId String?
+  name            String
+  price           Int            @default(0)
+  isShowPrice     Boolean        @default(false)
+  description     String?
+  qty             Int            @default(1)
+  sortOrder       Int            @default(0)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  package         Package        @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  complimentary   Complimentary? @relation(fields: [complimentaryId], references: [id], onDelete: SetNull)
+
+  @@index([packageId])
+  @@index([complimentaryId])
+  @@map("package_complimentaries")
+}
+
+// No isShowPrice column: unlike Complimentary, Bonus has no show/hide-price concept
+// (matches Bonus/QuotationBonus master schema).
+model PackageBonus {
+  id          String   @id @default(uuid())
+  packageId   String
+  bonusId     String?
+  name        String
+  price       Int      @default(0)
+  description String?
+  qty         Int      @default(1)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  package     Package  @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  bonus       Bonus?   @relation(fields: [bonusId], references: [id], onDelete: SetNull)
+
+  @@index([packageId])
+  @@index([bonusId])
+  @@map("package_bonuses")
 }
 
 // ─── Customers ───────────────────────────────────────────────────────────────
@@ -1333,6 +1427,7 @@ model Complimentary {
   updatedAt                DateTime                 @updatedAt
   snapComplimentaries      SnapComplimentary[]
   quotationComplimentaries QuotationComplimentary[]
+  packageComplimentaries   PackageComplimentary[]
 
   @@map("complimentaries")
 }
@@ -1368,6 +1463,8 @@ model Bonus {
   createdAt          DateTime           @default(now())
   updatedAt          DateTime           @updatedAt
   snapBookingBonuses SnapBookingBonus[]
+  quotationBonuses   QuotationBonus[]
+  packageBonuses     PackageBonus[]
 
   @@map("bonuses")
 }
@@ -1409,6 +1506,25 @@ model QuotationComplimentary {
   @@index([quotationId])
   @@index([complimentaryId])
   @@map("quotation_complimentaries")
+}
+
+model QuotationBonus {
+  id          String    @id @default(uuid())
+  quotationId String
+  bonusId     String?
+  name        String
+  price       Int       @default(0)
+  description String?
+  qty         Int       @default(1)
+  sortOrder   Int       @default(0)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  quotation   Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+  bonus       Bonus?    @relation(fields: [bonusId], references: [id], onDelete: SetNull)
+
+  @@index([quotationId])
+  @@index([bonusId])
+  @@map("quotation_bonuses")
 }
 
 model SnapVendorItem {
@@ -2016,11 +2132,6 @@ enum EventCategory {
   MICE
 }
 
-enum MiceItemPriceType {
-  PAX
-  NOMINAL
-}
-
 model LeadStatus {
   id        String          @id @default(uuid())
   name      String
@@ -2267,6 +2378,7 @@ model Quotation {
   items           QuotationItem[]
   terms           QuotationTerm[]
   complimentaries QuotationComplimentary[]
+  bonuses         QuotationBonus[]
 
   @@index([salesId])
   @@index([venueId])

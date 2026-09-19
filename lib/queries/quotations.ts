@@ -38,6 +38,10 @@ const quotationListSelect = {
     orderBy: { sortOrder: "asc" as const },
     select: { id: true, complimentaryId: true, name: true, price: true, isShowPrice: true, description: true, qty: true, sortOrder: true },
   },
+  bonuses: {
+    orderBy: { sortOrder: "asc" as const },
+    select: { id: true, bonusId: true, name: true, price: true, description: true, qty: true, sortOrder: true },
+  },
 } as const;
 
 export type QuotationListRow = Awaited<ReturnType<typeof db.quotation.findMany<{ select: typeof quotationListSelect }>>>[number];

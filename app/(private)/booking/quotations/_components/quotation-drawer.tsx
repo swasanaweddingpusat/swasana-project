@@ -45,11 +45,13 @@ import {
   CollapsibleTrigger,
   CollapsibleContent,
 } from "@/components/ui/collapsible";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { SimpleEditor } from "@/components/shared/SimpleEditor";
 import { BankAccountSelect } from "@/components/shared/bank-account-select";
 import { PhoneInput } from "@/components/shared/PhoneInput";
 import { TimeRangePicker } from "@/components/shared/time-range-picker";
 import { ComplimentarySelect } from "@/components/shared/ComplimentarySelect";
+import { BonusSelect } from "@/components/shared/BonusSelect";
 import {
   AddCircle,
   TrashBinTrash,
@@ -61,15 +63,20 @@ import {
   Box,
   BillList,
   Gift,
+  MedalStar,
+  Calculator,
+  SafeSquare,
 } from "@solar-icons/react";
-import { cn } from "@/lib/utils";
+import { cn, parseDateOnly } from "@/lib/utils";
 import { useVenues } from "@/hooks/use-venues";
 import { useEventTypes } from "@/hooks/use-event-types";
 import { useSalesUsers } from "@/hooks/use-sales-users";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { useComplimentaries } from "@/hooks/use-complimentaries";
+import { useBonuses } from "@/hooks/use-bonuses";
 import { usePermissions } from "@/hooks/use-permissions";
 import { createComplimentary } from "@/actions/complimentary";
+import { createBonus } from "@/actions/bonus";
 import { parseContactNumbers } from "@/types/daily-activity";
 import type { QuotationItem } from "./quotations-table";
 
@@ -135,6 +142,39 @@ interface ComplimentaryRow {
   qty: number;
 }
 
+interface BonusRow {
+  id: string;
+  bonusId: string | null;
+  name: string;
+  price: number;
+  description: string;
+  qty: number;
+}
+
+// Price — UI-only for now (belum ada table/DB; JANGAN dikirim ke server action
+// sampai schema server siap). Mirrors the MicePriceType QTY/NOMINAL convention
+// already established for package_mice_prices (lib/validations/package.ts):
+// QTY rows carry qty+price (total = qty*price, computed client-side), NOMINAL
+// rows carry only a directly-editable total (qty/price stay null).
+type PriceType = "QTY" | "NOMINAL";
+
+interface PriceRow {
+  id: string;
+  name: string;
+  priceType: PriceType;
+  qty: number | null;
+  price: number | null;
+  total: number;
+}
+
+// Tax & Deposit — UI-only for now (belum ada table/DB; JANGAN dikirim ke server
+// action sampai schema server siap). Same local-useState architecture as Price.
+interface TaxDepositRow {
+  id: string;
+  name: string;
+  nominal: number;
+}
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function parseNumericInput(raw: string): number {
@@ -158,31 +198,11 @@ function formatRupiah(amount: number): string {
   });
 }
 
-/** Escape HTML-sensitive chars so raw package text is safe inside TipTap. */
-function escapeHtml(raw: string): string {
-  return raw
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
-}
-
-/**
- * Convert a PackageMiceItem.itemDescription (newline-separated bullets) into the
- * rich HTML shape SimpleEditor/TipTap expects. Multi-line → <ul>; single line →
- * <p>; empty → "".
- */
-function miceDescriptionToHtml(raw: string): string {
-  const lines = (raw ?? "")
-    .split("\n")
-    .map((l) => l.trim())
-    .filter((l) => l.length > 0)
-    .map((l) => escapeHtml(l));
-  if (lines.length === 0) return "";
-  if (lines.length === 1) return `<p>${lines[0]}</p>`;
-  return `<ul>${lines.map((l) => `<li>${l}</li>`).join("")}</ul>`;
-}
-
 const LABEL_CLASS = cn("text-sm", "font-medium", "text-foreground");
+
+const TAB_TRIGGER_CLASS = cn(
+  "h-auto flex-none items-center gap-1.5 rounded-none border-0 border-b border-b-transparent -mb-px bg-transparent px-4 py-2.5 text-sm font-medium text-muted-foreground shadow-none transition-colors after:hidden hover:border-b-border hover:text-foreground data-active:border-b-primary data-active:bg-transparent data-active:text-foreground data-active:shadow-none",
+);
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -241,6 +261,9 @@ type QuotationDraft = {
   signingLocation?: string;
   signatureSales?: string;
   complimentaries?: ComplimentaryRow[];
+  bonuses?: BonusRow[];
+  prices?: PriceRow[];
+  taxDeposits?: TaxDepositRow[];
 };
 
 function readQuotationDraft(): QuotationDraft | null {
@@ -258,6 +281,9 @@ function persistQuotationDraft(
   signingLocation?: string,
   signatureSales?: string,
   complimentaries?: ComplimentaryRow[],
+  bonuses?: BonusRow[],
+  prices?: PriceRow[],
+  taxDeposits?: TaxDepositRow[],
 ) {
   if (typeof window === "undefined") return;
   const { ...rest } = values;
@@ -265,11 +291,22 @@ function persistQuotationDraft(
     if (Array.isArray(v)) return v.some((item: QuotationItemForm) => item.title?.trim());
     return typeof v === "string" && v.trim() !== "";
   });
-  if (hasContent || signingLocation?.trim() || signatureSales || (complimentaries && complimentaries.length > 0)) {
+  if (
+    hasContent ||
+    signingLocation?.trim() ||
+    signatureSales ||
+    (complimentaries && complimentaries.length > 0) ||
+    (bonuses && bonuses.length > 0) ||
+    (prices && prices.length > 0) ||
+    (taxDeposits && taxDeposits.length > 0)
+  ) {
     const draft: QuotationDraft = { values: rest };
     if (signingLocation !== undefined) draft.signingLocation = signingLocation;
     if (signatureSales !== undefined) draft.signatureSales = signatureSales;
     if (complimentaries !== undefined) draft.complimentaries = complimentaries;
+    if (bonuses !== undefined) draft.bonuses = bonuses;
+    if (prices !== undefined) draft.prices = prices;
+    if (taxDeposits !== undefined) draft.taxDeposits = taxDeposits;
     localStorage.setItem(QUOTATION_DRAFT_KEY, JSON.stringify(draft));
   } else {
     localStorage.removeItem(QUOTATION_DRAFT_KEY);
@@ -381,9 +418,9 @@ function SortableItemRow({
                   !titleVal && "text-muted-foreground italic",
                 )}
               >
-                {titleVal || "Item tanpa judul"}
+                {titleVal || "Untitled item"}
               </p>
-              {!isOpen && (totalVal || qtyVal) && (
+              {arrayName === "additionals" && !isOpen && (totalVal || qtyVal) && (
                 <p className="text-xs text-muted-foreground tabular-nums">
                   {qtyVal ? `Qty ${qtyVal}` : ""}
                   {qtyVal && totalVal ? " · " : ""}
@@ -402,7 +439,7 @@ function SortableItemRow({
               e.stopPropagation();
               remove(index);
             }}
-            aria-label="Hapus item"
+            aria-label="Delete item"
             className="shrink-0 h-7 w-7 text-destructive hover:bg-destructive/10"
           >
             <TrashBinTrash weight="BoldDuotone" className="h-3.5 w-3.5" />
@@ -418,13 +455,13 @@ function SortableItemRow({
               render={({ field }) => (
                 <FormItem className="pt-2">
                   <FormLabel className="text-xs text-muted-foreground">
-                    Judul / Nama Item
+                    Item Title / Name <span className="text-destructive">*</span>
                   </FormLabel>
                   <FormControl>
                     <Input
                       {...field}
                       value={field.value as string}
-                      placeholder="mis. Ballroom Facilities : atau Nasi Box"
+                      placeholder="e.g. Ballroom Facilities: or Rice Box"
                       className="w-full"
                     />
                   </FormControl>
@@ -440,107 +477,109 @@ function SortableItemRow({
                 <FormItem>
                   <FormLabel className="text-xs text-muted-foreground">
                     Description{" "}
-                    <span className="font-normal">(opsional)</span>
+                    <span className="font-normal">(optional)</span>
                   </FormLabel>
                   <FormControl>
                     <SimpleEditor
                       value={field.value as string}
                       onChange={field.onChange}
-                      placeholder="Deskripsi detail item..."
+                      placeholder="Detailed item description..."
                     />
                   </FormControl>
                 </FormItem>
               )}
             />
 
-            <div className="grid grid-cols-3 gap-2">
-              <FormField
-                control={form.control}
-                name={`${arrayName}.${index}.qty` as FieldPath<QuotationFormValues>}
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel className="text-xs text-muted-foreground">
-                      Qty
-                    </FormLabel>
-                    <FormControl>
-                      <Input
-                        value={field.value as string}
-                        onChange={(e) => {
-                          field.onChange(e.target.value.replace(/\D/g, ""));
-                          recomputeRowTotal(index);
-                        }}
-                        placeholder="0"
-                        inputMode="numeric"
-                        className="w-full"
-                      />
-                    </FormControl>
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name={`${arrayName}.${index}.price` as FieldPath<QuotationFormValues>}
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel className="text-xs text-muted-foreground">
-                      Harga
-                    </FormLabel>
-                    <FormControl>
-                      <Input
-                        value={field.value as string}
-                        onChange={(e) => {
-                          field.onChange(formatNumericDisplay(e.target.value));
-                          recomputeRowTotal(index);
-                        }}
-                        placeholder="0"
-                        inputMode="numeric"
-                        className="w-full"
-                      />
-                    </FormControl>
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name={`${arrayName}.${index}.total` as FieldPath<QuotationFormValues>}
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel className="flex items-center justify-between text-xs text-muted-foreground">
-                      <span>Total</span>
-                      {isManual && (
-                        <button
-                          type="button"
-                          onClick={() => revertRowTotal(index)}
-                          className="flex items-center gap-0.5 text-[10px] text-primary hover:underline cursor-pointer"
-                          aria-label="Kembalikan ke otomatis"
-                        >
-                          <Refresh weight="BoldDuotone" className="h-3 w-3" />
-                          auto
-                        </button>
-                      )}
-                    </FormLabel>
-                    <FormControl>
-                      <Input
-                        value={field.value as string}
-                        onChange={(e) => {
-                          form.setValue(
-                            `${arrayName}.${index}.manualTotal` as FieldPath<QuotationFormValues>,
-                            true,
-                          );
-                          field.onChange(formatNumericDisplay(e.target.value));
-                        }}
-                        placeholder="0"
-                        inputMode="numeric"
-                        className={cn(
-                          "w-full",
-                          isManual && "border-primary/50",
+            {arrayName === "additionals" && (
+              <div className="grid grid-cols-3 gap-2">
+                <FormField
+                  control={form.control}
+                  name={`${arrayName}.${index}.qty` as FieldPath<QuotationFormValues>}
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-xs text-muted-foreground">
+                        Qty <span className="text-destructive">*</span>
+                      </FormLabel>
+                      <FormControl>
+                        <Input
+                          value={field.value as string}
+                          onChange={(e) => {
+                            field.onChange(e.target.value.replace(/\D/g, ""));
+                            recomputeRowTotal(index);
+                          }}
+                          placeholder="0"
+                          inputMode="numeric"
+                          className="w-full"
+                        />
+                      </FormControl>
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name={`${arrayName}.${index}.price` as FieldPath<QuotationFormValues>}
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-xs text-muted-foreground">
+                        Price <span className="text-destructive">*</span>
+                      </FormLabel>
+                      <FormControl>
+                        <Input
+                          value={field.value as string}
+                          onChange={(e) => {
+                            field.onChange(formatNumericDisplay(e.target.value));
+                            recomputeRowTotal(index);
+                          }}
+                          placeholder="0 /pax"
+                          inputMode="numeric"
+                          className="w-full"
+                        />
+                      </FormControl>
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name={`${arrayName}.${index}.total` as FieldPath<QuotationFormValues>}
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="flex items-center justify-between text-xs text-muted-foreground">
+                        <span>Total</span>
+                        {isManual && (
+                          <button
+                            type="button"
+                            onClick={() => revertRowTotal(index)}
+                            className="flex items-center gap-0.5 text-[10px] text-primary hover:underline cursor-pointer"
+                            aria-label="Revert to automatic"
+                          >
+                            <Refresh weight="BoldDuotone" className="h-3 w-3" />
+                            auto
+                          </button>
                         )}
-                      />
-                    </FormControl>
-                  </FormItem>
-                )}
-              />
-            </div>
+                      </FormLabel>
+                      <FormControl>
+                        <Input
+                          value={field.value as string}
+                          onChange={(e) => {
+                            form.setValue(
+                              `${arrayName}.${index}.manualTotal` as FieldPath<QuotationFormValues>,
+                              true,
+                            );
+                            field.onChange(formatNumericDisplay(e.target.value));
+                          }}
+                          placeholder="0"
+                          inputMode="numeric"
+                          className={cn(
+                            "w-full",
+                            isManual && "border-primary/50",
+                          )}
+                        />
+                      </FormControl>
+                    </FormItem>
+                  )}
+                />
+              </div>
+            )}
           </div>
         </CollapsibleContent>
       </Collapsible>
@@ -636,8 +675,310 @@ function ItemListEditor({
         className="w-full rounded-xl border-dashed"
       >
         <AddCircle weight="BoldDuotone" className="h-4 w-4 mr-1" />
-        Tambah Item
+        Add Item
       </Button>
+    </div>
+  );
+}
+
+// ── Sub-component: PriceRowCard (Step 4 — same visual language as SortableItemRow) ──
+
+interface PriceRowCardProps {
+  row: PriceRow;
+  isCollapsed: boolean;
+  toggleCollapse: () => void;
+  onUpdate: (patch: Partial<PriceRow>) => void;
+  onRemove: () => void;
+}
+
+function PriceRowCard({ row, isCollapsed, toggleCollapse, onUpdate, onRemove }: PriceRowCardProps) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: row.id,
+  });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : undefined,
+  };
+
+  const isOpen = !isCollapsed;
+
+  return (
+    <div ref={setNodeRef} style={style} {...attributes}>
+      <Collapsible
+        open={isOpen}
+        onOpenChange={toggleCollapse}
+        className="rounded-xl border border-border bg-muted/30 overflow-hidden"
+      >
+        {/* Accordion header */}
+        <div className="flex items-center gap-1 px-3 py-2.5">
+          {/* Drag handle — sibling of CollapsibleTrigger, NOT nested inside it */}
+          <button
+            type="button"
+            {...listeners}
+            aria-label="Drag to reorder"
+            className="shrink-0 p-1.5 rounded-lg cursor-grab touch-none text-muted-foreground hover:bg-muted hover:text-foreground transition-colors active:cursor-grabbing"
+          >
+            <AlignVerticalSpacing weight="BoldDuotone" className="h-4 w-4" />
+          </button>
+
+          <CollapsibleTrigger className="flex flex-1 items-center gap-2 min-w-0 cursor-pointer text-left">
+            <AltArrowDown
+              weight="BoldDuotone"
+              className={cn(
+                "h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200",
+                isOpen && "rotate-180",
+              )}
+            />
+            <p
+              className={cn(
+                "flex-1 min-w-0 truncate font-heading text-base italic",
+                row.name ? "text-foreground" : "text-muted-foreground",
+              )}
+            >
+              {row.name || "Untitled item"}
+            </p>
+            {!isOpen && (
+              <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
+                {formatRupiah(row.total)}
+              </span>
+            )}
+          </CollapsibleTrigger>
+
+          {/* Delete button — sibling of CollapsibleTrigger, NOT inside it */}
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            onClick={(e) => {
+              e.stopPropagation();
+              onRemove();
+            }}
+            aria-label="Delete price item"
+            className="shrink-0 h-7 w-7 text-destructive hover:bg-destructive/10"
+          >
+            <TrashBinTrash weight="BoldDuotone" className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+
+        {/* Accordion body */}
+        <CollapsibleContent>
+          <div className="px-3 pb-3 space-y-3 border-t border-border/60">
+            <div className="pt-2">
+              <FormLabel className="text-xs text-muted-foreground">
+                Item Title / Name <span className="text-destructive">*</span>
+              </FormLabel>
+              <Input
+                value={row.name}
+                onChange={(e) => onUpdate({ name: e.target.value })}
+                placeholder="e.g. Ballroom Facilities: or Rice Box"
+                className="mt-1.5"
+              />
+            </div>
+
+            <div>
+              <FormLabel className="text-xs text-muted-foreground">Price Type</FormLabel>
+              <div className="mt-1.5 grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => onUpdate({ priceType: "QTY" })}
+                  className={cn(
+                    "rounded-xl border px-3 py-2 text-sm font-medium transition-colors cursor-pointer",
+                    row.priceType === "QTY"
+                      ? "border-primary bg-primary/10 text-primary"
+                      : "border-border text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  Qty × Price
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onUpdate({ priceType: "NOMINAL", qty: null, price: null })}
+                  className={cn(
+                    "rounded-xl border px-3 py-2 text-sm font-medium transition-colors cursor-pointer",
+                    row.priceType === "NOMINAL"
+                      ? "border-primary bg-primary/10 text-primary"
+                      : "border-border text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  Nominal
+                </button>
+              </div>
+            </div>
+
+            {row.priceType === "QTY" ? (
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <FormLabel className="text-xs text-muted-foreground">
+                      Qty <span className="text-destructive">*</span>
+                    </FormLabel>
+                    <Input
+                      value={row.qty ?? ""}
+                      onChange={(e) => onUpdate({ qty: parseNumericInput(e.target.value) || null })}
+                      placeholder="0"
+                      inputMode="numeric"
+                      className="mt-1.5"
+                    />
+                  </div>
+                  <div>
+                    <FormLabel className="text-xs text-muted-foreground">
+                      Price <span className="text-destructive">*</span>
+                    </FormLabel>
+                    <Input
+                      value={row.price ? formatNumericDisplay(row.price) : ""}
+                      onChange={(e) =>
+                        onUpdate({ price: parseNumericInput(e.target.value) || null })
+                      }
+                      placeholder="0 /pax"
+                      inputMode="numeric"
+                      className="mt-1.5"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <FormLabel className="text-xs text-muted-foreground">Total</FormLabel>
+                  <Input
+                    value={row.total ? formatNumericDisplay(row.total) : ""}
+                    readOnly
+                    placeholder="0"
+                    className="mt-1.5 bg-muted text-muted-foreground"
+                  />
+                </div>
+              </div>
+            ) : (
+              <div>
+                <FormLabel className="text-xs text-muted-foreground">
+                  Total <span className="text-destructive">*</span>
+                </FormLabel>
+                <Input
+                  value={row.total ? formatNumericDisplay(row.total) : ""}
+                  onChange={(e) => onUpdate({ total: parseNumericInput(e.target.value) })}
+                  placeholder="0"
+                  inputMode="numeric"
+                  className="mt-1.5"
+                />
+              </div>
+            )}
+          </div>
+        </CollapsibleContent>
+      </Collapsible>
+    </div>
+  );
+}
+
+// ── Sub-component: TaxDepositRowCard (Step 2 — same visual language as PriceRowCard, 2 fields only) ──
+
+interface TaxDepositRowCardProps {
+  row: TaxDepositRow;
+  isCollapsed: boolean;
+  toggleCollapse: () => void;
+  onUpdate: (patch: Partial<TaxDepositRow>) => void;
+  onRemove: () => void;
+}
+
+function TaxDepositRowCard({ row, isCollapsed, toggleCollapse, onUpdate, onRemove }: TaxDepositRowCardProps) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: row.id,
+  });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : undefined,
+  };
+
+  const isOpen = !isCollapsed;
+
+  return (
+    <div ref={setNodeRef} style={style} {...attributes}>
+      <Collapsible
+        open={isOpen}
+        onOpenChange={toggleCollapse}
+        className="rounded-xl border border-border bg-muted/30 overflow-hidden"
+      >
+        {/* Accordion header */}
+        <div className="flex items-center gap-1 px-3 py-2.5">
+          {/* Drag handle — sibling of CollapsibleTrigger, NOT nested inside it */}
+          <button
+            type="button"
+            {...listeners}
+            aria-label="Drag to reorder"
+            className="shrink-0 p-1.5 rounded-lg cursor-grab touch-none text-muted-foreground hover:bg-muted hover:text-foreground transition-colors active:cursor-grabbing"
+          >
+            <AlignVerticalSpacing weight="BoldDuotone" className="h-4 w-4" />
+          </button>
+
+          <CollapsibleTrigger className="flex flex-1 items-center gap-2 min-w-0 cursor-pointer text-left">
+            <AltArrowDown
+              weight="BoldDuotone"
+              className={cn(
+                "h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200",
+                isOpen && "rotate-180",
+              )}
+            />
+            <p
+              className={cn(
+                "flex-1 min-w-0 truncate font-heading text-base italic",
+                row.name ? "text-foreground" : "text-muted-foreground",
+              )}
+            >
+              {row.name || "Untitled item"}
+            </p>
+            {!isOpen && (
+              <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
+                {formatRupiah(row.nominal)}
+              </span>
+            )}
+          </CollapsibleTrigger>
+
+          {/* Delete button — sibling of CollapsibleTrigger, NOT inside it */}
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            onClick={(e) => {
+              e.stopPropagation();
+              onRemove();
+            }}
+            aria-label="Delete tax & deposit item"
+            className="shrink-0 h-7 w-7 text-destructive hover:bg-destructive/10"
+          >
+            <TrashBinTrash weight="BoldDuotone" className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+
+        {/* Accordion body */}
+        <CollapsibleContent>
+          <div className="px-3 pb-3 space-y-3 border-t border-border/60">
+            <div className="pt-2">
+              <FormLabel className="text-xs text-muted-foreground">
+                Name <span className="text-destructive">*</span>
+              </FormLabel>
+              <Input
+                value={row.name}
+                onChange={(e) => onUpdate({ name: e.target.value })}
+                placeholder="e.g. PPN 11% or Deposit Ballroom"
+                className="mt-1.5"
+              />
+            </div>
+
+            <div>
+              <FormLabel className="text-xs text-muted-foreground">
+                Nominal <span className="text-destructive">*</span>
+              </FormLabel>
+              <Input
+                value={row.nominal ? formatNumericDisplay(row.nominal) : ""}
+                onChange={(e) => onUpdate({ nominal: parseNumericInput(e.target.value) })}
+                placeholder="0"
+                inputMode="numeric"
+                className="mt-1.5"
+              />
+            </div>
+          </div>
+        </CollapsibleContent>
+      </Collapsible>
     </div>
   );
 }
@@ -651,7 +992,7 @@ export function QuotationDrawer({
   onSuccess,
 }: QuotationDrawerProps) {
   const isEdit = !!editQuotation;
-  const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
+  const [step, setStep] = useState<1 | 2 | 3 | 4 | 5 | 6>(1);
   const queryClient = useQueryClient();
 
   // ── Mutation hooks ───────────────────────────────────────────────────────
@@ -716,6 +1057,147 @@ export function QuotationDrawer({
       return next;
     });
   }
+
+  // ── Bonus (Step 2) ────────────────────────────────────────────────────────
+  const [bonuses, setBonuses] = useState<BonusRow[]>([]);
+  // "none" = collapsed button | "create-new" = inline mini-form
+  const [bonusMode, setBonusMode] = useState<"none" | "create-new">("none");
+  // Tracks which bonus rows are collapsed (by b.id). Default = none → all open.
+  const [collapsedBonuses, setCollapsedBonuses] = useState<Set<string>>(new Set());
+  // Inline "buat baru" form state
+  const [createNewBonus, setCreateNewBonus] = useState({ name: "", price: 0, description: "" });
+  const [isCreatingBonus, setIsCreatingBonus] = useState(false);
+  const { data: bonusResult } = useBonuses({ activeOnly: true, pageSize: 100 });
+  const bonusOptions = bonusResult?.data ?? [];
+  const canCreateBonus = canPermission("bonus", "create");
+
+  function toggleBonusCollapse(id: string) {
+    setCollapsedBonuses((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }
+
+  // ── Price (Step 4) ────────────────────────────────────────────────────────
+  // UI-only for now — no master data table, no server/DB wiring yet. Plain
+  // useState array (not RHF), same architecture as Bonus/Complimentary above.
+  const [prices, setPrices] = useState<PriceRow[]>([]);
+  const [collapsedPrices, setCollapsedPrices] = useState<Set<string>>(new Set());
+
+  function togglePriceCollapse(id: string) {
+    setCollapsedPrices((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }
+
+  function addPriceRow() {
+    const id = crypto.randomUUID();
+    setPrices((prev) => [
+      ...prev,
+      { id, name: "", priceType: "QTY", qty: null, price: null, total: 0 },
+    ]);
+  }
+
+  function removePriceRow(id: string) {
+    setPrices((prev) => prev.filter((p) => p.id !== id));
+  }
+
+  function updatePriceRow(id: string, patch: Partial<PriceRow>) {
+    setPrices((prev) =>
+      prev.map((p) => {
+        if (p.id !== id) return p;
+        const next = { ...p, ...patch };
+        if (next.priceType === "QTY") {
+          next.total = (next.qty ?? 0) * (next.price ?? 0);
+        }
+        return next;
+      }),
+    );
+  }
+
+  function movePriceRow(fromIndex: number, toIndex: number) {
+    setPrices((prev) => {
+      const next = [...prev];
+      const [moved] = next.splice(fromIndex, 1);
+      next.splice(toIndex, 0, moved);
+      return next;
+    });
+  }
+
+  function handlePriceDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const fromIndex = prices.findIndex((p) => p.id === active.id);
+    const toIndex = prices.findIndex((p) => p.id === over.id);
+    if (fromIndex !== -1 && toIndex !== -1) movePriceRow(fromIndex, toIndex);
+  }
+
+  const priceSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+  );
+
+  // ── Tax & Deposit (Step 2) ───────────────────────────────────────────────
+  // UI-only for now — no master data table, no server/DB wiring yet. Plain
+  // useState array (not RHF), same architecture as Price above.
+  const [taxDeposits, setTaxDeposits] = useState<TaxDepositRow[]>([]);
+  const [collapsedTaxDeposits, setCollapsedTaxDeposits] = useState<Set<string>>(new Set());
+
+  function toggleTaxDepositCollapse(id: string) {
+    setCollapsedTaxDeposits((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }
+
+  function addTaxDepositRow() {
+    const id = crypto.randomUUID();
+    setTaxDeposits((prev) => [...prev, { id, name: "", nominal: 0 }]);
+  }
+
+  function removeTaxDepositRow(id: string) {
+    setTaxDeposits((prev) => prev.filter((t) => t.id !== id));
+  }
+
+  function updateTaxDepositRow(id: string, patch: Partial<TaxDepositRow>) {
+    setTaxDeposits((prev) => prev.map((t) => (t.id === id ? { ...t, ...patch } : t)));
+  }
+
+  function moveTaxDepositRow(fromIndex: number, toIndex: number) {
+    setTaxDeposits((prev) => {
+      const next = [...prev];
+      const [moved] = next.splice(fromIndex, 1);
+      next.splice(toIndex, 0, moved);
+      return next;
+    });
+  }
+
+  function handleTaxDepositDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const fromIndex = taxDeposits.findIndex((t) => t.id === active.id);
+    const toIndex = taxDeposits.findIndex((t) => t.id === over.id);
+    if (fromIndex !== -1 && toIndex !== -1) moveTaxDepositRow(fromIndex, toIndex);
+  }
+
+  const taxDepositSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+  );
 
   // ── Real data hooks ──────────────────────────────────────────────────────
   const { data: venues = [] } = useVenues();
@@ -861,8 +1343,6 @@ export function QuotationDrawer({
       id: string;
       itemName: string;
       itemDescription: string;
-      itemType: "PAX" | "NOMINAL";
-      itemPrice: number;
       sortOrder: number;
     }>;
   }
@@ -882,38 +1362,27 @@ export function QuotationDrawer({
   /**
    * Explode a package's items into editable quotation line items and REPLACE
    * the entire items list with them (overwrites any existing template/manual
-   * items). PAX items multiply by the package's default pax; NOMINAL items
-   * are flat.
+   * items). Package MICE items no longer carry pricing (Item Paket step only
+   * has nama + detail) — qty/price/total start blank and are filled manually.
    */
   function handleApplyPackage(packageId: string) {
     const pkg = micePackages.find((p) => p.id === packageId);
     if (!pkg) return;
     if (pkg.miceItems.length === 0) {
-      toast.error("Paket ini belum punya item.");
+      toast.error("This package doesn't have any items yet.");
       return;
     }
-    const newItems = pkg.miceItems.map((item) => {
-      let qty: string;
-      let total: number;
-      if (item.itemType === "PAX") {
-        qty = String(pkg.pax);
-        total = pkg.pax * item.itemPrice;
-      } else {
-        qty = "1";
-        total = item.itemPrice;
-      }
-      return {
-        title: item.itemName,
-        description: miceDescriptionToHtml(item.itemDescription),
-        qty,
-        price: item.itemPrice > 0 ? formatNumericDisplay(item.itemPrice) : "",
-        total: total > 0 ? formatNumericDisplay(total) : "",
-        manualTotal: false,
-      };
-    });
+    const newItems = pkg.miceItems.map((item) => ({
+      title: item.itemName,
+      description: item.itemDescription,
+      qty: "",
+      price: "",
+      total: "",
+      manualTotal: false,
+    }));
     replaceItems(newItems);
     toast.success(
-      `${pkg.miceItems.length} item dari paket "${pkg.packageName}" diterapkan (menggantikan item sebelumnya).`,
+      `${pkg.miceItems.length} item(s) from package "${pkg.packageName}" applied (replacing previous items). Fill in qty & price manually.`,
     );
     setSelectedPackageId("");
   }
@@ -993,7 +1462,7 @@ export function QuotationDrawer({
       });
       if (!res.ok) {
         const err = (await res.json()) as { error?: string };
-        toast.error(err.error ?? "Gagal membuat event type");
+        toast.error(err.error ?? "Failed to create event type");
         return;
       }
       const created = (await res.json()) as { id: string; name: string; category: string; sortOrder: number; isActive: boolean; code: string; createdAt: string };
@@ -1002,9 +1471,9 @@ export function QuotationDrawer({
       // Immediately select the new event type
       form.setValue("eventTypeId", created.id);
       form.setValue("eventTypeName", created.name);
-      toast.success(`Event type "${created.name}" ditambahkan`);
+      toast.success(`Event type "${created.name}" added`);
     } catch {
-      toast.error("Gagal membuat event type");
+      toast.error("Failed to create event type");
     }
   }
 
@@ -1046,6 +1515,18 @@ export function QuotationDrawer({
     setCollapsedComplimentaries(new Set());
     setCreateNewComp({ name: "", price: 0, description: "", isShowPrice: false });
     setIsCreatingComp(false);
+    // Reset Bonus state
+    setBonuses([]);
+    setBonusMode("none");
+    setCollapsedBonuses(new Set());
+    setCreateNewBonus({ name: "", price: 0, description: "" });
+    setIsCreatingBonus(false);
+    // Reset Price state (UI-only, never restored from editQuotation)
+    setPrices([]);
+    setCollapsedPrices(new Set());
+    // Reset Tax & Deposit state (UI-only, never restored from editQuotation)
+    setTaxDeposits([]);
+    setCollapsedTaxDeposits(new Set());
 
     if (editQuotation) {
       const matchedVenue = venues.find((v) => v.name === editQuotation.venue);
@@ -1110,6 +1591,17 @@ export function QuotationDrawer({
           qty: c.qty,
         })),
       );
+      // Restore bonuses
+      setBonuses(
+        (editQuotation.bonuses ?? []).map((b) => ({
+          id: crypto.randomUUID(),
+          bonusId: b.bonusId ?? null,
+          name: b.name,
+          price: b.price,
+          description: b.description ?? "",
+          qty: b.qty,
+        })),
+      );
     } else {
       const draft = readQuotationDraft();
       if (draft?.values) {
@@ -1143,6 +1635,12 @@ export function QuotationDrawer({
         }
         // Restore complimentaries dari draft
         setComplimentaries(draft.complimentaries ?? []);
+        // Restore bonuses dari draft
+        setBonuses(draft.bonuses ?? []);
+        // Restore prices dari draft (UI-only)
+        setPrices(draft.prices ?? []);
+        // Restore tax & deposit dari draft (UI-only)
+        setTaxDeposits(draft.taxDeposits ?? []);
       } else {
         form.reset({
           ...DEFAULT_VALUES,
@@ -1164,21 +1662,21 @@ export function QuotationDrawer({
   useEffect(() => {
     if (!open || isEdit) return;
     const sub = form.watch((values) => {
-      persistQuotationDraft(values as Partial<QuotationFormValues>, signingLocation, signatureSales, complimentaries);
+      persistQuotationDraft(values as Partial<QuotationFormValues>, signingLocation, signatureSales, complimentaries, bonuses, prices, taxDeposits);
     });
     return () => sub.unsubscribe();
-  }, [open, isEdit, signingLocation, signatureSales, complimentaries]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [open, isEdit, signingLocation, signatureSales, complimentaries, bonuses, prices, taxDeposits]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Persist signingLocation/signatureSales/complimentaries changes to draft (not triggered by form.watch).
+  // Persist signingLocation/signatureSales/complimentaries/bonuses/prices/taxDeposits changes to draft (not triggered by form.watch).
   useEffect(() => {
     if (!open || isEdit) return;
-    persistQuotationDraft(form.getValues(), signingLocation, signatureSales, complimentaries);
-  }, [signingLocation, signatureSales, complimentaries]); // eslint-disable-line react-hooks/exhaustive-deps
+    persistQuotationDraft(form.getValues(), signingLocation, signatureSales, complimentaries, bonuses, prices, taxDeposits);
+  }, [signingLocation, signatureSales, complimentaries, bonuses, prices, taxDeposits]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Repaint the restored signature once the canvas mounts (step 4 only — see the
-  // "Mount only when step 4 is active" note on SignatureCanvas below).
+  // Repaint the restored signature once the canvas mounts (step 6 only — see the
+  // "Mount only when step 6 is active" note on SignatureCanvas below).
   useEffect(() => {
-    if (step !== 4 || !pendingSignatureRestoreRef.current) return;
+    if (step !== 6 || !pendingSignatureRestoreRef.current) return;
     sigSalesRef.current?.fromDataURL(pendingSignatureRestoreRef.current);
     pendingSignatureRestoreRef.current = null;
   }, [step]);
@@ -1203,6 +1701,10 @@ export function QuotationDrawer({
       setStep(3);
     } else if (step === 3) {
       setStep(4);
+    } else if (step === 4) {
+      setStep(5);
+    } else if (step === 5) {
+      setStep(6);
     }
   }
 
@@ -1212,10 +1714,14 @@ export function QuotationDrawer({
     } else if (step === 3) {
       setStep(2);
     } else if (step === 4) {
+      setStep(3);
+    } else if (step === 5) {
+      setStep(4);
+    } else if (step === 6) {
       // Clear signature saat kembali dari step TTD
       sigSalesRef.current?.clear();
       setSignatureSales("");
-      setStep(3);
+      setStep(5);
     }
   }
 
@@ -1254,6 +1760,14 @@ export function QuotationDrawer({
         qty: c.qty,
         sortOrder: i,
       })),
+      bonuses: bonuses.map((b, i) => ({
+        bonusId: b.bonusId,
+        name: b.name,
+        price: b.price,
+        description: b.description || null,
+        qty: b.qty,
+        sortOrder: i,
+      })),
       eventDate: values.eventDate || null,
       eventEndDate: values.eventEndDate || null,
       time: values.time || null,
@@ -1279,13 +1793,13 @@ export function QuotationDrawer({
     }
 
     if (!result.success) {
-      toast.error(result.error ?? "Gagal menyimpan quotation.");
+      toast.error(result.error ?? "Failed to save quotation.");
       return;
     }
 
     if (!isEdit) clearQuotationDraft();
     toast.success(
-      isEdit ? "Quotation berhasil diperbarui." : "Quotation berhasil disimpan.",
+      isEdit ? "Quotation updated successfully." : "Quotation saved successfully.",
     );
     // Reset signature setelah submit
     sigSalesRef.current?.clear();
@@ -1295,6 +1809,16 @@ export function QuotationDrawer({
     setComplimentaries([]);
     setComplimentaryMode("none");
     setCollapsedComplimentaries(new Set());
+    // Reset bonus state setelah submit sukses
+    setBonuses([]);
+    setBonusMode("none");
+    setCollapsedBonuses(new Set());
+    // Reset price state setelah submit sukses
+    setPrices([]);
+    setCollapsedPrices(new Set());
+    // Reset tax & deposit state setelah submit sukses
+    setTaxDeposits([]);
+    setCollapsedTaxDeposits(new Set());
     if (!isEdit) onSuccess?.();
     onOpenChange(false);
   }
@@ -1304,10 +1828,10 @@ export function QuotationDrawer({
     <Drawer
       isOpen={open}
       onClose={() => onOpenChange(false)}
-      title={isEdit ? "Edit Quotation" : "Tambah Quotation"}
+      title={isEdit ? "Edit Quotation" : "Add Quotation"}
       maxWidth="sm:max-w-2xl"
       steps={step}
-      totalSteps={4}
+      totalSteps={6}
       stepperType="short"
     >
       <div className="flex flex-col h-full">
@@ -1320,7 +1844,7 @@ export function QuotationDrawer({
 
                 {/* ── Klien ───────────────────────────────────────── */}
                 <div className="rounded-2xl border bg-card p-5 space-y-3">
-                  <p className="text-sm font-semibold text-foreground mb-1">Klien</p>
+                  <p className="text-sm font-semibold text-foreground mb-1">Client</p>
 
                   {/* Perusahaan / Instansi */}
                   <div ref={instansiDropdownRef} className="w-full">
@@ -1330,8 +1854,8 @@ export function QuotationDrawer({
                       render={({ field }) => (
                         <FormItem className="w-full">
                           <FormLabel className={LABEL_CLASS}>
-                            Perusahaan / Instansi{" "}
-                            <span className="font-normal text-muted-foreground">(opsional)</span>
+                            Company / Institution{" "}
+                            <span className="font-normal text-muted-foreground">(optional)</span>
                           </FormLabel>
                           <FormControl>
                             <div className="relative">
@@ -1345,14 +1869,14 @@ export function QuotationDrawer({
                                 onFocus={() => {
                                   if (instansiSearch.trim()) setInstansiDropdownOpen(true);
                                 }}
-                                placeholder="Ketik nama perusahaan / instansi..."
+                                placeholder="Type company / institution name..."
                                 className="w-full"
                                 autoComplete="off"
                               />
                               {instansiDropdownOpen && debouncedInstansi.trim().length >= 1 && leadInstansiOptions.length > 0 && (
                                 <div className="absolute z-50 w-full mt-1 max-h-64 overflow-auto rounded-xl border bg-background shadow-md">
                                   <p className="px-3 pt-2 pb-1 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                                    Dari Daily Activity
+                                    From Daily Activity
                                   </p>
                                   {leadInstansiOptions.map((lead) => (
                                     <div
@@ -1395,14 +1919,14 @@ export function QuotationDrawer({
                   <FormField
                     control={form.control}
                     name="clientName"
-                    rules={{ required: "Nama PIC wajib diisi" }}
+                    rules={{ required: "PIC name is required" }}
                     render={({ field }) => (
                       <FormItem className="w-full">
                         <FormLabel className={LABEL_CLASS}>
-                          Nama PIC <span className="text-destructive">*</span>
+                          PIC Name <span className="text-destructive">*</span>
                         </FormLabel>
                         <FormControl>
-                          <Input {...field} placeholder="Nama kontak / PIC klien..." className="w-full" />
+                          <Input {...field} placeholder="Client contact / PIC name..." className="w-full" />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -1416,8 +1940,8 @@ export function QuotationDrawer({
                     render={({ field }) => (
                       <FormItem className="w-full">
                         <FormLabel className={LABEL_CLASS}>
-                          No. HP / WA{" "}
-                          <span className="font-normal text-muted-foreground">(opsional)</span>
+                          Phone / WA Number{" "}
+                          <span className="font-normal text-muted-foreground">(optional)</span>
                         </FormLabel>
                         <FormControl>
                           <PhoneInput value={field.value} onChange={field.onChange} onBlur={field.onBlur} />
@@ -1435,33 +1959,33 @@ export function QuotationDrawer({
                   {currentUserIsSales ? (
                     <div className="w-full">
                       <FormLabel className={LABEL_CLASS}>
-                        Nama Sales <span className="text-destructive">*</span>
+                        Sales Name <span className="text-destructive">*</span>
                       </FormLabel>
                       <div className="mt-1.5 flex h-9 w-full items-center rounded-md border border-input bg-muted/40 px-3 text-sm text-foreground cursor-not-allowed select-none">
                         {lockedSalesName}
                       </div>
                       <p className="mt-1.5 text-xs text-muted-foreground">
-                        Tercatat atas nama Anda.
+                        Recorded under your name.
                       </p>
                     </div>
                   ) : (
                     <FormField
                       control={form.control}
                       name="salesId"
-                      rules={{ required: "Sales wajib dipilih" }}
+                      rules={{ required: "Sales must be selected" }}
                       render={({ field }) => (
                         <FormItem className="w-full">
                           <FormLabel className={LABEL_CLASS}>
-                            Nama Sales <span className="text-destructive">*</span>
+                            Sales Name <span className="text-destructive">*</span>
                           </FormLabel>
                           <FormControl>
                             <SearchableSelect
                               options={salesUsers.map((u) => ({ id: u.id, name: u.fullName ?? "" }))}
                               value={field.value}
                               onChange={field.onChange}
-                              placeholder="Pilih sales..."
-                              searchPlaceholder="Cari sales..."
-                              emptyText="Sales tidak ditemukan"
+                              placeholder="Select sales..."
+                              searchPlaceholder="Search sales..."
+                              emptyText="Sales not found"
                             />
                           </FormControl>
                           <FormMessage />
@@ -1476,18 +2000,18 @@ export function QuotationDrawer({
                     name="salesPhone"
                     render={({ field }) => (
                       <FormItem className="w-full">
-                        <FormLabel className={LABEL_CLASS}>No. HP Sales</FormLabel>
+                        <FormLabel className={LABEL_CLASS}>Sales Phone Number</FormLabel>
                         <FormControl>
                           <PhoneInput
                             value={field.value}
                             onChange={field.onChange}
                             onBlur={field.onBlur}
-                            placeholder="Isi nomor HP sales..."
+                            placeholder="Enter sales phone number..."
                           />
                         </FormControl>
                         {!watchedSalesPhone?.trim() && (
                           <p className="text-xs text-muted-foreground">
-                            Profil sales belum punya nomor — isi manual.
+                            Sales profile has no number yet — enter manually.
                           </p>
                         )}
                       </FormItem>
@@ -1498,7 +2022,7 @@ export function QuotationDrawer({
                 {/* ── Event ───────────────────────────────────────── */}
                 <div className="rounded-2xl border bg-card p-5 space-y-3">
                   <div className="flex items-center justify-between mb-1">
-                    <p className="text-sm font-semibold text-foreground">Detail Event</p>
+                    <p className="text-sm font-semibold text-foreground">Event Details</p>
                     <span className="inline-flex items-center rounded-full border border-primary/25 bg-primary/10 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary">
                       MICE
                     </span>
@@ -1523,9 +2047,9 @@ export function QuotationDrawer({
                               form.setValue("eventEndDate", "");
                               void loadVenueTemplate(id);
                             }}
-                            placeholder="Pilih / cari venue..."
-                            searchPlaceholder="Cari venue..."
-                            emptyText="Venue tidak ditemukan"
+                            placeholder="Select / search venue..."
+                            searchPlaceholder="Search venue..."
+                            emptyText="Venue not found"
                           />
                         </FormControl>
                         <FormMessage />
@@ -1537,11 +2061,11 @@ export function QuotationDrawer({
                   <FormField
                     control={form.control}
                     name="eventTypeId"
-                    rules={{ required: "Jenis event wajib dipilih" }}
+                    rules={{ required: "Event type must be selected" }}
                     render={({ field }) => (
                       <FormItem className="w-full">
                         <FormLabel className={LABEL_CLASS}>
-                          Jenis Event <span className="text-destructive">*</span>
+                          Event Type <span className="text-destructive">*</span>
                         </FormLabel>
                         <FormControl>
                           <SearchableSelect
@@ -1552,11 +2076,11 @@ export function QuotationDrawer({
                               const matched = filteredEventTypes.find((et) => et.id === v);
                               form.setValue("eventTypeName", matched?.name ?? "");
                             }}
-                            placeholder="Pilih jenis event..."
-                            searchPlaceholder="Cari / ketik nama baru..."
-                            emptyText="Belum ada jenis event MICE"
+                            placeholder="Select event type..."
+                            searchPlaceholder="Search / type new name..."
+                            emptyText="No MICE event types yet"
                             onAdd={handleAddEventType}
-                            addingLabel="Menambahkan jenis event..."
+                            addingLabel="Adding event type..."
                           />
                         </FormControl>
                         <FormMessage />
@@ -1564,11 +2088,11 @@ export function QuotationDrawer({
                     )}
                   />
 
-                  {/* Tanggal Event — bisa single atau rentang (klik 1 tanggal = single, klik ke-2 = rentang) */}
+                  {/* Event Date — bisa single atau rentang (klik 1 tanggal = single, klik ke-2 = rentang) */}
                   <FormField
                     control={form.control}
                     name="eventDate"
-                    rules={{ required: "Tanggal event wajib diisi" }}
+                    rules={{ required: "Event date is required" }}
                     render={({ field }) => {
                       const watchedEnd = form.watch("eventEndDate");
                       const selected: DateRange | undefined = field.value
@@ -1587,17 +2111,22 @@ export function QuotationDrawer({
 
                       let triggerLabel: string;
                       if (!field.value) {
-                        triggerLabel = "Pilih tanggal event";
+                        triggerLabel = "Select event date";
                       } else if (!watchedEnd || watchedEnd === field.value) {
-                        triggerLabel = format(new Date(field.value + "T00:00:00"), "PPP");
+                        triggerLabel = format(parseDateOnly(field.value), "dd MMM yyyy");
                       } else {
-                        triggerLabel = `${format(new Date(field.value + "T00:00:00"), "PPP")} – ${format(new Date(watchedEnd + "T00:00:00"), "PPP")}`;
+                        const from = parseDateOnly(field.value);
+                        const to = parseDateOnly(watchedEnd);
+                        const sameMonth = from.getFullYear() === to.getFullYear() && from.getMonth() === to.getMonth();
+                        triggerLabel = sameMonth
+                          ? `${format(from, "dd")} - ${format(to, "dd MMM yyyy")}`
+                          : `${format(from, "dd MMM yyyy")} - ${format(to, "dd MMM yyyy")}`;
                       }
 
                       return (
                         <FormItem className="w-full">
                           <FormLabel className={LABEL_CLASS}>
-                            Tanggal Event <span className="text-destructive">*</span>
+                            Event Date <span className="text-destructive">*</span>
                           </FormLabel>
                           <Popover>
                             <PopoverTrigger
@@ -1643,10 +2172,10 @@ export function QuotationDrawer({
                             </PopoverContent>
                           </Popover>
                           {availLoading && (
-                            <p className="text-xs text-muted-foreground mt-1">Mengecek ketersediaan...</p>
+                            <p className="text-xs text-muted-foreground mt-1">Checking availability...</p>
                           )}
                           <p className="text-xs text-muted-foreground">
-                            Klik 1 tanggal untuk single, klik tanggal ke-2 untuk rentang.
+                            Click 1 date for a single date, click a 2nd date for a range.
                           </p>
                           <FormMessage />
                         </FormItem>
@@ -1661,14 +2190,14 @@ export function QuotationDrawer({
                     render={({ field }) => (
                       <FormItem className="w-full">
                         <FormLabel className={LABEL_CLASS}>
-                          Waktu{" "}
-                          <span className="font-normal text-muted-foreground">(opsional)</span>
+                          Time{" "}
+                          <span className="font-normal text-muted-foreground">(optional)</span>
                         </FormLabel>
                         <FormControl>
                           <TimeRangePicker
                             value={field.value}
                             onChange={field.onChange}
-                            placeholder="Pilih waktu (bisa rentang)..."
+                            placeholder="Select time (can be a range)..."
                           />
                         </FormControl>
                       </FormItem>
@@ -1682,11 +2211,11 @@ export function QuotationDrawer({
                     render={({ field }) => (
                       <FormItem className="w-full">
                         <FormLabel className={LABEL_CLASS}>
-                          Tempat{" "}
-                          <span className="font-normal text-muted-foreground">(opsional)</span>
+                          Place{" "}
+                          <span className="font-normal text-muted-foreground">(optional)</span>
                         </FormLabel>
                         <FormControl>
-                          <Input {...field} placeholder="mis. Ballroom, Outdoor..." className="w-full" />
+                          <Input {...field} placeholder="e.g. Ballroom, Outdoor..." className="w-full" />
                         </FormControl>
                       </FormItem>
                     )}
@@ -1699,14 +2228,14 @@ export function QuotationDrawer({
                     render={({ field }) => (
                       <FormItem className="w-full">
                         <FormLabel className={LABEL_CLASS}>
-                          Keterangan{" "}
-                          <span className="font-normal text-muted-foreground">(opsional)</span>
+                          Notes{" "}
+                          <span className="font-normal text-muted-foreground">(optional)</span>
                         </FormLabel>
                         <FormControl>
                           <Textarea
                             {...field}
                             rows={3}
-                            placeholder="mis. Venue Only, Full Service, catatan khusus..."
+                            placeholder="e.g. Venue Only, Full Service, special notes..."
                             className="w-full"
                           />
                         </FormControl>
@@ -1723,12 +2252,12 @@ export function QuotationDrawer({
                   <div className="rounded-xl border border-border bg-muted/30 p-3 space-y-2">
                     <div className="flex items-center gap-1.5">
                       <Box weight="BoldDuotone" className="h-4 w-4 text-primary" />
-                      <p className={LABEL_CLASS}>Pilih Package MICE</p>
+                      <p className={LABEL_CLASS}>Select MICE Package</p>
                     </div>
                     <p className="text-xs text-muted-foreground">
                       {micePackages.length === 0
-                        ? "Belum ada paket MICE approved untuk venue ini."
-                        : "Pilih paket — item paket akan MENGGANTIKAN daftar item di bawah (bisa diedit setelahnya)."}
+                        ? "No approved MICE packages for this venue yet."
+                        : "Select a package — its items will REPLACE the item list below (can be edited afterward)."}
                     </p>
                     <SearchableSelect
                       options={micePackages.map((p) => ({ id: p.id, name: p.packageName }))}
@@ -1737,337 +2266,688 @@ export function QuotationDrawer({
                         setSelectedPackageId(id);
                         handleApplyPackage(id);
                       }}
-                      placeholder="Cari & pilih paket MICE untuk venue ini..."
-                      searchPlaceholder="Cari paket..."
-                      emptyText="Tidak ada paket MICE"
+                      placeholder="Search & select a MICE package for this venue..."
+                      searchPlaceholder="Search package..."
+                      emptyText="No MICE packages"
                     />
                   </div>
                 )}
 
-                {/* ── Items ─────────────────────────────────────────── */}
-                <div className="rounded-2xl border bg-card p-5 space-y-3">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2">
-                      <BillList weight="BoldDuotone" className="h-4 w-4 text-primary" />
-                      <p className={LABEL_CLASS}>Items</p>
-                    </div>
+                {/* ── Items / Additional ──────────────────────────────── */}
+                <Tabs defaultValue="items">
+                  <TabsList
+                    variant="line"
+                    className="h-auto w-full justify-start gap-1 rounded-none border-b border-border bg-transparent p-0 group-data-horizontal/tabs:h-auto"
+                  >
+                    <TabsTrigger value="items" className={TAB_TRIGGER_CLASS}>
+                      <BillList weight="BoldDuotone" className="size-4 shrink-0" />
+                      Items
+                    </TabsTrigger>
+                    <TabsTrigger value="additionals" className={TAB_TRIGGER_CLASS}>
+                      <AddCircle weight="BoldDuotone" className="size-4 shrink-0" />
+                      Additional
+                    </TabsTrigger>
+                    <TabsTrigger value="tax-deposit" className={TAB_TRIGGER_CLASS}>
+                      <SafeSquare weight="BoldDuotone" className="size-4 shrink-0" />
+                      Tax & Deposit
+                    </TabsTrigger>
+                  </TabsList>
+
+                  {/* ── Items ─────────────────────────────────────────── */}
+                  <TabsContent value="items" keepMounted className="mt-4 animate-in fade-in duration-300 space-y-3">
                     {itemsSubtotal > 0 && (
-                      <span className="text-xs font-medium tabular-nums text-muted-foreground">
-                        {formatRupiah(itemsSubtotal)}
-                      </span>
+                      <div className="flex justify-end">
+                        <span className="text-xs font-medium tabular-nums text-muted-foreground">
+                          {formatRupiah(itemsSubtotal)}
+                        </span>
+                      </div>
                     )}
-                  </div>
 
-                  <ItemListEditor
-                    arrayName="items"
-                    fields={itemFields}
-                    append={appendItem}
-                    remove={removeItem}
-                    move={moveItem}
-                    form={form}
-                    expandedSet={expandedItems}
-                    toggleExpanded={toggleItem}
-                    pendingExpandRef={pendingExpandItemsRef}
-                    watchedArray={watchedItems ?? []}
-                  />
-                </div>
-
-                {/* ── Additional ────────────────────────────────────── */}
-                <div className="rounded-2xl border bg-card p-5 space-y-3">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2">
-                      <AddCircle weight="BoldDuotone" className="h-4 w-4 text-primary" />
-                      <p className={LABEL_CLASS}>Additional</p>
-                    </div>
-                    {additionalsSubtotal > 0 && (
-                      <span className="text-xs font-medium tabular-nums text-muted-foreground">
-                        {formatRupiah(additionalsSubtotal)}
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-xs text-muted-foreground -mt-1">
-                    Item tambahan berbayar — ikut menambah subtotal &amp; total.
-                  </p>
-
-                  <ItemListEditor
-                    arrayName="additionals"
-                    fields={additionalFields}
-                    append={appendAdditional}
-                    remove={removeAdditional}
-                    move={moveAdditional}
-                    form={form}
-                    expandedSet={expandedItems}
-                    toggleExpanded={toggleItem}
-                    pendingExpandRef={pendingExpandAdditionalsRef}
-                    watchedArray={watchedAdditionals ?? []}
-                  />
-                </div>
-
-                {/* ── Complimentary ─────────────────────────────────── */}
-                <div className="rounded-2xl border bg-card p-5 space-y-2">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2">
-                      <Gift weight="BoldDuotone" className="h-4 w-4 text-primary" />
-                      <p className={LABEL_CLASS}>Complimentary</p>
-                    </div>
-                    <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
-                      Gratis
-                    </span>
-                  </div>
-                  <p className="text-xs text-muted-foreground -mt-1">
-                    Bonus/fasilitas gratis untuk client — tidak masuk ke total biaya.
-                  </p>
-
-                  {/* Pilih dari daftar (dropdown inline) — "Tambah" muncul di dalam dropdown saat search tidak exact-match */}
-                  {complimentaryMode !== "create-new" && (
-                    <ComplimentarySelect
-                      options={complimentaryOptions
-                        .filter((opt) => !complimentaries.some((c) => c.complimentaryId === opt.id))
-                        .map((opt) => ({ id: opt.id, name: opt.name, badge: formatRupiah(opt.price), description: opt.description ?? undefined }))}
-                      value=""
-                      onChange={(selectedId) => {
-                        const found = complimentaryOptions.find((x) => x.id === selectedId);
-                        if (found) {
-                          setComplimentaries((prev) => [...prev, {
-                            id: crypto.randomUUID(),
-                            complimentaryId: found.id,
-                            name: found.name,
-                            price: found.price,
-                            isShowPrice: found.isShowPrice,
-                            description: found.description ?? "",
-                            qty: 1,
-                          }]);
-                        }
-                      }}
-                      onAddTrigger={canCreateComplimentary ? (text) => {
-                        setComplimentaryMode("create-new");
-                        setCreateNewComp({ name: text, price: 0, description: "", isShowPrice: false });
-                      } : undefined}
-                      placeholder="Pilih dari daftar complimentary..."
-                      searchPlaceholder="Cari complimentary..."
-                      emptyText="Tidak ada complimentary"
+                    <ItemListEditor
+                      arrayName="items"
+                      fields={itemFields}
+                      append={appendItem}
+                      remove={removeItem}
+                      move={moveItem}
+                      form={form}
+                      expandedSet={expandedItems}
+                      toggleExpanded={toggleItem}
+                      pendingExpandRef={pendingExpandItemsRef}
+                      watchedArray={watchedItems ?? []}
                     />
-                  )}
+                  </TabsContent>
 
-                  {/* Mode: buat baru */}
-                  {complimentaryMode === "create-new" && (
-                    <div className="rounded-xl border border-border bg-muted/30 p-3 space-y-3">
-                      <div className="flex items-center justify-between">
-                        <p className="text-xs font-medium text-muted-foreground">Tambah complimentary baru ke master</p>
-                        <button
-                          type="button"
-                          className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-                          onClick={() => setComplimentaryMode("none")}
+                  {/* ── Additional ────────────────────────────────────── */}
+                  <TabsContent value="additionals" keepMounted className="mt-4 animate-in fade-in duration-300 space-y-3">
+                    {additionalsSubtotal > 0 && (
+                      <div className="flex items-center justify-end gap-2">
+                        <span className="shrink-0 text-xs font-medium tabular-nums text-muted-foreground">
+                          {formatRupiah(additionalsSubtotal)}
+                        </span>
+                      </div>
+                    )}
+
+                    <ItemListEditor
+                      arrayName="additionals"
+                      fields={additionalFields}
+                      append={appendAdditional}
+                      remove={removeAdditional}
+                      move={moveAdditional}
+                      form={form}
+                      expandedSet={expandedItems}
+                      toggleExpanded={toggleItem}
+                      pendingExpandRef={pendingExpandAdditionalsRef}
+                      watchedArray={watchedAdditionals ?? []}
+                    />
+                  </TabsContent>
+
+                  {/* ── Tax & Deposit ─────────────────────────────────── */}
+                  <TabsContent value="tax-deposit" keepMounted className="mt-4 animate-in fade-in duration-300 space-y-3">
+                    {taxDeposits.length === 0 ? (
+                      <p className="text-sm text-muted-foreground text-center py-6">
+                        No tax & deposit items yet. Click &quot;Add Item&quot; to add one.
+                      </p>
+                    ) : (
+                      <DndContext
+                        sensors={taxDepositSensors}
+                        collisionDetection={closestCenter}
+                        onDragEnd={handleTaxDepositDragEnd}
+                      >
+                        <SortableContext
+                          items={taxDeposits.map((t) => t.id)}
+                          strategy={verticalListSortingStrategy}
                         >
-                          Batal
-                        </button>
-                      </div>
+                          <div className="space-y-2">
+                            {taxDeposits.map((row) => (
+                              <TaxDepositRowCard
+                                key={row.id}
+                                row={row}
+                                isCollapsed={collapsedTaxDeposits.has(row.id)}
+                                toggleCollapse={() => toggleTaxDepositCollapse(row.id)}
+                                onUpdate={(patch) => updateTaxDepositRow(row.id, patch)}
+                                onRemove={() => removeTaxDepositRow(row.id)}
+                              />
+                            ))}
+                          </div>
+                        </SortableContext>
+                      </DndContext>
+                    )}
 
-                      {/* Nama */}
-                      <div>
-                        <label className="text-xs font-medium text-foreground block mb-1">
-                          Nama <span className="text-destructive">*</span>
-                        </label>
-                        <Input
-                          value={createNewComp.name}
-                          onChange={(e) => setCreateNewComp((p) => ({ ...p, name: e.target.value }))}
-                          placeholder="Nama complimentary..."
-                          className="h-8 text-sm"
-                        />
-                      </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={addTaxDepositRow}
+                      className="w-full rounded-xl border-dashed"
+                    >
+                      <AddCircle weight="BoldDuotone" className="h-4 w-4 mr-1" />
+                      Add Item
+                    </Button>
+                  </TabsContent>
 
-                      {/* Harga + Tampil harga */}
-                      <div className="flex items-center gap-2">
-                        <div className="relative flex-1">
-                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground select-none">
-                            Rp
-                          </span>
-                          <Input
-                            value={createNewComp.price ? formatNumericDisplay(createNewComp.price) : ""}
-                            onChange={(e) => {
-                              const n = parseNumericInput(e.target.value);
-                              setCreateNewComp((p) => ({ ...p, price: n }));
-                            }}
-                            placeholder="Harga (opsional)"
-                            inputMode="numeric"
-                            className="h-8 text-sm pl-8"
-                          />
-                        </div>
-                        <label className="flex items-center gap-1.5 shrink-0 cursor-pointer">
-                          <Switch
-                            checked={createNewComp.isShowPrice}
-                            onCheckedChange={(v) => setCreateNewComp((p) => ({ ...p, isShowPrice: v }))}
-                          />
-                          <span className="text-xs text-muted-foreground">Tampil harga</span>
-                        </label>
-                      </div>
+                </Tabs>
+              </div>
 
-                      {/* Deskripsi */}
-                      <div>
-                        <label className="text-xs font-medium text-foreground block mb-1">Deskripsi</label>
-                        <Textarea
-                          value={createNewComp.description}
-                          onChange={(e) => setCreateNewComp((p) => ({ ...p, description: e.target.value }))}
-                          placeholder="Keterangan complimentary (opsional)..."
-                          rows={2}
-                          className="resize-none text-sm"
-                        />
-                      </div>
+              {/* ════════════════ STEP 3 — BONUS & COMPLIMENTARY ════════════════ */}
+              <div className={cn(step !== 3 && "hidden", "space-y-3")}>
+                <Tabs defaultValue="bonus">
+                  <TabsList
+                    variant="line"
+                    className="h-auto w-full justify-start gap-1 rounded-none border-b border-border bg-transparent p-0 group-data-horizontal/tabs:h-auto"
+                  >
+                    <TabsTrigger value="bonus" className={TAB_TRIGGER_CLASS}>
+                      <MedalStar weight="BoldDuotone" className="size-4 shrink-0" />
+                      Bonus
+                    </TabsTrigger>
+                    <TabsTrigger value="complimentary" className={TAB_TRIGGER_CLASS}>
+                      <Gift weight="BoldDuotone" className="size-4 shrink-0" />
+                      Complimentary
+                    </TabsTrigger>
+                  </TabsList>
 
-                      {/* Tombol simpan */}
-                      <Button
-                        type="button"
-                        className="w-full rounded-xl"
-                        disabled={!createNewComp.name.trim() || isCreatingComp}
-                        onClick={async () => {
-                          if (!createNewComp.name.trim() || isCreatingComp) return;
-                          setIsCreatingComp(true);
-                          try {
-                            const result = await createComplimentary({
-                              name: createNewComp.name.trim(),
-                              price: createNewComp.price,
-                              description: createNewComp.description.trim() || null,
-                              isShowPrice: createNewComp.isShowPrice,
-                              isActive: true,
-                            });
-                            if (result.success && result.item) {
-                              setComplimentaries((prev) => [...prev, {
-                                id: crypto.randomUUID(),
-                                complimentaryId: result.item!.id,
-                                name: result.item!.name,
-                                price: result.item!.price,
-                                isShowPrice: result.item!.isShowPrice,
-                                description: result.item!.description ?? "",
-                                qty: 1,
-                              }]);
-                              setComplimentaryMode("none");
-                              toast.success(`"${result.item.name}" berhasil ditambahkan`);
-                            } else {
-                              toast.error(result.error ?? "Gagal menambahkan complimentary");
-                            }
-                          } finally {
-                            setIsCreatingComp(false);
+                  {/* ── Bonus ─────────────────────────────────────────── */}
+                  <TabsContent value="bonus" keepMounted className="mt-4 animate-in fade-in duration-300 space-y-3">
+                    {/* Pilih dari daftar (dropdown inline) — "Tambah" muncul di dalam dropdown saat search tidak exact-match */}
+                    {bonusMode !== "create-new" && (
+                      <BonusSelect
+                        options={bonusOptions
+                          .filter((opt) => !bonuses.some((b) => b.bonusId === opt.id))
+                          .map((opt) => ({ id: opt.id, name: opt.name, badge: formatRupiah(opt.price), description: opt.description ?? undefined }))}
+                        value=""
+                        onChange={(selectedId) => {
+                          const found = bonusOptions.find((x) => x.id === selectedId);
+                          if (found) {
+                            setBonuses((prev) => [...prev, {
+                              id: crypto.randomUUID(),
+                              bonusId: found.id,
+                              name: found.name,
+                              price: found.price,
+                              description: found.description ?? "",
+                              qty: 1,
+                            }]);
                           }
                         }}
-                      >
-                        {isCreatingComp ? "Menyimpan..." : "Simpan & Tambahkan"}
-                      </Button>
-                    </div>
-                  )}
+                        onAddTrigger={canCreateBonus ? (text) => {
+                          setBonusMode("create-new");
+                          setCreateNewBonus({ name: text, price: 0, description: "" });
+                        } : undefined}
+                        placeholder="Select from bonus list..."
+                        searchPlaceholder="Search bonus..."
+                        emptyText="No bonus"
+                      />
+                    )}
 
-                  {/* List complimentary yang sudah ditambahkan — collapsible rows */}
-                  {complimentaries.map((c) => {
-                    const isOpen = !collapsedComplimentaries.has(c.id);
-                    return (
-                      <Collapsible
-                        key={c.id}
-                        open={isOpen}
-                        onOpenChange={() => toggleComplimentaryCollapse(c.id)}
-                        className="rounded-xl border border-border bg-muted/30 overflow-hidden"
-                      >
-                        {/* Header */}
-                        <div className="flex items-center gap-1 px-3 py-2.5">
-                          <CollapsibleTrigger className="flex flex-1 items-center gap-2 min-w-0 cursor-pointer text-left">
-                            <AltArrowDown
-                              weight="BoldDuotone"
-                              className={cn(
-                                "h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200",
-                                isOpen && "rotate-180",
-                              )}
-                            />
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm font-medium text-foreground truncate">{c.name}</p>
-                              {!isOpen && (
-                                <p className="text-xs text-muted-foreground tabular-nums">
-                                  {c.isShowPrice && c.price ? formatRupiah(c.price) : "Harga tidak ditampilkan"}
-                                </p>
-                              )}
-                            </div>
-                          </CollapsibleTrigger>
-                          <Button
+                    {/* Mode: buat baru */}
+                    {bonusMode === "create-new" && (
+                      <div className="rounded-xl border border-border bg-muted/30 p-3 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <p className="text-xs font-medium text-muted-foreground">Add a new bonus to the master list</p>
+                          <button
                             type="button"
-                            variant="ghost"
-                            size="icon"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setComplimentaries((prev) => prev.filter((x) => x.id !== c.id));
-                              setCollapsedComplimentaries((prev) => {
-                                const next = new Set(prev);
-                                next.delete(c.id);
-                                return next;
-                              });
-                            }}
-                            aria-label="Hapus complimentary"
-                            className="shrink-0 h-7 w-7 text-destructive hover:bg-destructive/10"
+                            className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                            onClick={() => setBonusMode("none")}
                           >
-                            <TrashBinTrash weight="BoldDuotone" className="h-3.5 w-3.5" />
-                          </Button>
+                            Cancel
+                          </button>
                         </div>
 
-                        {/* Body */}
-                        <CollapsibleContent>
-                          <div className="px-3 pb-3 space-y-2 border-t border-border/60 pt-2">
-                            <div>
-                              <label className="text-xs font-medium text-foreground block mb-1">
-                                Nama <span className="text-destructive">*</span>
-                              </label>
-                              <Input
-                                value={c.name}
-                                onChange={(e) => setComplimentaries((prev) => prev.map((x) => x.id === c.id ? { ...x, name: e.target.value } : x))}
-                                placeholder="Nama complimentary..."
-                                className="h-8 text-sm"
-                              />
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <div className="relative flex-1">
-                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground select-none">
-                                  Rp
-                                </span>
-                                <Input
-                                  value={c.price ? formatNumericDisplay(c.price) : ""}
-                                  onChange={(e) => {
-                                    const n = parseNumericInput(e.target.value);
-                                    setComplimentaries((prev) => prev.map((x) => x.id === c.id ? { ...x, price: n } : x));
-                                  }}
-                                  placeholder="Harga"
-                                  inputMode="numeric"
-                                  className="h-8 text-sm pl-8"
-                                />
-                              </div>
-                              <label className="flex items-center gap-1.5 shrink-0 cursor-pointer">
-                                <Switch
-                                  checked={c.isShowPrice}
-                                  onCheckedChange={(v) => setComplimentaries((prev) => prev.map((x) => x.id === c.id ? { ...x, isShowPrice: v } : x))}
-                                />
-                                <span className="text-xs text-muted-foreground">Tampil harga</span>
-                              </label>
-                            </div>
-                            <Textarea
-                              value={c.description}
-                              onChange={(e) => setComplimentaries((prev) => prev.map((x) => x.id === c.id ? { ...x, description: e.target.value } : x))}
-                              placeholder="Keterangan complimentary..."
-                              rows={2}
-                              className="resize-none text-sm"
+                        {/* Nama */}
+                        <div>
+                          <label className="text-xs font-medium text-foreground block mb-1">
+                            Name <span className="text-destructive">*</span>
+                          </label>
+                          <Input
+                            value={createNewBonus.name}
+                            onChange={(e) => setCreateNewBonus((p) => ({ ...p, name: e.target.value }))}
+                            placeholder="Bonus name..."
+                            className="h-8 text-sm"
+                          />
+                        </div>
+
+                        {/* Harga */}
+                        <div>
+                          <label className="text-xs font-medium text-foreground block mb-1">
+                            Price <span className="text-destructive">*</span>
+                          </label>
+                          <div className="relative">
+                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground select-none">
+                              Rp
+                            </span>
+                            <Input
+                              value={createNewBonus.price ? formatNumericDisplay(createNewBonus.price) : ""}
+                              onChange={(e) => {
+                                const n = parseNumericInput(e.target.value);
+                                setCreateNewBonus((p) => ({ ...p, price: n }));
+                              }}
+                              placeholder="Price"
+                              inputMode="numeric"
+                              className="h-8 text-sm pl-8"
                             />
                           </div>
-                        </CollapsibleContent>
-                      </Collapsible>
-                    );
-                  })}
-                  {complimentaries.length === 0 && complimentaryMode === "none" && (
-                    <p className="text-xs text-muted-foreground italic text-center py-1">Belum ada complimentary</p>
-                  )}
+                        </div>
+
+                        {/* Deskripsi */}
+                        <div>
+                          <label className="text-xs font-medium text-foreground block mb-1">Description</label>
+                          <Textarea
+                            value={createNewBonus.description}
+                            onChange={(e) => setCreateNewBonus((p) => ({ ...p, description: e.target.value }))}
+                            placeholder="Bonus description (optional)..."
+                            rows={2}
+                            className="resize-none text-sm"
+                          />
+                        </div>
+
+                        {/* Tombol simpan */}
+                        <Button
+                          type="button"
+                          className="w-full rounded-xl"
+                          disabled={!createNewBonus.name.trim() || !createNewBonus.price || isCreatingBonus}
+                          onClick={async () => {
+                            if (!createNewBonus.name.trim() || !createNewBonus.price || isCreatingBonus) return;
+                            setIsCreatingBonus(true);
+                            try {
+                              const result = await createBonus({
+                                name: createNewBonus.name.trim(),
+                                price: createNewBonus.price,
+                                description: createNewBonus.description.trim() || null,
+                                isActive: true,
+                              });
+                              if (result.success) {
+                                setBonuses((prev) => [...prev, {
+                                  id: crypto.randomUUID(),
+                                  bonusId: result.data.id,
+                                  name: result.data.name,
+                                  price: result.data.price,
+                                  description: result.data.description ?? "",
+                                  qty: 1,
+                                }]);
+                                setBonusMode("none");
+                                toast.success(`"${result.data.name}" added successfully`);
+                              } else {
+                                toast.error(result.error ?? "Failed to add bonus");
+                              }
+                            } finally {
+                              setIsCreatingBonus(false);
+                            }
+                          }}
+                        >
+                          {isCreatingBonus ? "Saving..." : "Save & Add"}
+                        </Button>
+                      </div>
+                    )}
+
+                    {/* List bonus yang sudah ditambahkan — collapsible rows */}
+                    {bonuses.map((b) => {
+                      const isOpen = !collapsedBonuses.has(b.id);
+                      return (
+                        <Collapsible
+                          key={b.id}
+                          open={isOpen}
+                          onOpenChange={() => toggleBonusCollapse(b.id)}
+                          className="rounded-xl border border-border bg-muted/30 overflow-hidden"
+                        >
+                          {/* Header */}
+                          <div className="flex items-center gap-1 px-3 py-2.5">
+                            <CollapsibleTrigger className="flex flex-1 items-center gap-2 min-w-0 cursor-pointer text-left">
+                              <AltArrowDown
+                                weight="BoldDuotone"
+                                className={cn(
+                                  "h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200",
+                                  isOpen && "rotate-180",
+                                )}
+                              />
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium text-foreground truncate">{b.name}</p>
+                                {!isOpen && (
+                                  <p className="text-xs text-muted-foreground tabular-nums">
+                                    {b.price ? formatRupiah(b.price) : ""}
+                                  </p>
+                                )}
+                              </div>
+                            </CollapsibleTrigger>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setBonuses((prev) => prev.filter((x) => x.id !== b.id));
+                                setCollapsedBonuses((prev) => {
+                                  const next = new Set(prev);
+                                  next.delete(b.id);
+                                  return next;
+                                });
+                              }}
+                              aria-label="Delete bonus"
+                              className="shrink-0 h-7 w-7 text-destructive hover:bg-destructive/10"
+                            >
+                              <TrashBinTrash weight="BoldDuotone" className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+
+                          {/* Body */}
+                          <CollapsibleContent>
+                            <div className="px-3 pb-3 space-y-2 border-t border-border/60 pt-2">
+                              <div>
+                                <label className="text-xs font-medium text-foreground block mb-1">
+                                  Name <span className="text-destructive">*</span>
+                                </label>
+                                <Input
+                                  value={b.name}
+                                  onChange={(e) => setBonuses((prev) => prev.map((x) => x.id === b.id ? { ...x, name: e.target.value } : x))}
+                                  placeholder="Bonus name..."
+                                  className="h-8 text-sm"
+                                />
+                              </div>
+                              <div>
+                                <label className="text-xs font-medium text-foreground block mb-1">
+                                  Price <span className="text-destructive">*</span>
+                                </label>
+                                <div className="relative">
+                                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground select-none">
+                                    Rp
+                                  </span>
+                                  <Input
+                                    value={b.price ? formatNumericDisplay(b.price) : ""}
+                                    onChange={(e) => {
+                                      const n = parseNumericInput(e.target.value);
+                                      setBonuses((prev) => prev.map((x) => x.id === b.id ? { ...x, price: n } : x));
+                                    }}
+                                    placeholder="Price"
+                                    inputMode="numeric"
+                                    className="h-8 text-sm pl-8"
+                                  />
+                                </div>
+                              </div>
+                              <Textarea
+                                value={b.description}
+                                onChange={(e) => setBonuses((prev) => prev.map((x) => x.id === b.id ? { ...x, description: e.target.value } : x))}
+                                placeholder="Bonus description..."
+                                rows={2}
+                                className="resize-none text-sm"
+                              />
+                            </div>
+                          </CollapsibleContent>
+                        </Collapsible>
+                      );
+                    })}
+                    {bonuses.length === 0 && bonusMode === "none" && (
+                      <p className="text-xs text-muted-foreground italic text-center py-1">No bonus yet</p>
+                    )}
+                  </TabsContent>
+
+                  {/* ── Complimentary ─────────────────────────────────── */}
+                  <TabsContent value="complimentary" keepMounted className="mt-4 animate-in fade-in duration-300 space-y-3">
+                {/* Pilih dari daftar (dropdown inline) — "Tambah" muncul di dalam dropdown saat search tidak exact-match */}
+                {complimentaryMode !== "create-new" && (
+                  <ComplimentarySelect
+                    options={complimentaryOptions
+                      .filter((opt) => !complimentaries.some((c) => c.complimentaryId === opt.id))
+                      .map((opt) => ({ id: opt.id, name: opt.name, badge: formatRupiah(opt.price), description: opt.description ?? undefined }))}
+                    value=""
+                    onChange={(selectedId) => {
+                      const found = complimentaryOptions.find((x) => x.id === selectedId);
+                      if (found) {
+                        setComplimentaries((prev) => [...prev, {
+                          id: crypto.randomUUID(),
+                          complimentaryId: found.id,
+                          name: found.name,
+                          price: found.price,
+                          isShowPrice: found.isShowPrice,
+                          description: found.description ?? "",
+                          qty: 1,
+                        }]);
+                      }
+                    }}
+                    onAddTrigger={canCreateComplimentary ? (text) => {
+                      setComplimentaryMode("create-new");
+                      setCreateNewComp({ name: text, price: 0, description: "", isShowPrice: false });
+                    } : undefined}
+                    placeholder="Select from complimentary list..."
+                    searchPlaceholder="Search complimentary..."
+                    emptyText="No complimentary"
+                  />
+                )}
+
+                {/* Mode: buat baru */}
+                {complimentaryMode === "create-new" && (
+                  <div className="rounded-xl border border-border bg-muted/30 p-3 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs font-medium text-muted-foreground">Add a new complimentary to the master list</p>
+                      <button
+                        type="button"
+                        className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                        onClick={() => setComplimentaryMode("none")}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+
+                    {/* Nama */}
+                    <div>
+                      <label className="text-xs font-medium text-foreground block mb-1">
+                        Name <span className="text-destructive">*</span>
+                      </label>
+                      <Input
+                        value={createNewComp.name}
+                        onChange={(e) => setCreateNewComp((p) => ({ ...p, name: e.target.value }))}
+                        placeholder="Complimentary name..."
+                        className="h-8 text-sm"
+                      />
+                    </div>
+
+                    {/* Harga + Tampil harga */}
+                    <div className="flex items-center gap-2">
+                      <div className="relative flex-1">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground select-none">
+                          Rp
+                        </span>
+                        <Input
+                          value={createNewComp.price ? formatNumericDisplay(createNewComp.price) : ""}
+                          onChange={(e) => {
+                            const n = parseNumericInput(e.target.value);
+                            setCreateNewComp((p) => ({ ...p, price: n }));
+                          }}
+                          placeholder="Price (optional)"
+                          inputMode="numeric"
+                          className="h-8 text-sm pl-8"
+                        />
+                      </div>
+                      <label className="flex items-center gap-1.5 shrink-0 cursor-pointer">
+                        <Switch
+                          checked={createNewComp.isShowPrice}
+                          onCheckedChange={(v) => setCreateNewComp((p) => ({ ...p, isShowPrice: v }))}
+                        />
+                        <span className="text-xs text-muted-foreground">Show price</span>
+                      </label>
+                    </div>
+
+                    {/* Deskripsi */}
+                    <div>
+                      <label className="text-xs font-medium text-foreground block mb-1">Description</label>
+                      <Textarea
+                        value={createNewComp.description}
+                        onChange={(e) => setCreateNewComp((p) => ({ ...p, description: e.target.value }))}
+                        placeholder="Complimentary description (optional)..."
+                        rows={2}
+                        className="resize-none text-sm"
+                      />
+                    </div>
+
+                    {/* Tombol simpan */}
+                    <Button
+                      type="button"
+                      className="w-full rounded-xl"
+                      disabled={!createNewComp.name.trim() || isCreatingComp}
+                      onClick={async () => {
+                        if (!createNewComp.name.trim() || isCreatingComp) return;
+                        setIsCreatingComp(true);
+                        try {
+                          const result = await createComplimentary({
+                            name: createNewComp.name.trim(),
+                            price: createNewComp.price,
+                            description: createNewComp.description.trim() || null,
+                            isShowPrice: createNewComp.isShowPrice,
+                            isActive: true,
+                          });
+                          if (result.success && result.item) {
+                            setComplimentaries((prev) => [...prev, {
+                              id: crypto.randomUUID(),
+                              complimentaryId: result.item!.id,
+                              name: result.item!.name,
+                              price: result.item!.price,
+                              isShowPrice: result.item!.isShowPrice,
+                              description: result.item!.description ?? "",
+                              qty: 1,
+                            }]);
+                            setComplimentaryMode("none");
+                            toast.success(`"${result.item.name}" added successfully`);
+                          } else {
+                            toast.error(result.error ?? "Failed to add complimentary");
+                          }
+                        } finally {
+                          setIsCreatingComp(false);
+                        }
+                      }}
+                    >
+                      {isCreatingComp ? "Saving..." : "Save & Add"}
+                    </Button>
+                  </div>
+                )}
+
+                {/* List complimentary yang sudah ditambahkan — collapsible rows */}
+                {complimentaries.map((c) => {
+                  const isOpen = !collapsedComplimentaries.has(c.id);
+                  return (
+                    <Collapsible
+                      key={c.id}
+                      open={isOpen}
+                      onOpenChange={() => toggleComplimentaryCollapse(c.id)}
+                      className="rounded-xl border border-border bg-muted/30 overflow-hidden"
+                    >
+                      {/* Header */}
+                      <div className="flex items-center gap-1 px-3 py-2.5">
+                        <CollapsibleTrigger className="flex flex-1 items-center gap-2 min-w-0 cursor-pointer text-left">
+                          <AltArrowDown
+                            weight="BoldDuotone"
+                            className={cn(
+                              "h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200",
+                              isOpen && "rotate-180",
+                            )}
+                          />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-foreground truncate">{c.name}</p>
+                            {!isOpen && (
+                              <p className="text-xs text-muted-foreground tabular-nums">
+                                {c.isShowPrice && c.price ? formatRupiah(c.price) : "Price not shown"}
+                              </p>
+                            )}
+                          </div>
+                        </CollapsibleTrigger>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setComplimentaries((prev) => prev.filter((x) => x.id !== c.id));
+                            setCollapsedComplimentaries((prev) => {
+                              const next = new Set(prev);
+                              next.delete(c.id);
+                              return next;
+                            });
+                          }}
+                          aria-label="Delete complimentary"
+                          className="shrink-0 h-7 w-7 text-destructive hover:bg-destructive/10"
+                        >
+                          <TrashBinTrash weight="BoldDuotone" className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+
+                      {/* Body */}
+                      <CollapsibleContent>
+                        <div className="px-3 pb-3 space-y-2 border-t border-border/60 pt-2">
+                          <div>
+                            <label className="text-xs font-medium text-foreground block mb-1">
+                              Name <span className="text-destructive">*</span>
+                            </label>
+                            <Input
+                              value={c.name}
+                              onChange={(e) => setComplimentaries((prev) => prev.map((x) => x.id === c.id ? { ...x, name: e.target.value } : x))}
+                              placeholder="Complimentary name..."
+                              className="h-8 text-sm"
+                            />
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <div className="relative flex-1">
+                              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground select-none">
+                                Rp
+                              </span>
+                              <Input
+                                value={c.price ? formatNumericDisplay(c.price) : ""}
+                                onChange={(e) => {
+                                  const n = parseNumericInput(e.target.value);
+                                  setComplimentaries((prev) => prev.map((x) => x.id === c.id ? { ...x, price: n } : x));
+                                }}
+                                placeholder="Price"
+                                inputMode="numeric"
+                                className="h-8 text-sm pl-8"
+                              />
+                            </div>
+                            <label className="flex items-center gap-1.5 shrink-0 cursor-pointer">
+                              <Switch
+                                checked={c.isShowPrice}
+                                onCheckedChange={(v) => setComplimentaries((prev) => prev.map((x) => x.id === c.id ? { ...x, isShowPrice: v } : x))}
+                              />
+                              <span className="text-xs text-muted-foreground">Show price</span>
+                            </label>
+                          </div>
+                          <Textarea
+                            value={c.description}
+                            onChange={(e) => setComplimentaries((prev) => prev.map((x) => x.id === c.id ? { ...x, description: e.target.value } : x))}
+                            placeholder="Complimentary description..."
+                            rows={2}
+                            className="resize-none text-sm"
+                          />
+                        </div>
+                      </CollapsibleContent>
+                    </Collapsible>
+                  );
+                })}
+                {complimentaries.length === 0 && complimentaryMode === "none" && (
+                  <p className="text-xs text-muted-foreground italic text-center py-1">No complimentary yet</p>
+                )}
+                  </TabsContent>
+                </Tabs>
+              </div>
+
+              {/* ════════════════ STEP 4 — PRICE (UI-only, no server/DB yet) ════════════════ */}
+              <div className={cn(step !== 4 && "hidden", "space-y-4")}>
+                <div className="pb-3 border-b border-border">
+                  <p className="text-sm font-semibold text-foreground">Price</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Tambahkan item harga untuk quotation ini. Hitung otomatis lewat qty × harga, atau isi nominal langsung.
+                  </p>
                 </div>
 
-                {/* ── Ringkasan ─────────────────────────────────────── */}
+                <div className="space-y-3">
+                  {prices.length === 0 ? (
+                    <p className="text-sm text-muted-foreground text-center py-6">
+                      No price items yet. Click &quot;Add Item&quot; to add one.
+                    </p>
+                  ) : (
+                    <DndContext
+                      sensors={priceSensors}
+                      collisionDetection={closestCenter}
+                      onDragEnd={handlePriceDragEnd}
+                    >
+                      <SortableContext
+                        items={prices.map((p) => p.id)}
+                        strategy={verticalListSortingStrategy}
+                      >
+                        <div className="space-y-2">
+                          {prices.map((row) => (
+                            <PriceRowCard
+                              key={row.id}
+                              row={row}
+                              isCollapsed={collapsedPrices.has(row.id)}
+                              toggleCollapse={() => togglePriceCollapse(row.id)}
+                              onUpdate={(patch) => updatePriceRow(row.id, patch)}
+                              onRemove={() => removePriceRow(row.id)}
+                            />
+                          ))}
+                        </div>
+                      </SortableContext>
+                    </DndContext>
+                  )}
+
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={addPriceRow}
+                    className="w-full rounded-xl border-dashed"
+                  >
+                    <AddCircle weight="BoldDuotone" className="h-4 w-4 mr-1" />
+                    Add Item
+                  </Button>
+                </div>
+              </div>
+
+              {/* ════════════════ STEP 5 — KETENTUAN PENAWARAN ════════════════ */}
+              <div className={cn(step !== 5 && "hidden", "space-y-3")}>
+                {/* ── Ringkasan Biaya ───────────────────────────────── */}
                 <div className="rounded-2xl border bg-card p-5 space-y-3">
-                  <p className="text-sm font-semibold text-foreground mb-1">Ringkasan Biaya</p>
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <Calculator weight="BoldDuotone" className="h-4 w-4 text-primary" />
+                    <p className="text-sm font-semibold text-foreground">Cost Summary</p>
+                  </div>
+
                   <FormField
                     control={form.control}
                     name="discount"
                     render={({ field }) => (
                       <FormItem className="w-full">
-                        <FormLabel className={LABEL_CLASS}>Diskon</FormLabel>
+                        <FormLabel className={LABEL_CLASS}>Discount</FormLabel>
                         <FormControl>
                           <div className="relative w-full">
                             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground select-none">
@@ -2095,7 +2975,7 @@ export function QuotationDrawer({
                     </div>
                     {discountNum > 0 && (
                       <div className="flex justify-between text-muted-foreground">
-                        <span>Diskon</span>
+                        <span>Discount</span>
                         <span className="tabular-nums">
                           - {formatRupiah(discountNum)}
                         </span>
@@ -2113,25 +2993,22 @@ export function QuotationDrawer({
                     </div>
                   </div>
                 </div>
-              </div>
 
-              {/* ════════════════ STEP 3 — KETENTUAN PENAWARAN ════════════════ */}
-              <div className={cn(step !== 3 && "hidden", "space-y-3")}>
                 {/* ── Ketentuan Penawaran ───────────────────────────── */}
                 <div className="rounded-2xl border bg-card p-5 space-y-3">
-                  <p className="text-sm font-semibold text-foreground mb-1">Ketentuan Penawaran</p>
+                  <p className="text-sm font-semibold text-foreground mb-1">Quotation Terms</p>
 
                   <FormField
                     control={form.control}
                     name="paymentMethodId"
                     render={({ field }) => (
                       <FormItem className="w-full">
-                        <FormLabel className={LABEL_CLASS}>Metode Pembayaran</FormLabel>
+                        <FormLabel className={LABEL_CLASS}>Payment Method</FormLabel>
                         <BankAccountSelect
                           value={field.value ?? ""}
                           onChange={field.onChange}
                           venueId={watchedVenueId || undefined}
-                          placeholder="Pilih metode pembayaran..."
+                          placeholder="Select payment method..."
                           disableAdd
                         />
                         <FormMessage />
@@ -2146,7 +3023,7 @@ export function QuotationDrawer({
                       <FormItem className="w-full">
                         <FormLabel className={LABEL_CLASS}>
                           Booking Fee{" "}
-                          <span className="font-normal text-muted-foreground">(opsional)</span>
+                          <span className="font-normal text-muted-foreground">(optional)</span>
                         </FormLabel>
                         <FormControl>
                           <div className="relative w-full">
@@ -2165,8 +3042,8 @@ export function QuotationDrawer({
                           </div>
                         </FormControl>
                         <p className="text-xs text-muted-foreground">
-                          Tampil di dokumen: &quot;Booking Fee of Rp X is required to confirm the
-                          reservation&quot;. Kosongkan bila tidak ada.
+                          Shown in the document: &quot;Booking Fee of Rp X is required to confirm the
+                          reservation&quot;. Leave empty if not applicable.
                         </p>
                       </FormItem>
                     )}
@@ -2178,8 +3055,8 @@ export function QuotationDrawer({
                     render={({ field }) => (
                       <FormItem className="w-full">
                         <FormLabel className={LABEL_CLASS}>
-                          Berlaku Sampai{" "}
-                          <span className="font-normal text-muted-foreground">(opsional)</span>
+                          Valid Until{" "}
+                          <span className="font-normal text-muted-foreground">(optional)</span>
                         </FormLabel>
                         <Popover>
                           <PopoverTrigger
@@ -2193,8 +3070,8 @@ export function QuotationDrawer({
                               >
                                 <CalendarSolarIcon weight="BoldDuotone" className="mr-2 h-4 w-4" />
                                 {field.value
-                                  ? format(new Date(field.value + "T00:00:00"), "PPP")
-                                  : "Pilih tanggal berlaku..."}
+                                  ? format(parseDateOnly(field.value), "dd MMM yyyy")
+                                  : "Select valid-until date..."}
                               </Button>
                             }
                           />
@@ -2230,14 +3107,14 @@ export function QuotationDrawer({
                     render={({ field }) => (
                       <FormItem className="w-full">
                         <FormLabel className={LABEL_CLASS}>
-                          Catatan{" "}
-                          <span className="font-normal text-muted-foreground">(opsional)</span>
+                          Notes{" "}
+                          <span className="font-normal text-muted-foreground">(optional)</span>
                         </FormLabel>
                         <FormControl>
                           <Textarea
                             {...field}
                             rows={2}
-                            placeholder="Catatan tambahan untuk client..."
+                            placeholder="Additional notes for the client..."
                             className="w-full"
                           />
                         </FormControl>
@@ -2248,23 +3125,23 @@ export function QuotationDrawer({
                 </div>
               </div>
 
-              {/* ════════════════ STEP 4 — TTD ════════════════ */}
-              <div className={cn(step !== 4 && "hidden", "space-y-3")}>
+              {/* ════════════════ STEP 6 — TTD ════════════════ */}
+              <div className={cn(step !== 6 && "hidden", "space-y-3")}>
                 <div className="rounded-2xl border bg-card p-5 space-y-4">
-                  <p className="text-sm font-semibold text-foreground mb-1">Tanda Tangan & Lokasi</p>
+                  <p className="text-sm font-semibold text-foreground mb-1">Signature & Location</p>
                   <div>
                     <FormLabel className={cn("text-sm", "font-medium", "text-foreground", "mb-2", "block")}>
-                      Lokasi Tanda Tangan <span className="text-destructive">*</span>
+                      Signing Location <span className="text-destructive">*</span>
                     </FormLabel>
                     <Input
-                      placeholder="Contoh: Jakarta, Bandung, Surabaya..."
+                      placeholder="e.g. Jakarta, Bandung, Surabaya..."
                       value={signingLocation}
                       onChange={(e) => setSigningLocation(e.target.value)}
                     />
                   </div>
                   <div className="border-t border-border/60 pt-4">
                     <FormLabel className={cn("text-sm", "font-medium", "text-foreground", "mb-2", "block")}>
-                      Tanda Tangan Sales <span className="text-destructive">*</span>
+                      Sales Signature <span className="text-destructive">*</span>
                     </FormLabel>
                     <div
                       className={cn(
@@ -2272,10 +3149,10 @@ export function QuotationDrawer({
                         !signatureSales ? "border-destructive/40" : "border-border",
                       )}
                     >
-                      {/* Mount only when step 4 is active — a SignatureCanvas mounted
+                      {/* Mount only when step 6 is active — a SignatureCanvas mounted
                           inside a display:none container has 0 dimensions and never
                           captures strokes. */}
-                      {step === 4 && (
+                      {step === 6 && (
                         <SignatureCanvas
                           ref={sigSalesRef}
                           penColor="black"
@@ -2293,7 +3170,7 @@ export function QuotationDrawer({
                     </div>
                     <div className="flex items-center justify-between mt-1.5">
                       <p className={cn("text-xs", "text-destructive", signatureSales && "invisible")}>
-                        Tanda tangan sales wajib diisi
+                        Sales signature is required
                       </p>
                       <button
                         type="button"
@@ -2303,7 +3180,7 @@ export function QuotationDrawer({
                         }}
                         className="text-xs text-destructive hover:text-destructive underline ml-auto"
                       >
-                        Hapus tanda tangan
+                        Clear signature
                       </button>
                     </div>
                   </div>
@@ -2323,7 +3200,7 @@ export function QuotationDrawer({
                 onClick={() => onOpenChange(false)}
                 className="flex-[40%] cursor-pointer text-destructive border-destructive hover:bg-destructive/10"
               >
-                Batal
+                Cancel
               </Button>
             ) : (
               <Button
@@ -2331,16 +3208,16 @@ export function QuotationDrawer({
                 onClick={handlePrevious}
                 className="flex-[40%] cursor-pointer"
               >
-                Kembali
+                Back
               </Button>
             )}
-            {step < 4 ? (
+            {step < 6 ? (
               <Button
                 onClick={handleNext}
                 disabled={step === 1 ? isStep1Incomplete : false}
                 className="flex-[60%] cursor-pointer"
               >
-                Lanjut
+                Next
                 <ArrowRight weight="BoldDuotone" className="h-4 w-4 ml-1" />
               </Button>
             ) : (
@@ -2349,7 +3226,7 @@ export function QuotationDrawer({
                 disabled={!isSignatureComplete || isPending}
                 className="flex-[60%] cursor-pointer"
               >
-                {isPending ? "Menyimpan..." : isEdit ? "Simpan" : "Tambah"}
+                {isPending ? "Saving..." : isEdit ? "Save" : "Add"}
               </Button>
             )}
           </div>
