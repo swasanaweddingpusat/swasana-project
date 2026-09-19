@@ -7,114 +7,52 @@ import { requirePermission } from "@/lib/permissions";
 import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
 import { logAudit } from "@/lib/audit";
 import { canAccessBooking } from "@/lib/access-control";
-import { isBookingSnapshotFrozen } from "@/lib/booking-freeze";
-import { refreshCurrentRevisionSnapshot, patchSnapshotPackageItems, patchSnapshotComplimentaries } from "@/lib/booking-revision";
+import { refreshCurrentRevisionSnapshot, patchSnapshotPackageItems, patchSnapshotComplimentaries, patchSnapshotBookingBonuses } from "@/lib/booking-revision";
 import {
-  saveSnapInternalItemsSchema,
-  saveSnapVendorItemsSchema,
+  saveSnapPackageItemsSchema,
   saveSnapComplimentariesSchema,
+  saveSnapBookingBonusesSchema,
+  saveSnapBonusesAndComplimentariesSchema,
   saveSnapTakeoutSchema,
 } from "@/lib/validations/snap-package-items";
 import { calcFinalFromFullPrice } from "@/lib/package-prices";
 import { getTermPaidMapForBookings } from "@/lib/queries/ledger";
 import { upsertCreditBalanceOp } from "@/lib/credit-balance";
 
-// ─── Save snap_package_internal_items ────────────────────────────────────────
+// ─── Save snap package items (internal + vendor, combined single transaction) ──
+// `internalItems`/`vendorItems` is null for a section that isn't dirty — mirrors
+// saveSnapBonusesAndComplimentaries below. Replaces the old separate
+// saveSnapInternalItems/saveSnapVendorItems actions so EditPackageItemsDrawer's
+// save commits both sections atomically instead of as two independent writes.
 
-export async function saveSnapInternalItems(
+export async function saveSnapPackageItems(
   data: unknown,
 ): Promise<{ success: boolean; error?: string }> {
   const { session, error } = await requirePermission({ module: "booking", action: "edit-package" });
   if (error) return { success: false, error };
-  if (!mutationLimiter.check(`snap-internal:${session!.user.id}`)) return { success: false, ...rateLimitError() };
+  if (!mutationLimiter.check(`snap-package-items:${session!.user.id}`)) return { success: false, ...rateLimitError() };
 
-  const parsed = saveSnapInternalItemsSchema.safeParse(data);
+  const parsed = saveSnapPackageItemsSchema.safeParse(data);
   if (!parsed.success) {
     return { success: false, error: parsed.error.issues[0]?.message ?? "Input tidak valid." };
   }
-  const { bookingId, items } = parsed.data;
+  const { bookingId, internalItems, vendorItems } = parsed.data;
 
-  const scope = session!.user.dataScope ?? "own";
-  if (!(await canAccessBooking(session!.user.profileId, scope, bookingId))) {
-    return { success: false, error: "Anda tidak memiliki akses ke booking ini." };
-  }
-
-  // Internal items stay editable post-freeze (ops correcting item text/qty does not
-  // require re-approval or re-signing) — captured only for audit below.
-  const frozen = await isBookingSnapshotFrozen(bookingId);
-
-  try {
-    const ops: Prisma.PrismaPromise<unknown>[] = [
-      db.snapPackageInternalItem.deleteMany({ where: { bookingId } }),
-      ...items.map((item, idx) =>
-        db.snapPackageInternalItem.create({
-          data: {
-            bookingId,
-            itemName: item.itemName,
-            itemDescription: item.itemDescription ?? "",
-            sortOrder: item.sortOrder ?? idx,
-          },
-        }),
-      ),
-    ];
-
-    await db.$transaction(ops);
-
-    // Keep the PO PDF in sync with the edited internal items: refresh the in-flight
-    // revision when still unfrozen, or — post-signature — patch just the item fields
-    // into the signed snapshot so the PDF reflects the correction. Best-effort.
-    try {
-      const refreshed = await refreshCurrentRevisionSnapshot(bookingId);
-      if (!refreshed) await patchSnapshotPackageItems(bookingId);
-    } catch (e) {
-      console.error("[saveSnapInternalItems] revision snapshot refresh failed:", e);
-    }
-
-    await logAudit({
-      userId: session!.user.id,
-      action: "booking.snap_internal_items_updated",
-      result: "success",
-      entityType: "booking",
-      entityId: bookingId,
-      changes: { count: items.length, postFreeze: frozen },
-      description: frozen
-        ? `Updated ${items.length} internal package items (post-signature edit)`
-        : `Updated ${items.length} internal package items`,
-    });
-
-    revalidateTag("bookings", "max");
+  if (!internalItems && !vendorItems) {
     return { success: true };
-  } catch (e) {
-    console.error("[saveSnapInternalItems]", e);
-    return { success: false, error: "Gagal menyimpan internal items." };
   }
-}
-
-// ─── Save snap_package_vendor_items ──────────────────────────────────────────
-
-export async function saveSnapVendorItems(
-  data: unknown,
-): Promise<{ success: boolean; error?: string }> {
-  const { session, error } = await requirePermission({ module: "booking", action: "edit-package" });
-  if (error) return { success: false, error };
-  if (!mutationLimiter.check(`snap-vendor-items:${session!.user.id}`)) return { success: false, ...rateLimitError() };
-
-  const parsed = saveSnapVendorItemsSchema.safeParse(data);
-  if (!parsed.success) {
-    return { success: false, error: parsed.error.issues[0]?.message ?? "Input tidak valid." };
-  }
-  const { bookingId, items } = parsed.data;
 
   const scope = session!.user.dataScope ?? "own";
   if (!(await canAccessBooking(session!.user.profileId, scope, bookingId))) {
     return { success: false, error: "Anda tidak memiliki akses ke booking ini." };
   }
 
-  // Vendor items stay editable post-freeze (ops swap a vendor without re-approval).
-  // Capture freeze + active revision BEFORE writing so we can detect a concurrent
-  // editBooking material-change (which clears freeze, bumps currentRevisionId, and
-  // rebuilds snap vendor rows from the master package). Without this, a vendor swap
-  // saved concurrently with a material-change could be silently wiped. (H-02)
+  // Both sections stay editable post-freeze (ops correcting item text/qty or
+  // swapping a vendor does not require re-approval or re-signing). Capture
+  // freeze + active revision BEFORE writing so a concurrent editBooking
+  // material-change (which clears freeze, bumps currentRevisionId, and rebuilds
+  // snap vendor rows from the master package) can be detected after the write —
+  // mirrors the old saveSnapVendorItems guard (H-02).
   const before = await db.booking.findUnique({
     where: { id: bookingId },
     select: { snapshotFrozenAt: true, currentRevisionId: true },
@@ -123,84 +61,112 @@ export async function saveSnapVendorItems(
   const frozen = before.snapshotFrozenAt != null;
 
   try {
-    // Preserve existing isTakeout flags — the vendor items editor only edits itemText,
-    // not takeout state; we must not reset flags that saveSnapTakeout already set.
-    const existingVendorItems = await db.snapPackageVendorItem.findMany({
-      where: { bookingId },
-      select: { categoryName: true, isTakeout: true },
-    });
-    const takeoutByCategoryName = new Map(existingVendorItems.map((r) => [r.categoryName, r.isTakeout]));
+    const ops: Prisma.PrismaPromise<unknown>[] = [];
 
-    const ops: Prisma.PrismaPromise<unknown>[] = [
-      db.snapPackageVendorItem.deleteMany({ where: { bookingId } }),
-      ...items.map((item, idx) =>
-        db.snapPackageVendorItem.create({
-          data: {
-            bookingId,
-            categoryId: item.categoryId ?? null,
-            categoryName: item.categoryName,
-            itemText: item.itemText,
-            sortOrder: item.sortOrder ?? idx,
-            // Prefer caller-supplied value; fall back to existing DB flag to avoid reset
-            isTakeout: item.isTakeout ?? takeoutByCategoryName.get(item.categoryName) ?? false,
-          },
-        }),
-      ),
-    ];
+    if (internalItems) {
+      ops.push(
+        db.snapPackageInternalItem.deleteMany({ where: { bookingId } }),
+        ...internalItems.map((item, idx) =>
+          db.snapPackageInternalItem.create({
+            data: {
+              bookingId,
+              itemName: item.itemName,
+              itemDescription: item.itemDescription ?? "",
+              sortOrder: item.sortOrder ?? idx,
+            },
+          }),
+        ),
+      );
+    }
+
+    if (vendorItems) {
+      // Preserve existing isTakeout flags — the vendor items editor only edits itemText,
+      // not takeout state; we must not reset flags that saveSnapTakeout already set.
+      const existingVendorItems = await db.snapPackageVendorItem.findMany({
+        where: { bookingId },
+        select: { categoryName: true, isTakeout: true },
+      });
+      const takeoutByCategoryName = new Map(existingVendorItems.map((r) => [r.categoryName, r.isTakeout]));
+
+      ops.push(
+        db.snapPackageVendorItem.deleteMany({ where: { bookingId } }),
+        ...vendorItems.map((item, idx) =>
+          db.snapPackageVendorItem.create({
+            data: {
+              bookingId,
+              categoryId: item.categoryId ?? null,
+              categoryName: item.categoryName,
+              itemText: item.itemText,
+              sortOrder: item.sortOrder ?? idx,
+              // Prefer caller-supplied value; fall back to existing DB flag to avoid reset
+              isTakeout: item.isTakeout ?? takeoutByCategoryName.get(item.categoryName) ?? false,
+            },
+          }),
+        ),
+      );
+    }
 
     await db.$transaction(ops);
 
-    // Detect a material-change that landed concurrently: if currentRevisionId moved
-    // between our read and write, editBooking rebuilt the vendor rows from the master
-    // package — our swap may be inconsistent with the new revision. Surface it so the
-    // user can re-apply, instead of silently keeping a superseded write.
-    const after = await db.booking.findUnique({
-      where: { id: bookingId },
-      select: { currentRevisionId: true },
-    });
-    if (after && after.currentRevisionId !== before.currentRevisionId) {
-      await logAudit({
-        userId: session!.user.id,
-        action: "booking.snap_vendor_items_conflict",
-        result: "failure",
-        entityType: "booking",
-        entityId: bookingId,
-        changes: { from: before.currentRevisionId, to: after.currentRevisionId },
-        description: "Vendor items disimpan saat booking sedang berubah (revisi baru) — perubahan mungkin tertimpa.",
+    if (vendorItems) {
+      // Detect a material-change that landed concurrently: if currentRevisionId moved
+      // between our read and write, editBooking rebuilt the vendor rows from the master
+      // package — our swap may be inconsistent with the new revision. Surface it so the
+      // user can re-apply, instead of silently keeping a superseded write.
+      const after = await db.booking.findUnique({
+        where: { id: bookingId },
+        select: { currentRevisionId: true },
       });
-      return {
-        success: false,
-        error: "Booking baru saja diubah (revisi baru dibuat). Buka ulang & simpan item vendor sekali lagi.",
-      };
+      if (after && after.currentRevisionId !== before.currentRevisionId) {
+        await logAudit({
+          userId: session!.user.id,
+          action: "booking.snap_vendor_items_conflict",
+          result: "failure",
+          entityType: "booking",
+          entityId: bookingId,
+          changes: { from: before.currentRevisionId, to: after.currentRevisionId },
+          description: "Item paket disimpan saat booking sedang berubah (revisi baru) — perubahan mungkin tertimpa.",
+        });
+        return {
+          success: false,
+          error: "Booking baru saja diubah (revisi baru dibuat). Buka ulang & simpan item paket sekali lagi.",
+        };
+      }
     }
 
-    // Keep the PO PDF in sync with the edited vendor items: refresh the in-flight
-    // revision when still unfrozen, or — post-signature swap — patch just the item
-    // fields into the signed snapshot so the PDF reflects the swap. Best-effort.
+    // Keep the PO PDF in sync with the edited item(s): refresh the in-flight revision
+    // when still unfrozen, or — post-signature — patch just the item fields into the
+    // signed snapshot so the PDF reflects the correction/swap. patchSnapshotPackageItems
+    // covers both internal + vendor sections generically, so one call suffices
+    // regardless of which section(s) were dirty. Best-effort.
     try {
       const refreshed = await refreshCurrentRevisionSnapshot(bookingId);
       if (!refreshed) await patchSnapshotPackageItems(bookingId);
     } catch (e) {
-      console.error("[saveSnapVendorItems] revision snapshot refresh failed:", e);
+      console.error("[saveSnapPackageItems] revision snapshot refresh failed:", e);
     }
 
     await logAudit({
       userId: session!.user.id,
-      action: "booking.snap_vendor_items_updated",
+      action: "booking.snap_package_items_updated",
       result: "success",
       entityType: "booking",
       entityId: bookingId,
-      changes: { count: items.length, postFreeze: frozen },
+      changes: {
+        internalCount: internalItems?.length ?? null,
+        vendorCount: vendorItems?.length ?? null,
+        postFreeze: frozen,
+      },
       description: frozen
-        ? `Updated ${items.length} vendor package items (post-signature swap)`
-        : `Updated ${items.length} vendor package items`,
+        ? "Updated package items (post-signature edit)"
+        : "Updated package items",
     });
 
     revalidateTag("bookings", "max");
     return { success: true };
   } catch (e) {
-    console.error("[saveSnapVendorItems]", e);
-    return { success: false, error: "Gagal menyimpan vendor items." };
+    console.error("[saveSnapPackageItems]", e);
+    return { success: false, error: "Gagal menyimpan item paket." };
   }
 }
 
@@ -271,6 +237,181 @@ export async function saveSnapComplimentaries(
   } catch (e) {
     console.error("[saveSnapComplimentaries]", e);
     return { success: false, error: "Gagal menyimpan complimentaries." };
+  }
+}
+
+// ─── Save snap_booking_bonuses ────────────────────────────────────────────────
+
+export async function saveSnapBookingBonuses(
+  data: unknown,
+): Promise<{ success: boolean; error?: string }> {
+  const { session, error } = await requirePermission({ module: "booking", action: "edit-package" });
+  if (error) return { success: false, error };
+  if (!mutationLimiter.check(`snap-bonus:${session!.user.id}`)) return { success: false, ...rateLimitError() };
+
+  const parsed = saveSnapBookingBonusesSchema.safeParse(data);
+  if (!parsed.success) {
+    return { success: false, error: parsed.error.issues[0]?.message ?? "Input tidak valid." };
+  }
+  const { bookingId, items } = parsed.data;
+
+  const scope = session!.user.dataScope ?? "own";
+  if (!(await canAccessBooking(session!.user.profileId, scope, bookingId))) {
+    return { success: false, error: "Anda tidak memiliki akses ke booking ini." };
+  }
+
+  try {
+    const ops: Prisma.PrismaPromise<unknown>[] = [
+      db.snapBookingBonus.deleteMany({ where: { bookingId } }),
+      ...items.map((item, idx) =>
+        db.snapBookingBonus.create({
+          data: {
+            bookingId,
+            bonusId: item.bonusId ?? null,
+            name: item.name,
+            price: item.price,
+            description: item.description ?? null,
+            qty: item.qty ?? 1,
+            sortOrder: item.sortOrder ?? idx,
+          },
+        }),
+      ),
+    ];
+
+    await db.$transaction(ops);
+
+    // Keep the PO PDF in sync with the edited bonuses: refresh the in-flight
+    // revision when still unfrozen, or — post-signature — patch just the booking
+    // bonuses into the signed snapshot (bonus is a non-trigger field, editable
+    // after signature without re-approval). Mirrors saveSnapComplimentaries. Best-effort.
+    try {
+      const refreshed = await refreshCurrentRevisionSnapshot(bookingId);
+      if (!refreshed) await patchSnapshotBookingBonuses(bookingId);
+    } catch (e) {
+      console.error("[saveSnapBookingBonuses] revision snapshot refresh failed:", e);
+    }
+
+    await logAudit({
+      userId: session!.user.id,
+      action: "booking.snap_bonuses_updated",
+      result: "success",
+      entityType: "booking",
+      entityId: bookingId,
+      changes: { count: items.length },
+      description: `Updated ${items.length} booking bonuses`,
+    });
+
+    revalidateTag("bookings", "max");
+    return { success: true };
+  } catch (e) {
+    console.error("[saveSnapBookingBonuses]", e);
+    return { success: false, error: "Gagal menyimpan bonus." };
+  }
+}
+
+// ─── Save snap booking bonuses + complimentaries (combined, single transaction) ──
+// Used by the edit-booking drawer's step 3 (Bonus + Complimentary tabs) so both
+// sections commit atomically instead of as two independent $transaction calls.
+// `bonusItems`/`complimentaryItems` is null for a section that isn't dirty.
+
+export async function saveSnapBonusesAndComplimentaries(
+  data: unknown,
+): Promise<{ success: boolean; error?: string }> {
+  const { session, error } = await requirePermission({ module: "booking", action: "edit-package" });
+  if (error) return { success: false, error };
+  if (!mutationLimiter.check(`snap-bonus-compl:${session!.user.id}`)) return { success: false, ...rateLimitError() };
+
+  const parsed = saveSnapBonusesAndComplimentariesSchema.safeParse(data);
+  if (!parsed.success) {
+    return { success: false, error: parsed.error.issues[0]?.message ?? "Input tidak valid." };
+  }
+  const { bookingId, bonusItems, complimentaryItems } = parsed.data;
+
+  if (!bonusItems && !complimentaryItems) {
+    return { success: true };
+  }
+
+  const scope = session!.user.dataScope ?? "own";
+  if (!(await canAccessBooking(session!.user.profileId, scope, bookingId))) {
+    return { success: false, error: "Anda tidak memiliki akses ke booking ini." };
+  }
+
+  try {
+    const ops: Prisma.PrismaPromise<unknown>[] = [];
+
+    if (bonusItems) {
+      ops.push(
+        db.snapBookingBonus.deleteMany({ where: { bookingId } }),
+        ...bonusItems.map((item, idx) =>
+          db.snapBookingBonus.create({
+            data: {
+              bookingId,
+              bonusId: item.bonusId ?? null,
+              name: item.name,
+              price: item.price,
+              description: item.description ?? null,
+              qty: item.qty ?? 1,
+              sortOrder: item.sortOrder ?? idx,
+            },
+          }),
+        ),
+      );
+    }
+
+    if (complimentaryItems) {
+      ops.push(
+        db.snapComplimentary.deleteMany({ where: { bookingId } }),
+        ...complimentaryItems.map((item, idx) =>
+          db.snapComplimentary.create({
+            data: {
+              bookingId,
+              complimentaryId: item.complimentaryId ?? null,
+              name: item.name,
+              price: item.price ?? 0,
+              isShowPrice: item.isShowPrice ?? false,
+              description: item.description ?? null,
+              qty: item.qty ?? 1,
+              sortOrder: item.sortOrder ?? idx,
+            },
+          }),
+        ),
+      );
+    }
+
+    await db.$transaction(ops);
+
+    // Keep the PO PDF in sync: refresh the in-flight revision when still unfrozen,
+    // or — post-signature — patch just the changed section(s) into the signed
+    // snapshot (bonus/complimentary are non-trigger fields, editable after
+    // signature without re-approval). Best-effort.
+    try {
+      const refreshed = await refreshCurrentRevisionSnapshot(bookingId);
+      if (!refreshed) {
+        if (bonusItems) await patchSnapshotBookingBonuses(bookingId);
+        if (complimentaryItems) await patchSnapshotComplimentaries(bookingId);
+      }
+    } catch (e) {
+      console.error("[saveSnapBonusesAndComplimentaries] revision snapshot refresh failed:", e);
+    }
+
+    await logAudit({
+      userId: session!.user.id,
+      action: "booking.snap_bonuses_complimentaries_updated",
+      result: "success",
+      entityType: "booking",
+      entityId: bookingId,
+      changes: {
+        bonusCount: bonusItems?.length ?? null,
+        complimentaryCount: complimentaryItems?.length ?? null,
+      },
+      description: "Updated booking bonuses and/or complimentaries",
+    });
+
+    revalidateTag("bookings", "max");
+    return { success: true };
+  } catch (e) {
+    console.error("[saveSnapBonusesAndComplimentaries]", e);
+    return { success: false, error: "Gagal menyimpan bonus/complimentary." };
   }
 }
 

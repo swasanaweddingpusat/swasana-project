@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "mcp-gsheets": {
+      "transport": "stdio",
+      "enabled": true,
+      "command": "npx",
+      "args": ["-y", "mcp-gsheets@latest"],
+      "env": {
+        "GOOGLE_PROJECT_ID": "spreadsheethilmi",
+        "GOOGLE_APPLICATION_CREDENTIALS": "C:/Users/user/.claude/gsheets-key.json"
+      }
+    }
+  }
+}

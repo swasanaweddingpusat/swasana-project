@@ -26,6 +26,7 @@ import {
   DocumentAdd,
   Sledgehammer,
   Gift,
+  MedalStar,
   TagPrice,
   ClipboardCheck,
   ChartSquare,
@@ -129,6 +130,7 @@ export const MODULE_NAV_MAP: Record<ModuleKey, NavItem[]> = {
   booking: [
     { name: "Calendar Events", href: "/booking/calendar-events", icon: CalendarDate, subtitle: "Lihat jadwal event di kalender", permission: { module: "booking", action: "view" } },
     { name: "Daily Report Manager", href: "/booking/daily-report-manager", icon: Chart2, subtitle: "Laporan harian manager per grup", permission: { module: "daily-report-manager", action: "view" } },
+    { name: "Daily Activity", href: "/booking/daily-activity", icon: ClipboardList, subtitle: "Kelola aktivitas harian sales & prospek", permission: { module: "daily-activity", action: "view" } },
     { name: "Quotations", href: "/booking/quotations", icon: DocumentAdd, subtitle: "Kelola penawaran harga untuk lead", permission: { module: "quotations", action: "view" } },
     { name: "Booking MICE", href: "/booking/booking-mice", icon: TicketSale, subtitle: "Kelola data booking MICE", permission: { module: "booking-mice", action: "view" } },
     { name: "Booking Weddings", href: "/booking/booking-weddings", icon: Ticket, subtitle: "Kelola data booking weddings", permission: { module: "booking", action: "view" } },
@@ -136,6 +138,7 @@ export const MODULE_NAV_MAP: Record<ModuleKey, NavItem[]> = {
     { name: "Mice Package", href: "/booking/package-mice", icon: Case, subtitle: "Kelola paket MICE per venue", permission: { module: "package-mice", action: "view" } },
     { name: "Groups", href: "/booking/groups", icon: UsersGroupRounded, subtitle: "Kelola tim dan pantau kinerja penjualan", permission: { module: "groups", action: "view" } },
     { name: "Complimentary", href: "/booking/complimentary", icon: Gift, subtitle: "Kelola master item complimentary untuk booking", permission: { module: "complimentary", action: "view" } },
+    { name: "Bonus", href: "/booking/bonus", icon: MedalStar, subtitle: "Kelola master item bonus untuk booking", permission: { module: "bonus", action: "view" } },
     { name: "Voucher / Program", href: "/booking/voucher", icon: TagPrice, subtitle: "Program voucher & discount aktif", permission: { module: "promo", action: "view" } },
   ],
   purchase: [

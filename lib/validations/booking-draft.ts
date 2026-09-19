@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { bonusRowSchema } from "@/lib/validations/bonus";
+
 // ─── Step 1: Create Draft ─────────────────────────────────────────────────────
 
 export const createDraftStep1Schema = z.object({
@@ -7,6 +9,8 @@ export const createDraftStep1Schema = z.object({
    *  so that retries don't create duplicate draft rows. */
   id: z.string().optional().nullable(),
   eventDate: z.string().min(1, "Tanggal event wajib diisi"),
+  // Tanggal dealing booking — wajib diisi. Default hari ini di client, boleh diubah user.
+  dealingDate: z.string().min(1, "Tanggal dealing wajib diisi"),
   category: z.enum(["WEDDINGS", "MICE"]).default("WEDDINGS"),
   venueId: z.string().min(1, "Venue wajib dipilih"),
   packageId: z.string().optional().nullable(),
@@ -94,6 +98,7 @@ export const updateDraftStep2Schema = z.object({
     )
     .optional()
     .default([]),
+  draftBonuses: z.array(bonusRowSchema).optional(),
   // Editable package items (Item Paket step). Snapshotted into snap_package_* on
   // finalize; empty arrays fall back to the package template at finalize time.
   draftInternalItems: z
@@ -194,6 +199,9 @@ export const finalizeDraftSchema = z.object({
     )
     .optional()
     .default([]),
+
+  // Bonuses — new bonus-based, snapped at finalize time (parallel to complimentaries)
+  bookingBonuses: z.array(bonusRowSchema).optional().default([]),
 
   // Category toggles for snap creation
   categoryToggles: z

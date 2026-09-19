@@ -166,8 +166,9 @@ model Profile {
   bookingRevisions             BookingRevision[]
   userTargets                  UserTarget[]               @relation("UserTargets")
   userTargetsSet               UserTarget[]               @relation("UserTargetsSetBy")
-  leadsCreated                 DailyActivity[]
-  leadsAssigned                DailyActivity[]            @relation("LeadAssignee")
+  leadsCreated                 Lead[]
+  leadsAssigned                Lead[]            @relation("LeadAssignee")
+  dailyActivities              DailyActivity[]            @relation("DailyActivitySales")
   quotations                   Quotation[]
   ledgersCreated               Ledger[]                   @relation("LedgerCreator")
   ledgersAcknowledged          Ledger[]                   @relation("LedgerAcknowledger")
@@ -372,8 +373,8 @@ model Venue {
   packages                  Package[]
   paymentMethods            PaymentMethod[]
   bookings                  Booking[]
-  leads                     DailyActivity[]            @relation("LeadPrimaryVenue")
-  leadsSecondary            DailyActivity[]            @relation("LeadSecondaryVenue")
+  leads                     Lead[]            @relation("LeadPrimaryVenue")
+  leadsSecondary            Lead[]            @relation("LeadSecondaryVenue")
   quotations                Quotation[]
   quotationTemplates        QuotationTemplate[]
   maintenanceTickets        MaintenanceTicket[]
@@ -534,30 +535,33 @@ model PaymentMethod {
 // ─── Packages ────────────────────────────────────────────────────────────────
 
 model Package {
-  id               String                 @id @default(uuid())
-  packageName      String
-  category         EventCategory          @default(WEDDINGS)
-  available        Boolean                @default(true)
-  approvalStatus   String                 @default("draft")
-  venueId          String?
-  notes            String?
-  pax              Int                    @default(0)
-  margin           Float                  @default(0)
-  sellingPrice     Int                    @default(0)
-  termAndCondition String?
-  createdAt        DateTime               @default(now())
-  updatedAt        DateTime               @updatedAt
-  venue            Venue?                 @relation(fields: [venueId], references: [id], onDelete: SetNull)
-  vendorItems      PackageVendorItem[]
-  internalItems    PackageInternalItem[]
-  miceItems        PackageMiceItem[]
-  categoryPrices   PackageCategoryPrice[]
-  bookings         Booking[]
-  leads            DailyActivity[]
-  guestbookEntries GuestbookEntry[]
+  id                     String                 @id @default(uuid())
+  packageName            String
+  category               EventCategory          @default(WEDDINGS)
+  available              Boolean                @default(true)
+  approvalStatus         String                 @default("draft")
+  venueId                String?
+  packageTypeCategoryId  String?
+  notes                  String?
+  pax                    Int                    @default(0)
+  margin                 Float                  @default(0)
+  sellingPrice           Int                    @default(0)
+  termAndCondition       String?
+  createdAt              DateTime               @default(now())
+  updatedAt              DateTime               @updatedAt
+  venue                  Venue?                 @relation(fields: [venueId], references: [id], onDelete: SetNull)
+  packageTypeCategory    PackageTypeCategory?   @relation(fields: [packageTypeCategoryId], references: [id], onDelete: SetNull)
+  vendorItems            PackageVendorItem[]
+  internalItems          PackageInternalItem[]
+  miceItems              PackageMiceItem[]
+  categoryPrices         PackageCategoryPrice[]
+  bookings               Booking[]
+  leads                  Lead[]
+  guestbookEntries       GuestbookEntry[]
 
   @@index([venueId])
   @@index([category])
+  @@index([packageTypeCategoryId])
   @@map("packages")
 }
 
@@ -574,6 +578,22 @@ model Category {
   vendorItems    PackageVendorItem[]
 
   @@map("categories")
+}
+
+// Package type master — groups Packages themselves (e.g. "Paket Hadjatan", "Paket
+// Regular"). Standalone reference data, separate from `Category` above (which is
+// vendor-item master data used inside a package, e.g. Catering/Dekorasi).
+model PackageTypeCategory {
+  id        String    @id @default(uuid())
+  name      String    @unique
+  code      String    @unique
+  sortOrder Int       @default(0)
+  isActive  Boolean   @default(true)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  packages  Package[]
+
+  @@map("package_type_category")
 }
 
 model PackageCategoryPrice {
@@ -667,7 +687,7 @@ model Customer {
   updatedAt             DateTime             @updatedAt
   bookings              Booking[]
   sourceOfInformation   SourceOfInformation? @relation(fields: [sourceOfInformationId], references: [id], onDelete: SetNull)
-  convertedFromLeads    DailyActivity[]      @relation("LeadConvertedCustomer")
+  convertedFromLeads    Lead[]      @relation("LeadConvertedCustomer")
 
   @@index([name])
   @@map("customers")
@@ -691,7 +711,8 @@ model SourceOfInformation {
   createdAt        DateTime         @default(now())
   bookings         Booking[]
   customers        Customer[]
-  leads            DailyActivity[]
+  leads            Lead[]
+  dailyActivities  DailyActivity[] @relation("DailyActivitySource")
   guestbookEntries GuestbookEntry[]
 
   @@map("source_of_informations")
@@ -958,6 +979,7 @@ model Booking {
   poNumber                  String?
   poYear                    Int?
   poSeq                     Int?
+  dealingDate               DateTime? // tanggal dealing booking; user-editable, default hari ini saat create, backfilled dari createdAt untuk data lama
   eventDate                 DateTime? // required for saved bookings; null only during MICE draft steps
   quotationId               String?
   salesSignature            String?
@@ -983,6 +1005,7 @@ model Booking {
   // Draft-only fields: persisted during multi-step form, cleared on finalize (kept as null for saved bookings)
   draftCategoryToggles      Json? // { categoryName: string, isTakeout: boolean, takeoutNominal: number }[]
   draftComplimentaries      Json? // { complimentaryId: string | null, name: string, price: number, isShowPrice: boolean, description: string | null, qty: number }[]
+  draftBonuses              Json? // { bonusId: string | null, name: string, price: number, description: string | null, qty: number }[]
   draftInternalItems        Json? // { itemName: string, itemDescription: string }[] — editable package internal items during draft
   draftVendorItems          Json? // { categoryId: string | null, categoryName: string, itemText: string }[] — editable package vendor items during draft
   // Tracks the active revision for approval step filtering (snapshot approach)
@@ -1006,7 +1029,7 @@ model Booking {
   paymentMethod       PaymentMethod?       @relation(fields: [paymentMethodId], references: [id], onDelete: SetNull)
   sourceOfInformation SourceOfInformation? @relation(fields: [sourceOfInformationId], references: [id], onDelete: SetNull)
   currentRevision     BookingRevision?     @relation("BookingCurrentRevision", fields: [currentRevisionId], references: [id], onDelete: SetNull)
-  lead                DailyActivity?       @relation("BookingFromLead", fields: [leadId], references: [id], onDelete: SetNull)
+  lead                Lead?       @relation("BookingFromLead", fields: [leadId], references: [id], onDelete: SetNull)
   recognizedBy        Profile?             @relation("BookingRecognizer", fields: [recognizedById], references: [id], onDelete: SetNull)
 
   // Snapshot relations (1:1)
@@ -1022,6 +1045,7 @@ model Booking {
   snapBonuses               SnapBonus[]
   snapVendorItems           SnapVendorItem[]
   snapComplimentaries       SnapComplimentary[]
+  snapBookingBonuses        SnapBookingBonus[]
 
   // Live relations
   termOfPayments     TermOfPayment[]
@@ -1034,7 +1058,7 @@ model Booking {
   bookingComments    BookingComment[]
   commentReads       BookingCommentRead[]
   revisions          BookingRevision[]
-  convertedFromLeads DailyActivity[]            @relation("LeadConvertedBooking")
+  convertedFromLeads Lead[]            @relation("LeadConvertedBooking")
   editDraft          BookingEditDraft?
   eventEvaluations   EventEvaluation[]
   creditBalance      CreditBalance?
@@ -1153,13 +1177,15 @@ model SnapVenue {
 }
 
 model SnapPackage {
-  id          String   @id @default(uuid())
-  bookingId   String   @unique
-  packageId   String
-  packageName String
-  notes       String?
-  createdAt   DateTime @default(now())
-  booking     Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  id                      String   @id @default(uuid())
+  bookingId               String   @unique
+  packageId               String
+  packageName             String
+  packageTypeCategoryName String?
+  packageTypeCategoryCode String?
+  notes                   String?
+  createdAt               DateTime @default(now())
+  booking                 Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
 
   @@map("snap_packages")
 }
@@ -1283,6 +1309,40 @@ model SnapComplimentary {
   @@index([bookingId])
   @@index([complimentaryId])
   @@map("snap_complimentaries")
+}
+
+// ─── Bonus Master ─────────────────────────────────────────────────────────────
+
+model Bonus {
+  id                 String             @id @default(uuid())
+  name               String
+  price              Int
+  description        String?
+  isActive           Boolean            @default(true)
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+  snapBookingBonuses SnapBookingBonus[]
+
+  @@map("bonuses")
+}
+
+model SnapBookingBonus {
+  id          String   @id @default(uuid())
+  bookingId   String
+  bonusId     String?
+  name        String
+  price       Int
+  description String?
+  qty         Int      @default(1)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  booking     Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  bonus       Bonus?   @relation(fields: [bonusId], references: [id], onDelete: SetNull)
+
+  @@index([bookingId])
+  @@index([bonusId])
+  @@map("snap_booking_bonuses")
 }
 
 model QuotationComplimentary {
@@ -1889,7 +1949,7 @@ model EventType {
   isActive   Boolean         @default(true)
   createdAt  DateTime        @default(now())
   updatedAt  DateTime        @updatedAt
-  leads      DailyActivity[]
+  leads      Lead[]
   quotations Quotation[]
 
   @@index([category])
@@ -1926,7 +1986,7 @@ model LeadStatus {
   isActive  Boolean         @default(true)
   createdAt DateTime        @default(now())
   updatedAt DateTime        @updatedAt
-  leads     DailyActivity[]
+  leads     Lead[]
 
   @@index([sortOrder])
   @@map("lead_statuses")
@@ -1939,7 +1999,8 @@ model DailyActivitySegment {
   sortOrder        Int              @default(0)
   createdAt        DateTime         @default(now())
   updatedAt        DateTime         @updatedAt
-  leads            DailyActivity[]
+  leads            Lead[]
+  dailyActivities  DailyActivity[] @relation("DailyActivitySegmentRel")
   guestbookEntries GuestbookEntry[]
 
   // Physical table kept as "lead_segments" — no data migration needed.
@@ -1947,7 +2008,7 @@ model DailyActivitySegment {
   @@map("lead_segments")
 }
 
-model DailyActivity {
+model Lead {
   id             String    @id @default(uuid())
   name           String
   contactNumbers Json      @default("[]") // Array of { label: string, number: string }
@@ -2032,6 +2093,49 @@ model DailyActivity {
   // Composite index buat listing "assigned to me" urut terbaru
   @@index([assignedToId, createdAt])
   @@map("leads")
+}
+
+enum ProgressStatus {
+  COLD
+  WARM
+  HOT
+  FREEZE
+  DEAL
+  LOST
+}
+
+model DailyActivity {
+  id                    String         @id @default(uuid())
+  salesId               String
+  activityDate          DateTime       @db.Date
+  companyName           String?
+  segmentId             String
+  sourceOfInformationId String
+  sourceOfInformationDetail String?
+  bitrixId              String?
+  contactName           String?
+  phoneNumber           String?
+  email                 String?
+  location              String?
+  siteVisitAt           DateTime?
+  milestone             String
+  progressStatus        ProgressStatus
+  notes                 String?
+  createdAt             DateTime       @default(now())
+  updatedAt             DateTime       @updatedAt
+  deletedAt             DateTime?
+
+  sales               Profile              @relation("DailyActivitySales", fields: [salesId], references: [id])
+  segment             DailyActivitySegment @relation("DailyActivitySegmentRel", fields: [segmentId], references: [id])
+  sourceOfInformation SourceOfInformation  @relation("DailyActivitySource", fields: [sourceOfInformationId], references: [id])
+
+  @@index([salesId])
+  @@index([segmentId])
+  @@index([sourceOfInformationId])
+  @@index([activityDate])
+  @@index([progressStatus])
+  @@index([deletedAt])
+  @@map("daily_activities")
 }
 
 model UserTarget {

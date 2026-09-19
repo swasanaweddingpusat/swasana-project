@@ -21,6 +21,7 @@ import {
   updateDraftStep4Schema,
   finalizeDraftSchema,
 } from "@/lib/validations/booking-draft";
+import type { BonusRow } from "@/lib/validations/bonus";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -71,6 +72,7 @@ export interface DraftBookingDetail {
   sourceOfInformationId: string | null;
   sourceOfInformationDetail: string | null;
   eventDate: string | null;
+  dealingDate: string | null;
   paymentMethodId: string | null;
   discountName: string | null;
   discountAmount: number;
@@ -108,6 +110,7 @@ export interface DraftBookingDetail {
     description: string | null;
     qty: number;
   }>;
+  bonuses: BonusRow[];
   draftInternalItems: Array<{
     itemName: string;
     itemDescription: string;
@@ -196,7 +199,7 @@ export async function createDraftBooking(data: unknown): Promise<DraftResult> {
     } | null = null;
 
     if (input.leadId) {
-      leadRecord = await db.dailyActivity.findUnique({
+      leadRecord = await db.lead.findUnique({
         where: { id: input.leadId },
         select: {
           id: true,
@@ -240,7 +243,7 @@ export async function createDraftBooking(data: unknown): Promise<DraftResult> {
           },
         });
 
-        const lockResult = await db.dailyActivity.updateMany({
+        const lockResult = await db.lead.updateMany({
           where: { id: leadRecord.id, convertedToCustomerId: null },
           data: { convertedToCustomerId: customerId },
         });
@@ -248,7 +251,7 @@ export async function createDraftBooking(data: unknown): Promise<DraftResult> {
         if (lockResult.count === 0) {
           // Lost race — cleanup and reuse winner's customer
           await db.customer.delete({ where: { id: customerId } }).catch(() => undefined);
-          const refreshed = await db.dailyActivity.findUnique({
+          const refreshed = await db.lead.findUnique({
             where: { id: leadRecord.id },
             select: { convertedToCustomerId: true },
           });
@@ -316,6 +319,7 @@ export async function createDraftBooking(data: unknown): Promise<DraftResult> {
           where: { id: draftId },
           data: {
             eventDate: new Date(`${input.eventDate}T00:00:00.000Z`),
+            dealingDate: input.dealingDate ? new Date(`${input.dealingDate}T00:00:00.000Z`) : undefined,
             salesId,
             managerId,
             customerId,
@@ -349,6 +353,7 @@ export async function createDraftBooking(data: unknown): Promise<DraftResult> {
         data: {
           id: draftId,
           eventDate: new Date(input.eventDate),
+          dealingDate: input.dealingDate ? new Date(`${input.dealingDate}T00:00:00.000Z`) : new Date(),
           recordStatus: "draft",
           bookingStatus: "Pending",
           category: input.category ?? "WEDDINGS",
@@ -435,6 +440,9 @@ export async function updateDraftBookingStep2(
             : Prisma.JsonNull,
           draftComplimentaries: (input.draftComplimentaries && input.draftComplimentaries.length > 0)
             ? (input.draftComplimentaries as Prisma.InputJsonValue)
+            : Prisma.JsonNull,
+          draftBonuses: (input.draftBonuses && input.draftBonuses.length > 0)
+            ? (input.draftBonuses as Prisma.InputJsonValue)
             : Prisma.JsonNull,
           draftInternalItems: (input.draftInternalItems && input.draftInternalItems.length > 0)
             ? (input.draftInternalItems as Prisma.InputJsonValue)
@@ -628,6 +636,7 @@ export async function finalizeDraftBooking(data: unknown): Promise<FinalizeDraft
             vendorItems: true,
             internalItems: true,
             categoryPrices: true,
+            packageTypeCategory: true,
           },
         },
         termOfPayments: { orderBy: { sortOrder: "asc" } },
@@ -813,6 +822,8 @@ export async function finalizeDraftBooking(data: unknown): Promise<FinalizeDraft
             packageId: pkg.id,
             packageName: pkg.packageName,
             notes: pkg.notes,
+            packageTypeCategoryName: pkg.packageTypeCategory?.name ?? null,
+            packageTypeCategoryCode: pkg.packageTypeCategory?.code ?? null,
           },
         }),
         db.snapPackagePricing.create({
@@ -955,6 +966,25 @@ export async function finalizeDraftBooking(data: unknown): Promise<FinalizeDraft
       );
     }
 
+    // 5c. Add bonuses (new bonus-based snap rows)
+    if (input.bookingBonuses && input.bookingBonuses.length > 0) {
+      ops.push(
+        ...input.bookingBonuses.map((b, i) =>
+          db.snapBookingBonus.create({
+            data: {
+              bookingId: draftId,
+              bonusId: b.bonusId ?? null,
+              name: b.name,
+              price: b.price,
+              description: b.description ?? null,
+              qty: b.qty,
+              sortOrder: i,
+            },
+          })
+        )
+      );
+    }
+
     // 6b. Step-6 payments → Ledger(`in`) + PaymentAllocation + activity (§8).
     // Termin sudah persist di step-3 → resolve alokasi lewat sortOrder→termId di sini.
     // Alokasi di-clamp defensif (drop sortOrder tak dikenal, cap Σ ≤ gross & ≤ nominal
@@ -1078,7 +1108,7 @@ export async function finalizeDraftBooking(data: unknown): Promise<FinalizeDraft
         select: { id: true },
       });
       ops.push(
-        db.dailyActivity.update({
+        db.lead.update({
           where: { id: input.leadId },
           data: {
             convertedToBookingId: draftId,
@@ -1286,6 +1316,7 @@ export async function getDraftBookingDetail(
       sourceOfInformationId: true,
       sourceOfInformationDetail: true,
       eventDate: true,
+      dealingDate: true,
       paymentMethodId: true,
       discountName: true,
       discountAmount: true,
@@ -1293,6 +1324,7 @@ export async function getDraftBookingDetail(
       withMaterai: true,
       draftCategoryToggles: true,
       draftComplimentaries: true,
+      draftBonuses: true,
       draftInternalItems: true,
       draftVendorItems: true,
       customer: {
@@ -1373,6 +1405,21 @@ export async function getDraftBookingDetail(
       }));
   }
 
+  // Parse draftBonuses JSON → typed array
+  const rawBonuses = draft.draftBonuses;
+  let bonuses: BonusRow[] = [];
+  if (Array.isArray(rawBonuses)) {
+    bonuses = (rawBonuses as Array<Record<string, unknown>>)
+      .filter((e) => typeof e.name === "string")
+      .map((e) => ({
+        bonusId: typeof e.bonusId === "string" ? e.bonusId : null,
+        name: e.name as string,
+        price: typeof e.price === "number" ? e.price : 0,
+        description: typeof e.description === "string" ? e.description : null,
+        qty: typeof e.qty === "number" ? e.qty : 1,
+      }));
+  }
+
   // Parse draftInternalItems JSON → typed array
   const rawInternal = draft.draftInternalItems;
   let draftInternalItems: Array<{ itemName: string; itemDescription: string }> = [];
@@ -1414,6 +1461,9 @@ export async function getDraftBookingDetail(
     eventDate: draft.eventDate
       ? `${draft.eventDate.getUTCFullYear()}-${String(draft.eventDate.getUTCMonth() + 1).padStart(2, "0")}-${String(draft.eventDate.getUTCDate()).padStart(2, "0")}`
       : null,
+    dealingDate: draft.dealingDate
+      ? `${draft.dealingDate.getUTCFullYear()}-${String(draft.dealingDate.getUTCMonth() + 1).padStart(2, "0")}-${String(draft.dealingDate.getUTCDate()).padStart(2, "0")}`
+      : null,
     paymentMethodId: draft.paymentMethodId ?? null,
     discountName: draft.discountName ?? null,
     discountAmount: draft.discountAmount ?? 0,
@@ -1438,6 +1488,7 @@ export async function getDraftBookingDetail(
     })),
     draftCategoryToggles,
     draftComplimentaries,
+    bonuses,
     draftInternalItems,
     draftVendorItems,
   };

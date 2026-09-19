@@ -1,0 +1,1048 @@
+{
+  "_meta": {
+    "purpose": "Draft lokal task ClickUp — BELUM di-push. Review dulu sebelum jalanin push batch.",
+    "generated_at": "2026-09-17",
+    "updated_at": "2026-09-18",
+    "style_reference": "Parent task = fitur singkat + 1 kalimat desc. Subtask prefix [BE]/[FE] + bullet konkret (mengikuti gaya Phase 2 Auth & Access Control).",
+    "note": "Field yang diawali underscore (_review_note, _status_hint) HANYA catatan internal buat kita, JANGAN ikut ke-push sebagai description ke ClickUp.",
+    "structure_note": "File ini nampung >1 phase sekaligus (per instruksi user).",
+    "list_targeting_status": "RESOLVED 2026-09-18 — 5 list baru dibikin di space Kediaman Project (901810589678), sejajar Phase 1 & 2 yang udah ada, tanpa folder (approved by user): Phase 3=1100480000000516, Phase 4=1100480000000517, Phase 5=1100480000000518, Phase 6=1100480000000519, Phase 7=1100480000000520. Push sedang berjalan.",
+    "push_status_phase4_7": "STALLED, retry re-scheduled LAGI 2026-09-18 12:37 SEAST — cron sebelumnya (dijadwalkan 12:15 SEAST buat fire 23:35) ternyata hilang karena session reset sebelum jam tsb (cron bersifat session-only, mati kalau session mati/exit). Re-checked jam 12:37 SEAST: MASIH kena limit ClickUp MCP (100/100 calls), retryAfter=38616s → reset ~2026-09-18 23:22 SEAST (konsisten). Cron auto-retry baru berhasil di-buat jam 12:37 SEAST buat fire 2026-09-18 23:36 SEAST (job id 51fc9f35) — TAPI ini juga session-only, jadi kalau session INI mati sebelum 23:36, cron ini juga bakal hilang lagi tanpa notifikasi apapun. BELUM DIKETAHUI persis berapa task yg berhasil kebuat sebelum fork sebelumnya mati — progress belum pernah diverifikasi karena rate limit keburu kena tiap kali mau cek. Kalau session ini (atau cron-nya) udah gak hidup pas dibaca lagi nanti: lanjutin manual — LANGKAH PERTAMA WAJIB cek isi 4 list (clickup_filter_tasks list_ids=[1100480000000517,1100480000000518,1100480000000519,1100480000000520], subtasks:true, include_closed:true) buat tau task apa yang UDAH ada sebelum lanjut create, biar gak dobel-dobel banget (user oke duplikat dikit tapi jangan push ulang 100% dari nol). Push task yang BELUM ada aja. Jangan pakai fork besar sekaligus lagi — pecah per-phase (4 dulu, verify, baru 5, dst) biar gak kena context thrashing lagi."
+  },
+  "phases": [
+    {
+      "phase": 3,
+      "target_list_id": "1100480000000516",
+      "target_list_name": "Phase 3 Booking Wedding Package",
+      "phase_note": "Booking Wedding + Master Paket + fitur-fitur eks-'Phase 5' yang digabung ke sini atas instruksi user (Calendar Event, Groups, Voucher/Program, Vendor, Customer — Complimentary & Bonus udah lebih dulu ada di list ini).",
+      "tasks": [
+        {
+          "name": "Booking Wedding — Buat & Draft",
+          "markdown_description": "Form multi-step pembuatan booking wedding yang progresnya tersimpan sebagai draft di database (bukan browser storage), jadi bisa dilanjutkan kapan saja tanpa hilang.",
+          "_status_hint": "complete",
+          "subtasks": [
+            {
+              "name": "[BE] Draft Persistence Engine",
+              "markdown_description": "- Booking punya kolom `recordStatus` (draft / saved) — draft baru terhitung booking resmi setelah difinalisasi\n- Tiap step form (Venue & Paket, Bonus & Complimentary, Item Paket, Takeout, Term of Payment, Payment, Signature) punya server action sendiri yang nyimpen progres ke kolom draft terkait di tabel Booking\n- Query listing default exclude draft (recordStatus: \"saved\") supaya draft gak numpuk di daftar booking resmi\n- Saat draft dibuka lagi, seluruh state di-rehydrate dari DB\n- Validasi Zod per step sebelum data ditulis, rate limit di tiap action"
+            },
+            {
+              "name": "[FE] Wizard Booking Bertahap",
+              "markdown_description": "- Drawer multi-step dengan step indicator progresif\n- Tombol Next/Prev dengan gating: step berikutnya terkunci sampai step aktif valid\n- Auto-resume: buka booking draft lama, semua field kepopulasi otomatis dari hasil terakhir tersimpan\n- Komponen search-picker reusable dengan drag-reorder"
+            }
+          ]
+        },
+        {
+          "name": "Booking Wedding — Finalize & Snapshot",
+          "markdown_description": "Saat booking difinalisasi, seluruh data master (customer, venue, paket, harga) di-freeze ke tabel salinan (Snap*) supaya dokumen legal (PO/kontrak) tidak berubah meski data master di kemudian hari diedit.",
+          "_status_hint": "complete",
+          "subtasks": [
+            {
+              "name": "[BE] Freeze Engine saat Finalize",
+              "markdown_description": "- Finalize menulis satu set tabel Snap* (SnapCustomer, SnapVenue, SnapPackage, SnapPackagePricing, SnapComplimentary, SnapBookingBonus, dst) sebagai copy-at-a-point-in-time dari master\n- Semua render dokumen (PDF PO, client-agreement) baca dari Snap*, bukan dari master live\n- `snapshotFrozenAt` (freeze final) baru diset SAAT KLIEN TANDA TANGAN, bukan saat staff finalize — jadi ada 2 lapis freeze\n- Field tertentu (kontak customer, lokasi TTD, item paket, complimentary, bonus) tetap bisa dikoreksi staff SETELAH freeze via fungsi patch khusus tanpa membuka ulang approval"
+            }
+          ]
+        },
+        {
+          "name": "Booking Wedding — Alur Approval",
+          "markdown_description": "Persetujuan booking (manager → finance → tanda tangan klien) dikonfigurasi dari database, disimpan per-revisi, dan otomatis reset kalau ada perubahan material setelah booking dibekukan.",
+          "_status_hint": "complete",
+          "subtasks": [
+            {
+              "name": "[BE] Approval Engine (DB-driven)",
+              "markdown_description": "- Alur approval disimpan di ApprovalFlowConfig/ApprovalFlowStep (bisa diatur lewat Settings), fallback hardcode kalau config DB belum ada\n- Urutan approver Booking Wedding: manager → finance → client (tanda tangan PO)\n- Tiap approval record di-snapshot per revisionId — histori approval lama tetap tersimpan (append-only)\n- Deteksi \"material change\" hanya berlaku kalau booking sudah frozen DAN ada perubahan di 6 field pemicu (venue, paket, tipe wedding, tanggal event, sesi, jam event) — kalau berubah, freeze dibatalkan, revisi baru dibuat, approval & TTD wajib diulang\n- Perubahan finansial kecil (diskon/takeout/TOP) di bawah ambang tertentu dianggap minor amendment — dicatat tapi TTD & freeze tidak dibatalkan\n- Saat step client selesai TTD, seluruh approval jadi \"approved\" dan bookingStatus jadi \"Confirmed\" dalam satu transaksi"
+            },
+            {
+              "name": "[FE] Dialog & Indikator Approval",
+              "markdown_description": "- Dialog approval reusable dipakai lintas modul (Booking, Package, Package-MICE) — step per role dikelompokkan per revisi, hanya round terbaru yang ditampilkan\n- Fitur reset-step manual dari UI (permission khusus/super-admin) terpisah dari reset otomatis akibat material change\n- Step approval aktif (pending) ditandai jelas biar approver tahu giliran siapa"
+            }
+          ]
+        },
+        {
+          "name": "Booking Wedding — Edit & Revisi",
+          "markdown_description": "Booking yang sudah final tetap bisa diedit; sistem membedakan perubahan \"aman\" (info kontak klien) dari perubahan \"material\" (venue/paket/tanggal) yang wajib memicu approval ulang dan tanda tangan ulang klien.",
+          "_status_hint": "complete",
+          "subtasks": [
+            {
+              "name": "[BE] Dua Jalur Edit Terpisah",
+              "markdown_description": "- `updateBookingClientInfo` khusus edit info klien — tidak pernah memicu re-approval, aman dieksekusi bahkan setelah frozen, disinkron ke snapshot yang sudah signed\n- `editBooking` (jalur venue/event/paket/TOP) menghitung banyak sinyal perubahan untuk menentukan structural vs minor vs non-material\n- Guard konflik jadwal venue (venue+tanggal+sesi yang sama) sebelum commit perubahan\n- Perbandingan Term of Payment berbasis id (bukan index) supaya drag-reorder TOP tidak dianggap perubahan material\n- Semua perubahan dieksekusi dalam satu transaksi dengan audit log detail per jenis perubahan"
+            },
+            {
+              "name": "[FE] Drawer Edit Bertahap",
+              "markdown_description": "- Struktur drawer edit dipisah per concern: hook state/submit terpisah dari komponen presentasional step Info Klien vs step Venue & Event\n- Edit info klien bisa langsung disimpan tanpa memicu ulang alur approval",
+              "_review_note": "Detail render/warning UI konsekuensi approval ulang di layer presentasional belum ditelusuri tuntas — cek ulang kalau butuh detail pixel-level."
+            }
+          ]
+        },
+        {
+          "name": "Master Paket — Buat & Edit Paket",
+          "markdown_description": "Pembuatan & pengeditan data dasar paket beserta komposisi item vendor/internal-nya, dikelola di modul Booking sendiri (bukan di area Settings).",
+          "_status_hint": "complete",
+          "subtasks": [
+            {
+              "name": "[BE] CRUD Paket & Item Vendor/Internal",
+              "markdown_description": "- Lokasi: booking/packages (Wedding) dan booking/package-mice (MICE) — dikonfirmasi bukan di bawah Settings\n- Create/update/delete paket beserta item vendor & item internal di dalamnya, dengan modul permission berbeda per kategori (Wedding vs MICE)\n- Data dasar mencakup nama, kategori, venue, deskripsi paket"
+            },
+            {
+              "name": "[FE] Wizard Buat/Edit Paket",
+              "markdown_description": "- Drawer step: Detail Paket → Item Vendor → Item Internal\n- Drag-reorder item vendor/internal"
+            }
+          ]
+        },
+        {
+          "name": "Master Paket — Harga & Syarat Ketentuan",
+          "markdown_description": "Pengaturan harga jual & syarat/ketentuan (T&C) paket dipisah dari data dasar — perubahan di sini sengaja TIDAK memicu approval ulang.",
+          "_status_hint": "complete",
+          "subtasks": [
+            {
+              "name": "[BE] Endpoint Set Harga & T&C",
+              "markdown_description": "- Endpoint set-harga & set-T&C terpisah dari update data dasar paket\n- Perubahan harga/T&C TIDAK mereset approvalStatus — beda dari perubahan data dasar/item yang wajib approval ulang"
+            },
+            {
+              "name": "[FE] Editor Harga & Syarat Ketentuan",
+              "markdown_description": "- Form khusus isi harga jual per paket\n- Editor syarat & ketentuan (T&C) paket"
+            }
+          ]
+        },
+        {
+          "name": "Master Paket — Approval Paket",
+          "markdown_description": "Paket baru/diedit wajib melalui approval sebelum bisa dipakai booking. Berbeda dari Booking: histori approval paket destroy-and-recreate tiap edit, bukan snapshot berjenjang per revisi.",
+          "_status_hint": "complete",
+          "subtasks": [
+            {
+              "name": "[BE] Approval Engine Paket",
+              "markdown_description": "- Tiap create/update paket otomatis membuat step approval sesuai role approver yang dikonfigurasi\n- Auto-approve hanya step yang cocok dengan role pembuat/pengedit\n- Beda dari Booking: histori approval paket TIDAK snapshot berjenjang — tiap edit menghapus & membuat ulang semua step approval, approvalStatus selalu balik \"pending\" (histori lama hilang)"
+            },
+            {
+              "name": "[FE] Dialog & Step Tanda Tangan Paket",
+              "markdown_description": "- Step \"Tanda Tangan\" jadi step terakhir di wizard buat/edit paket\n- Pakai dialog approval reusable yang sama dengan modul Booking"
+            }
+          ]
+        },
+        {
+          "name": "Master Paket — Duplikasi, Status Aktif, & Preview PO",
+          "markdown_description": "Fitur pendukung katalog paket: duplikasi cepat dari paket existing, toggle ketersediaan paket, dan preview dokumen PO dari suatu paket sebelum dipakai booking real.",
+          "_status_hint": "complete",
+          "subtasks": [
+            {
+              "name": "[BE] Duplikasi, Toggle Status, & Preview PO",
+              "markdown_description": "- Duplikasi paket menghasilkan draft baru (beserta item-nya) tanpa approval record — cara cepat bikin varian dari paket existing\n- Toggle ketersediaan (aktif/nonaktif) paket; nonaktifkan paket yang sudah approved mengirim notifikasi ke semua approver terkait\n- Endpoint preview dokumen PO dari master paket (permission `package:view`, bukan `booking:view`) — staff bisa cek tampilan PO dari suatu paket sebelum ada booking real"
+            },
+            {
+              "name": "[FE] Aksi Duplikasi & Preview PO",
+              "markdown_description": "- Tombol duplikasi paket di listing/wizard\n- Tombol toggle status aktif/nonaktif per paket\n- Tombol preview PO paket (render PDF langsung dari master, tanpa booking)"
+            }
+          ]
+        },
+        {
+          "name": "Snapshot Item Paket per Booking",
+          "markdown_description": "Saat booking pakai suatu paket, item vendor & internal paket di-copy ke tabel snapshot booking-spesifik supaya bisa dikustomisasi per booking tanpa mengubah master paket.",
+          "_status_hint": "complete",
+          "subtasks": [
+            {
+              "name": "[BE] Snap Package Items Layer",
+              "markdown_description": "- Menangani penyalinan & kustomisasi item vendor/internal paket ke level booking (SnapPackageVendorItem/SnapPackageInternalItem) — beda dari master Package yang generic, snapshot ini terikat ke satu booking spesifik dan bisa diubah tanpa menyentuh master\n- Perubahan pada snapshot item setelah booking frozen tetap disinkronkan ke revisi PO yang sudah signed (non-material, tidak perlu approval ulang)",
+              "_review_note": "actions/snap-package-items.ts ~531 baris, belum full ditelusuri ulang di sesi ini — cek ulang kalau butuh nama fungsi exact."
+            },
+            {
+              "name": "[FE] Editor Item per Booking",
+              "markdown_description": "- Step \"Item Paket\" di drawer booking menampilkan item vendor/internal hasil snapshot\n- Bisa diedit qty/harga/urutan khusus untuk booking tsb tanpa mempengaruhi master paket"
+            }
+          ]
+        },
+        {
+          "name": "Client Agreement & PO Digital",
+          "markdown_description": "Klien menandatangani PO secara digital lewat link publik (tanpa login), dengan opsi e-meterai resmi (Peruri), lalu sistem merender PDF PO dari data snapshot yang sudah dibekukan.",
+          "_status_hint": "complete",
+          "subtasks": [
+            {
+              "name": "[BE] Token, Validasi, & Tanda Tangan",
+              "markdown_description": "- Token client-agreement TIDAK PERNAH EXPIRE by design — validasi hanya cek token + accessCode cocok\n- Agreement yang sudah pernah ditandatangani tetap bisa diakses lagi (alreadySigned: true) supaya klien bisa unduh ulang PO kapan saja\n- Proses tanda tangan pakai pola atomic \"claim\" untuk mencegah race condition double-submit\n- Momen TTD klien = pemicu freeze final (snapshotFrozenAt) DAN penyelesaian step approval client — kalau semua step lain approved, bookingStatus otomatis \"Confirmed\" dalam satu transaksi\n- E-meterai Peruri: autentikasi JWT dengan cache token 23 jam, generate stempel resmi + QR code, auto-retry kalau token expired, pesan error khusus kalau kuota e-meterai habis\n- Fitur tambahan (non-wajib): AI-assisted PO number extraction untuk cross-check upload manual hasil scan tanda tangan\n- Rendering PDF PO ada 3 jalur: internal `render-po` (wajib login, support render dari revisi historis, pakai komponen POPdfDocument), internal `render-po/v2` (logika sama tapi pakai komponen layout PDF kedua POPdfDocumentV2 — varian template, belum pasti mana yang aktif dipanggil UI), dan publik `client-agreement/render-po` (token+accessCode, tanpa login)",
+              "_review_note": "Gap tersisa: baris pasti pemanggilan generateEmaterai() di actions/booking.ts belum ditelusuri, dan belum pasti komponen FE booking manggil render-po versi v1 atau v2 (POPdfDocument vs POPdfDocumentV2)."
+            },
+            {
+              "name": "[FE] Halaman Publik Tanda Tangan",
+              "markdown_description": "- /client-agreement (public, no-auth) — step machine: input kode akses → preview & tanda tangan digital → selesai/unduh\n- Preview PDF langsung di browser sebelum tanda tangan\n- Tanda tangan pakai signature-canvas, dikirim sebagai gambar ke server saat submit"
+            }
+          ]
+        },
+        {
+          "name": "Daftar Booking & Kontrol Akses",
+          "markdown_description": "Daftar booking difilter otomatis berdasarkan hak akses user (data milik sendiri/grup/semua) dan draft selalu disembunyikan dari daftar utama.",
+          "_status_hint": "complete",
+          "subtasks": [
+            {
+              "name": "[BE] dataScope Access Control",
+              "markdown_description": "- Profile.dataScope (own/group/all) menentukan booking siapa saja yang boleh dilihat/diakses user\n- Listing utama membungkus resolusi grup berbasis membership, dengan union pemimpin grup sebagai fallback\n- Pengecekan akses ke satu booking spesifik sengaja pakai strategi group-first (cari grup di mana user jadi leader ATAU member) — keputusan sadar biar leader yang lupa didaftarkan sebagai member tetap bisa akses\n- Booking tanpa PIC hanya bisa diakses lewat scope \"all\"\n- Listing default exclude draft, didukung composite index untuk urutan nomor PO"
+            },
+            {
+              "name": "[FE] Tabel Listing Booking",
+              "markdown_description": "- Kontrol per-kolom/aksi digated permission (aksi seperti chat/detail dibatasi permission tertentu)\n- Nama customer ditampilkan snapshot-first dengan fallback ke data customer live untuk booking draft/pending yang belum di-freeze",
+              "_review_note": "File bookings-table.tsx besar (~100K+), belum ditelusuri kolom-per-kolom lengkap."
+            }
+          ]
+        },
+        {
+          "name": "Item Complimentary Booking",
+          "markdown_description": "Master katalog item complimentary (hadiah gratis untuk klien) yang bisa ditambahkan ke booking — fitur lama, sudah stabil.",
+          "_status_hint": "complete",
+          "subtasks": [
+            {
+              "name": "[BE] Complimentary Master & Snapshot",
+              "markdown_description": "- CRUD master item complimentary\n- Punya toggle sembunyikan harga (beda dari Bonus yang harga wajib tampil)\n- Snapshot ke SnapComplimentary saat finalize, tetap disinkron ke revisi signed PO via patch khusus tanpa memicu re-approval"
+            },
+            {
+              "name": "[FE] Picker Complimentary di Booking",
+              "markdown_description": "- Search-dropdown untuk cari & tambah item complimentary ke booking\n- Ditampilkan di step booking drawer"
+            }
+          ]
+        },
+        {
+          "name": "Item Bonus Booking (Baru)",
+          "markdown_description": "Master katalog item bonus baru untuk booking, mirip Complimentary tapi harga wajib diisi (>0). Sudah feature-complete di branch feat/bonus-booking, TAPI belum di-merge ke main dan masih ada perubahan aktif berjalan.",
+          "_status_hint": "in_progress_pending_merge",
+          "_review_note": "JANGAN tandai selesai di ClickUp. Branch feat/bonus-booking belum merge ke main, masih ada 3 file uncommitted (booking-drawer.tsx, bookings-table.tsx, edit-booking-drawer.tsx). Update status task ini manual pas udah merge.",
+          "subtasks": [
+            {
+              "name": "[BE] Bonus — Master Catalog Baru",
+              "markdown_description": "- Model Bonus (master) + SnapBookingBonus (snapshot per booking) — model baru, tidak menyentuh model lama SnapBonus (vendor-based) yang tetap dipakai fitur lain\n- CRUD lengkap dengan permission module `bonus` (view/create/edit/delete), dipetakan ke world Booking\n- Draft booking punya kolom draftBonuses (JSON) terpisah dari field lama bonuses; finalize menulis SnapBookingBonus lewat field baru bookingBonuses\n- Perubahan Bonus setelah frozen tetap disinkron ke revisi signed PO tanpa memicu re-approval, sama seperti Complimentary"
+            },
+            {
+              "name": "[FE] Bonus — UI Picker & Step Booking Baru",
+              "markdown_description": "- Step baru \"Bonus & Complimentary\" disisipkan di posisi ke-3 drawer booking (drawer wedding jadi 8 step total dari sebelumnya 7)\n- Komponen BonusSelect (search-dropdown, kloningan pola ComplimentarySelect)\n- Tiap baris bonus wajib diisi harga > 0 sebelum bisa lanjut ke step berikutnya (validasi blocking di FE)\n- Halaman master management tersendiri di /booking/bonus dengan form harga wajib (tanpa toggle sembunyikan harga)\n- EditBonusDrawer untuk wire Bonus ke alur edit booking yang sudah ada"
+            }
+          ]
+        },
+        {
+          "name": "Calendar Event — Kalender Jadwal Booking",
+          "markdown_description": "Halaman kalender (tampilan bulan/minggu/hari + statistik) buat lihat jadwal event booking Wedding & MICE berdasarkan tanggal event — murni read-view, tidak punya model/tabel sendiri.",
+          "_status_hint": "complete",
+          "subtasks": [
+            {
+              "name": "[BE] Query Kalender dari Booking",
+              "markdown_description": "- Tidak ada model CalendarEvent sendiri — murni query read-only di atas model Booking (pakai eventDate, weddingSession, plus relasi snapshot customer/venue/package)\n- Query terpisah untuk halaman kalender penuh dan untuk widget kalender dashboard\n- Difilter otomatis sesuai dataScope user\n- Digate pakai booking:view (module permission calendar_event sendiri sudah dihapus dari daftar permission, tapi fitur UI-nya tetap jalan normal)"
+            },
+            {
+              "name": "[FE] Tampilan Kalender Bulan/Minggu/Hari",
+              "markdown_description": "- Switch tampilan bulan/minggu/hari + navigasi maju-mundur periode\n- Panel statistik ringkas & detail event per tanggal yang diklik"
+            }
+          ]
+        },
+        {
+          "name": "Groups — Tim Sales & Target Achievement",
+          "markdown_description": "Kelola tim sales (grup): assign leader & member, set target penjualan tahunan per member, dan tracking pencapaian revenue vs target per member maupun per grup.",
+          "_status_hint": "complete",
+          "subtasks": [
+            {
+              "name": "[BE] CRUD Grup, Member, & Target",
+              "markdown_description": "- createGroup (otomatis tambah leader sebagai member + set Profile.dataScope=\"group\" untuk leader), updateGroup (ganti leader → dataScope leader lama balik \"own\", leader baru jadi \"group\"), deleteGroup\n- addGroupMember/removeGroupMember, reorderGroups/reorderGroupMembers (drag-drop sortOrder)\n- setMemberTarget/deleteMemberTarget — target sales tahunan per profil per tahun\n- updateGroupLeader — jalur khusus super-admin ganti leader tanpa lewat form edit biasa\n- Revenue performance = SUM harga package untuk SEMUA booking selain status Lost/Canceled (Confirmed+Pending+Uploaded+Rejected ikut kehitung) — bukan confirmed-only, konsisten di semua fungsi performance (single-group, multi-group, dashboard)"
+            },
+            {
+              "name": "[FE] Manajemen Grup & Detail per Sales",
+              "markdown_description": "- Tabel daftar grup + dialog form create/edit, picker leader, selector tahun target\n- Halaman detail per grup: daftar member + panel booking per sales member, dialog ganti leader"
+            }
+          ]
+        },
+        {
+          "name": "Voucher / Program — Diskon & Cashback",
+          "markdown_description": "Kelola program diskon/promo/cashback yang bisa dipasang ke pembayaran booking (Ledger) atau hutang booking (BookingPayable), lengkap dengan periode berlaku, kuota, dan minimum transaksi.",
+          "_status_hint": "complete",
+          "subtasks": [
+            {
+              "name": "[BE] CRUD Program Diskon",
+              "markdown_description": "- createPromo/updatePromo/deletePromo — field tipe diskon (persentase/nominal), jenis voucher (payment_discount/cashback), minimum transaksi, periode berlaku, periode event eligible, kuota, usedCount, toggle isActive\n- Toggle aktif/nonaktif dilakukan lewat updatePromo biasa, tidak ada endpoint toggle terpisah\n- Terhubung ke Ledger.discountProgramId (snapshot discountAmount per pembayaran) dan BookingPayable.programId",
+              "_review_note": "Logic increment DiscountProgram.usedCount belum ketemu di file promo utama — kemungkinan di-update dari flow ledger/payment allocation lain, worth digali kalau butuh detail penuh."
+            },
+            {
+              "name": "[FE] Manager Program Diskon",
+              "markdown_description": "- Halaman kelola daftar promo/voucher dengan form create/edit + toggle aktif\n- Dropdown pilih promo dipakai di form pembayaran booking (create & edit) dan Finance income"
+            }
+          ]
+        },
+        {
+          "name": "Vendor — Master Data Supplier",
+          "markdown_description": "Master data vendor/supplier beserta kategorinya, dipakai sebagai sumber item paket wedding/bonus/PO — menu general, bukan world tersendiri.",
+          "_status_hint": "complete",
+          "subtasks": [
+            {
+              "name": "[BE] CRUD Vendor & Kategori Vendor",
+              "markdown_description": "- CRUD VendorCategory (createVendorCategory/updateVendorCategory/deleteVendorCategory)\n- CRUD Vendor (nama, kategori, deskripsi, kontak, alamat, bank) dengan payment methods multi-rekening bersarang — update me-replace payment methods lama (deleteMany + recreate)\n- Vendor terhubung ke booking lewat PackageVendorItem/SnapVendorItem/SnapBonus (bukan lewat entity PurchaseOrder terpisah) — di modul Purchase, vendorId langsung di-assign ke item kategori booking"
+            },
+            {
+              "name": "[FE] Tabel & Form Vendor",
+              "markdown_description": "- Tabel daftar vendor dengan filter kategori\n- Drawer form create/edit vendor lengkap dengan input multi-rekening pembayaran"
+            }
+          ]
+        },
+        {
+          "name": "Customer — Master Data & Integrasi Deal",
+          "markdown_description": "Master data customer (calon pengantin pria/wanita) yang otomatis terhubung ke alur konversi Deal→Customer dari Lead, plus link referensi ke Bitrix24 CRM.",
+          "_status_hint": "complete",
+          "subtasks": [
+            {
+              "name": "[BE] CRUD Customer & Konversi dari Lead",
+              "markdown_description": "- createCustomer/updateCustomer/deleteCustomer/deleteBulkCustomers, digate requirePermission({module:\"customers\"})\n- Saat booking dibuat dari sebuah Lead yang belum pernah dikonversi, sistem otomatis bikin Customer baru dari data lead (nama, email, alamat, bitrixId, sourceOfInformationId) pakai pola create-then-lock (create row → updateMany claim convertedToCustomerId dengan guard race condition)\n- Kalau lead sudah pernah dikonversi, booking baru reuse Customer existing lewat convertedToCustomerId — ini alur \"Deal → jadi Customer + Booking draft\" di ARCHITECTURE.md §1\n- Field bitrixId dibawa dari Lead ke Customer saat konversi, dipakai sebagai link referensi ke Bitrix24 (bukan lewat sync tulis-balik dari webhook)"
+            },
+            {
+              "name": "[FE] Tabel & Form Customer",
+              "markdown_description": "- Tabel daftar customer dengan pencarian & bulk delete\n- Drawer form create/edit customer (NIK, kontak, alamat, tipe, club, member status)",
+              "_review_note": "actions/customer-payout.ts & lib/queries/customer-payout.ts (fitur payout/refund customer) belum ditelusuri — di luar scope 5 fitur ini, worth dicek terpisah kalau relevan."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "phase": 4,
+      "target_list_id": "1100480000000517",
+      "target_list_name": "Phase 4 Setting Master Data",
+      "phase_note": "Semua menu di Settings (app/(private)/(general)/settings) KECUALI User Management dan Role & Permission — dua itu udah masuk Phase 2 Auth & Access Control, sengaja gak diulang di sini.",
+      "_pending_note": "Draft ini disusun dari hasil investigasi subagent, belum di-cross-check manual line-by-line sama orchestrator — kalau ada nama field/endpoint yang meleset dikit, wajar, tandain _review_note di masing-masing subtask kalau nemu.",
+      "tasks": [
+        {
+          "name": "Settings — Approval Flow Config",
+          "markdown_description": "Konfigurasi alur approval per modul bisnis (booking, package, quotation, dll) langsung dari halaman Settings, tanpa perlu ubah kode tiap kali urutan approver berubah — implementasi nyata dari konsep DB-driven approval.",
+          "_status_hint": "complete",
+          "subtasks": [
+            {
+              "name": "[BE] Approval Flow Engine",
+              "markdown_description": "- Modul dikonfigurasi lewat KNOWN_MODULES: booking, package, quotations, catering, decoration, payment\n- Tiap modul punya config sequential (berurutan) vs parallel (approve barengan), plus list step (urutan, role approver)\n- Update flow = replace-all-steps: 1 transaksi hapus semua step lama lalu buat ulang semua step baru sesuai input, disimpan ke ApprovalFlowConfig/ApprovalFlowStep\n- Kalau modul belum punya row config di DB, fallback ke default hardcode (lib/approval-flows.ts) biar tetap ada nilai yang kebaca di UI"
+            },
+            {
+              "name": "[FE] Approval Flow Settings UI",
+              "markdown_description": "- Form per modul: toggle sequential/parallel + list step yang bisa ditambah/dihapus/reorder\n- Pilih role approver per step dari dropdown role yang ada"
+            }
+          ]
+        },
+        {
+          "name": "Settings — Module & Sidebar Registry",
+          "markdown_description": "Kelola registry module sidebar (world Finance/HRD/Booking/Purchase) beserta pemetaan permission-module ke tiap world — inti dari mekanisme sidebar World vs General.",
+          "_status_hint": "complete",
+          "subtasks": [
+            {
+              "name": "[BE] Module Registry & Mapping",
+              "markdown_description": "- CRUD module/world (create/update/delete) + reorder urutan tampil di module-switcher\n- Toggle pemetaan permission-module ke/dari suatu world lewat tabel module_permission_maps — permission-module yang gak di-map otomatis muncul sebagai menu general (flat di semua world)"
+            },
+            {
+              "name": "[FE] Modules Manager UI",
+              "markdown_description": "- Tabel daftar module dengan tombol reorder naik/turun\n- Matrix checkbox buat centang permission-module mana yang di-map ke world mana"
+            }
+          ]
+        },
+        {
+          "name": "Settings — Booking Activity Log",
+          "markdown_description": "Monitoring gabungan histori perubahan booking Wedding & MICE (siapa ubah apa field, kapan) dalam satu tabel read-only, tanpa CRUD.",
+          "_status_hint": "complete",
+          "subtasks": [
+            {
+              "name": "[BE] Query Activity Log Gabungan",
+              "markdown_description": "- Gabungin log perubahan Booking Wedding + Booking MICE jadi satu list read-only\n- Query di lib/queries/, gak ada action mutasi karena murni monitoring"
+            },
+            {
+              "name": "[FE] Tabel Booking Activity Log",
+              "markdown_description": "- Tabel dengan filter (tanggal, user, jenis booking)\n- Tampilan detail perubahan per entri log"
+            }
+          ]
+        },
+        {
+          "name": "Settings — Venue & Brand",
+          "markdown_description": "Master data venue dan brand — satu venue bisa punya beberapa brand, dipakai buat penomoran dokumen PO/invoice per brand.",
+          "_status_hint": "complete",
+          "subtasks": [
+            {
+              "name": "[BE] Venue & Brand CRUD",
+              "markdown_description": "- CRUD Venue (nama, alamat, data dasar lokasi)\n- CRUD Brand + relasi brand ke venue (satu venue → banyak brand)"
+            },
+            {
+              "name": "[FE] Form Venue & Brand",
+              "markdown_description": "- Form create/update/delete Venue\n- Form create/update/delete Brand dengan dropdown pilih venue induk"
+            }
+          ]
+        },
+        {
+          "name": "Settings — Payment Methods",
+          "markdown_description": "Master rekening/metode pembayaran yang muncul di quotation, invoice, dan Finance AR sebagai tujuan transfer klien.",
+          "_status_hint": "complete",
+          "subtasks": [
+            {
+              "name": "[BE] Payment Method CRUD",
+              "markdown_description": "- CRUD metode pembayaran (nama bank, no. rekening, atas nama)\n- Pola implementasi beda dari mayoritas menu Settings lain: full client component fetch langsung ke REST API route, TANPA server action + lib/queries terpisah",
+              "_review_note": "Perlu konfirmasi nama pasti route API-nya kalau mau dipush — belum ditelusuri sampai nama file exact."
+            },
+            {
+              "name": "[FE] Form Payment Methods",
+              "markdown_description": "- List + dialog form create/update/delete metode pembayaran"
+            }
+          ]
+        },
+        {
+          "name": "Settings — Quotation Templates",
+          "markdown_description": "Template item & metode pembayaran default per venue buat quotation, biar sales gak perlu input item quotation manual dari nol tiap kali bikin quotation baru.",
+          "_status_hint": "complete",
+          "subtasks": [
+            {
+              "name": "[BE] Quotation Template per Venue",
+              "markdown_description": "- Upsert (create sekaligus update) + delete template per venue\n- Sama seperti Payment Methods: pola full client component + REST API route langsung, bukan server action + lib/queries",
+              "_review_note": "Nama route API exact belum ditelusuri — cek ulang sebelum push kalau butuh detail endpoint."
+            },
+            {
+              "name": "[FE] Editor Template per Venue",
+              "markdown_description": "- Pilih venue → edit daftar item default quotation + metode pembayaran default"
+            }
+          ]
+        },
+        {
+          "name": "Settings — Tutorial CMS",
+          "markdown_description": "Konten tutorial aplikasi berjenjang (Kategori → Lesson → Step → Dokumen/attachment) yang ditampilkan di menu Tutorial pada sidebar general.",
+          "_status_hint": "complete",
+          "subtasks": [
+            {
+              "name": "[BE] Tutorial CMS 4-Level CRUD",
+              "markdown_description": "- CRUD 4 level nested: Category → Lesson → Step → Step Document/attachment\n- Tiap level punya action/query sendiri, urutan tampil bisa diatur manual"
+            },
+            {
+              "name": "[FE] Editor Tutorial Berjenjang",
+              "markdown_description": "- UI kelola kategori → lesson → step → attachment secara berjenjang\n- Upload dokumen/gambar per step"
+            }
+          ]
+        },
+        {
+          "name": "Settings — Master Data Referensi",
+          "markdown_description": "Kumpulan master data referensi sederhana (nama + urutan) yang dipakai modul lain: Source of Information, Tingkat Pendidikan, Order Status, Event Types, dan Hari Libur Nasional.",
+          "_status_hint": "complete",
+          "subtasks": [
+            {
+              "name": "[BE] CRUD Master Referensi",
+              "markdown_description": "- Source of Information — dipakai daily-activity buat tracking channel akuisisi customer\n- Tingkat Pendidikan — dipakai data karyawan HRD, punya field urutan manual\n- Order Status — dipakai Purchase/Vendor buat tracking status pengadaan\n- Event Types — dipakai kategorisasi booking & format penomoran PO\n- Hari Libur Nasional — dipakai HRD buat perhitungan absensi/cuti\n- Semua entity pakai pola CRUD sederhana (create/update/delete), masing-masing punya action & query file sendiri"
+            },
+            {
+              "name": "[FE] Form Master Referensi",
+              "markdown_description": "- 5 halaman form terpisah (satu per entity), pola UI seragam: list + dialog create/edit"
+            }
+          ]
+        },
+        {
+          "name": "Settings — Banner",
+          "markdown_description": "Banner carousel dashboard yang dikelompokkan per lokasi/module tampil, dengan urutan carousel yang bisa diatur per grup.",
+          "_status_hint": "complete",
+          "subtasks": [
+            {
+              "name": "[BE] Banner CRUD & Toggle",
+              "markdown_description": "- Create single/batch, update, delete, toggle aktif/nonaktif\n- sortOrder auto-increment per grup lokasi tampil"
+            },
+            {
+              "name": "[FE] Manager Banner per Grup",
+              "markdown_description": "- Form upload gambar banner + reorder urutan\n- Toggle aktif/nonaktif per grup lokasi"
+            }
+          ]
+        },
+        {
+          "name": "Settings — Maintenance Master Data",
+          "markdown_description": "Master data pendukung modul Maintenance (ticketing): Kategori, Prioritas, Status — pola implementasinya beda dari menu lain (REST API route + TanStack Query hook, bukan server action).",
+          "_status_hint": "complete",
+          "subtasks": [
+            {
+              "name": "[BE] API Route Maintenance Category/Priority/Status",
+              "markdown_description": "- 3 REST endpoint terpisah (categories, priorities, statuses), masing-masing create/update/delete\n- Priority punya field estimasi target waktu penyelesaian per level"
+            },
+            {
+              "name": "[FE] Hook & Form Maintenance Settings",
+              "markdown_description": "- useMaintenanceCategories/Priorities/Statuses + mutation hooks (TanStack Query)\n- 3 halaman form terpisah dengan pola UI seragam"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "phase": 5,
+      "target_list_id": "1100480000000518",
+      "target_list_name": "Phase 5 HRD",
+      "phase_note": "Seluruh fitur di app/(private)/hrd/ (world HRD) + 2 general-nav yang numpang komponen sama (slip-gaji, cuti). _status_hint diisi 'complete' default kecuali disebutkan lain di _review_note. Rekrutmen/Onboarding (submodul paling kompleks) sudah masuk di akhir array ini. Catatan: 2 task Absensi (Clock In/Out & Riwayat; Manajemen Lokasi, Shift & Assignment) DIPINDAH ke Phase 8 (digabung dengan KPI Performance) per instruksi user 2026-09-18 — bukan dihapus, cuma relokasi. Manajemen Kinerja — Review & KPI TETAP di sini.",
+      "tasks": [
+        {
+          "name": "Payroll — Generate & Kelola Periode Gaji",
+          "markdown_description": "Generate gaji bulanan per karyawan aktif (gaji pokok+tunjangan, potongan BPJS/PPh21/absen/telat) dengan lifecycle draft → finalized → paid.",
+          "_status_hint": "complete",
+          "_review_note": "generatePayrollForPeriod (lib/payroll/payroll-generator.ts) TIDAK pakai db.$transaction — loop sequential create per karyawan/item, melanggar AGENTS.md §4.2. Kalau gagal di tengah proses, periode nyangkut partial/processing, gak atomic.",
+          "subtasks": [
+            {
+              "name": "[BE] Payroll Generator Engine",
+              "markdown_description": "- Kalkulasi gaji pokok + tunjangan dari EmployeeSalary, potongan BPJS Kes/JHT/JKK/JKM/JP, PPh21 (metode TER/progressive dari PayrollSettings), potongan absen/telat dari data Attendance\n- Lifecycle PayrollPeriod: draft → processing → finalized → paid (unique per month+year)\n- Snapshot nama/jabatan/departemen/bank di-freeze ke Payslip saat digenerate\n- CRUD Komponen Gaji (SalaryComponent) & Gaji Karyawan (EmployeeSalary, unique per profil+komponen+effectiveDate)"
+            },
+            {
+              "name": "[FE] Payroll Management Admin",
+              "markdown_description": "- Tab Periode Payroll, Komponen Gaji, Gaji Karyawan, Pengaturan (tab Pengaturan cuma muncul kalau permission edit)\n- Dialog generate payroll per periode + tabel detail periode\n- Panel pengaturan rate BPJS/PPh21/potongan absen-telat"
+            }
+          ]
+        },
+        {
+          "name": "Payroll — Slip Gaji Karyawan (Self-Service)",
+          "markdown_description": "Karyawan bisa lihat & download PDF slip gaji sendiri, data di-scope otomatis ke profil yang login.",
+          "_status_hint": "complete",
+          "_review_note": "Halaman general-nav (general)/slip-gaji cuma re-export literal komponen PayslipViewer dari hrd/slip-gaji — bukan modul terpisah. Gap: halaman general ini TIDAK punya requirePagePermission() sama sekali (beda dari versi hrd yang gate 'hr'); tetap aman karena API di-scope ke profileId/ownership, tapi page-level gate-nya inkonsisten.",
+          "subtasks": [
+            {
+              "name": "[BE] API Payslip Scoped per Karyawan",
+              "markdown_description": "- Endpoint my-list & detail by id, keduanya cek ownership ke session.user.profileId\n- Generate PDF slip gaji dari data snapshot Payslip/PayslipItem"
+            },
+            {
+              "name": "[FE] Payslip Viewer",
+              "markdown_description": "- Kartu ringkasan + detail komponen gaji per periode\n- Tombol download PDF\n- Dipakai baik di world HRD maupun general-nav (komponen sama)"
+            }
+          ]
+        },
+        {
+          "name": "Cuti — Pengajuan & Approval",
+          "markdown_description": "Karyawan mengajukan cuti, disetujui manager lalu HR secara berjenjang; approval otomatis memotong saldo cuti dan membuat catatan kehadiran \"on_leave\".",
+          "_status_hint": "complete",
+          "_review_note": "Approval flow BUKAN pakai generic DB-driven ApprovalFlowConfig (beda dari Booking) — bespoke 2-step hardcode: managerApproveLeave (cek profile.managerId === caller) lalu hrApproveLeave. Approval chain depend on Profile.managerId — kalau karyawan gak punya manager assigned, request stuck pending selamanya tanpa fallback. Bug ditemukan: app/api/hr/approvers/route.ts gate pakai permission 'hr-recruitment:view', kemungkinan copy-paste salah dari 'hr-leave'.",
+          "subtasks": [
+            {
+              "name": "[BE] Leave Request Engine (2-Step Approval)",
+              "markdown_description": "- managerApproveLeave (cek manager assignment) → hrApproveLeave (permission hr-leave:approve, hanya proses status manager_approved)\n- Approval sukses = 1 transaksi: update status + increment LeaveBalance.usedDays + bulk-create Attendance status on_leave per hari kerja\n- cancelLeaveRequest reverse saldo + hapus Attendance rows kalau sebelumnya approved"
+            },
+            {
+              "name": "[FE] Form, Riwayat & Team Calendar",
+              "markdown_description": "- Form pengajuan cuti + riwayat pengajuan (dipakai di world HRD & general-nav /cuti, komponen sama beda mode prop hr vs self-service)\n- Kalender tim & tabel approval (gate hr-leave:approve atau manager dengan item pending)\n- Kartu saldo cuti per tipe"
+            }
+          ]
+        },
+        {
+          "name": "Cuti — Master Data Tipe & Saldo",
+          "markdown_description": "Pengaturan jenis cuti (kuota, carry-over, batas pengajuan) dan saldo cuti per karyawan per tahun, dikonfigurasi dari Settings.",
+          "_status_hint": "complete",
+          "subtasks": [
+            {
+              "name": "[BE] CRUD Leave Type & Leave Balance",
+              "markdown_description": "- LeaveType: defaultQuota, isDeductible, maxConsecutiveDays, minDaysBeforeRequest, carry-over (isCarryOver, carryOverMaxDays, carryOverExpiryMonths), isSystemType\n- LeaveBalance unique per profil+tipe+tahun, permission hr-leave:create/edit"
+            },
+            {
+              "name": "[FE] Leave Type & Balance Manager",
+              "markdown_description": "- Form pengaturan tipe cuti + kuota\n- Manajemen saldo cuti per karyawan (tab Settings di sistem-cuti)"
+            }
+          ]
+        },
+        {
+          "name": "Database Karyawan — Master Data Employee",
+          "markdown_description": "CRUD data karyawan lengkap (identitas, NPWP/BPJS, kontrak, dokumen) — data karyawan numpang di model Profile yang sama dipakai untuk login/auth.",
+          "_status_hint": "complete",
+          "_review_note": "TEMUAN ARSITEKTUR: Employee TIDAK punya model Prisma terpisah — semua field HR (nik, npwp, bpjs, employeeNumber, departmentId, positionId, managerId self-relation, employmentType, joinDate/resignDate, contract dates) nempel di model Profile yang sama dipakai auth. Jadi tiap karyawan otomatis = 1 akun login; perubahan ke Profile berdampak ke seluruh sistem auth. createEmployee: EmploymentHistory.create & pengiriman email invite dilakukan DI LUAR transaksi induk (partial-write risk, meski disengaja biar email failure gak rollback user). Bug: app/api/hr/ex-staff/route.ts pakai permission module 'hr-recruitment' yang salah (harusnya bukan bagian rekrutmen).",
+          "subtasks": [
+            {
+              "name": "[BE] CRUD Employee (create/update/delete)",
+              "markdown_description": "- createEmployee: buat User+Profile nested, generate token verifikasi 7 hari, kirim email invite\n- updateEmployee: $transaction update profile + auto-insert EmploymentHistory kalau dept/position berubah\n- deleteEmployee: soft delete (status inactive + resignDate)"
+            },
+            {
+              "name": "[FE] Tabel, Filter, Drawer & Detail Karyawan",
+              "markdown_description": "- Tabel + filter karyawan, drawer create/edit\n- Detail tabs: Employment, Documents (upload), History (riwayat mutasi/promosi/resign)\n- Org chart (dibangun dari hierarki Department, bukan dari managerId reports-to)"
+            }
+          ]
+        },
+        {
+          "name": "Database Karyawan — Departemen & Jabatan",
+          "markdown_description": "Master data departemen (hierarkis) dan jabatan sebagai referensi struktur organisasi karyawan.",
+          "_status_hint": "complete",
+          "subtasks": [
+            {
+              "name": "[BE] CRUD Department & Position",
+              "markdown_description": "- Department: self-relation hierarkis (parentId) + headId ke Profile\n- Position: level + sortOrder, permission module terpisah hr-departments/hr-positions"
+            },
+            {
+              "name": "[FE] Department & Position Manager",
+              "markdown_description": "- Form CRUD departemen dengan struktur hierarki\n- Form CRUD jabatan dengan level & urutan"
+            }
+          ]
+        },
+        {
+          "name": "Manajemen Kinerja — Review & KPI",
+          "markdown_description": "Penilaian kinerja karyawan (performance review) dan target KPI, dikelola HR.",
+          "_status_hint": "complete",
+          "_review_note": "Fungsional CRUD lengkap tapi TIDAK ADA dataScope filtering sama sekali (beda dari Booking yang enforce dataScope ketat). Kpi.department cuma string bebas, bukan FK ke Department.",
+          "subtasks": [
+            {
+              "name": "[BE] CRUD Performance Review & KPI",
+              "markdown_description": "- PerformanceReview: rating + status (PENDING/IN_PROGRESS/COMPLETED/REJECTED), relasi ke Profile\n- Kpi: standalone, field department masih string bebas"
+            },
+            {
+              "name": "[FE] Manajemen Kinerja UI",
+              "markdown_description": "- Tabel review kinerja + form input rating\n- Manajemen target KPI"
+            }
+          ]
+        },
+        {
+          "name": "Pengembangan SDM — Training, Sertifikasi & Development",
+          "markdown_description": "Pengelolaan program training, riwayat pengembangan karyawan, dan sertifikasi yang dimiliki.",
+          "_status_hint": "complete",
+          "_review_note": "TrainingProgram TIDAK punya relasi FK ke Profile — cuma field participantsCount (angka), jadi peserta training gak traceable per-orang. Inkonsistensi kecil: logAudit pakai session.user.profileId di sini vs session.user.id di modul Kinerja.",
+          "subtasks": [
+            {
+              "name": "[BE] CRUD Training Program, Development & Certification",
+              "markdown_description": "- TrainingProgram (tanpa relasi peserta per-orang)\n- EmployeeDevelopment & EmployeeCertification (status ACTIVE/EXPIRED), keduanya relasi ke Profile"
+            },
+            {
+              "name": "[FE] Pengembangan SDM UI",
+              "markdown_description": "- Drawer Training Program, Employee Development, Certification\n- Tabel ringkasan per karyawan"
+            }
+          ]
+        },
+        {
+          "name": "Rekrutmen — FPK & Permintaan Karyawan (Pipeline A)",
+          "markdown_description": "Form Permintaan Karyawan (FPK) tempat manager mengajukan kebutuhan headcount baru dan pelamar publik submit lamaran ke request tsb — tapi jalur ini buntu, tidak pernah nyambung ke proses hire.",
+          "_status_hint": "complete",
+          "_review_note": "TEMUAN ARSITEKTUR: Pipeline A ini dead-end — CandidateSubmission (hasil apply publik ke RecruitmentRequest) TIDAK PERNAH dikonversi jadi Candidate, jadi gak ada jalur otomatis dari FPK ke hire. Bug: updateRecruitmentRequestStatus cuma cek permission generik 'hr-recruitment:edit', TIDAK verifikasi caller memang approver1Id/approver2Id yang ditunjuk — beda dari Pipeline B (approveJobPosting/rejectJobPosting) yang benar enforce identitas approver.",
+          "subtasks": [
+            {
+              "name": "[BE] RecruitmentRequest & CandidateSubmission CRUD",
+              "markdown_description": "- CRUD RecruitmentRequest (kebutuhan headcount: posisi, jumlah, alasan) + approval 2-approver (approver1Id/approver2Id)\n- updateRecruitmentRequestStatus untuk approve/reject — TIDAK cek identitas caller terhadap approver1Id/approver2Id, cuma permission generik\n- CandidateSubmission dari form publik tersimpan tapi tanpa jalur konversi ke Candidate"
+            },
+            {
+              "name": "[FE] Form Publik & Approval FPK",
+              "markdown_description": "- Form publik pelamar submit lamaran ke request tertentu (recruitment-form)\n- UI approval berjenjang untuk manager/approver FPK"
+            }
+          ]
+        },
+        {
+          "name": "Rekrutmen — Job Posting, Approval Ganda & Publikasi (Pipeline B)",
+          "markdown_description": "Manager membuat lowongan kerja yang harus disetujui dua approver sebelum dipublikasikan ke form lamaran publik — satu-satunya jalur rekrutmen yang benar-benar otomatis sampai ke hire.",
+          "_status_hint": "complete",
+          "subtasks": [
+            {
+              "name": "[BE] Job Posting Lifecycle & Dual Approval",
+              "markdown_description": "- CRUD JobPosting (posisi, kualifikasi, kuota) dengan status draft → pending_approval → approved/rejected → published\n- approveJobPosting/rejectJobPosting benar cek identitas caller terhadap approver1Id/approver2Id yang ditunjuk (kontras dengan bug di Pipeline A)"
+            },
+            {
+              "name": "[FE] Manajemen Job Posting",
+              "markdown_description": "- Tabel + drawer create/edit job posting\n- Panel approval ganda dengan status tracking per approver"
+            }
+          ]
+        },
+        {
+          "name": "Rekrutmen — Aplikasi Publik, Kandidat & Hire",
+          "markdown_description": "Pelamar publik apply ke job posting yang sudah dipublikasikan, kandidat dikelola lewat pipeline kanban, lalu di-hire langsung jadi akun karyawan aktif.",
+          "_status_hint": "complete",
+          "_review_note": "hireCandidate: pembuatan User+Profile dan update Candidate.stage TIDAK dibungkus db.$transaction beneran — pakai compensating-delete manual (try/catch rollback) kalau ada langkah gagal, melanggar semangat AGENTS.md §4.2. Auto-assignment OnboardingTemplate default juga di luar $transaction yang membungkus pembuatan OnboardingTask-nya, jadi assignment+tasks gak atomic sebagai satu kesatuan. BlacklistEntry TIDAK PERNAH dicek programmatically di createJobPosting/addCandidate/hireCandidate/apply publik — padahal ada tab UI 'Blacklist' yang kesannya aktif menyaring.",
+          "subtasks": [
+            {
+              "name": "[BE] Public Apply & Candidate Pipeline",
+              "markdown_description": "- Form publik apply ke JobPosting yang sudah published → create Candidate\n- Kanban stage kandidat (applied/screening/interview/offer/hired/rejected)\n- hireCandidate: create User+Profile + update stage 'hired' + auto-assign OnboardingTemplate default — TIDAK atomic (compensating-delete, bukan $transaction beneran)\n- BlacklistEntry tidak pernah dicek di titik manapun pada pipeline ini"
+            },
+            {
+              "name": "[FE] Kanban Kandidat & Hire Dialog",
+              "markdown_description": "- Board kanban drag-drop per stage kandidat\n- Dialog detail kandidat + tombol hire → provisioning akun"
+            }
+          ]
+        },
+        {
+          "name": "Onboarding Karyawan — 3 Sistem Terpisah",
+          "markdown_description": "Tiga sistem onboarding yang berjalan sendiri-sendiri tanpa saling terhubung: checklist tugas onboarding, form pengumpulan data publik, dan form internal manual.",
+          "_status_hint": "complete",
+          "_review_note": "TEMUAN ARSITEKTUR: 3 sistem onboarding TIDAK saling terhubung — (1) task-checklist OnboardingTemplate/Assignment/Task, (2) OnboardingFormSubmission pengumpulan data publik, (3) 'Form Internal' submitOnboardingForm yang jadi satu-satunya jalur provisioning akun selain hireCandidate. assignOnboarding: create assignment standalone lalu tasks via $transaction terpisah — gak atomic sebagai satu kesatuan. completeOnboardingTask: 3 operasi sequential non-transaksional lintas 2 tabel. submitOnboardingForm: find-or-create Department/Position by nama case-insensitive TANPA transaction/upsert (race risk minor pada nama sama dibuat bersamaan) — tapi bagian EmployeeDocument+EmploymentHistory-nya SUDAH benar pakai $transaction. Inkonsistensi permission module: employeeOnboarding.ts (submitOnboardingForm, createOnboardingFormLink, regenerateOnboardingFormLink, revokeOnboardingFormLink) pakai module 'hr', sedangkan candidate.ts/jobPosting.ts/onboarding.ts/recruitmentRequest.ts/blacklist.ts semua pakai 'hr-recruitment'.",
+          "subtasks": [
+            {
+              "name": "[BE] Template Checklist, Form Publik & Form Internal",
+              "markdown_description": "- OnboardingTemplate/Assignment/Task: assignOnboarding (assignment standalone + tasks $transaction terpisah), completeOnboardingTask (3 langkah non-transaksional)\n- OnboardingFormSubmission: form publik pengumpulan data via link token (createOnboardingFormLink/regenerateOnboardingFormLink/revokeOnboardingFormLink)\n- submitOnboardingForm ('Form Internal'): satu-satunya jalur provisioning akun selain hireCandidate — Department/Position find-or-create tanpa transaction, tapi EmployeeDocument+EmploymentHistory sudah $transaction benar"
+            },
+            {
+              "name": "[FE] Onboarding Admin & Task Tracker",
+              "markdown_description": "- UI assign template ke karyawan baru + tracker progress checklist\n- Form publik pengisian data onboarding via link\n- Form internal manual untuk HR input data onboarding tanpa link publik"
+            }
+          ]
+        },
+        {
+          "name": "Rekrutmen — Blacklist Pelamar",
+          "markdown_description": "Daftar pelamar yang di-blacklist agar tidak diproses lagi — saat ini murni pencatatan pasif, belum ada enforcement otomatis.",
+          "_status_hint": "complete",
+          "_review_note": "BlacklistEntry cuma pencatatan — tidak ada satupun titik (createJobPosting, addCandidate, hireCandidate, apply publik) yang cek entry ini secara programmatic, padahal tab UI-nya kesannya aktif menyaring pelamar.",
+          "subtasks": [
+            {
+              "name": "[BE] CRUD Blacklist Entry",
+              "markdown_description": "- Create/update/delete BlacklistEntry (nama, alasan, kontak)\n- Tidak ada hook enforcement ke pipeline manapun"
+            },
+            {
+              "name": "[FE] Tab Blacklist",
+              "markdown_description": "- Tabel daftar blacklist + form tambah/hapus entry"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "phase": 6,
+      "target_list_id": "1100480000000519",
+      "target_list_name": "Phase 6 Procurement & Profile Utilities",
+      "phase_note": "Digabung atas instruksi user (Phase 7 lama dilebur ke sini): Procurement + Profile/Reset Password Dashboard/Logout/Notifications. Bukan satu modul yang sama, cuma disatukan phase-nya.",
+      "tasks": [
+        {
+          "name": "Procurement — Pengadaan Barang (Item, CRUD & Approval)",
+          "markdown_description": "Form pengajuan pembelian barang internal per venue/divisi dengan alur status Pending → Approved/Rejected → Completed, termasuk kalkulasi petty cash otomatis dan upload bukti beli.",
+          "_status_hint": "complete",
+          "_review_note": "General-nav, TERPISAH TOTAL secara arsitektur dari world Purchase (vendor-specialist→PO) — zero relasi model ke Vendor/PurchaseOrder/Booking, cuma ke Venue+Profile. Gap: (1) lib/queries/procurement.ts sama sekali tidak menerapkan filter dataScope (own/group/all) — beda dari pola booking (ARCHITECTURE.md §4.4), semua data lintas-user terbuka ke siapapun yang punya permission view. (2) GET /api/procurement/pending-ids findMany TANPA take/limit sama sekali — pelanggaran langsung AGENTS.md. (3) GET /api/procurement/export inline raw Prisma query di route handler (bukan lib/queries/), dibatasi take:5000 tapi tetap salah folder. (4) Approval pakai hardcoded VALID_TRANSITIONS map, bukan ApprovalFlowConfig DB-driven standar project (ARCHITECTURE.md §4.2). (5) EditProcurementDrawer.tsx pakai createProcurementSchema untuk mode edit, harusnya updateProcurementSchema yang sudah ada — gak fatal (reset() isi semua field) tapi inkonsisten. (6) useExportProcurement/exportProcurement dead code (fitur export nyata jalan lewat handleExport() manual anchor click, bypass hook). (7) Duplikasi verbatim uploadProcurementFile() + useEffect auto-calc pettyCash antara Add/EditProcurementDrawer, serta formatDate/formatCurrency reimplement beda-beda di 3 file. (8) STATUS_CONFIG/ProcurementStats hardcode raw Tailwind color (bg-amber-500 dst, cuma REJECTED benar pakai token) — deviasi AGENTS.md §12. (9) ApproveProcurementDialog.tsx pakai shadcn Dialog, beda pola dari semua form procurement lain yang pakai Drawer.",
+          "subtasks": [
+            {
+              "name": "[BE] Procurement Item CRUD, Approval & Export Routes",
+              "markdown_description": "- GET/POST /api/procurement, GET/PATCH/DELETE /api/procurement/[id] — requirePermissionForRoute(module:procurement) → rate limit tier sesuai method → Zod → $transaction array-form → logAudit → revalidateTag\n- POST /api/procurement/[id]/approve — 3 aksi (Approve/Reject/Complete), Zod .refine() wajib keterangan saat Reject, validasi transisi status via hardcoded VALID_TRANSITIONS map\n- GET /api/procurement/summary — ringkasan count per status, scope global/per-venue\n- GET /api/procurement/export — CSV/Excel(exceljs)/PDF(jspdf), inline query take:5000\n- GET /api/procurement/pending-ids — ambil semua id item PENDING buat fitur select-all lintas halaman (tanpa limit — gap)"
+            },
+            {
+              "name": "[FE] Tab Pengadaan — Table, Filter, Form & Approval Dialog",
+              "markdown_description": "- ProcurementTable.tsx: desktop table + mobile card, bulk-select khusus row PENDING, banner select-all-across-pages\n- ProcurementFilters.tsx: search, venue, divisi (5 opsi statis), status, date range\n- Add/EditProcurementDrawer.tsx: form 19 field, upload bukti beli, auto-calc petty cash\n- ProcurementDetailDrawer.tsx (read-only) & ApproveProcurementDialog.tsx (radio 3 aksi)"
+            }
+          ]
+        },
+        {
+          "name": "Procurement — Pengumuman (Announcement)",
+          "markdown_description": "CRUD pengumuman internal yang bisa ditarget ke semua pengguna, per venue, atau per divisi tertentu, dengan status aktif/nonaktif.",
+          "_status_hint": "complete",
+          "_review_note": "BUG: ketiga route mutation (create/update/delete) cuma revalidateTag('procurement','max'), TIDAK PERNAH revalidateTag('procurement-announcements','max') — padahal getActiveAnnouncements()/getAnnouncementList() di-tag khusus itu, jadi cache list gak ter-invalidate langsung setelah mutation. getActiveAnnouncements() dead code (fitur tampilkan pengumuman aktif ke user belum diintegrasi ke UI manapun meski fungsinya lengkap). AnnouncementFormDrawer.tsx pakai createAnnouncementSchema untuk mode edit juga, harusnya updateAnnouncementSchema. BUG UX: dropdown global 'Tambah Baru' di header.tsx gate menu 'Tambah Pengumuman' cuma pakai flag can('procurement','create') — BUKAN can('procurement-announcement','create') yang sebenarnya dienforce API — user bisa buka form lengkap lalu baru dapat 403 pas submit.",
+          "subtasks": [
+            {
+              "name": "[BE] Announcement CRUD Routes & Query",
+              "markdown_description": "- GET/POST /api/procurement/announcements, PATCH/DELETE /api/procurement/announcements/[id] — permission module procurement-announcement, transaction array-form, logAudit\n- getAnnouncementList(page,limit) paginated + getActiveAnnouncements(venueId?,division?) — dead export, belum ada consumer\n- targetAudience enum ALL/VENUE/DIVISION + targetList string array"
+            },
+            {
+              "name": "[FE] Tab Pengumuman — Table & Form Drawer",
+              "markdown_description": "- AnnouncementTab.tsx: table (judul+preview, target audiens, status badge, dibuat oleh, tanggal), pagination shared, delete confirm shared ConfirmDialog\n- AnnouncementFormDrawer.tsx: dual-purpose create/edit, field label dinamis tergantung targetAudience yang dipilih, dipicu dari tab lokal ATAU dropdown global header"
+            }
+          ]
+        },
+        {
+          "name": "Procurement — Anggaran Venue (Budget)",
+          "markdown_description": "Set anggaran bulanan per venue, dengan sisa anggaran dihitung otomatis dari total pengeluaran procurement item yang approved/completed di periode & venue yang sama.",
+          "_status_hint": "complete",
+          "_review_note": "Kolom usedAmount di model ProcurementVenueBudget TIDAK PERNAH ditulis mutation manapun (selalu default 0, dead column) — nilai real selalu dihitung ulang LIVE lewat query terpisah. BUG N+1 residual: getVenueBudgetList() masih pakai Promise.all per-row aggregate loop (satu query per baris budget), padahal pola yang sama sudah diperbaiki jadi groupBy sekali-jalan di getProcurementSummaryByVenue (lihat task Ringkasan) — belum diterapkan di sini. getVenueBudgetById() dead export, zero consumer. BudgetFormDrawer.tsx pakai createVenueBudgetSchema untuk mode edit, harusnya updateVenueBudgetSchema. Logic badge warna 'sisa anggaran' (threshold 50%/20%) duplikat antara VenueBudgetTab.tsx dan ProcurementSummaryTab.tsx, dua implementasi terpisah.",
+          "subtasks": [
+            {
+              "name": "[BE] Venue Budget CRUD Routes & Query",
+              "markdown_description": "- GET/POST /api/procurement/venue-budgets, PATCH/DELETE /api/procurement/venue-budgets/[id] — permission module procurement-budget, transaction array-form, revalidate KEDUA tag (procurement-budgets + procurement, ini yang benar dibanding Announcement)\n- getVenueBudgetList(period?,page,limit): N+1 residual per-row aggregate untuk hitung usedAmount live\n- period format YYYY-MM, relasi venue + updatedBy"
+            },
+            {
+              "name": "[FE] Tab Anggaran Venue — Table & Form Drawer",
+              "markdown_description": "- VenueBudgetTab.tsx: filter periode (month input), table (venue, periode, anggaran, terpakai, sisa dengan badge warna threshold, catatan, diperbarui oleh)\n- BudgetFormDrawer.tsx: form venue+total anggaran (format ribuan Indonesia live Intl.NumberFormat)+periode+catatan"
+            }
+          ]
+        },
+        {
+          "name": "Procurement — Ringkasan (Summary Dashboard)",
+          "markdown_description": "Dashboard analitik read-only: total pengajuan per venue (bar chart), distribusi status (pie chart), dan tabel rincian per venue termasuk anggaran vs realisasi.",
+          "_status_hint": "complete",
+          "_review_note": "Sisi BE query di sini (getProcurementSummaryByVenue, pakai groupBy 2x, query konstan berapapun jumlah venue) JUSTRU CONTOH BENAR untuk fix N+1 di task Anggaran Venue — tidak ada bug fungsional di sisi BE. Minor design-system deviation: STATUS_COLORS di ProcurementSummaryTab.tsx pakai raw oklch(...) untuk pending/approved/completed (cuma rejected benar pakai var(--destructive)). Logic badge sisa anggaran duplikat dengan VenueBudgetTab.tsx.",
+          "subtasks": [
+            {
+              "name": "[BE] Summary-by-Venue Query",
+              "markdown_description": "- GET /api/procurement/summary/by-venue — permission procurement-summary:view, apiLimiter\n- getProcurementSummaryByVenue(period?): 2x groupBy query (status count per venue, sum pettyCash per venue), cache tag procurement + procurement-budgets"
+            },
+            {
+              "name": "[FE] Tab Ringkasan — Chart & Venue Table",
+              "markdown_description": "- 4 StatCard (Total Pengajuan/Disetujui/Belanja/Anggaran)\n- VenueBarChart (recharts, pakai var(--brand-ink) — token benar) & StatusPieChart (recharts, warna per status)\n- VenueTable breakdown per venue termasuk kolom Sisa dengan badge warna"
+            }
+          ]
+        },
+        {
+          "name": "Profile — Edit Data Diri & Tanda Tangan",
+          "markdown_description": "Halaman self-service tempat karyawan mengedit data personalnya sendiri (kontak, alamat, rekening bank), upload avatar, dan atur tanda tangan default — sebagian field HR-managed sengaja read-only.",
+          "_status_hint": "complete",
+          "_review_note": "Tech debt: banyak branch mustChangePassword di profile-client.tsx (line 87, 231-239, 278-288, 505, 510) tidak pernah bisa ke-trigger di production karena AuthGate sudah redirect user mustChangePassword=true ke /auth/reset-password?force=true sebelum halaman private manapun sempat render — dead code, bukan bug fungsional.",
+          "subtasks": [
+            {
+              "name": "[BE] Update Profile, Signature & Avatar Upload",
+              "markdown_description": "- updateMyProfile/updateMyDefaultSignature (actions/profile.ts): auth + mutationLimiter + $transaction single-table, TIDAK pakai logAudit (sesuai — bukan sensitive action)\n- Field HR-managed (npwp, bpjs, departmentId, positionId, dataScope, dst) sengaja TIDAK bisa diedit dari sini, hanya field personal (fullName, alamat, rekening, emergency contact, dst)\n- Upload avatar 2-step (POST compress-to-webp lalu PATCH assign) via app/api/upload/avatar/route.ts, validasi tipe file + max 5MB"
+            },
+            {
+              "name": "[FE] Profile Page (Overview/Security Tab) & Avatar Cropper",
+              "markdown_description": "- 2 tab: Overview (data diri) & Security (ganti password)\n- Field email di-render readOnly — tidak bisa diubah user sendiri\n- Avatar upload pakai crop-then-upload (react-easy-crop)"
+            }
+          ]
+        },
+        {
+          "name": "Reset Password — Ganti Password di Dashboard",
+          "markdown_description": "Karyawan yang sudah login bisa ganti password sendiri secara voluntary dengan wajib input password lama — beda dari flow forgot-password publik (token-based) dan force-reset (dipicu mustChangePassword).",
+          "_status_hint": "complete",
+          "_review_note": "TEMUAN ARSITEKTUR (perlu keputusan tim, bukan bug di fitur ini spesifik): db.session.deleteMany({where:{userId}}) di flow ini (dan di resetPassword/forceResetPassword) kemungkinan besar NO-OP secara efek — NextAuth pakai strategy:'jwt', tabel Session gak pernah ditulis untuk credentials-login (grep db.session.* di seluruh repo cuma nemu .deleteMany(), tidak ada satupun .create()/.findUnique()), dan jwt() callback tidak pernah cek tabel Session buat revocation. Artinya: kalau user ganti password, sesi/device lain yang masih login TIDAK benar-benar ter-invalidate — JWT lama tetap valid sampai expiry alami. Secara sintaks kode ini 100% compliant checklist AGENTS.md §4.6, tapi mandate 'invalidate all other sessions' efektif tidak terpenuhi karena pilihan JWT strategy di level auth config.",
+          "subtasks": [
+            {
+              "name": "[BE] Change Password Endpoint",
+              "markdown_description": "- POST /api/user/change-password: auth → mutationLimiter → Zod changePasswordSchema (currentPassword wajib, newPassword min 12+kombinasi karakter) → bcrypt.compare currentPassword → db.$transaction([user.update password, profile.update mustChangePassword:false, session.deleteMany]) → logAudit success/failure\n- Beda dengan resetPassword (publik, token-based) dan forceResetPassword (dipicu mustChangePassword, tanpa currentPassword) — tiga-tiganya independent, bukan duplikasi yang perlu di-dedup"
+            },
+            {
+              "name": "[FE] Security Tab — Form Ganti Password",
+              "markdown_description": "- Form current/new/confirm password di tab Security halaman Profile\n- Delayed signOut() setelah sukses ganti password"
+            }
+          ]
+        },
+        {
+          "name": "Logout — Sign Out & Force Logout",
+          "markdown_description": "User keluar dari sesi lewat tombol logout di sidebar/mobile nav, plus jalur force-logout server-side untuk edge case sesi bermasalah (profil hilang/suspended).",
+          "_status_hint": "complete",
+          "_review_note": "Dead code: app/(private)/_components/header/user-menu.tsx (dropdown user + tombol logout di header) TIDAK di-import di manapun (dikonfirmasi grep seluruh repo) — unused component, perlu dikonfirmasi ke tim apakah legacy atau disiapkan buat dipakai nanti. Minor gap: tidak ada auto-unsubscribe PushSubscription saat logout — row tetap ada di DB sampai cleanup manual atau stale-cleanup saat push gagal 404/410.",
+          "subtasks": [
+            {
+              "name": "[BE] Force Logout Route",
+              "markdown_description": "- GET /api/auth/force-logout: manual delete auth cookies (authjs.session-token, __Secure-authjs.session-token, callback-url, csrf-token) + redirect /auth/login\n- Dipakai AuthGate untuk edge case (profileMissing, suspended, missing id) — bukan primary user-initiated logout path"
+            },
+            {
+              "name": "[FE] Tombol Logout (Sidebar Desktop & Mobile Bottom Nav)",
+              "markdown_description": "- nav-user.tsx (sidebar dropdown) & MobileBottomNav.tsx — dua entry point live, keduanya signOut({callbackUrl:'/auth/login'})\n- user-menu.tsx (header dropdown) — komponen sama tapi dead code, tidak dipakai"
+            }
+          ]
+        },
+        {
+          "name": "Notifications — In-App List & Read State",
+          "markdown_description": "Daftar notifikasi in-app dengan badge unread/mention di header, bisa ditandai sudah dibaca satu-satu atau semua sekaligus — sebagian besar tipe notifikasi di UI belum ada trigger backend-nya.",
+          "_status_hint": "complete",
+          "_review_note": "BUG [Security, Medium]: markAsRead(notificationId, _userId) di lib/queries/notifications.ts TIDAK scope update by userId (parameter _userId di-accept tapi sengaja tidak dipakai) — user manapun yang punya notificationId (UUID, bisa leak lewat network tab) bisa mark-as-read notifikasi user LAIN (IDOR). Beda dari markAllAsRead di file yang sama yang justru scoped benar — kelihatan kelalaian. BUG [Rate-limit]: PATCH /api/notifications pakai apiLimiter, seharusnya mutationLimiter (ini write operation) — melanggar tabel tier AGENTS.md §4.1. BUG [Validation]: PATCH /api/notifications tidak ada Zod validation di body, cuma type assertion. Tech debt: 9 dari 11 notification type di FE map (booking_approved, booking_rejected, booking_lost, booking_transferred, agreement_signed, agreement_viewed, user_invited, vendor_updated, catering_updated) TIDAK PERNAH dibuat backend manapun — dead/aspirational UI. Type 'package' dibuat backend (actions/package.ts) tapi tidak ada di FE type map — fallback ke icon generik. leave_approved/leave_rejected/payslip_generated cuma ada di routing table lib/push.ts, belum pernah diimplementasi trigger-nya sama sekali. Tidak ada polling/realtime — in-app list cuma refresh via TanStack Query default (window focus/mount) + manual refresh + invalidation setelah mutation.",
+          "subtasks": [
+            {
+              "name": "[BE] Notification API, Query & Model",
+              "markdown_description": "- GET /api/notifications: apiLimiter (tier benar) → getNotifications(take:20)+getUnreadCount+getUnreadMentionCount\n- PATCH /api/notifications: mark satu (markAsRead) atau semua (markAllAsRead) — gap: markAsRead gak scoped userId (IDOR), rate limiter salah tier, gak ada Zod\n- createNotification/createNotifications (lib/notifications.ts): array-form $transaction, notifyRole, notifySuperAdmins (pakai isSystemRole flag, bukan string match — compliant)\n- Call-site yang benar-benar aktif cuma 5 file: booking-comment (comment_mention), booking-draft/booking-mice-draft/booking (booking_created), package (type 'package')"
+            },
+            {
+              "name": "[FE] Notification Bell (Header) & Halaman Notifikasi",
+              "markdown_description": "- Dropdown bell dengan badge unread (merah) + badge mention (emas, var(--brand-gold))\n- Halaman /notifications: tab all/unread, 11 type di-map ke icon/label tapi mayoritas gak pernah muncul karena gak ada trigger backend\n- Tidak ada UI pagination (cuma take:20 tanpa load more)"
+            }
+          ]
+        },
+        {
+          "name": "Notifications — Web Push (VAPID)",
+          "markdown_description": "Notifikasi push level-OS lewat browser (VAPID) yang terpisah total dari in-app notification list — subscribe/unsubscribe device, kirim saat event tertentu terjadi.",
+          "_status_hint": "complete",
+          "subtasks": [
+            {
+              "name": "[BE] Push Subscribe/Unsubscribe/Status & Send Engine",
+              "markdown_description": "- POST /api/push/subscribe: auth+mutationLimiter+Zod, handle endpoint-reassignment (hapus row lama milik user lain), upsert PushSubscription\n- DELETE /api/push/unsubscribe: auth+mutationLimiter+Zod, deleteMany scoped endpoint+userId\n- GET /api/push/status: auth+apiLimiter (tier benar)\n- sendPushNotification (lib/push.ts): kirim via webpush.sendNotification Promise.allSettled, auto-cleanup stale subscription (404/410), fire-and-forget by design (notification failure tidak boleh block business logic)"
+            },
+            {
+              "name": "[FE] Push Notification Manager",
+              "markdown_description": "- UI subscribe/unsubscribe: permission flow, service worker registration (race 5s timeout), VAPID key conversion\n- Embed di notification-bell.tsx"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "phase": 7,
+      "target_list_id": "1100480000000520",
+      "target_list_name": "Phase 7 General Nav Features",
+      "phase_note": "Sisa menu/modul general-nav di luar Purchase, Finance, dan Stakeholder (masing-masing dapat phase sendiri) DAN di luar semua fitur track MICE (daily activity/quotation/booking/package MICE — belum di-dev). Scope: Daily Activity (wedding/general track), Quotation (wedding track), Bitrix24, Maintenance, Guestbook, Tutorial, Wedding Indicators.",
+      "_pending_note": "Semua 7 task Phase 7 (Maintenance, Tutorial, Daily Activity, Quotation, Bitrix24, Guestbook, Wedding Indicators) sudah didraft lengkap per 2026-09-18 — tidak ada lagi yang pending. Temuan paling signifikan yang perlu perhatian user sebelum push: (1) Wedding Indicators — unbounded rating validation di public save endpoint yang feed ke kalkulasi bonus cash (security/business-logic risk); (2) Maintenance & Wedding Indicators sama-sama belum ada dataScope enforcement di listing query, beda dari Guestbook yang sudah jadi referensi best-practice.",
+      "tasks": [
+        {
+          "name": "Maintenance — Ticket & Preventive Maintenance",
+          "markdown_description": "Modul operasional untuk mengelola ticket kerusakan/perbaikan (reaktif) dan jadwal preventive maintenance venue, lengkap dengan upload foto, activity log, dan laporan ringkas — terpisah dari 3 halaman Settings yang hanya CRUD master data (Category/Priority/Status) sebagai referensi dropdown.",
+          "_status_hint": "complete",
+          "_review_note": "settings/maintenance-category/-priority/-status = CRUD sederhana 1 field, murni reference data (permission module settings-maintenance-category/-priority/-status). (general)/maintenance = modul operasional penuh (2 tab: Ticket Maintenance & Preventive Maintenance, permission module maintenance) yang pakai 3 master data itu sebagai FK/dropdown — BEDA, bukan duplikat. Gap: (1) lib/validations/maintenance.ts updateMaintenanceStatusActionSchema dead code. (2) TicketReportTab.tsx hitung completed/in-progress via string-matching nama MaintenanceStatus.name yang free-text & admin-editable (tidak ada flag semantik isTerminal) — rename status di Settings bisa bikin laporan salah tanpa error. (3) Tombol Export di Preventive tab cuma stub toast.info. (4) Preventive maintenance tidak ada automation/cron — frequency/nextDueDate cuma field deskriptif manual, tidak ada auto-generate ticket atau notifikasi jatuh tempo. (5) PreventiveDrawer.tsx wajibkan frequency & nextDueDate hanya client-side, createMaintenanceTicketSchema tetap .optional().nullable() unconditional — validation gap. (6) getMaintenanceReport scope type:TICKET saja, data Preventive tidak pernah masuk laporan (worth dikonfirmasi intentional atau tidak). (7) useCreateMaintenance/useUpdateMaintenance di hooks/useMaintenance.ts tidak ada onSuccess invalidate (manual invalidateMaintenance() dipanggil dari drawer), beda dari useDeleteMaintenance yang punya onSuccess — inkonsisten. Auth/security tidak ada gap, semua route pakai permission+rate limit+transaction+audit dengan benar. (8) getMaintenanceTickets (lib/queries/maintenance.ts) tidak ada dataScope enforcement (buildOwnerScopeWhere) di listing — siapa saja dengan permission maintenance:view bisa lihat semua tiket lintas venue/assignee, beda dari pola Guestbook (lib/queries/guestbookEntries.ts) yang sudah scoped dengan benar. Worth dikonfirmasi apakah ini intentional (semua ticket memang harus visible ke semua staff maintenance) atau gap.",
+          "subtasks": [
+            {
+              "name": "[BE] Maintenance Ticket CRUD, Upload, Activity Log & Report Routes",
+              "markdown_description": "- Model MaintenanceTicket (type TICKET/PREVENTIVE satu tabel) + relasi venue/category/priority/status/assignedTo/createdBy/images, plus 3 reference model MaintenanceCategory/Priority(deadlineDays)/Status(order)\n- lib/queries/maintenance.ts: getMaintenanceTickets (cache tag), getMaintenanceTicketById, getMaintenanceReport (groupBy status/category/venue, filter type:TICKET saja)\n- app/api/maintenance route.ts (GET/POST), [id]/route.ts (GET/PATCH/DELETE), [id]/activity/route.ts (activity log dari ActivityLog), upload/route.ts (compress WebP, 5MB cap), report/route.ts\n- Reference CRUD routes: maintenance-categories/-priorities/-statuses, semua requirePermissionForRoute → rate limit → Zod →  → logAudit → revalidateTag"
+            },
+            {
+              "name": "[FE] Tab Ticket Maintenance & Preventive Maintenance",
+              "markdown_description": "- MaintenanceTabs.tsx: 2 tab utama (Ticket Maintenance, Preventive Maintenance)\n- TicketMaintenanceTab.tsx: sub-tab Data (TicketDataTab) & Report (TicketReportTab — metric card, bar chart status/kategori, tabel by venue)\n- PreventiveMaintenanceTab.tsx + PreventiveDrawer.tsx (form sama + Frekuensi & Tanggal Jatuh Tempo wajib client-side)\n- TicketDrawer.tsx (form create/edit lengkap multi-foto), TicketDetailModal.tsx (3 tab: Detail/Foto/Aktivitas)\n- hooks/useMaintenance.ts: useMaintenance, useCreateMaintenance, useUpdateMaintenance, useDeleteMaintenance, useMaintenanceReport"
+            }
+          ]
+        },
+        {
+          "name": "Tutorial — Help Center Viewer (companion Settings Tutorial CMS)",
+          "markdown_description": "Halaman tutorial in-app end-user (help center) yang menampilkan konten kategori/lesson/step yang dikelola lewat Settings → Tutorial CMS, dengan UI search + master-detail + video/dokumen embed.",
+          "_status_hint": "complete",
+          "_review_note": "BUKAN duplikat Settings — Tutorial CMS. CMS (settings/tutorial) = admin editor CRUD kategori/lesson/step/dokumen; Viewer ((general)/tutorial) = consumer-facing reading UI — pola CMS-vs-frontend normal, BE fully shared (tidak ada endpoint baru khusus viewer), FE beda surface. Permission module cuma settings-tutorial (CMS) — viewer TIDAK ADA module permission terpisah, semua role bisa akses (tampaknya intentional, help center untuk semua karyawan). Gap: (1) DEAD CODE — app/(private)/(general)/tutorial/_components/tutorial-data.ts (344 baris, TUTORIAL_CATEGORIES hardcoded array + tipe lama) sisa sebelum migrasi ke DB, zero import di manapun, aman dihapus. (2) Orphaned storage file — deleteTutorialStepDocument dan cascade delete category/lesson/step tidak pernah hapus file di MinIO/S3 (jadi orphan permanen), sama saat updateTutorialStep ganti image/video, file lama tidak dihapus.",
+          "subtasks": [
+            {
+              "name": "[BE] Tutorial Category/Lesson/Step CRUD & Media Upload (shared dengan CMS)",
+              "markdown_description": "- Model TutorialCategory → TutorialLesson → TutorialStep → TutorialStepDocument (cascade delete, sortOrder per level)\n- lib/queries/tutorials.ts getTutorialCategories() — nested findMany, \"use cache\" + cacheTag(\"tutorials\")\n- actions/tutorial.ts — 10 server action (create/update/delete category/lesson/step/stepDocument), requirePermission(module:settings-tutorial) + mutationLimiter + Zod + revalidateTag, single-table writes tanpa \n- app/api/upload/tutorial-media/route.ts — validasi MIME+size per tipe (image 10MB, video 200MB, doc 50MB)"
+            },
+            {
+              "name": "[FE] Halaman Tutorial Viewer — Search, Master-Detail & Media Embed",
+              "markdown_description": "- page.tsx (RSC) → tutorial-client.tsx (split TutorialMaster + TutorialDetail, mobile view toggle)\n- tutorial-master.tsx: search box filter client-side, Collapsible per kategori, badge completed\n- tutorial-detail.tsx: render step-by-step (screenshot, video embed YouTube/native, caption, dokumen unduhan), navigasi prev/next lintas kategori, no permission gate (semua role akses)"
+            }
+          ]
+        },
+        {
+          "name": "Daily Activity — Sales Pipeline Tracking (as-built: MICE-only)",
+          "markdown_description": "Modul pencatatan aktivitas harian sales terhadap prospek (company, contact, segment, source of info, milestone, progress COLD→WARM→HOT→FREEZE→DEAL/LOST, site visit date) dengan filter & dataScope access control — solid untuk MICE, tapi sales picker terkunci struktural ke role sales-mice, belum ada jalur Wedding.",
+          "_status_hint": "complete untuk MICE (CRUD + dataScope + rate limit + permission semua benar), gap struktural: 0% coverage untuk Wedding sales (bukan bug — scope belum digarap) dan tidak ada mekanisme convert-to-Quotation.",
+          "_review_note": "Model DailyActivity (table daily_activities, soft delete deletedAt) — LEAN & TERPISAH dari Lead legacy (leads table/lib/queries/leads.ts, ada peringatan eksplisit di komentar kode jangan tertukar). dataScope DIENFORCE BENAR via resolveDailyActivityScopeFilter() (lib/queries/daily-activity.ts:40-72), profileId diambil dari session server-side bukan client param. Rate limit (mutationLimiter/apiLimiter) & permission module daily-activity konsisten, logAudit dipanggil setelah transaction (pola project-wide, bukan deviasi). Gap: (1) Sales picker terkunci ke getSalesMiceProfiles() di SEMUA titik (daily-activity-drawer.tsx baris 113-116 ada komentar eksplisit \"Daily Activity is a sales-mice-scoped feature\") — untuk expand ke Wedding butuh ganti ke getAssignableSalesUsers() (varian scoped) + evaluasi perlu kolom category di model. (2) Tidak ada mekanisme \"convert to Quotation\" sama sekali (grep project-wide: tidak ada convertToQuotation atau semacamnya) — gap fungsional kalau ini diharapkan ada. (3) types/daily-activity.ts nama file menyesatkan — isinya legacy Lead-based types, bukan DailyActivity, berpotensi salah pakai oleh developer baru. (4) Role Wedding sales sengaja belum di-grant permission module daily-activity (keputusan user sebelumnya, \"ditahan dulu\").",
+          "subtasks": [
+            {
+              "name": "[BE] Daily Activity CRUD, Scope Filter & Sales-Mice Query",
+              "markdown_description": "- Model DailyActivity (soft delete deletedAt), actions/daily-activity.ts: createDailyActivity/updateDailyActivity/deleteDailyActivity (mutationLimiter + requirePermission + $transaction array-form)\n- lib/queries/daily-activity.ts: getDailyActivities, getDailyActivityById, getDailyActivitySegmentOptions, resolveDailyActivityScopeFilter (own/group/all, resolve group leader dari session.user.profileId server-side)\n- app/api/daily-activities/route.ts (GET list, apiLimiter)\n- services/daily-activity-service.ts: fetchDailyActivities\n- Sales-picker exclusively pakai getSalesMiceProfiles() — role sales-mice only, belum ada varian untuk Wedding sales"
+            },
+            {
+              "name": "[FE] Halaman Daily Activity — Table, Drawer Form & Filter",
+              "markdown_description": "- page.tsx + daily-activity-table.tsx/daily-activity-table-client.tsx: list dengan filter date range/progress/segment/sales\n- daily-activity-drawer.tsx (441 baris): form create/edit — company, contact, segment, source of info, milestone, progress status, site visit date; sales-lock logic currentUserIsSalesMice\n- DailyActivityFilterDrawer.tsx (163 baris): filter drawer terpisah"
+            }
+          ]
+        },
+        {
+          "name": "Quotation — Create, Approval & Print (as-built: MICE-only)",
+          "markdown_description": "Modul pembuatan quotation MICE (venue, package, item rich-text TipTap, harga, term payment, tanda tangan digital canvas) dengan approval DB-driven (Manager+Finance) dan preview/print — fungsional end-to-end untuk MICE, tapi hardcode category MICE, branding dokumen masih project referensi lama, dan \"Convert to Booking\" masih stub.",
+          "_status_hint": "fungsional untuk create→approve→print quotation MICE, tapi ada bug branding visible-di-dokumen-resmi (High), beberapa gap arsitektur (draft localStorage bukan DB-backed, missing dataScope), dan integrasi ke Booking belum ada (stub \"coming soon\").",
+          "_review_note": "Model Quotation + QuotationItem + QuotationComplimentary + QuotationTemplate/QuotationTemplateItem. QuotationTerm model dikonfirmasi DEAD CODE (zero referensi project-wide di luar schema). Approval pakai resolveApprovalSteps(\"quotations\") DB-driven (lib/approval-flows.ts) — sudah sesuai pola ARCHITECTURE.md §4.2. Gap terurut severity: (1) HIGH — hardcode branding \"KEDIAMAN\"/\"Kediaman Event Venue\" logo di dokumen resmi yang di-print/dikirim ke client, sisa reference project lama (quotation-preview.tsx:170-175, 359-361). (2) MEDIUM — label signature \"MICE Event Sales\" hardcode tidak dinamis walau quotation Wedding (quotation-preview.tsx:385). (3) MEDIUM — category:\"MICE\" as const hardcode di submit, tidak ada UI pilihan kategori meski Zod/Prisma schema support WEDDINGS (quotation-drawer.tsx:1246). (4) MEDIUM — draft persistence pakai localStorage (QUOTATION_DRAFT_KEY=\"quotation-draft-v4\", quotation-drawer.tsx:235-282), kontradiksi arsitektur DB-backed progressive draft (ARCHITECTURE.md §4.3) yang dipakai Booking. (5) MEDIUM — getQuotations() (lib/queries/quotation.ts) TIDAK enforce dataScope sama sekali, beda dari getDailyActivities() yang benar. (6) LOW-MEDIUM — GET /api/quotations tanpa Zod validation query params + tanpa try/catch. (7) LOW-MEDIUM — app/api/quotation-templates/[venueId]/route.ts pakai raw auth() + manual session check, BUKAN requirePermissionForRoute() — bypass permission gate settings-quotation-templates (severity rendah krn cuma return default template). (8) LOW — \"Convert to Booking\" cuma UI stub toast.info (quotations-table.tsx:387-389, wired di 697-699 & ~823-831), belum ada implementasi Quotation→Deal→Customer+Booking nyata. (9) LOW — dua implementasi deriveQuotationNo() beda hasil (quotations-table.tsx:277-280 vs quotation-preview.tsx:28-31) — nomor quotation bisa tampil beda antara table & preview. (10) LOW — field packageName/variantName/pax di QuotationItem interface selalu hardcode kosong/0 di mapper (quotations-table.tsx:153-207), field dead. (11) LOW — field downPayment/others/purchaseOrderNo/issuedAt tidak pernah di-assign di mapper, UI branch yang render field ini di preview selalu blank. (12) STRUCTURAL — ApprovalDialog/ApproveModal di-import cross-feature dari booking/packages/_components/ alih-alih components/shared/. Sales-picker Quotation (getAssignableSalesUsers(), role IN [\"sales\",\"sales-mice\"]) SUDAH category-agnostic di level picker — beda dari Daily Activity yang sepenuhnya terkunci, jadi effort expand ke Wedding di sisi picker lebih kecil, tapi tetap butuh ubah hardcode category + UI copy + permission grant role Wedding sales.",
+          "subtasks": [
+            {
+              "name": "[BE] Quotation CRUD, Template & Approval Routes",
+              "markdown_description": "- actions/quotation.ts, actions/quotation-template.ts, lib/validations/quotation.ts, lib/validations/quotation-template.ts\n- app/api/quotations/route.ts (GET list, tanpa Zod+try/catch — gap), app/api/quotation-templates/route.ts & [venueId]/route.ts (bypass requirePermissionForRoute — gap)\n- Approval DB-driven via resolveApprovalSteps(\"quotations\") (lib/approval-flows.ts), step Manager+Finance\n- hooks/use-sales-users.ts + lib/queries/users.ts getAssignableSalesUsers() (role IN sales,sales-mice — category-agnostic di picker)\n- category hardcode \"MICE\" di submit handler, QuotationTerm model dead code"
+            },
+            {
+              "name": "[FE] Quotation Drawer, Table & Print Preview",
+              "markdown_description": "- quotation-drawer.tsx (2360 baris): 4-step stepper, item editor rich-text TipTap, complimentary picker, signature canvas, draft persistence localStorage (gap vs DB-backed pattern)\n- quotations-table.tsx: list + approval trigger + \"Convert to Booking\" stub + deriveQuotationNo() (duplikat logic vs preview)\n- quotation-preview.tsx (415 baris): render dokumen print via window.print() — branding hardcode \"Kediaman\" (bug High), label signature hardcode \"MICE Event Sales\", field mapper kosong (packageName/variantName/pax/downPayment/others/purchaseOrderNo/issuedAt)\n- components/providers/quotation-drawer-provider.tsx"
+            }
+          ]
+        },
+        {
+          "name": "Bitrix24 — CRM Sync Dashboard (Overview, Transaksi, Percakapan, Response Sales)",
+          "markdown_description": "Integrasi read-only outbound-pull ke Bitrix24 CRM lewat webhook (Deals/Contacts/Activities/Open Lines), disajikan sebagai 4 halaman dashboard dengan caching 2-lapis (in-memory + Redis) dan cron warmer harian — tanpa menyimpan data ke database sendiri (sync hanya field-level seperti Customer.bitrixId).",
+          "_status_hint": "complete dan production-ready — 4 halaman penuh, caching matang, cron warmer, export XLSX/PDF, cross-feature integration ke Guestbook. Bukan stub. Gap yang ada murni code-quality/maintainability, bukan fitur belum jadi.",
+          "_review_note": "Temuan agent investigasi (severity-ranked):\n1. Duplikasi konstanta & helper tersebar (UF_CRM_* custom field IDs, PROVIDER_ID, helper seperti isIsoDay/stripImol/labelFromSourceId) di-redeclare lokal di banyak file alih-alih diimpor dari lib/bitrix.ts — misal deals/route.ts:275-283 redeclare labelFromSourceId yang sudah ada versinya. Ada komentar eksplisit soal risiko ini (byte-identik demi cache key warmer) tapi belum di-enforce lewat shared const.\n2. Potensi field-ID reuse/bug: overview/route.ts:18 UF_REASON = \"UF_CRM_1774952346733\" vs deals/route.ts:15 UF_SUB_ISSUE = ID SAMA PERSIS untuk 2 konsep berbeda (getback reason vs sub-issue) — perlu dikonfirmasi ke tim/Bitrix admin apakah disengaja atau salah copy-paste.\n3. Hardcode hex warna di export (deals/export/route.ts:217 argb \"FF0F4159\", :300 setFillColor(15,65,89), sama di percakapan/export/route.ts) — melanggar AGENTS.md §12, meski agak excusable karena ExcelJS/jsPDF butuh raw hex. Sebaiknya dipusatkan jadi 1 const BRAND_INK_ARGB/RGB.\n4. Silent catch tanpa logging di beberapa resolveBitrix* function (lib/bitrix.ts ~367-369, 488-490, 545-547) — degradasi graceful tapi tanpa console.error, susah di-debug kalau scope webhook Bitrix berubah.\n5. Tidak ada inbound webhook receiver — semua sync arahnya outbound-pull (swasana → Bitrix). Perubahan di Bitrix (deal pindah stage) tidak notify balik real-time; data selalu \"as of last poll/cache\" (stale-serve-on-error tanpa TTL Redis bisa sampai berhari-hari kalau live fetch gagal terus).\n6. Rate limit key granularity beda: per-user untuk route biasa, key statis global untuk cron (benar/sesuai karena cron gak punya session, bukan bug).\n7. Business rule fragile via string matching (NON_VENUE_LABELS, MANDIRI_SOURCE_LABELS exact-match case-insensitive; Spam/Prank detection via .includes(\"spam\")/\"prank\" substring) — bisa diam-diam salah kalau label di Bitrix portal berubah/typo, tanpa error yang kelihatan.\n8. Hook FE tidak lengkap: hanya use-bitrix-overview.ts yang match pola useXxx.ts; 3 halaman lain (Transaksi/Percakapan/Response Sales) kemungkinan fetch langsung di manager component tanpa hook terpisah — perlu verifikasi manual saat FE subtask dikerjakan.\n9. Tidak ditemukan TODO/FIXME eksplisit — kode matang & terdokumentasi rapi.\n\nCatatan arsitektur: TIDAK ADA method .add/.update/.delete di seluruh fitur (100% read-only). Permission module \"bitrix\" (action \"view\" saja) sengaja TIDAK di-map ke module_permission_maps → general nav (sesuai ARCHITECTURE.md §5). \"Customers\" adalah general-nav terpisah total (module permission berbeda, route berbeda, tidak ada dependency silang) — satu-satunya titik singgung Bitrix adalah ke Guestbook (2 route lookup: bitrix-lookup by phone, bitrix-source untuk SOURCE_ID label), bukan ke Customers.",
+          "subtasks": [
+            {
+              "name": "[BE] Bitrix24 — Core Client, Cache Layer & API Routes",
+              "markdown_description": "- `lib/bitrix.ts` (551 baris): REST client ke webhook Bitrix (bitrixCall/rawBitrixCall, hanya method baca: .list/.get/.search/batch/user.search/imopenlines.session.history.get), getBitrixCrmMeta (cache in-memory TTL 10 menit), getBitrixDealEnums, resolveBitrixContacts/ContactInfo/Users, searchBitrixUsers, findBitrixContactsByPhone, bitrixSessionHistory, BitrixApiError (mapped ke HTTP 503/502)\n- Cache 2 lapis: in-memory (metaCache/dealEnumCache) + `lib/bitrix-cache.ts` Redis read-through (withBitrixCache, fresh window 30 detik, stale-serve-on-error tanpa TTL Redis)\n- `lib/bitrix-session-metrics.ts` — cache per sesi percakapan, key stabil permanen untuk sesi CLOSED, auto re-fetch kalau sesi masih OPEN\n- `lib/bitrix-warm-targets.ts` + `app/api/cron/bitrix-refresh/route.ts` — cron harian force-refresh 5 target cache, auth bearer secret BITRIX_CRON_SECRET + crypto.timingSafeEqual\n- `lib/bitrix-accounts.ts` (hardcode akun bot/queue), `lib/bitrix-conversation.ts` (parseSubject, channelFromSourceId), `lib/bitrix-response.ts` (parseResponseSamples — algoritma response-time anchor transfer-only sampling, avgSeconds, extractTransferTarget)\n- Routes `app/api/bitrix/*`: [entity]/route.ts (proxy generik), deals/route.ts (filter lengkap + enrichment), overview/route.ts (agregasi dashboard), percakapan/route.ts + [sessionId]/route.ts (list + detail drawer), sales/route.ts, contacts/route.ts (typeahead), response-sales/route.ts (agregasi response time per sales), deals/export & percakapan/export (XLSX/PDF)\n- Semua route: requirePermissionForRoute({module:\"bitrix\", action:\"view\"}) → apiLimiter.check() per user\n- Cross-feature: app/api/guestbook/bitrix-lookup & bitrix-source (gate module \"guestbook\" bukan \"bitrix\", disengaja)\n- Tidak ada model Prisma Bitrix (no BitrixLog/BitrixSync) — sync field-level saja: Customer.bitrixId, Lead.bitrixId, DailyActivity.bitrixId, GuestbookEntry.bitrixContactId/bitrixName/bitrixSourceInfo"
+            },
+            {
+              "name": "[FE] Bitrix24 — Overview, Transaksi, Percakapan & Response Sales Pages",
+              "markdown_description": "- Nav: item general \"BITRIX24\" (icon Bolt) dengan 4 sub-item, tidak ada landing page di /bitrix24 sendiri\n- 4 page.tsx (`app/(private)/(general)/bitrix24/**`) pola identik: requirePagePermission(\"bitrix\") → render manager component\n- Overview: `bitrix-overview.tsx` + hook `use-bitrix-overview.ts` (TanStack Query v5, staleTime/refetchInterval 30 detik, refetchOnWindowFocus true)\n- Transaksi: `bitrix-deals-manager.tsx` + `bitrix-deal-detail-modal.tsx` — tabel deals + modal detail\n- Percakapan: `bitrix-percakapan-manager.tsx` + `percakapan-detail-drawer.tsx` — tabel Open Lines + drawer detail sesi (walk history, resolve nama agent via regex BBCode)\n- Response Sales: `response-sales-manager.tsx` + `sales-conversations-drawer.tsx` — tabel rata-rata response time per agent + drawer daftar percakapan\n- Export XLSX (exceljs) & PDF (jspdf) untuk Transaksi & Percakapan"
+            }
+          ]
+        },
+        {
+          "name": "Guestbook — Buku Tamu & Kunjungan (Online/Offline)",
+          "markdown_description": "Modul pencatatan kunjungan/interaksi tamu (site visit, meeting online/offline) lengkap dengan check-in/check-out, lookup kontak Bitrix24, dan export laporan Excel — general nav, dataScope enforcement jadi referensi best-practice di codebase.",
+          "_status_hint": "complete",
+          "_review_note": "lib/queries/guestbookEntries.ts jadi referensi best-practice dataScope: pakai buildOwnerScopeWhere (own/group/all) + strict Set-based filter allow-list, lebih rapi dari Maintenance & Wedding Indicators yang belum ada enforcement serupa. Gap: (1) checkOutGuestbookEntry (actions/guestbook.ts) + useCheckOutGuestbookEntry (hooks/use-guestbook.ts) sudah dibuat lengkap tapi TIDAK ada UI caller yang manggil — fitur checkout jadi dead/unwired, worth dicek apakah memang belum sempat di-wire ke drawer atau sengaja belum dipakai. (2) DRY minor — label map (visitStatus, interactionType, dll) di-duplicate antara app/api/guestbook/export/route.ts dan komponen FE, walau sudah ada komentar \"keep labels in sync\" sebagai pengingat manual.",
+          "subtasks": [
+            {
+              "name": "[BE] Guestbook Entry CRUD, Check-in/out, Bitrix Lookup & Export",
+              "markdown_description": "- Model GuestbookEntry: visitorName, companyName, eventCategory, interactionType, onlineMedium/meetingUrl/meetingLocation, scheduledAt, checkInAt/checkOutAt, notes, guestCode, bitrixContactId/Name/SourceInfo, visitStatus enum, proofFiles, commitVisitDate/commitPayDate\n- actions/guestbook.ts: create/update/delete + checkOutGuestbookEntry (belum ada caller FE)\n- lib/queries/guestbookEntries.ts: dataScope enforcement via buildOwnerScopeWhere (own/group/all) + strict Set-based filter allow-list — pola paling rapi di antara semua general-nav module\n- app/api/guestbook/route.ts (GET dari JWT session), /export (Excel styled brand-ink, take 5000 cap), /upload (bukti foto), /bitrix-lookup (by phone), /bitrix-source (SOURCE_ID label)\n- Semua write path: requirePermission → mutationLimiter → Zod → transaction → logAudit → revalidateTag"
+            },
+            {
+              "name": "[FE] Guestbook List, Drawer Create/Edit, Detail & Filter",
+              "markdown_description": "- GuestbookClient.tsx (listing + filter trigger)\n- GuestbookDrawer.tsx (~1300 baris — form create/edit lengkap termasuk online/offline meeting, upload bukti, Bitrix contact lookup)\n- GuestbookDetailDrawer.tsx, GuestbookFilterDrawer.tsx\n- hooks/use-guestbook.ts + services/guestbookService.ts: pola standar TanStack Query (useGuestbookEntries, useCreate/Update/Delete, useCheckOutGuestbookEntry — hook ada tapi belum dipanggil dari UI manapun)"
+            }
+          ]
+        },
+        {
+          "name": "Wedding Indicators — Kuesioner Kepuasan & Bonus Sales (Public Share Link)",
+          "markdown_description": "Kuesioner kepuasan klien pasca-acara yang menghasilkan skor kepuasan & nominal bonus (allowance) untuk sales, bisa diisi internal atau dikirim ke klien lewat public share-link (token + access code) tanpa perlu login.",
+          "_status_hint": "complete (BE & FE dibaca penuh; beberapa komponen presentasional minor tidak dibaca baris-per-baris tapi tidak mempengaruhi temuan di bawah)",
+          "_review_note": "[SECURITY — signifikan] 5 dari 6 field rating di lib/validations/weddingIndicatorShare.ts (dipakai langsung oleh public save endpoint) dan lib/validations/weddingIndicator.ts TIDAK ada .min()/.max() bound — cuma recommendationScore yang dibatasi (.int().min(0).max(10)). Karena endpoint public cuma di-gate access-code (bukan session auth) dan rating ini nentuin satisfactionScore → allowanceNominal (bonus cash sampai Rp 1.000.000), raw POST yang bypass UI berpotensi submit nilai unbounded/negatif/ekstrem tanpa terdeteksi. Rekomendasi: tambahin .min()/.max() sesuai skala emoji-picker (1–4) ke kedua schema.\n[Data exposure gap] getWeddingIndicators()/getWeddingIndicatorsByVenue() (lib/queries/weddingIndicators.ts) TIDAK ada dataScope enforcement — siapapun dengan permission vendor-specialist:view (permission-nya numpang, belum ada module dedicated) bisa lihat semua kuesioner lintas sales/venue, termasuk rating personal by name.\n[DRY violation] calculateAllowance()/calculateSatisfactionScore() di-implement byte-identik di 3 tempat terpisah: canonical lib/utils/weddingIndicatorUtils.ts (dipakai public save endpoint), duplikat di actions/weddingIndicator.ts:14-64 (tidak di-import dari util), duplikat lagi di client WeddingIndicatorForm.tsx (live-preview only) — risiko kalau threshold allowance diubah di satu tempat doang, create/update internal bisa diam-diam divergen dari public share-link save path.\n[Minor] actions/weddingIndicator.ts pakai .parse() try/catch alih-alih .safeParse() yang lebih umum dipakai di codebase lain. canEdit logic di [id]/page.tsx (baris 32-34) punya fallback ownership implisit (isSuperAdmin || hasPermission(edit) || session.user.id === indicator.createdById) di atas RBAC standar — kemungkinan disengaja tapi tidak terdokumentasi.",
+          "subtasks": [
+            {
+              "name": "[BE] Wedding Indicator Model, Scoring, Share Token & Public Save Endpoint",
+              "markdown_description": "- Model WeddingIndicator (prisma/schema.prisma:3400-3439): 6 kolom rating Float?, recommendationScore Int @default(5), computed satisfactionScore/allowancePercentage/allowanceNominal, questionnaireData Json, relasi venue/createdBy onDelete:Restrict\n- Model WeddingIndicatorShare (schema.prisma:3446-3460): 1:1, token 256-bit (randomBytes(32)), access code 6-char CSPRNG, status enum Active/Revoked, expiresAt 7 hari, onDelete:Cascade\n- actions/weddingIndicator.ts (CRUD, pakai .parse() bukan .safeParse()), actions/weddingIndicatorShare.ts (create/revoke share link)\n- Public POST /api/wedding-indicator-share/validate: authLimiter key token:ip, crypto.timingSafeEqual, generic 404, strip field skor sensitif\n- Public POST /api/wedding-indicator-share/save: mutationLimiter by IP, re-validate token/status/expiry/access-code server-side, recalculate score server-side, $transaction array-form, venueId tidak bisa di-override submitter\n- lib/utils/weddingIndicatorUtils.ts: calculateAllowance/calculateSatisfactionScore canonical (tapi ada 2 duplikat lain — lihat review note)"
+            },
+            {
+              "name": "[FE] Wedding Indicator Form, Rating Components, Detail Page & Public Share View",
+              "markdown_description": "- page.tsx (dual view: folder-by-venue / table), create/page.tsx, [id]/page.tsx (canEdit logic dengan ownership fallback)\n- Public app/(public)/wedding-indicator/page.tsx: flow token + access-code tanpa login\n- 13 shared component (components/shared/wedding-indicators/**): WeddingIndicatorForm, RatingSection, EmojiRatingPicker (5 nilai fixed 4.0/3.5/3.0/2.0/1.0), NpsSlider, dll\n- services/ + hooks/useWeddingIndicators.ts: semua mutation invalidate cache onSuccess dengan benar (kontras positif vs inkonsistensi Maintenance)"
+            }
+          ]
+        }
+      ],
+      "_scope_conflict_note": "TEMUAN PENTING dari investigasi Daily Activity & Quotation: kedua fitur ini di kode SAAT INI justru MICE-only (bukan Wedding seperti asumsi awal scope Phase 7). Daily Activity: sales picker terkunci struktural ke getSalesMiceProfiles() di semua titik (drawer/table/filter), ada komentar eksplisit di kode soal ini. Quotation: onSubmit hardcode category:\"MICE\" walau Zod/Prisma support WEDDINGS, plus branding dokumen masih \"Kediaman\" (project referensi lama, bukan Swasana). Role Wedding sales juga sengaja belum di-grant akses ke kedua module ini. User perlu putuskan: (a) tetap masukkan ke Phase 7 dengan framing \"sudah built untuk MICE, perlu extend ke Wedding\", atau (b) pindahkan ke phase MICE nanti karena substansinya MICE-track. Untuk sekarang task di bawah didokumentasikan APA ADANYA (as-built MICE) + gap Wedding-nya, TIDAK mengasumsikan keputusan."
+    },
+    {
+      "phase": 8,
+      "target_list_id": null,
+      "target_list_name": "Phase 8 KPI Performance & Absensi",
+      "phase_note": "Scope: KPI Performance (Master Data KPI, KPI per Sales, KPI for Stakeholder — area baru, belum pernah diaudit di phase manapun sebelumnya) digabung dengan Absensi (2 task dipindah dari Phase 5 HRD atas instruksi user 2026-09-18 — HRD tetap punya Manajemen Kinerja, cuma Absensi yang direlokasi), DAN Booking MICE + MICE Package (2 task baru, area track MICE yang belum pernah diaudit — sudah dev penuh & live di working tree branch feat/bonus-booking saat ini, BUKAN unmerged branch feat/crm seperti catatan project lama; feat/crm branch sudah tidak ada, kemungkinan sudah di-merge). CATATAN: Daily Activity dan Quotation (2 area track MICE lainnya) SENGAJA TIDAK diduplikasi ke sini — keduanya SUDAH punya task audit lengkap di Phase 7 (\"Daily Activity — Sales Pipeline Tracking (as-built: MICE-only)\" dan \"Quotation — Create, Approval & Print (as-built: MICE-only)\") dengan gap konkret yang sudah tercatat; phase_note Phase 7 yang lama sempat menyebut area-area ini \"belum di-dev\" — itu SUDAH TIDAK AKURAT, task individualnya sendiri sudah correctly menandai MICE-nya complete/functional dengan gap spesifik. Kalau mau konsolidasi semua scope MICE dalam 1 phase, opsi: relokasi 2 task itu dari Phase 7 ke sini (bukan ditambah baru). target_list_id null karena list ClickUp Phase 8 belum dibikin (ClickUp API kena rate limit pas draft ini disusun) — dibikin manual nanti pas mau push.",
+      "tasks": [
+        {
+          "name": "KPI Performance — Master Data KPI",
+          "markdown_description": "Halaman admin untuk mendefinisikan master indikator KPI (metrik, satuan, target, scope) yang jadi acuan buat KPI per Sales & KPI for Stakeholder — belum ada implementasi sama sekali di codebase.",
+          "_status_hint": "not-started",
+          "_review_note": "Genuinely belum ada: grep project-wide untuk 'kpi' cuma nemu 3 hal, dan ketiganya BUKAN ini — (1) model Prisma `Kpi` (prisma/schema.prisma:3558-3573) standalone TANPA relasi FK sama sekali (department cuma string bebas), dipakai eksklusif oleh HRD Manajemen Kinerja (actions/hrPerformance.ts, lib/queries/hrPerformance.ts, app/api/hr/kpis/route.ts digate permission module \"hr\") — ini KPI individual employee review, BUKAN sales KPI. (2) model `UserTarget` (dipakai lib/queries/groups.ts & lib/queries/salesPerformance.ts) cuma 1 kolom `amount` per (profileId, type=\"sales\", year) — bukan \"KPI\" beneran, cuma angka target revenue flat, gak ada metric/unit/formula. (3) Tidak ada permission module \"kpi\"/\"kpi-master\"/\"kpi-sales\" apapun di prisma/seeders/roles-permissions.ts, tidak ada nav entry di sidebar-config.ts. Rekomendasi desain: bikin model BARU yang scoped ke sales/tim (misal `SalesKpiDefinition` atau `KpiMetric`) — JANGAN reuse/extend model `Kpi` yang udah dipakai HRD Manajemen Kinerja, karena beda konsep (individual performance review vs sales-team target metric) dan nge-share 1 tabel bakal bikin query/permission dua fitur collision. Kalau mau tetap 1 model, minimal butuh discriminator field (mis. `scope: HR | SALES`) plus FK yang bener (Group/Role) — bukan string bebas kayak `Kpi.department` sekarang.",
+          "subtasks": [
+            {
+              "name": "[BE] Model, Validasi & CRUD Master KPI (rencana build)",
+              "markdown_description": "- Model Prisma baru (mis. `SalesKpiDefinition`) TERPISAH dari `Kpi` (HRD) — field: name, metricType (revenue/bookingCount/custom), unit, defaultTarget, scope (individual/group), isActive, periodType (monthly/yearly)\n- Migration idempotent (`CREATE TABLE IF NOT EXISTS`) sesuai AGENTS.md §6\n- lib/validations/kpiDefinition.ts: Zod schema create/update\n- lib/queries/kpiDefinition.ts: getKpiDefinitions (SELECT only, cacheTag)\n- actions/kpiDefinition.ts: createKpiDefinition/updateKpiDefinition/deleteKpiDefinition — requirePermission({module:\"kpi-master\", action}) → mutationLimiter → Zod → db.$transaction array form (kalau nyentuh >1 tabel) → logAudit → revalidateTag(\"kpi\", \"max\")\n- Tambah permission module baru \"kpi-master\": [\"view\",\"create\",\"edit\",\"delete\"] di prisma/seeders/roles-permissions.ts (moduleActions), pastikan namanya gak collision sama REMOVED_MODULES"
+            },
+            {
+              "name": "[FE] Halaman Settings Master Data KPI (rencana build)",
+              "markdown_description": "- Route baru (kandidat: app/(private)/(general)/settings/kpi, karena sifatnya cross-world kayak settings-maintenance-*) — TBD final placement pas desain\n- Table list + drawer form CRUD (rounded-2xl card, pill button/badge — Bank Jago vibe)\n- hooks/useKpiDefinitions.ts: TanStack Query wrapper (useKpiDefinitions, useCreateKpiDefinition, useUpdateKpiDefinition, useDeleteKpiDefinition — invalidate onSuccess)\n- services/kpiDefinitionService.ts: fetch wrapper\n- Nav entry baru di GENERAL_NAV (sidebar-config.ts) kalau general, atau di world Booking kalau scope-nya sales-only — keputusan desain pending"
+            }
+          ]
+        },
+        {
+          "name": "KPI Performance — KPI per Sales",
+          "markdown_description": "Sales individual melihat target vs pencapaian KPI mereka sendiri secara periodik — sebagian datanya (leaderboard revenue-vs-target per sales) SUDAH ADA di dashboard Overview umum, tapi belum ada halaman personal yang ter-scope ke diri sendiri.",
+          "_status_hint": "partial — leaderboard target-vs-achievement per individual sales SUDAH ADA & jalan (bar chart + ranked list di general Overview \"/\"), tapi company-wide (semua sales, semua role bisa lihat), single-metric (revenue doang), dan belum ada halaman 'KPI Saya' yang scoped ke sales yang login sendiri.",
+          "_review_note": "lib/queries/salesPerformance.ts `_queryTopSales`/`getTopSalesByRecentBooking` (baris 52-211) sudah menghitung per-profileId: revenue booking (exclude Lost/Canceled, sesuai Group Revenue Rule), target dari `db.userTarget` (type=\"sales\", first-write-wins per createdAt desc), achievementPct = revenue/target, plus breakdown kategori weddings/mice — di-render oleh app/(private)/_components/SalesPerformanceSection.tsx (bar chart Recharts + ranked list dgn avatar/podium icon, month picker, drill-down ke booking list via useDashboardBookings). Dipanggil dari app/(private)/page.tsx (landing '/') dan di-fetch live lewat hooks/useDashboardSalesPerformance.ts → app/api/dashboard/sales-performance/route.ts. GAP: (1) route.ts baris 36-39 eksplisit comment \"Overview is company-wide: performance always ranks ALL sales, regardless of the viewer's dataScope\" — TIDAK ADA scoping ke 'own', dan endpoint-nya cuma cek `session?.user?.profileId` ada (baris 9), TANPA requirePermission sama sekali — artinya SEMUA authenticated user (termasuk role non-sales) bisa lihat revenue & target individual tiap sales lain di company lewat halaman landing. Worth dikonfirmasi ke user apakah ini intentional (leaderboard terbuka ala gamifikasi) atau harus di-restrict/di-scope. (2) Metric cuma revenue (dari UserTarget.amount) — belum ada dimensi KPI lain, nunggu Master Data KPI kalau mau multi-metric. (3) Belum ada halaman dedicated 'KPI Saya' yang cuma nunjukin data sales yang login (dataScope:own) terpisah dari leaderboard company-wide ini — kalau user maunya justru reuse leaderboard yang udah ada (bukan halaman baru), task ini effort-nya jauh lebih kecil dari yang dibayangin.",
+          "subtasks": [
+            {
+              "name": "[BE] Reuse Query Existing + Scoping 'Own' (partial — sudah ada, perlu extend)",
+              "markdown_description": "- Reuse lib/queries/salesPerformance.ts `getTopSalesByRecentBooking`/`getTopSalesByRecentBookingRaw` — parameter `allowedProfileIds` SUDAH mendukung filter per-profile, tinggal panggil dengan `[session.user.profileId]` buat personal view\n- app/api/dashboard/sales-performance/route.ts SAAT INI tanpa requirePermission (cuma session check) — kalau dipisah jadi endpoint personal, tambahin requirePermission/dataScope enforcement (lib/access-control.ts) sesuai pola project, JANGAN ikutin pola company-wide yang sekarang\n- Kalau nanti nyambung ke Master Data KPI baru (task lain): extend query biar gak cuma revenue"
+            },
+            {
+              "name": "[FE] Halaman/Section 'KPI Saya' (partial — reuse komponen existing)",
+              "markdown_description": "- Reuse pattern SalesChart/AvatarCircle/TotalRevenueCard dari SalesPerformanceSection.tsx tapi single-user (bukan leaderboard semua sales)\n- hooks/useDashboardSalesPerformance.ts sudah ada, tinggal extend/pakai varian profileId=own\n- Keputusan desain: tambah halaman baru, atau cukup expose 'posisi gue' di leaderboard existing (mis. highlight row sendiri) — lebih murah, worth didiskusiin ke user dulu sebelum build"
+            }
+          ]
+        },
+        {
+          "name": "KPI Performance — KPI for Stakeholder",
+          "markdown_description": "Dashboard read-only untuk role Stakeholder memantau performa tim sales (target vs achievement, revenue, piutang per Group) lintas tahun.",
+          "_status_hint": "complete",
+          "_review_note": "app/(private)/stakeholder/performance-sales/page.tsx gate pakai `hasPermission(session.user.roleId, \"performance-sales\", \"view\")` OR isSuperAdmin (baris 21-24), redirect /forbidden kalau gak punya akses — permission module \"performance-sales\" (prisma/seeders/roles-permissions.ts baris 98 & 337). Data dari `getGroupsWithPerformance(undefined, ...)` (lib/queries/groups.ts baris 463-624) dengan `profileId=undefined` = dataScope \"all\" (monitor semua tim), raw SQL aggregate booking+ledger per grup. Dirender PerformanceSalesClient.tsx: 6 KPI card (revenue/target/achievement/piutang/confirmed/total grup), ranking table per grup + progress bar achievement, year filter pill (5 tahun terakhir). Gap: (1) Granularitas cuma per-GROUP — getGroupsWithPerformance SEBENARNYA menghitung achievement per-member di dalam loop (baris 601-618: `for (const member of g.members)` hitung actual/target/achievement per profileId) TAPI hasil per-member ini DIBUANG, cuma di-rata-rata jadi `avgAchievement` per grup (baris 620) yang di-return — Stakeholder GAK BISA drill-down lihat kontribusi individual sales di dalam grupnya dari halaman ini (beda dari halaman KPI per Sales di Overview yang justru per-individual tapi gak per-grup). (2) Tidak ada export/print. (3) Year filter cuma pilih 1 tahun, gak ada perbandingan YoY built-in di UI (meski datanya bisa di-refetch per tahun).",
+          "subtasks": [
+            {
+              "name": "[BE] Query Aggregasi Performance per Group (existing, reuse)",
+              "markdown_description": "- lib/queries/groups.ts `getGroupsWithPerformance(profileId, startDate, endDate, year)` — raw SQL 3-query (booking agg, financial/ledger agg, userTarget) di-assemble in-memory per grup\n- Revenue = SUM snapPackagePricing.price exclude Lost/Canceled (Group Revenue Rule), piutang/totalRevenue derived dari Ledger cash-in ter-ack (bukan legacy TOP)\n- Permission module \"performance-sales\": [\"view\"] — cek hasPermission langsung di page.tsx (server component), bukan requirePermissionForRoute (bukan route handler)"
+            },
+            {
+              "name": "[FE] Halaman Performance Sales — Stakeholder World (existing, reuse)",
+              "markdown_description": "- app/(private)/stakeholder/performance-sales/page.tsx: server component, searchParams.year, redirect kalau !canView\n- PerformanceSalesClient.tsx: grid KPI card, YearFilter pill selector, ranking table (avatar leader, progress bar Math.min(avgAchievement,100))"
+            }
+          ]
+        },
+        {
+          "name": "Absensi — Clock In/Out & Riwayat",
+          "markdown_description": "Karyawan absen masuk/pulang lewat web dengan foto selfie wajib dan validasi lokasi (geofence), lalu bisa lihat riwayat kehadiran sendiri.",
+          "_status_hint": "complete",
+          "subtasks": [
+            {
+              "name": "[BE] API Clock-in/Clock-out & Riwayat",
+              "markdown_description": "- Validasi geofence radius per WorkLocation, dukung workType WFO/WFH/WFA\n- Simpan foto selfie + koordinat lat/lng saat clock-in dan clock-out\n- Status otomatis on_time/late/absent berdasarkan shift & jam masuk\n- Endpoint my-history + export rekap"
+            },
+            {
+              "name": "[FE] Attendance Clock & History",
+              "markdown_description": "- Live clock + modal kamera untuk selfie wajib\n- Pilih shift/lokasi kerja saat clock-in\n- Riwayat kehadiran pribadi (general-nav /absensi)"
+            }
+          ]
+        },
+        {
+          "name": "Absensi — Manajemen Lokasi, Shift & Assignment",
+          "markdown_description": "HR mengatur lokasi kerja (geofence), shift, dan penugasan shift per karyawan termasuk hari libur individual dan override shift harian.",
+          "_status_hint": "complete",
+          "_review_note": "Gap keamanan: GET /api/hr/{work-shifts,work-locations,work-assignments,shift-overrides} TIDAK ada requirePermission/requirePermissionForRoute — cuma cek session ada, jadi semua authenticated user bisa baca list ini. Juga permission module gado-gado: 'attendance', 'hr:view-all', 'hr-attendance' dipakai gantian untuk fitur yang konsepnya sama. Tidak ditemukan proses auto-generate attendantType DAY_OFF dari EmployeeWorkAssignment.offdayDays — 'Off' masih self-report manual saat clock-in.",
+          "subtasks": [
+            {
+              "name": "[BE] CRUD Work Location/Shift/Assignment/Override",
+              "markdown_description": "- WorkLocation: geofence radius per lokasi, opsional reuse Venue booking\n- WorkShift, EmployeeWorkAssignment (offdayDays[], effectiveDate/endDate, lokasi clock-in/out beda), ShiftOverride harian\n- bulkCreateWorkAssignment pakai $transaction array form (contoh implementasi benar)"
+            },
+            {
+              "name": "[FE] Attendance Management Admin",
+              "markdown_description": "- Tab Rekap, Lokasi, Shift, Assignment, Pengaturan\n- Export rekap kehadiran"
+            }
+          ]
+        },
+        {
+          "name": "Booking MICE — Draft, Finalize & Approval Lifecycle",
+          "markdown_description": "Booking kategori MICE (`Booking.category = \"MICE\"`, enum `EventCategory` di prisma/schema.prisma:1946-1949) — SATU model `Booking` dengan Wedding, dibedakan lewat field `category`, tapi punya action file terpisah (bukan cabang di action file wedding). Sudah implemented penuh: draft 3-step (Info Event → Term of Payment → TTD/Lokasi) → finalize dengan snapshot (SnapCustomer + SnapVenue) → approval Sales→Manager→Finance (tanpa step client TTD) → PO Number generation. UI: mice-table.tsx, MiceBookingDrawer.tsx (3-step drawer), MiceDetailModal/Content.tsx.",
+          "_status_hint": "complete dengan 2 bug konkret di approval-record module tagging",
+          "_review_note": "Feature-complete dan sudah live di working tree branch `feat/bonus-booking` saat ini (BUKAN cuma di branch lain yang belum merge — `git branch -a` gak nemu branch `feat/crm` sama sekali, kemungkinan sudah di-merge sebelumnya lalu branch-nya dihapus). Verified: actions/booking-mice.ts (566 baris, 6 action: createMiceBooking/updateMiceBooking/deleteMiceBooking/markMiceLost/restoreMiceBooking/cancelMiceBooking) dan actions/booking-mice-draft.ts (603 baris, draft step1-3 + finalizeDraftMiceBooking) — semua sudah requirePermission({module:\"booking-mice\"}) → mutationLimiter.check → Zod safeParse → db.$transaction array form → logAudit → revalidateTag, 100% sesuai AGENTS.md §4. finalizeDraftMiceBooking (actions/booking-mice-draft.ts:297-548) juga sudah bikin SnapCustomer (baris 402-420) & SnapVenue (baris 424-437) persis kayak wedding booking — snapshot pattern (ARCHITECTURE.md §4.1) TERPENUHI, bukan gap.\n\nBUG KONKRET #1 — approval module tag inconsistent antar 2 jalur create: createMiceBooking (jalur create instan, actions/booking-mice.ts:160-167) manggil `buildBookingApprovalSteps({module: \"booking-mice\", ...})` eksplisit dan bikin ApprovalRecord dengan `module: \"booking-mice\"` (baris 172-180). Tapi finalizeDraftMiceBooking (jalur draft→finalize, actions/booking-mice-draft.ts:371-377) — yang notabene jalur produksi utama karena UI drawer-nya 3-step draft — TIDAK pass parameter `module` ke buildBookingApprovalSteps sama sekali, sehingga default ke `\"booking\"` (lib/approval-flows.ts:193-203, `module?: string` defaults ke `opts.module ?? \"booking\"`), dan ApprovalRecord dibikin dengan `module: \"booking\"` hardcoded (baris 446-455) — bukan \"booking-mice\". Akibatnya booking MICE hasil finalize-draft ikut approval-flow config WEDDING (`ApprovalFlowConfig` where module=\"booking\"), bukan config booking-mice yang mungkin di-set beda di Settings — silent misrouting, bukan crash.\n\nBUG KONKRET #2 — turunan dari bug #1: restoreMiceBooking (actions/booking-mice.ts:472-477) filter approvalRecord.updateMany by `module: \"booking-mice\"` — HANYA match booking dari jalur create-instan, GAK match booking hasil finalize-draft (yang taggingnya \"booking\") — restore gak akan reset approval status buat mayoritas booking MICE real. Sebaliknya deleteMiceBooking (baris 352-355) filter `module: \"booking\"` — kebalikannya, cuma bersihin approval record dari jalur finalize-draft, bukan jalur create-instan. Fix: samain module tag di kedua jalur (pass `module: \"booking-mice\"` eksplisit di finalizeDraftMiceBooking, dan samain filter di restore/delete).",
+          "subtasks": [
+            {
+              "name": "[FIX] Samain approval module tag antara createMiceBooking dan finalizeDraftMiceBooking",
+              "markdown_description": "- Tambahin `module: \"booking-mice\"` eksplisit di call `buildBookingApprovalSteps` (actions/booking-mice-draft.ts:371-377)\n- Ganti `module: \"booking\"` hardcoded jadi `\"booking-mice\"` di ApprovalRecord.create (actions/booking-mice-draft.ts:450)\n- Audit ulang restoreMiceBooking (booking-mice.ts:472-477) & deleteMiceBooking (booking-mice.ts:352-355) — pastikan filter `module` konsisten satu nilai di semua query\n- Regression check: booking MICE existing di DB (kalau ada) yang udah kadung ke-tag \"booking\" dari jalur finalize-draft — butuh data-fix migration atau at least dokumentasi kalau restore-nya bakal gak jalan buat data lama"
+            }
+          ]
+        },
+        {
+          "name": "MICE Package — Master Paket & Item Non-Vendor",
+          "markdown_description": "Master paket khusus MICE (`Package.category = \"MICE\"`) — BUKAN model terpisah dari Master Paket Wedding (sudah di-cover Phase 3), tapi shared model `Package` dengan tambahan relasi `PackageMiceItem[]` (prisma/schema.prisma:629-643) buat item non-vendor (mis. sewa ruang meeting, coffee break) yang di-price per PAX atau NOMINAL (`enum MiceItemPriceType`, schema.prisma:1951+). UI: app/(private)/booking/package-mice/ (page.tsx + mice-packages-table.tsx, mice-package-drawer.tsx, mice-package-detail-modal.tsx, mice-package-finance-drawer.tsx).",
+          "_status_hint": "complete, thin extension di atas infrastruktur package wedding — no significant gap",
+          "_review_note": "Arsitekturnya SENGAJA beda dari Booking MICE: kalau Booking MICE punya action file sendiri (booking-mice.ts/booking-mice-draft.ts, paralel ke wedding), Package MICE REUSE penuh actions/package.ts yang sama dengan wedding lewat helper `permModuleFor(category)` (actions/package.ts:23-24) yang milih permission module `\"package\"` vs `\"package-mice\"` runtime berdasarkan `pkg.category` — dipakai di saveMiceItems (actions/package.ts:480-539, action satu-satunya yang MICE-spesifik: delete-then-recreate PackageMiceItem dalam db.$transaction array form, sudah requirePermission → mutationLimiter → Zod → transaction → logAudit → revalidateTag, compliant penuh). CRUD paket dasar, harga (via `MicePackageFinanceDrawer` yang reuse `DrawerFinanceBase` + `useSavePackagePrices` — komponen & hook SAMA PERSIS dengan wedding package, cuma beda wrapper) dan approval paket semuanya reuse 100% dari infrastruktur Phase 3 (Master Paket — Buat & Edit Paket / Harga & T&C / Approval Paket / Duplikasi) — jadi task ini fokusnya cuma DELTA MICE-spesifik (PackageMiceItem CRUD via saveMiceItems, permission module `package-mice`: view/create/edit/delete/set-harga/set-status/term-&-condition di prisma/seeders/roles-permissions.ts:56), bukan re-audit base package CRUD yang udah dicover Phase 3. Gak ketemu gap konkret dari baca actions/package.ts saveMiceItems maupun mice-packages-table.tsx — solid.",
+          "subtasks": []
+        }
+      ]
+    }
+  ]
+}

@@ -21,6 +21,7 @@ import {
   Widget,
   ClipboardList,
   GalleryWide,
+  Tag,
   type IconProps,
 } from "@solar-icons/react";
 import type { ComponentType } from "react";
@@ -158,6 +159,13 @@ const GROUPS: SettingGroup[] = [
         module: "settings-banner",
       },
       {
+        title: "Package Category",
+        description: "Kelola kategori paket untuk pricing (Hadjatan, Regular, dll).",
+        icon: Tag,
+        href: "/settings/package-category",
+        module: "settings-package-category",
+      },
+      {
         title: "Hari Libur Nasional",
         description: "Kelola daftar tanggal merah / hari libur nasional.",
         icon: CalendarDate,
@@ -208,6 +216,7 @@ export default async function SettingsHubPage() {
     "settings-maintenance-status",
     "settings-booking-log",
     "settings-banner",
+    "settings-package-category",
   ]);
 
   const session = await auth();

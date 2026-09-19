@@ -116,7 +116,7 @@ export async function getMemberCompletionStatus(
   const memberIds = members.map((m) => m.userId);
 
   // Find distinct assignedToIds that logged activity on the target date
-  const actives = await db.dailyActivity.findMany({
+  const actives = await db.lead.findMany({
     where: {
       assignedToId: { in: memberIds },
       OR: [

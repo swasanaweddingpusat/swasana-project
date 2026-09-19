@@ -1,120 +1,57 @@
 import { cacheTag, cacheLife } from "next/cache";
 import { db } from "@/lib/db";
-import { resolveAvatarUrl } from "@/lib/storage";
 import type { Prisma } from "@prisma/client";
 import type { DailyActivityFilterInput } from "@/lib/validations/daily-activity";
 import type { DataScope } from "@/types/user";
 
-/**
- * Resolve bookingFeeEvidenceUrl from a stored S3 key (or a legacy full URL) to a
- * displayable full URL. Uses resolveAvatarUrl which handles both forms:
- *   - relative key → getPublicUrl(key)
- *   - full URL from current host → passthrough
- *   - full URL from a different/legacy host → null (file gone)
- * This is safe even if the DB value is already a full URL (idempotent).
- */
-function resolveLeadEvidenceUrl<T extends { bookingFeeEvidenceUrl: string | null }>(
-  lead: T,
-): T {
-  return {
-    ...lead,
-    bookingFeeEvidenceUrl: resolveAvatarUrl(lead.bookingFeeEvidenceUrl),
-  };
-}
+// ─── Daily Activity reads (new lean model → db.dailyActivity) ─────────────────
+//
+// The NEW Daily Activity feature (sales prospecting log). Legacy lead-picker
+// reads live in lib/queries/leads.ts. Do not conflate the two.
 
-const leadSelect = {
+const dailyActivitySelect = {
   id: true,
-  name: true,
-  contactNumbers: true,
-  email: true,
-  emailCpp: true,
-  emailCpw: true,
-  nikCpp: true,
-  nikCpw: true,
-  addressCpp: true,
-  addressCpw: true,
-  address: true,
-  eventDate: true,
-  eventDateAlt: true,
-  time: true,
-  estimatedPax: true,
-  budgetRange: true,
-  notes: true,
-  category: true,
-  weddingSession: true,
-  weddingSessionAlt: true,
-  bitrixId: true,
-  instansi: true,
+  salesId: true,
+  activityDate: true,
+  companyName: true,
   segmentId: true,
-  instagramUrl: true,
-  siteVisitDate: true,
-  isDateLocked: true,
-  bookingFeeAmount: true,
-  bookingFeeDate: true,
-  bookingFeeEvidenceUrl: true,
-  convertedAt: true,
+  sourceOfInformationId: true,
+  sourceOfInformationDetail: true,
+  bitrixId: true,
+  contactName: true,
+  phoneNumber: true,
+  email: true,
+  location: true,
+  siteVisitAt: true,
+  milestone: true,
+  progressStatus: true,
+  notes: true,
   createdAt: true,
   updatedAt: true,
-  status: {
-    select: { id: true, name: true, color: true, isFinal: true, isSystem: true },
-  },
-  venue: {
-    select: { id: true, name: true },
-  },
-  venueSecondary: {
-    select: { id: true, name: true },
-  },
-  package: {
-    select: { id: true, packageName: true },
-  },
-  eventType: {
-    select: { id: true, name: true, category: true, code: true },
-  },
-  sourceOfInformation: {
-    select: { id: true, name: true },
-  },
-  segment: {
-    select: { id: true, name: true },
-  },
-  createdBy: {
-    select: { id: true, fullName: true, nickName: true },
-  },
-  assignedTo: {
-    select: { id: true, fullName: true, nickName: true },
-  },
-  convertedToCustomer: {
-    select: { id: true, name: true },
-  },
-  convertedToBooking: {
-    select: { id: true },
-  },
+  sales: { select: { id: true, fullName: true } },
+  segment: { select: { id: true, name: true } },
+  sourceOfInformation: { select: { id: true, name: true } },
 } satisfies Prisma.DailyActivitySelect;
 
 /**
- * Resolve the set of profileIds the caller is allowed to see leads for,
- * based on their dataScope. Returns null if scope = "all" (no restriction).
- *
- * This intentionally does NOT use "use cache" — the result is identity-specific
- * and must not be shared across callers.
+ * Resolve the salesId filter the caller is allowed to see, based on dataScope.
+ * Enforced from the server session, never from HTTP params. Returns {} for "all".
  */
-async function resolveLeadScopeFilter(
+async function resolveDailyActivityScopeFilter(
   callerProfileId: string,
   dataScope: DataScope,
 ): Promise<Prisma.DailyActivityWhereInput> {
   if (dataScope === "all") return {};
-  if (dataScope === "own") return { assignedToId: callerProfileId };
+  if (dataScope === "own") return { salesId: callerProfileId };
 
-  // dataScope === "group": find all groups where caller is a member
+  // dataScope === "group": everyone in the caller's group(s), plus group leaders.
   const myGroups = await db.userGroupMember.findMany({
     where: { userId: callerProfileId },
     select: { groupId: true },
   });
-  if (myGroups.length === 0) return { assignedToId: callerProfileId };
+  if (myGroups.length === 0) return { salesId: callerProfileId };
 
   const groupIds = myGroups.map((g) => g.groupId);
-
-  // Fetch all members + group leaders (defensive: covers legacy leaders who
-  // weren't added as members before the group-leader-sync fix was deployed)
   const [members, groupLeaders] = await Promise.all([
     db.userGroupMember.findMany({
       where: { groupId: { in: groupIds } },
@@ -131,51 +68,58 @@ async function resolveLeadScopeFilter(
     if (g.leaderId) allowedIds.add(g.leaderId);
   }
 
-  return { assignedToId: { in: [...allowedIds] } };
+  return { salesId: { in: [...allowedIds] } };
 }
 
 export async function getDailyActivities(
   filter: DailyActivityFilterInput,
   caller?: { profileId: string; dataScope: DataScope },
 ) {
-  // NOTE: "use cache" intentionally removed — this function may receive an
-  // identity-scoped filter (callerProfileId + dataScope). Caching a per-user
-  // result set without a per-user cache key would leak data across callers.
-  // Callers that need caching should cache at a higher layer with identity in key.
+  // No "use cache": may receive an identity-scoped filter; caching a per-user
+  // result without a per-user key would leak data across callers.
+  const {
+    search,
+    progressStatus,
+    segmentId,
+    salesId,
+    activityDateFrom,
+    activityDateTo,
+    siteVisitFrom,
+    siteVisitTo,
+    page,
+    pageSize,
+  } = filter;
 
-  const { search, scope, statusId, venueId, eventTypeId, segmentId, assignedToId, page, pageSize } = filter;
-
-  // Scope filter: active = isFinal:false, deal = isFinal&&isSystem, lost = isFinal&&!isSystem
-  let scopeWhere: Prisma.DailyActivityWhereInput = {};
-  if (scope === "active") {
-    scopeWhere = { status: { isFinal: false } };
-  } else if (scope === "deal") {
-    scopeWhere = { status: { isFinal: true, isSystem: true } };
-  } else if (scope === "lost") {
-    scopeWhere = { status: { isFinal: true, isSystem: false } };
-  }
-
-  // Data-access scope filter (group/own/all) — enforced from server session, never from HTTP params
   const dataScopeFilter = caller
-    ? await resolveLeadScopeFilter(caller.profileId, caller.dataScope)
+    ? await resolveDailyActivityScopeFilter(caller.profileId, caller.dataScope)
     : {};
 
   const where: Prisma.DailyActivityWhereInput = {
-    ...scopeWhere,
+    deletedAt: null,
     ...dataScopeFilter,
     ...(search?.trim() && {
       OR: [
-        { name: { contains: search.trim(), mode: "insensitive" } },
-        { email: { contains: search.trim(), mode: "insensitive" } },
+        { companyName: { contains: search.trim(), mode: "insensitive" } },
+        { contactName: { contains: search.trim(), mode: "insensitive" } },
+        { milestone: { contains: search.trim(), mode: "insensitive" } },
       ],
     }),
-    // statusId filter only applies in active scope (deal/lost scope already constrains by flag)
-    ...(statusId && scope === "active" && { statusId }),
-    ...(venueId && { venueId }),
-    ...(eventTypeId && { eventTypeId }),
+    ...(progressStatus && { progressStatus }),
     ...(segmentId && { segmentId }),
-    // assignedToId from query param is an additional narrowing filter on top of dataScopeFilter
-    ...(assignedToId && { assignedToId }),
+    // salesId from param is an additional narrowing filter on top of dataScopeFilter
+    ...(salesId && { salesId }),
+    ...((activityDateFrom || activityDateTo) && {
+      activityDate: {
+        ...(activityDateFrom && { gte: new Date(`${activityDateFrom}T00:00:00`) }),
+        ...(activityDateTo && { lte: new Date(`${activityDateTo}T23:59:59.999`) }),
+      },
+    }),
+    ...((siteVisitFrom || siteVisitTo) && {
+      siteVisitAt: {
+        ...(siteVisitFrom && { gte: new Date(`${siteVisitFrom}T00:00:00`) }),
+        ...(siteVisitTo && { lte: new Date(`${siteVisitTo}T23:59:59.999`) }),
+      },
+    }),
   };
 
   const skip = (page - 1) * pageSize;
@@ -183,8 +127,8 @@ export async function getDailyActivities(
   const [items, total] = await Promise.all([
     db.dailyActivity.findMany({
       where,
-      select: leadSelect,
-      orderBy: { createdAt: "desc" },
+      select: dailyActivitySelect,
+      orderBy: [{ activityDate: "desc" }, { createdAt: "desc" }],
       skip,
       take: pageSize,
     }),
@@ -192,7 +136,7 @@ export async function getDailyActivities(
   ]);
 
   return {
-    items: items.map(resolveLeadEvidenceUrl),
+    data: items,
     total,
     page,
     pageSize,
@@ -201,57 +145,28 @@ export async function getDailyActivities(
 }
 
 export async function getDailyActivityById(id: string) {
-  "use cache";
-  cacheTag("daily-activity");
-  cacheLife("seconds");
-
-  const lead = await db.dailyActivity.findUnique({
-    where: { id },
-    select: leadSelect,
-  });
-  if (!lead) return null;
-  return resolveLeadEvidenceUrl(lead);
-}
-
-export async function getLeadStatuses() {
-  "use cache";
-  cacheTag("lead-statuses");
-  cacheLife("minutes");
-
-  return db.leadStatus.findMany({
-    select: {
-      id: true,
-      name: true,
-      color: true,
-      sortOrder: true,
-      isDefault: true,
-      isFinal: true,
-      isSystem: true,
-      isActive: true,
-    },
-    orderBy: { sortOrder: "asc" },
-    take: 200,
+  return db.dailyActivity.findFirst({
+    where: { id, deletedAt: null },
+    select: dailyActivitySelect,
   });
 }
 
-export async function getDailyActivitySegments() {
+/** Active segments for the Daily Activity segment dropdown. */
+export async function getDailyActivitySegmentOptions() {
   "use cache";
   cacheTag("daily-activity-segments");
   cacheLife("minutes");
 
   return db.dailyActivitySegment.findMany({
-    select: {
-      id: true,
-      name: true,
-      isActive: true,
-      sortOrder: true,
-    },
+    where: { isActive: true },
+    select: { id: true, name: true },
     orderBy: { sortOrder: "asc" },
     take: 200,
   });
 }
 
 export type DailyActivitiesResult = Awaited<ReturnType<typeof getDailyActivities>>;
-export type DailyActivityItem = DailyActivitiesResult["items"][number];
-export type LeadStatusItem = Awaited<ReturnType<typeof getLeadStatuses>>[number];
-export type DailyActivitySegmentItem = Awaited<ReturnType<typeof getDailyActivitySegments>>[number];
+export type DailyActivityItem = DailyActivitiesResult["data"][number];
+export type DailyActivitySegmentOption = Awaited<
+  ReturnType<typeof getDailyActivitySegmentOptions>
+>[number];

@@ -140,6 +140,7 @@ function PaymentContent({
   const [programId, setProgramId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<BookingCashIn | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [checkingContinue, setCheckingContinue] = useState(false);
 
   const amountNum = Number(amount.replace(/[^\d]/g, "")) || 0;
 
@@ -333,8 +334,10 @@ function PaymentContent({
   }
 
   async function handleContinue(): Promise<void> {
-    // Re-check gate against fresh data before advancing.
+    if (checkingContinue) return;
+    setCheckingContinue(true);
     try {
+      // Re-check gate against fresh data before advancing.
       const fresh = await getBookingFinanceDetailClient(bookingId);
       const freshFirst = fresh?.terms?.[0];
       const feeOk =
@@ -348,6 +351,8 @@ function PaymentContent({
     } catch {
       // If recheck fails, fall through to the local gate (bookingFeePaid).
       if (!bookingFeePaid) return;
+    } finally {
+      setCheckingContinue(false);
     }
     if (onSaved) onSaved();
   }
@@ -810,10 +815,10 @@ function PaymentContent({
           <Button
             type="button"
             className="flex-1 rounded-full"
-            disabled={!bookingFeePaid || submitting}
+            disabled={!bookingFeePaid || submitting || checkingContinue}
             onClick={() => { void handleContinue(); }}
           >
-            {saveLabel}
+            {checkingContinue ? "Memeriksa..." : saveLabel}
           </Button>
         </div>
       </div>
