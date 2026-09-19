@@ -83,6 +83,7 @@ export function PenugasanDrawer({
     if (!isOpen) return;
     if (isEdit && editItem) {
       const d = new Date(editItem.period);
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setForm({
         profileId: editItem.profileId,
         kpiMasterId: editItem.kpiMasterId,
