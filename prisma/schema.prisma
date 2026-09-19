@@ -325,6 +325,7 @@ model UserGroup {
   updatedAt   DateTime          @updatedAt
   leader       Profile?          @relation("GroupLeader", fields: [leaderId], references: [id], onDelete: SetNull)
   members      UserGroupMember[]
+  venues       UserGroupVenue[]
   dailyReports DailyReport[]
 
   @@index([leaderId])
@@ -342,6 +343,20 @@ model UserGroupMember {
   @@id([groupId, userId])
   @@index([userId])
   @@map("user_group_members")
+}
+
+// Many-to-many: satu Group (sales team) bisa di-assign ke banyak Venue sekaligus.
+// Informational/filter only — TIDAK dipakai oleh access-control / dataScope.
+model UserGroupVenue {
+  groupId   String
+  venueId   String
+  createdAt DateTime  @default(now())
+  group     UserGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  venue     Venue     @relation(fields: [venueId], references: [id], onDelete: Cascade)
+
+  @@id([groupId, venueId])
+  @@index([venueId])
+  @@map("user_group_venues")
 }
 
 // ─── Venue (dipakai untuk user invitation — assign venue ke user) ─────────────
@@ -388,6 +403,7 @@ model Venue {
   memos                     Memo[]
   announcements             Announcement[]
   onboardingFormSubmissions OnboardingFormSubmission[]
+  groupAssignments          UserGroupVenue[]
 
   @@index([brandId])
   @@map("venues")
