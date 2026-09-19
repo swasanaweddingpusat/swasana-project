@@ -203,7 +203,7 @@ export async function createBooking(data: unknown) {
       db.venue.findUniqueOrThrow({ where: { id: input.venueId }, include: { brand: true } }),
       db.package.findUniqueOrThrow({
         where: { id: input.packageId },
-        include: { vendorItems: true, internalItems: true, categoryPrices: true },
+        include: { vendorItems: true, internalItems: true, categoryPrices: true, packageTypeCategory: true },
       }),
     ]);
 
@@ -431,6 +431,8 @@ export async function createBooking(data: unknown) {
           packageId: pkg.id,
           packageName: pkg.packageName,
           notes: pkg.notes,
+          packageTypeCategoryName: pkg.packageTypeCategory?.name ?? null,
+          packageTypeCategoryCode: pkg.packageTypeCategory?.code ?? null,
         },
       }),
     );
@@ -1671,12 +1673,18 @@ export async function editBooking(data: unknown) {
     if (shouldRefreshPrice) {
       const newPkg = await db.package.findUniqueOrThrow({
         where: { id: rest.packageId },
-        include: { vendorItems: true, internalItems: true, categoryPrices: true },
+        include: { vendorItems: true, internalItems: true, categoryPrices: true, packageTypeCategory: true },
       });
       ops.push(
         db.snapPackage.update({
           where: { bookingId: id },
-          data: { packageId: newPkg.id, packageName: newPkg.packageName, notes: newPkg.notes },
+          data: {
+            packageId: newPkg.id,
+            packageName: newPkg.packageName,
+            notes: newPkg.notes,
+            packageTypeCategoryName: newPkg.packageTypeCategory?.name ?? null,
+            packageTypeCategoryCode: newPkg.packageTypeCategory?.code ?? null,
+          },
         })
       );
 

@@ -35,6 +35,7 @@ export const moduleActions: Record<string, string[]> = {
   "settings-users": ["view", "create", "edit", "delete"],
   "settings-education-level": ["view", "create", "edit", "delete"],
   "settings-event-types": ["view", "create", "edit", "delete"],
+  "settings-package-category": ["view", "create", "edit", "delete"],
   "settings-public-holiday": ["view", "create", "edit", "delete"],
   "settings-order-status": ["view", "create", "edit", "delete"],
   "settings-payment-methods": ["view", "create", "edit", "delete"],
@@ -144,6 +145,7 @@ export const rolePermissionMap: Record<string, Record<string, string[]>> = {
     groups: ["view", "create", "edit", "delete"],
     // daily-activity sengaja DICABUT — cuma manager-mice yang butuh.
     package: ["view", "create", "edit", "delete", "set-harga", "term-&-condition", "set-status"],
+    "settings-package-category": ["view", "create", "edit", "delete"],
     vendor: ["view", "create", "edit", "delete"],
     complimentary: ["view", "create", "edit", "delete"],
     bonus: ["view", "create", "edit", "delete"],
@@ -316,6 +318,7 @@ export const rolePermissionMap: Record<string, Record<string, string[]>> = {
     customers: ["view", "create", "edit", "delete"],
     "settings-event-types": ["view", "create", "edit", "delete"],
     "settings-quotation-templates": ["view", "create", "edit", "delete"],
+    "settings-package-category": ["view", "create", "edit", "delete"],
     "package-mice": ["view", "create", "edit", "delete", "set-harga", "set-status", "term-&-condition"],
     complimentary: ["view", "create", "edit", "delete"],
     bonus: ["view", "create", "edit", "delete"],

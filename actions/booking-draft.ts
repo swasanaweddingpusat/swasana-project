@@ -636,6 +636,7 @@ export async function finalizeDraftBooking(data: unknown): Promise<FinalizeDraft
             vendorItems: true,
             internalItems: true,
             categoryPrices: true,
+            packageTypeCategory: true,
           },
         },
         termOfPayments: { orderBy: { sortOrder: "asc" } },
@@ -821,6 +822,8 @@ export async function finalizeDraftBooking(data: unknown): Promise<FinalizeDraft
             packageId: pkg.id,
             packageName: pkg.packageName,
             notes: pkg.notes,
+            packageTypeCategoryName: pkg.packageTypeCategory?.name ?? null,
+            packageTypeCategoryCode: pkg.packageTypeCategory?.code ?? null,
           },
         }),
         db.snapPackagePricing.create({

@@ -535,30 +535,33 @@ model PaymentMethod {
 // ─── Packages ────────────────────────────────────────────────────────────────
 
 model Package {
-  id               String                 @id @default(uuid())
-  packageName      String
-  category         EventCategory          @default(WEDDINGS)
-  available        Boolean                @default(true)
-  approvalStatus   String                 @default("draft")
-  venueId          String?
-  notes            String?
-  pax              Int                    @default(0)
-  margin           Float                  @default(0)
-  sellingPrice     Int                    @default(0)
-  termAndCondition String?
-  createdAt        DateTime               @default(now())
-  updatedAt        DateTime               @updatedAt
-  venue            Venue?                 @relation(fields: [venueId], references: [id], onDelete: SetNull)
-  vendorItems      PackageVendorItem[]
-  internalItems    PackageInternalItem[]
-  miceItems        PackageMiceItem[]
-  categoryPrices   PackageCategoryPrice[]
-  bookings         Booking[]
-  leads            Lead[]
-  guestbookEntries GuestbookEntry[]
+  id                     String                 @id @default(uuid())
+  packageName            String
+  category               EventCategory          @default(WEDDINGS)
+  available              Boolean                @default(true)
+  approvalStatus         String                 @default("draft")
+  venueId                String?
+  packageTypeCategoryId  String?
+  notes                  String?
+  pax                    Int                    @default(0)
+  margin                 Float                  @default(0)
+  sellingPrice           Int                    @default(0)
+  termAndCondition       String?
+  createdAt              DateTime               @default(now())
+  updatedAt              DateTime               @updatedAt
+  venue                  Venue?                 @relation(fields: [venueId], references: [id], onDelete: SetNull)
+  packageTypeCategory    PackageTypeCategory?   @relation(fields: [packageTypeCategoryId], references: [id], onDelete: SetNull)
+  vendorItems            PackageVendorItem[]
+  internalItems          PackageInternalItem[]
+  miceItems              PackageMiceItem[]
+  categoryPrices         PackageCategoryPrice[]
+  bookings               Booking[]
+  leads                  Lead[]
+  guestbookEntries       GuestbookEntry[]
 
   @@index([venueId])
   @@index([category])
+  @@index([packageTypeCategoryId])
   @@map("packages")
 }
 
@@ -575,6 +578,22 @@ model Category {
   vendorItems    PackageVendorItem[]
 
   @@map("categories")
+}
+
+// Package type master — groups Packages themselves (e.g. "Paket Hadjatan", "Paket
+// Regular"). Standalone reference data, separate from `Category` above (which is
+// vendor-item master data used inside a package, e.g. Catering/Dekorasi).
+model PackageTypeCategory {
+  id        String    @id @default(uuid())
+  name      String    @unique
+  code      String    @unique
+  sortOrder Int       @default(0)
+  isActive  Boolean   @default(true)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  packages  Package[]
+
+  @@map("package_type_category")
 }
 
 model PackageCategoryPrice {
@@ -1158,13 +1177,15 @@ model SnapVenue {
 }
 
 model SnapPackage {
-  id          String   @id @default(uuid())
-  bookingId   String   @unique
-  packageId   String
-  packageName String
-  notes       String?
-  createdAt   DateTime @default(now())
-  booking     Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  id                      String   @id @default(uuid())
+  bookingId               String   @unique
+  packageId               String
+  packageName             String
+  packageTypeCategoryName String?
+  packageTypeCategoryCode String?
+  notes                   String?
+  createdAt               DateTime @default(now())
+  booking                 Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
 
   @@map("snap_packages")
 }

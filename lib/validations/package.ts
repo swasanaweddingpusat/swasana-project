@@ -9,6 +9,7 @@ export const createPackageSchema = z.object({
   category: packageCategorySchema.default("WEDDINGS"),
   available: z.boolean().default(true),
   venueId: z.string().nullable().optional(),
+  packageTypeCategoryId: z.string().min(1, "Kategori paket wajib diisi"),
   notes: z.string().nullable().optional(),
   pax: z.number().int().min(0).default(0),
   signature: z.string().nullable().optional(),
