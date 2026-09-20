@@ -47,6 +47,7 @@ import {
 } from "@/components/ui/collapsible";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { SimpleEditor } from "@/components/shared/SimpleEditor";
+import { TermConditionEditor } from "@/components/shared/TermConditionEditor";
 import { BankAccountSelect } from "@/components/shared/bank-account-select";
 import { PhoneInput } from "@/components/shared/PhoneInput";
 import { TimeRangePicker } from "@/components/shared/time-range-picker";
@@ -60,12 +61,14 @@ import {
   AltArrowDown,
   Calendar as CalendarSolarIcon,
   AlignVerticalSpacing,
-  Box,
   BillList,
   Gift,
   MedalStar,
   Calculator,
+  Card2,
+  DocumentText,
   SafeSquare,
+  Pen,
 } from "@solar-icons/react";
 import { cn, parseDateOnly } from "@/lib/utils";
 import { useVenues } from "@/hooks/use-venues";
@@ -110,6 +113,9 @@ interface QuotationFormValues {
   salesPhone: string;
   eventTypeId: string;
   eventTypeName: string; // nama event type untuk display/preview
+  packageId: string;
+  packageName: string;
+  pax: number;
   details: string;
   time: string;
   place: string;
@@ -124,12 +130,11 @@ interface QuotationFormValues {
   // JANGAN dikirim ke server action sampai schema server siap).
   additionals: QuotationItemForm[];
   discount: string;
+  discountName: string;
   bookingFee: string;
-  paymentNote: string;
+  termAndCondition: string;
   cancellationPolicy: string;
   closingNote: string;
-  validUntil: string;
-  notes: string;
   paymentMethodId: string;
 }
 
@@ -178,6 +183,30 @@ interface TaxDepositRow {
   nominal: number;
 }
 
+// Term of Payment (TOP) — UI-only for now (belum ada table/DB; same
+// local-useState architecture as Price/TaxDeposit). Mirrors the wedding-booking
+// TOP builder: each term = name + nominal + due date.
+interface TermRow {
+  id: string;
+  name: string;
+  amount: number;
+  dueDate: string; // "yyyy-MM-dd"
+}
+
+function makeDefaultTerms(): TermRow[] {
+  return [
+    { id: crypto.randomUUID(), name: "Down Payment", amount: 0, dueDate: "" },
+    { id: crypto.randomUUID(), name: "Other", amount: 0, dueDate: "" },
+  ];
+}
+
+function makeDefaultTaxDeposits(): TaxDepositRow[] {
+  return [
+    { id: crypto.randomUUID(), name: "Tax 10%", nominal: 2000000 },
+    { id: crypto.randomUUID(), name: "Deposite", nominal: 5000000 },
+  ];
+}
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function parseNumericInput(raw: string): number {
@@ -204,7 +233,7 @@ function formatRupiah(amount: number): string {
 const LABEL_CLASS = cn("text-sm", "font-medium", "text-foreground");
 
 const TAB_TRIGGER_CLASS = cn(
-  "h-auto flex-none items-center gap-1.5 rounded-none border-0 border-b border-b-transparent -mb-px bg-transparent px-4 py-2.5 text-sm font-medium text-muted-foreground shadow-none transition-colors after:hidden hover:border-b-border hover:text-foreground data-active:border-b-primary data-active:bg-transparent data-active:text-foreground data-active:shadow-none",
+  "h-auto flex-none items-center gap-1.5 rounded-none border-0 border-b-2 border-b-transparent -mb-px bg-transparent px-4 py-2.5 text-sm font-medium text-muted-foreground shadow-none transition-colors after:hidden hover:border-b-border hover:text-foreground data-active:border-b-primary data-active:bg-transparent data-active:font-semibold data-active:text-primary data-active:shadow-none",
 );
 
 // ── Constants ────────────────────────────────────────────────────────────────
@@ -238,6 +267,9 @@ const DEFAULT_VALUES: QuotationFormValues = {
   salesPhone: "",
   eventTypeId: "",
   eventTypeName: "",
+  packageId: "",
+  packageName: "",
+  pax: 0,
   details: "",
   time: "",
   place: "",
@@ -249,12 +281,11 @@ const DEFAULT_VALUES: QuotationFormValues = {
   items: DEFAULT_ITEMS.map((it) => ({ ...it })),
   additionals: [],
   discount: "",
+  discountName: "",
   bookingFee: "",
-  paymentNote: "",
+  termAndCondition: "",
   cancellationPolicy: "",
   closingNote: "",
-  validUntil: "",
-  notes: "",
   paymentMethodId: "",
 };
 
@@ -270,6 +301,7 @@ type QuotationDraft = {
   bonuses?: BonusRow[];
   prices?: PriceRow[];
   taxDeposits?: TaxDepositRow[];
+  terms?: TermRow[];
 };
 
 function readQuotationDraft(): QuotationDraft | null {
@@ -290,6 +322,7 @@ function persistQuotationDraft(
   bonuses?: BonusRow[],
   prices?: PriceRow[],
   taxDeposits?: TaxDepositRow[],
+  terms?: TermRow[],
 ) {
   if (typeof window === "undefined") return;
   const { ...rest } = values;
@@ -304,7 +337,8 @@ function persistQuotationDraft(
     (complimentaries && complimentaries.length > 0) ||
     (bonuses && bonuses.length > 0) ||
     (prices && prices.length > 0) ||
-    (taxDeposits && taxDeposits.length > 0)
+    (taxDeposits && taxDeposits.length > 0) ||
+    (terms && terms.length > 0)
   ) {
     const draft: QuotationDraft = { values: rest };
     if (signingLocation !== undefined) draft.signingLocation = signingLocation;
@@ -313,6 +347,7 @@ function persistQuotationDraft(
     if (bonuses !== undefined) draft.bonuses = bonuses;
     if (prices !== undefined) draft.prices = prices;
     if (taxDeposits !== undefined) draft.taxDeposits = taxDeposits;
+    if (terms !== undefined) draft.terms = terms;
     localStorage.setItem(QUOTATION_DRAFT_KEY, JSON.stringify(draft));
   } else {
     localStorage.removeItem(QUOTATION_DRAFT_KEY);
@@ -874,7 +909,7 @@ function PriceRowCard({ row, isCollapsed, toggleCollapse, onUpdate, onRemove }: 
   );
 }
 
-// ── Sub-component: TaxDepositRowCard (Step 2 — same visual language as PriceRowCard, 2 fields only) ──
+// ── Sub-component: TaxDepositRowCard (Step 4 — same visual language as PriceRowCard, 2 fields only) ──
 
 interface TaxDepositRowCardProps {
   row: TaxDepositRow;
@@ -989,6 +1024,170 @@ function TaxDepositRowCard({ row, isCollapsed, toggleCollapse, onUpdate, onRemov
   );
 }
 
+// ── Sub-component: TermRowCard (Step 4 Payment tab — TOP builder, UI-only) ──
+
+interface TermRowCardProps {
+  row: TermRow;
+  index: number;
+  isCollapsed: boolean;
+  toggleCollapse: () => void;
+  onUpdate: (patch: Partial<TermRow>) => void;
+  onRemove: () => void;
+}
+
+function TermRowCard({ row, index, isCollapsed, toggleCollapse, onUpdate, onRemove }: TermRowCardProps) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: row.id,
+  });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : undefined,
+  };
+
+  const isOpen = !isCollapsed;
+
+  return (
+    <div ref={setNodeRef} style={style} {...attributes}>
+      <Collapsible
+        open={isOpen}
+        onOpenChange={toggleCollapse}
+        className="rounded-xl border border-border bg-muted/30 overflow-hidden"
+      >
+        {/* Accordion header */}
+        <div className="flex items-center gap-1 px-3 py-2.5">
+          <button
+            type="button"
+            {...listeners}
+            aria-label="Drag to reorder"
+            className="shrink-0 p-1.5 rounded-lg cursor-grab touch-none text-muted-foreground hover:bg-muted hover:text-foreground transition-colors active:cursor-grabbing"
+          >
+            <AlignVerticalSpacing weight="BoldDuotone" className="h-4 w-4" />
+          </button>
+
+          <CollapsibleTrigger className="flex flex-1 items-center gap-2 min-w-0 cursor-pointer text-left">
+            <AltArrowDown
+              weight="BoldDuotone"
+              className={cn(
+                "h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200",
+                isOpen && "rotate-180",
+              )}
+            />
+            <p
+              className={cn(
+                "flex-1 min-w-0 truncate text-sm font-medium",
+                row.name ? "text-foreground" : "text-muted-foreground",
+              )}
+            >
+              {row.name || `Termin ${index + 1}`}
+            </p>
+            {!isOpen && (
+              <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
+                {row.amount ? formatRupiah(row.amount) : "Rp0"}
+                {row.dueDate ? ` · ${format(parseDateOnly(row.dueDate), "dd MMM yyyy")}` : ""}
+              </span>
+            )}
+          </CollapsibleTrigger>
+
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            onClick={(e) => {
+              e.stopPropagation();
+              onRemove();
+            }}
+            aria-label="Delete term"
+            className="shrink-0 h-7 w-7 text-destructive hover:bg-destructive/10"
+          >
+            <TrashBinTrash weight="BoldDuotone" className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+
+        {/* Accordion body */}
+        <CollapsibleContent>
+          <div className="px-3 pb-3 space-y-3 border-t border-border/60">
+            <div className="pt-2">
+              <FormLabel className="text-xs text-muted-foreground">
+                Name <span className="text-destructive">*</span>
+              </FormLabel>
+              <Input
+                value={row.name}
+                onChange={(e) => onUpdate({ name: e.target.value })}
+                placeholder={`Termin ${index + 1}`}
+                className="mt-1.5"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <FormLabel className="text-xs text-muted-foreground">
+                  Nominal <span className="text-destructive">*</span>
+                </FormLabel>
+                <div className="relative mt-1.5">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground select-none">
+                    Rp
+                  </span>
+                  <Input
+                    value={row.amount ? formatNumericDisplay(row.amount) : ""}
+                    onChange={(e) => onUpdate({ amount: parseNumericInput(e.target.value) })}
+                    placeholder="0"
+                    inputMode="numeric"
+                    className="pl-8"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <FormLabel className="text-xs text-muted-foreground">Jatuh Tempo</FormLabel>
+                <Popover>
+                  <PopoverTrigger
+                    render={
+                      <Button
+                        variant="outline"
+                        className={cn(
+                          "mt-1.5 w-full justify-start text-left font-normal",
+                          !row.dueDate && "text-muted-foreground",
+                        )}
+                      >
+                        <CalendarSolarIcon weight="BoldDuotone" className="mr-2 h-4 w-4" />
+                        {row.dueDate
+                          ? format(parseDateOnly(row.dueDate), "dd MMM yyyy")
+                          : "Pilih tanggal"}
+                      </Button>
+                    }
+                  />
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      mode="single"
+                      captionLayout="dropdown"
+                      selected={row.dueDate ? new Date(row.dueDate + "T00:00:00") : undefined}
+                      onSelect={(date) => {
+                        if (date) {
+                          const y = date.getFullYear();
+                          const m = String(date.getMonth() + 1).padStart(2, "0");
+                          const d = String(date.getDate()).padStart(2, "0");
+                          onUpdate({ dueDate: `${y}-${m}-${d}` });
+                        } else {
+                          onUpdate({ dueDate: "" });
+                        }
+                      }}
+                      fromYear={new Date().getFullYear() - 1}
+                      toYear={new Date().getFullYear() + 5}
+                      defaultMonth={row.dueDate ? new Date(row.dueDate + "T00:00:00") : new Date()}
+                    />
+                  </PopoverContent>
+                </Popover>
+              </div>
+            </div>
+          </div>
+        </CollapsibleContent>
+      </Collapsible>
+    </div>
+  );
+}
+
 // ── Component ────────────────────────────────────────────────────────────────
 
 export function QuotationDrawer({
@@ -998,7 +1197,7 @@ export function QuotationDrawer({
   onSuccess,
 }: QuotationDrawerProps) {
   const isEdit = !!editQuotation;
-  const [step, setStep] = useState<1 | 2 | 3 | 4 | 5 | 6>(1);
+  const [step, setStep] = useState<1 | 2 | 3 | 4 | 5>(1);
   const queryClient = useQueryClient();
 
   // ── Mutation hooks ───────────────────────────────────────────────────────
@@ -1025,6 +1224,11 @@ export function QuotationDrawer({
 
   // Package MICE picker (Step 2 — explode into line items, filtered by venue)
   const [selectedPackageId, setSelectedPackageId] = useState("");
+  // Editable discount label (e.g. "Discount" / "Cashback") — toggled by pen icon.
+  const [discountEditing, setDiscountEditing] = useState(false);
+  // Event detail package source: "meeting-package" = pick from MICE package list,
+  // "custom" = manual line items (hides the MICE package picker).
+  const [packageSource, setPackageSource] = useState<"meeting-package" | "custom">("custom");
 
   function toggleItem(id: string) {
     setExpandedItems((prev) => {
@@ -1153,7 +1357,7 @@ export function QuotationDrawer({
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
   );
 
-  // ── Tax & Deposit (Step 2) ───────────────────────────────────────────────
+  // ── Tax & Deposit (Step 4) ───────────────────────────────────────────────
   // UI-only for now — no master data table, no server/DB wiring yet. Plain
   // useState array (not RHF), same architecture as Price above.
   const [taxDeposits, setTaxDeposits] = useState<TaxDepositRow[]>([]);
@@ -1202,6 +1406,58 @@ export function QuotationDrawer({
   }
 
   const taxDepositSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+  );
+
+  // ── Term of Payment (TOP — Step 4 Payment tab) ───────────────────────────
+  // UI-only for now — mirrors the wedding-booking TOP builder (name + nominal +
+  // due date per term). Plain useState array, NOT sent to server action yet.
+  const [terms, setTerms] = useState<TermRow[]>([]);
+  const [collapsedTerms, setCollapsedTerms] = useState<Set<string>>(new Set());
+
+  function toggleTermCollapse(id: string) {
+    setCollapsedTerms((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }
+
+  function addTermRow() {
+    const id = crypto.randomUUID();
+    setTerms((prev) => [...prev, { id, name: "", amount: 0, dueDate: "" }]);
+  }
+
+  function removeTermRow(id: string) {
+    setTerms((prev) => prev.filter((t) => t.id !== id));
+  }
+
+  function updateTermRow(id: string, patch: Partial<TermRow>) {
+    setTerms((prev) => prev.map((t) => (t.id === id ? { ...t, ...patch } : t)));
+  }
+
+  function moveTermRow(fromIndex: number, toIndex: number) {
+    setTerms((prev) => {
+      const next = [...prev];
+      const [moved] = next.splice(fromIndex, 1);
+      next.splice(toIndex, 0, moved);
+      return next;
+    });
+  }
+
+  function handleTermDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const fromIndex = terms.findIndex((t) => t.id === active.id);
+    const toIndex = terms.findIndex((t) => t.id === over.id);
+    if (fromIndex !== -1 && toIndex !== -1) moveTermRow(fromIndex, toIndex);
+  }
+
+  const termSensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
   );
 
@@ -1336,6 +1592,7 @@ export function QuotationDrawer({
   const watchedItems = form.watch("items");
   const watchedAdditionals = form.watch("additionals");
   const watchedDiscount = form.watch("discount");
+  const watchedDiscountName = form.watch("discountName");
   const watchedEventTypeId = form.watch("eventTypeId");
   const watchedEventDate = form.watch("eventDate");
   const watchedPaymentMethodId = form.watch("paymentMethodId");
@@ -1368,19 +1625,62 @@ export function QuotationDrawer({
     id: string;
     packageName: string;
     pax: number;
+    eventTypeId: string | null;
+    termAndCondition: string | null;
+    cancellationRefundPolicy: string | null;
+    closingNote: string | null;
+    paymentMethodId: string | null;
     venue: { id: string; name: string } | null;
+    eventType: { id: string; name: string } | null;
     miceItems: Array<{
       id: string;
       itemName: string;
       itemDescription: string;
       sortOrder: number;
     }>;
+    micePrices: Array<{
+      id: string;
+      name: string;
+      description: string | null;
+      priceType: "QTY" | "NOMINAL";
+      qty: number | null;
+      price: number | null;
+      total: number;
+      sortOrder: number;
+    }>;
+    taxDeposits: Array<{
+      id: string;
+      name: string;
+      nominal: number;
+      sortOrder: number;
+    }>;
+    complimentaries: Array<{
+      id: string;
+      complimentaryId: string | null;
+      name: string;
+      price: number;
+      isShowPrice: boolean;
+      description: string | null;
+      qty: number;
+      sortOrder: number;
+    }>;
+    bonuses: Array<{
+      id: string;
+      bonusId: string | null;
+      name: string;
+      price: number;
+      description: string | null;
+      qty: number;
+      sortOrder: number;
+    }>;
   }
   const { data: micePackagesData } = useQuery({
-    queryKey: ["mice-packages-quotation", watchedVenueId],
+    queryKey: ["mice-packages-quotation", watchedVenueId, watchedEventTypeId],
     queryFn: async () => {
-      const qs = `/api/packages?forQuotation=true&category=MICE&venueId=${encodeURIComponent(watchedVenueId)}`;
-      const res = await fetch(qs);
+      const params = new URLSearchParams({ forQuotation: "true", category: "MICE" });
+      if (watchedVenueId) params.set("venueId", watchedVenueId);
+      if (watchedEventTypeId) params.set("eventTypeId", watchedEventTypeId);
+      const res = await fetch(`/api/packages?${params.toString()}`);
       if (!res.ok) return [] as MicePackageQuotationOption[];
       return (await res.json()) as MicePackageQuotationOption[];
     },
@@ -1390,10 +1690,9 @@ export function QuotationDrawer({
   const micePackages: MicePackageQuotationOption[] = micePackagesData ?? [];
 
   /**
-   * Explode a package's items into editable quotation line items and REPLACE
-   * the entire items list with them (overwrites any existing template/manual
-   * items). Package MICE items no longer carry pricing (Item Paket step only
-   * has nama + detail) — qty/price/total start blank and are filled manually.
+   * Apply a MICE package: freeze its identity on the form + auto-fill every step
+   * (items, harga, tax & deposit, complimentary, bonus, T&C, payment method).
+   * Values stay editable afterward.
    */
   function handleApplyPackage(packageId: string) {
     const pkg = micePackages.find((p) => p.id === packageId);
@@ -1402,18 +1701,70 @@ export function QuotationDrawer({
       toast.error("This package doesn't have any items yet.");
       return;
     }
-    const newItems = pkg.miceItems.map((item) => ({
-      title: item.itemName,
-      description: item.itemDescription,
-      qty: "",
-      price: "",
-      total: "",
-      manualTotal: false,
-    }));
-    replaceItems(newItems);
-    toast.success(
-      `${pkg.miceItems.length} item(s) from package "${pkg.packageName}" applied (replacing previous items). Fill in qty & price manually.`,
+
+    form.setValue("packageId", pkg.id);
+    form.setValue("packageName", pkg.packageName);
+    form.setValue("pax", pkg.pax);
+    if (pkg.paymentMethodId) form.setValue("paymentMethodId", pkg.paymentMethodId);
+    form.setValue("termAndCondition", pkg.termAndCondition ?? "");
+    form.setValue("cancellationPolicy", pkg.cancellationRefundPolicy ?? "");
+    form.setValue("closingNote", pkg.closingNote ?? "");
+
+    replaceItems(
+      pkg.miceItems.map((item) => ({
+        title: item.itemName,
+        description: item.itemDescription,
+        qty: "",
+        price: "",
+        total: "",
+        manualTotal: false,
+      })),
     );
+
+    setPrices(
+      pkg.micePrices.map((p) => ({
+        id: crypto.randomUUID(),
+        name: p.name,
+        priceType: p.priceType,
+        qty: p.qty,
+        price: p.price,
+        total: p.total,
+      })),
+    );
+    setCollapsedPrices(new Set());
+
+    setTaxDeposits(
+      pkg.taxDeposits.map((t) => ({
+        id: crypto.randomUUID(),
+        name: t.name,
+        nominal: t.nominal,
+      })),
+    );
+    setCollapsedTaxDeposits(new Set());
+
+    setComplimentaries(
+      pkg.complimentaries.map((c) => ({
+        id: crypto.randomUUID(),
+        complimentaryId: c.complimentaryId,
+        name: c.name,
+        price: c.price,
+        isShowPrice: c.isShowPrice,
+        description: c.description ?? "",
+        qty: c.qty,
+      })),
+    );
+    setBonuses(
+      pkg.bonuses.map((b) => ({
+        id: crypto.randomUUID(),
+        bonusId: b.bonusId,
+        name: b.name,
+        price: b.price,
+        description: b.description ?? "",
+        qty: b.qty,
+      })),
+    );
+
+    toast.success(`Package "${pkg.packageName}" applied — all steps auto-filled.`);
     setSelectedPackageId("");
   }
 
@@ -1539,6 +1890,10 @@ export function QuotationDrawer({
     setInstansiDropdownOpen(false);
     // Reset Package MICE picker state
     setSelectedPackageId("");
+    // Reset discount label edit mode
+    setDiscountEditing(false);
+    // Reset package source (default custom — hides MICE package picker)
+    setPackageSource("custom");
     // Reset Complimentary state
     setComplimentaries([]);
     setComplimentaryMode("none");
@@ -1554,9 +1909,12 @@ export function QuotationDrawer({
     // Reset Price state (UI-only, never restored from editQuotation)
     setPrices([]);
     setCollapsedPrices(new Set());
-    // Reset Tax & Deposit state (UI-only, never restored from editQuotation)
-    setTaxDeposits([]);
+    // Reset Tax & Deposit state — default 2 items (Tax 10% & Deposite)
+    setTaxDeposits(makeDefaultTaxDeposits());
     setCollapsedTaxDeposits(new Set());
+    // Reset Term of Payment (TOP) state — default 2 terms (Down Payment & Other)
+    setTerms(makeDefaultTerms());
+    setCollapsedTerms(new Set());
 
     if (editQuotation) {
       const matchedVenue = venues.find((v) => v.name === editQuotation.venue);
@@ -1583,6 +1941,9 @@ export function QuotationDrawer({
         salesPhone: editQuotation.salesPhone ?? "",
         eventTypeId: "",
         eventTypeName: editQuotation.eventType,
+        packageId: editQuotation.packageId ?? "",
+        packageName: editQuotation.packageName ?? "",
+        pax: editQuotation.pax ?? 0,
         details: editQuotation.details ?? "",
         time: editQuotation.time ?? "",
         place: editQuotation.place ?? "",
@@ -1592,22 +1953,26 @@ export function QuotationDrawer({
         eventEndDate: editQuotation.eventEndDate ?? "",
         status: (editQuotation.status as QuotationStatusValue) ?? "draft",
         items,
-        // Additional belum ada di server/DB — quotation existing selalu mulai
-        // kosong di sini (murni UI state, tidak dibaca dari editQuotation).
-        additionals: [],
+        additionals: (editQuotation.additionals ?? []).map((it) => ({
+          title: it.description,
+          description: it.richDescription ?? "",
+          qty: it.qty > 0 ? String(it.qty) : "",
+          price: it.price > 0 ? formatNumericDisplay(it.price) : "",
+          total: it.total > 0 ? formatNumericDisplay(it.total) : "",
+          manualTotal: !!it.manualTotal,
+        })),
         discount:
           editQuotation.discount > 0
             ? formatNumericDisplay(editQuotation.discount)
             : "",
+        discountName: editQuotation.discountName ?? "",
         bookingFee:
           editQuotation.bookingFee && editQuotation.bookingFee > 0
             ? formatNumericDisplay(editQuotation.bookingFee)
             : "",
-        paymentNote: editQuotation.paymentNote ?? "",
+        termAndCondition: editQuotation.termAndCondition ?? "",
         cancellationPolicy: editQuotation.cancellationPolicy ?? "",
         closingNote: editQuotation.closingNote ?? "",
-        validUntil: editQuotation.validUntil,
-        notes: editQuotation.notes,
         paymentMethodId: editQuotation.paymentMethodId ?? "",
       });
       // Sync instansi search input with existing value
@@ -1635,6 +2000,38 @@ export function QuotationDrawer({
           qty: b.qty,
         })),
       );
+      // Restore harga (prices)
+      setPrices(
+        (editQuotation.prices ?? []).map((p) => ({
+          id: crypto.randomUUID(),
+          name: p.name,
+          priceType: p.priceType,
+          qty: p.qty,
+          price: p.price,
+          total: p.total,
+        })),
+      );
+      // Restore tax & deposit (fallback ke default kalau kosong)
+      if (editQuotation.taxDeposits && editQuotation.taxDeposits.length > 0) {
+        setTaxDeposits(
+          editQuotation.taxDeposits.map((t) => ({
+            id: crypto.randomUUID(),
+            name: t.name,
+            nominal: t.nominal,
+          })),
+        );
+      }
+      // Restore term of payment / TOP (fallback ke default kalau kosong)
+      if (editQuotation.terms && editQuotation.terms.length > 0) {
+        setTerms(
+          editQuotation.terms.map((t) => ({
+            id: crypto.randomUUID(),
+            name: t.name,
+            amount: t.amount,
+            dueDate: t.dueDate ?? "",
+          })),
+        );
+      }
     } else {
       const draft = readQuotationDraft();
       if (draft?.values) {
@@ -1672,8 +2069,10 @@ export function QuotationDrawer({
         setBonuses(draft.bonuses ?? []);
         // Restore prices dari draft (UI-only)
         setPrices(draft.prices ?? []);
-        // Restore tax & deposit dari draft (UI-only)
-        setTaxDeposits(draft.taxDeposits ?? []);
+        // Restore tax & deposit dari draft (UI-only); fallback ke default 2 items
+        setTaxDeposits(draft.taxDeposits ?? makeDefaultTaxDeposits());
+        // Restore term of payment (TOP) dari draft (UI-only); fallback ke default 2 terms
+        setTerms(draft.terms ?? makeDefaultTerms());
       } else {
         form.reset({
           ...DEFAULT_VALUES,
@@ -1695,21 +2094,21 @@ export function QuotationDrawer({
   useEffect(() => {
     if (!open || isEdit) return;
     const sub = form.watch((values) => {
-      persistQuotationDraft(values as Partial<QuotationFormValues>, signingLocation, signatureSales, complimentaries, bonuses, prices, taxDeposits);
+      persistQuotationDraft(values as Partial<QuotationFormValues>, signingLocation, signatureSales, complimentaries, bonuses, prices, taxDeposits, terms);
     });
     return () => sub.unsubscribe();
-  }, [open, isEdit, signingLocation, signatureSales, complimentaries, bonuses, prices, taxDeposits]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [open, isEdit, signingLocation, signatureSales, complimentaries, bonuses, prices, taxDeposits, terms]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Persist signingLocation/signatureSales/complimentaries/bonuses/prices/taxDeposits changes to draft (not triggered by form.watch).
   useEffect(() => {
     if (!open || isEdit) return;
-    persistQuotationDraft(form.getValues(), signingLocation, signatureSales, complimentaries, bonuses, prices, taxDeposits);
-  }, [signingLocation, signatureSales, complimentaries, bonuses, prices, taxDeposits]); // eslint-disable-line react-hooks/exhaustive-deps
+    persistQuotationDraft(form.getValues(), signingLocation, signatureSales, complimentaries, bonuses, prices, taxDeposits, terms);
+  }, [signingLocation, signatureSales, complimentaries, bonuses, prices, taxDeposits, terms]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Repaint the restored signature once the canvas mounts (step 6 only — see the
-  // "Mount only when step 6 is active" note on SignatureCanvas below).
+  // Repaint the restored signature once the canvas mounts (step 5 only — see the
+  // "Mount only when step 5 is active" note on SignatureCanvas below).
   useEffect(() => {
-    if (step !== 6 || !pendingSignatureRestoreRef.current) return;
+    if (step !== 5 || !pendingSignatureRestoreRef.current) return;
     sigSalesRef.current?.fromDataURL(pendingSignatureRestoreRef.current);
     pendingSignatureRestoreRef.current = null;
   }, [step]);
@@ -1735,9 +2134,13 @@ export function QuotationDrawer({
     } else if (step === 3) {
       setStep(4);
     } else if (step === 4) {
-      setStep(5);
-    } else if (step === 5) {
-      setStep(6);
+      const step4Fields = [
+        "termAndCondition",
+        "cancellationPolicy",
+        "closingNote",
+      ] as const;
+      const ok = await form.trigger([...step4Fields]);
+      if (ok) setStep(5);
     }
   }
 
@@ -1749,12 +2152,10 @@ export function QuotationDrawer({
     } else if (step === 4) {
       setStep(3);
     } else if (step === 5) {
-      setStep(4);
-    } else if (step === 6) {
-      // Clear signature saat kembali dari step TTD
+      // Clear signature saat kembali dari step terakhir (summary + TTD)
       sigSalesRef.current?.clear();
       setSignatureSales("");
-      setStep(5);
+      setStep(4);
     }
   }
 
@@ -1770,6 +2171,45 @@ export function QuotationDrawer({
       sortOrder: idx,
     }));
 
+    const additionals = values.additionals.map((it, idx) => ({
+      title: it.title,
+      description: it.description || null,
+      qty: parseNumericInput(it.qty),
+      price: parseNumericInput(it.price),
+      total: parseNumericInput(it.total),
+      manualTotal: it.manualTotal,
+      sortOrder: idx,
+    }));
+
+    const pricesPayload = prices
+      .filter((p) => p.name.trim())
+      .map((p, idx) => ({
+        name: p.name.trim(),
+        description: null,
+        priceType: p.priceType,
+        qty: p.qty,
+        price: p.price,
+        total: p.total,
+        sortOrder: idx,
+      }));
+
+    const taxDepositsPayload = taxDeposits
+      .filter((t) => t.name.trim())
+      .map((t, idx) => ({
+        name: t.name.trim(),
+        nominal: t.nominal,
+        sortOrder: idx,
+      }));
+
+    const termsPayload = terms
+      .filter((t) => t.name.trim())
+      .map((t, idx) => ({
+        name: t.name.trim(),
+        amount: t.amount,
+        dueDate: t.dueDate || null,
+        sortOrder: idx,
+      }));
+
     const discountNum = parseNumericInput(values.discount);
     const bookingFeeNum = parseNumericInput(values.bookingFee);
 
@@ -1782,8 +2222,9 @@ export function QuotationDrawer({
       venueName: values.venue || null,
       eventTypeId: values.eventTypeId || null,
       eventTypeName: values.eventTypeName || null,
-      category: "MICE" as const,
-      weddingSession: null,
+      packageId: values.packageId || null,
+      packageName: values.packageName || null,
+      pax: values.pax,
       complimentaries: complimentaries.map((c, i) => ({
         complimentaryId: c.complimentaryId,
         name: c.name,
@@ -1807,13 +2248,16 @@ export function QuotationDrawer({
       place: values.place || null,
       details: values.details || null,
       items,
+      additionals,
+      prices: pricesPayload,
+      taxDeposits: taxDepositsPayload,
+      terms: termsPayload,
       discount: discountNum,
+      discountName: values.discountName || null,
       bookingFee: bookingFeeNum > 0 ? bookingFeeNum : null,
-      paymentNote: values.paymentNote || null,
+      termAndCondition: values.termAndCondition || null,
       cancellationPolicy: values.cancellationPolicy || null,
       closingNote: values.closingNote || null,
-      validUntil: values.validUntil,
-      notes: values.notes || null,
       paymentMethodId: values.paymentMethodId || null,
       signingLocation: signingLocation || null,
       signatureSales: signatureSales || null,
@@ -1853,8 +2297,11 @@ export function QuotationDrawer({
     setPrices([]);
     setCollapsedPrices(new Set());
     // Reset tax & deposit state setelah submit sukses
-    setTaxDeposits([]);
+    setTaxDeposits(makeDefaultTaxDeposits());
     setCollapsedTaxDeposits(new Set());
+    // Reset term of payment (TOP) state setelah submit sukses
+    setTerms(makeDefaultTerms());
+    setCollapsedTerms(new Set());
     if (!isEdit) onSuccess?.();
     onOpenChange(false);
   }
@@ -1867,7 +2314,7 @@ export function QuotationDrawer({
       title={isEdit ? "Edit Quotation" : "Add Quotation"}
       maxWidth="sm:max-w-2xl"
       steps={step}
-      totalSteps={6}
+      totalSteps={5}
       stepperType="short"
     >
       <div className="flex flex-col h-full">
@@ -2124,18 +2571,41 @@ export function QuotationDrawer({
                     )}
                   />
 
+                  {/* ── Package Type ─────────────────────────────────── */}
+                  <div className="w-full space-y-1.5">
+                    <p className={LABEL_CLASS}>Package Type</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setPackageSource("meeting-package")}
+                        className={cn(
+                          "rounded-xl border px-3 py-2 text-sm font-medium transition-colors cursor-pointer",
+                          packageSource === "meeting-package"
+                            ? "border-primary bg-primary/10 text-primary"
+                            : "border-border text-muted-foreground hover:text-foreground",
+                        )}
+                      >
+                        Meeting Package
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPackageSource("custom")}
+                        className={cn(
+                          "rounded-xl border px-3 py-2 text-sm font-medium transition-colors cursor-pointer",
+                          packageSource === "custom"
+                            ? "border-primary bg-primary/10 text-primary"
+                            : "border-border text-muted-foreground hover:text-foreground",
+                        )}
+                      >
+                        Custom
+                      </button>
+                    </div>
+                  </div>
+
                   {/* ── Pilih Package MICE ────────────────────────────── */}
-                  {watchedVenueId && (
-                    <div className="rounded-xl border border-border bg-muted/30 p-3 space-y-2">
-                      <div className="flex items-center gap-1.5">
-                        <Box weight="BoldDuotone" className="h-4 w-4 text-primary" />
-                        <p className={LABEL_CLASS}>Select MICE Package</p>
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        {micePackages.length === 0
-                          ? "No approved MICE packages for this venue yet."
-                          : "Select a package — its items will REPLACE the item list below (can be edited afterward)."}
-                      </p>
+                  {watchedVenueId && packageSource === "meeting-package" && (
+                    <div className="w-full space-y-1.5">
+                      <p className={LABEL_CLASS}>Select MICE Package</p>
                       <SearchableSelect
                         options={micePackages.map((p) => ({ id: p.id, name: p.packageName }))}
                         value={selectedPackageId}
@@ -2147,6 +2617,11 @@ export function QuotationDrawer({
                         searchPlaceholder="Search package..."
                         emptyText="No MICE packages"
                       />
+                      <p className="text-xs text-muted-foreground">
+                        {micePackages.length === 0
+                          ? "No approved MICE packages for this venue yet."
+                          : "Select a package — its items will REPLACE the item list below (can be edited afterward)."}
+                      </p>
                     </div>
                   )}
 
@@ -2309,7 +2784,7 @@ export function QuotationDrawer({
 
               {/* ════════════════ STEP 2 — ITEMS + RINGKASAN ════════════════ */}
               <div className={cn(step !== 2 && "hidden", "space-y-4")}>
-                {/* ── Harga / Items / Additional / Tax & Deposit ──────── */}
+                {/* ── Harga / Items / Additional ──────── */}
                 <Tabs defaultValue="harga">
                   <TabsList
                     variant="line"
@@ -2326,10 +2801,6 @@ export function QuotationDrawer({
                     <TabsTrigger value="additionals" className={TAB_TRIGGER_CLASS}>
                       <AddCircle weight="BoldDuotone" className="size-4 shrink-0" />
                       Additional
-                    </TabsTrigger>
-                    <TabsTrigger value="tax-deposit" className={TAB_TRIGGER_CLASS}>
-                      <SafeSquare weight="BoldDuotone" className="size-4 shrink-0" />
-                      Tax & Deposit
                     </TabsTrigger>
                   </TabsList>
 
@@ -2422,49 +2893,6 @@ export function QuotationDrawer({
                       pendingExpandRef={pendingExpandAdditionalsRef}
                       watchedArray={watchedAdditionals ?? []}
                     />
-                  </TabsContent>
-
-                  {/* ── Tax & Deposit ─────────────────────────────────── */}
-                  <TabsContent value="tax-deposit" keepMounted className="mt-4 animate-in fade-in duration-300 space-y-3">
-                    {taxDeposits.length === 0 ? (
-                      <p className="text-sm text-muted-foreground text-center py-6">
-                        No tax & deposit items yet. Click &quot;Add Item&quot; to add one.
-                      </p>
-                    ) : (
-                      <DndContext
-                        sensors={taxDepositSensors}
-                        collisionDetection={closestCenter}
-                        onDragEnd={handleTaxDepositDragEnd}
-                      >
-                        <SortableContext
-                          items={taxDeposits.map((t) => t.id)}
-                          strategy={verticalListSortingStrategy}
-                        >
-                          <div className="space-y-2">
-                            {taxDeposits.map((row) => (
-                              <TaxDepositRowCard
-                                key={row.id}
-                                row={row}
-                                isCollapsed={collapsedTaxDeposits.has(row.id)}
-                                toggleCollapse={() => toggleTaxDepositCollapse(row.id)}
-                                onUpdate={(patch) => updateTaxDepositRow(row.id, patch)}
-                                onRemove={() => removeTaxDepositRow(row.id)}
-                              />
-                            ))}
-                          </div>
-                        </SortableContext>
-                      </DndContext>
-                    )}
-
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={addTaxDepositRow}
-                      className="w-full rounded-xl border-dashed"
-                    >
-                      <AddCircle weight="BoldDuotone" className="h-4 w-4 mr-1" />
-                      Add Item
-                    </Button>
                   </TabsContent>
 
                 </Tabs>
@@ -2966,9 +3394,27 @@ export function QuotationDrawer({
 
               {/* ════════════════ STEP 4 — KETENTUAN PENAWARAN ════════════════ */}
               <div className={cn(step !== 4 && "hidden", "space-y-4")}>
-                <div className="pb-3 border-b border-border">
-                  <p className="text-sm font-semibold text-foreground">Quotation Terms</p>
-                </div>
+                <Tabs defaultValue="payment">
+                  <TabsList
+                    variant="line"
+                    className="h-auto w-full min-w-0 flex-nowrap justify-start gap-1 overflow-x-auto scrollbar-hide rounded-none border-b border-border bg-transparent p-0 group-data-horizontal/tabs:h-auto"
+                  >
+                    <TabsTrigger value="payment" className={TAB_TRIGGER_CLASS}>
+                      <Card2 weight="BoldDuotone" className="size-4 shrink-0" />
+                      Payment
+                    </TabsTrigger>
+                    <TabsTrigger value="tax-deposit" className={TAB_TRIGGER_CLASS}>
+                      <SafeSquare weight="BoldDuotone" className="size-4 shrink-0" />
+                      Tax & Deposit
+                    </TabsTrigger>
+                    <TabsTrigger value="term" className={TAB_TRIGGER_CLASS}>
+                      <DocumentText weight="BoldDuotone" className="size-4 shrink-0" />
+                      Term
+                    </TabsTrigger>
+                  </TabsList>
+
+                  {/* ── Payment ─────────────────────────────────────── */}
+                  <TabsContent value="payment" keepMounted className="mt-4 animate-in fade-in duration-300 space-y-4">
 
                 <FormField
                   control={form.control}
@@ -3010,193 +3456,28 @@ export function QuotationDrawer({
                   )}
                 />
 
-                <FormField
-                  control={form.control}
-                  name="bookingFee"
-                  render={({ field }) => (
-                    <FormItem className="w-full">
-                      <FormLabel className={LABEL_CLASS}>
-                        Booking Fee{" "}
-                        <span className="font-normal text-muted-foreground">(optional)</span>
-                      </FormLabel>
-                      <FormControl>
-                        <div className="relative w-full">
-                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground select-none">
-                            Rp
-                          </span>
-                          <Input
-                            value={field.value}
-                            onChange={(e) =>
-                              field.onChange(formatNumericDisplay(e.target.value))
-                            }
-                            placeholder="0"
-                            inputMode="numeric"
-                            className="w-full pl-8"
-                          />
-                        </div>
-                      </FormControl>
-                      <p className="text-xs text-muted-foreground">
-                        Shown in the document: &quot;Booking Fee of Rp X is required to confirm the
-                        reservation&quot;. Leave empty if not applicable.
-                      </p>
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="paymentNote"
-                  render={({ field }) => (
-                    <FormItem className="w-full">
-                      <FormLabel className={LABEL_CLASS}>
-                        Payment Note{" "}
-                        <span className="font-normal text-muted-foreground">(optional)</span>
-                      </FormLabel>
-                      <FormControl>
-                        <Textarea
-                          {...field}
-                          rows={2}
-                          placeholder="The remaining payment shall be completed according to the agreed schedule."
-                          className="w-full"
-                        />
-                      </FormControl>
-                      <p className="text-xs text-muted-foreground">
-                        Sub-note under Terms &amp; Payment. Leave empty to use the default text above.
-                      </p>
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="validUntil"
-                  render={({ field }) => (
-                    <FormItem className="w-full">
-                      <FormLabel className={LABEL_CLASS}>
-                        Valid Until{" "}
-                        <span className="font-normal text-muted-foreground">(optional)</span>
-                      </FormLabel>
-                      <Popover>
-                        <PopoverTrigger
-                          render={
-                            <Button
-                              variant="outline"
-                              className={cn(
-                                "w-full justify-start text-left font-normal",
-                                !field.value && "text-muted-foreground",
-                              )}
-                            >
-                              <CalendarSolarIcon weight="BoldDuotone" className="mr-2 h-4 w-4" />
-                              {field.value
-                                ? format(parseDateOnly(field.value), "dd MMM yyyy")
-                                : "Select valid-until date..."}
-                            </Button>
-                          }
-                        />
-                        <PopoverContent className="w-auto p-0" align="start">
-                          <Calendar
-                            mode="single"
-                            captionLayout="dropdown"
-                            selected={field.value ? new Date(field.value + "T00:00:00") : undefined}
-                            onSelect={(date) => {
-                              if (date) {
-                                const y = date.getFullYear();
-                                const m = String(date.getMonth() + 1).padStart(2, "0");
-                                const d = String(date.getDate()).padStart(2, "0");
-                                field.onChange(`${y}-${m}-${d}`);
-                              } else {
-                                field.onChange("");
-                              }
-                            }}
-                            fromYear={new Date().getFullYear()}
-                            toYear={new Date().getFullYear() + 5}
-                            defaultMonth={field.value ? new Date(field.value + "T00:00:00") : new Date()}
-                          />
-                        </PopoverContent>
-                      </Popover>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="notes"
-                  render={({ field }) => (
-                    <FormItem className="w-full">
-                      <FormLabel className={LABEL_CLASS}>
-                        Notes{" "}
-                        <span className="font-normal text-muted-foreground">(optional)</span>
-                      </FormLabel>
-                      <FormControl>
-                        <Textarea
-                          {...field}
-                          rows={2}
-                          placeholder="Additional notes for the client..."
-                          className="w-full"
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="cancellationPolicy"
-                  render={({ field }) => (
-                    <FormItem className="w-full">
-                      <FormLabel className={LABEL_CLASS}>
-                        Cancellation &amp; Refund Policy{" "}
-                        <span className="font-normal text-muted-foreground">(optional)</span>
-                      </FormLabel>
-                      <FormControl>
-                        <Textarea
-                          {...field}
-                          rows={2}
-                          placeholder="All confirmed transactions are non-cancellable and non-refundable."
-                          className="w-full"
-                        />
-                      </FormControl>
-                      <p className="text-xs text-muted-foreground">
-                        Leave empty to use the default text above.
-                      </p>
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="closingNote"
-                  render={({ field }) => (
-                    <FormItem className="w-full">
-                      <FormLabel className={LABEL_CLASS}>
-                        Closing{" "}
-                        <span className="font-normal text-muted-foreground">(optional)</span>
-                      </FormLabel>
-                      <FormControl>
-                        <Textarea
-                          {...field}
-                          rows={2}
-                          placeholder="We look forward to welcoming you and your team at Kediaman Event Venue — {venue}. Should you require any further assistance, please do not hesitate to contact us."
-                          className="w-full"
-                        />
-                      </FormControl>
-                      <p className="text-xs text-muted-foreground">
-                        Leave empty to use the default text above (venue name is filled in automatically).
-                      </p>
-                    </FormItem>
-                  )}
-                />
-              </div>
-
-              {/* ════════════════ STEP 5 — SUMMARY ════════════════ */}
-              <div className={cn(step !== 5 && "hidden", "space-y-3")}>
-                {/* ── Ringkasan Biaya ───────────────────────────────── */}
-                <div className="rounded-2xl border bg-card p-5 space-y-3">
-                  <div className="flex items-center gap-1.5 mb-1">
-                    <Calculator weight="BoldDuotone" className="h-4 w-4 text-primary" />
-                    <p className="text-sm font-semibold text-foreground">Cost Summary</p>
+                {/* ── Discount ── */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center gap-1.5">
+                    {discountEditing ? (
+                      <Input
+                        value={watchedDiscountName}
+                        onChange={(e) => form.setValue("discountName", e.target.value)}
+                        placeholder="Discount"
+                        className="h-8 w-40 rounded-xl"
+                        autoFocus
+                      />
+                    ) : (
+                      <p className={LABEL_CLASS}>{watchedDiscountName.trim() || "Discount"}</p>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setDiscountEditing((v) => !v)}
+                      aria-label="Edit discount label"
+                      className="inline-flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                    >
+                      <Pen weight="BoldDuotone" className="size-3.5" />
+                    </button>
                   </div>
 
                   <FormField
@@ -3204,7 +3485,6 @@ export function QuotationDrawer({
                     name="discount"
                     render={({ field }) => (
                       <FormItem className="w-full">
-                        <FormLabel className={LABEL_CLASS}>Discount</FormLabel>
                         <FormControl>
                           <div className="relative w-full">
                             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground select-none">
@@ -3224,8 +3504,185 @@ export function QuotationDrawer({
                       </FormItem>
                     )}
                   />
+                </div>
 
-                  <div className="rounded-xl bg-muted p-4 space-y-1.5 text-sm">
+                {/* ── Term of Payment (TOP) ── */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <p className={LABEL_CLASS}>Term of Payment</p>
+                    {terms.length > 0 && (
+                      <span className="text-xs text-muted-foreground tabular-nums">
+                        {formatRupiah(terms.reduce((s, t) => s + (t.amount || 0), 0))}
+                      </span>
+                    )}
+                  </div>
+
+                  {terms.length === 0 ? (
+                    <p className="text-sm text-muted-foreground text-center py-6">
+                      Belum ada termin. Klik &quot;Tambah Termin&quot; untuk menambahkan.
+                    </p>
+                  ) : (
+                    <DndContext sensors={termSensors} collisionDetection={closestCenter} onDragEnd={handleTermDragEnd}>
+                      <SortableContext items={terms.map((t) => t.id)} strategy={verticalListSortingStrategy}>
+                        <div className="space-y-2">
+                          {terms.map((row, index) => (
+                            <TermRowCard
+                              key={row.id}
+                              row={row}
+                              index={index}
+                              isCollapsed={collapsedTerms.has(row.id)}
+                              toggleCollapse={() => toggleTermCollapse(row.id)}
+                              onUpdate={(patch) => updateTermRow(row.id, patch)}
+                              onRemove={() => removeTermRow(row.id)}
+                            />
+                          ))}
+                        </div>
+                      </SortableContext>
+                    </DndContext>
+                  )}
+
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={addTermRow}
+                    className="w-full rounded-xl border-dashed"
+                  >
+                    <AddCircle weight="BoldDuotone" className="h-4 w-4 mr-1" />
+                    Tambah Termin
+                  </Button>
+                </div>
+
+                  </TabsContent>
+
+                  {/* ── Tax & Deposit ─────────────────────────────────── */}
+                  <TabsContent value="tax-deposit" keepMounted className="mt-4 animate-in fade-in duration-300 space-y-3">
+                    {taxDeposits.length === 0 ? (
+                      <p className="text-sm text-muted-foreground text-center py-6">
+                        No tax & deposit items yet. Click &quot;Add Item&quot; to add one.
+                      </p>
+                    ) : (
+                      <DndContext
+                        sensors={taxDepositSensors}
+                        collisionDetection={closestCenter}
+                        onDragEnd={handleTaxDepositDragEnd}
+                      >
+                        <SortableContext
+                          items={taxDeposits.map((t) => t.id)}
+                          strategy={verticalListSortingStrategy}
+                        >
+                          <div className="space-y-2">
+                            {taxDeposits.map((row) => (
+                              <TaxDepositRowCard
+                                key={row.id}
+                                row={row}
+                                isCollapsed={collapsedTaxDeposits.has(row.id)}
+                                toggleCollapse={() => toggleTaxDepositCollapse(row.id)}
+                                onUpdate={(patch) => updateTaxDepositRow(row.id, patch)}
+                                onRemove={() => removeTaxDepositRow(row.id)}
+                              />
+                            ))}
+                          </div>
+                        </SortableContext>
+                      </DndContext>
+                    )}
+
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={addTaxDepositRow}
+                      className="w-full rounded-xl border-dashed"
+                    >
+                      <AddCircle weight="BoldDuotone" className="h-4 w-4 mr-1" />
+                      Add Item
+                    </Button>
+                  </TabsContent>
+
+                  {/* ── Term ────────────────────────────────────────── */}
+                  <TabsContent value="term" keepMounted className="mt-4 animate-in fade-in duration-300 space-y-4">
+
+                <FormField
+                  control={form.control}
+                  name="termAndCondition"
+                  rules={{ required: "Term & Payment is required" }}
+                  render={({ field }) => (
+                    <FormItem className="w-full">
+                      <FormLabel className={LABEL_CLASS}>
+                        Term &amp; Payment <span className="text-destructive">*</span>
+                      </FormLabel>
+                      <FormControl>
+                        <TermConditionEditor
+                          value={field.value}
+                          onChange={field.onChange}
+                          placeholder="Tulis Term & Payment di sini..."
+                          showVariablePanel={false}
+                          resizable
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="cancellationPolicy"
+                  rules={{ required: "Cancellation & Refund Policy is required" }}
+                  render={({ field }) => (
+                    <FormItem className="w-full">
+                      <FormLabel className={LABEL_CLASS}>
+                        Cancellation &amp; Refund Policy <span className="text-destructive">*</span>
+                      </FormLabel>
+                      <FormControl>
+                        <TermConditionEditor
+                          value={field.value}
+                          onChange={field.onChange}
+                          placeholder="All confirmed transactions are non-cancellable and non-refundable."
+                          showVariablePanel={false}
+                          resizable
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="closingNote"
+                  rules={{ required: "Closing is required" }}
+                  render={({ field }) => (
+                    <FormItem className="w-full">
+                      <FormLabel className={LABEL_CLASS}>
+                        Closing <span className="text-destructive">*</span>
+                      </FormLabel>
+                      <FormControl>
+                        <TermConditionEditor
+                          value={field.value}
+                          onChange={field.onChange}
+                          placeholder="We look forward to welcoming you and your team at Kediaman Event Venue — {venue}. Should you require any further assistance, please do not hesitate to contact us."
+                          showVariablePanel={false}
+                          resizable
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                  </TabsContent>
+                </Tabs>
+              </div>
+
+              {/* ════════════════ STEP 5 — SUMMARY + TTD ════════════════ */}
+              <div className={cn(step !== 5 && "hidden", "space-y-6")}>
+                {/* ── Ringkasan Biaya ── */}
+                <div className="space-y-3">
+                  <div className="flex items-center gap-1.5">
+                    <Calculator weight="BoldDuotone" className="h-4 w-4 text-primary" />
+                    <p className="text-sm font-semibold text-foreground">Cost Summary</p>
+                  </div>
+
+                  <div className="space-y-1.5 text-sm">
                     <div className="flex justify-between text-muted-foreground">
                       <span>Subtotal</span>
                       <span className="tabular-nums">{formatRupiah(subtotal)}</span>
@@ -3250,12 +3707,10 @@ export function QuotationDrawer({
                     </div>
                   </div>
                 </div>
-              </div>
 
-              {/* ════════════════ STEP 6 — TTD ════════════════ */}
-              <div className={cn(step !== 6 && "hidden", "space-y-3")}>
-                <div className="rounded-2xl border bg-card p-5 space-y-4">
-                  <p className="text-sm font-semibold text-foreground mb-1">Signature & Location</p>
+                {/* ── TTD ── */}
+                <div className="space-y-4 border-t border-border pt-4">
+                  <p className="text-sm font-semibold text-foreground">Signature & Location</p>
                   <div>
                     <FormLabel className={cn("text-sm", "font-medium", "text-foreground", "mb-2", "block")}>
                       Signing Location <span className="text-destructive">*</span>
@@ -3266,7 +3721,7 @@ export function QuotationDrawer({
                       onChange={(e) => setSigningLocation(e.target.value)}
                     />
                   </div>
-                  <div className="border-t border-border/60 pt-4">
+                  <div>
                     <FormLabel className={cn("text-sm", "font-medium", "text-foreground", "mb-2", "block")}>
                       Sales Signature <span className="text-destructive">*</span>
                     </FormLabel>
@@ -3276,10 +3731,10 @@ export function QuotationDrawer({
                         !signatureSales ? "border-destructive/40" : "border-border",
                       )}
                     >
-                      {/* Mount only when step 6 is active — a SignatureCanvas mounted
+                      {/* Mount only when step 5 is active — a SignatureCanvas mounted
                           inside a display:none container has 0 dimensions and never
                           captures strokes. */}
-                      {step === 6 && (
+                      {step === 5 && (
                         <SignatureCanvas
                           ref={sigSalesRef}
                           penColor="black"
@@ -3338,7 +3793,7 @@ export function QuotationDrawer({
                 Back
               </Button>
             )}
-            {step < 6 ? (
+            {step < 5 ? (
               <Button
                 onClick={handleNext}
                 disabled={step === 1 ? isStep1Incomplete : false}

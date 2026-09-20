@@ -26,23 +26,95 @@ async function getRequestMeta(): Promise<{ ipAddress: string; userAgent: string 
   };
 }
 
-function computePricing(items: CreateQuotationInput["items"], discount: number): {
+function computePricing(
+  items: CreateQuotationInput["items"],
+  additionals: CreateQuotationInput["additionals"],
+  discount: number,
+): {
   subtotal: number;
   totalPrice: number;
 } {
-  const subtotal = items.reduce((sum, item) => sum + item.total, 0);
+  const itemsTotal = items.reduce((sum, item) => sum + item.total, 0);
+  const additionalsTotal = additionals.reduce((sum, item) => sum + item.total, 0);
+  const subtotal = itemsTotal + additionalsTotal;
   const totalPrice = Math.max(0, subtotal - discount);
   return { subtotal, totalPrice };
 }
 
-async function generateQuotationNo(category: "WEDDINGS" | "MICE"): Promise<string> {
+async function generateQuotationNo(): Promise<string> {
   const year = new Date().getFullYear();
-  const prefix = category === "MICE" ? "MICE" : "WED";
-  // Per-category counter → MICE numbers stay contiguous (matches the operational
-  // "NO QUOTATION" register: #201-MICE, #202-MICE … sequential per year).
-  const seq = await getNextSequence(`quotation-${prefix}-${year}`);
+  const seq = await getNextSequence(`quotation-MICE-${year}`);
   const padded = seq.toString().padStart(3, "0");
-  return category === "MICE" ? `#${padded}-MICE` : `${padded}/WED/${year}`;
+  return `#${padded}-MICE`;
+}
+
+/**
+ * Freeze the selected MICE package into snap_quotation_packages + children so the
+ * quotation document stays stable even if the master package changes later.
+ * Returns an empty array when the package no longer exists.
+ */
+async function buildPackageSnapshotOps(
+  quotationId: string,
+  packageId: string,
+  packageName: string,
+  pax: number,
+): Promise<Prisma.PrismaPromise<unknown>[]> {
+  const pkg = await db.package.findUnique({
+    where: { id: packageId },
+    include: {
+      venue: { select: { name: true } },
+      eventType: { select: { name: true } },
+      miceItems: { orderBy: { sortOrder: "asc" as const } },
+      micePrices: { orderBy: { sortOrder: "asc" as const } },
+      taxDeposits: { orderBy: { sortOrder: "asc" as const } },
+      complimentaries: { orderBy: { sortOrder: "asc" as const } },
+      bonuses: { orderBy: { sortOrder: "asc" as const } },
+    },
+  });
+  if (!pkg) return [];
+
+  const snapId = crypto.randomUUID();
+  return [
+    db.snapQuotationPackage.create({
+      data: {
+        id: snapId,
+        quotationId,
+        packageId,
+        packageName,
+        pax,
+        venueId: pkg.venueId ?? null,
+        venueName: pkg.venue?.name ?? null,
+        eventTypeId: pkg.eventTypeId ?? null,
+        eventTypeName: pkg.eventType?.name ?? null,
+        paymentMethodId: pkg.paymentMethodId ?? null,
+      },
+    }),
+    ...pkg.miceItems.map((it, i) =>
+      db.snapQuotationPackageItem.create({
+        data: { snapPackageId: snapId, itemName: it.itemName, itemDescription: it.itemDescription, sortOrder: i },
+      }),
+    ),
+    ...pkg.micePrices.map((p, i) =>
+      db.snapQuotationPackagePrice.create({
+        data: { snapPackageId: snapId, name: p.name, description: p.description, priceType: p.priceType, qty: p.qty, price: p.price, total: p.total, sortOrder: i },
+      }),
+    ),
+    ...pkg.taxDeposits.map((t, i) =>
+      db.snapQuotationPackageTaxDeposit.create({
+        data: { snapPackageId: snapId, name: t.name, nominal: t.nominal, sortOrder: i },
+      }),
+    ),
+    ...pkg.complimentaries.map((c, i) =>
+      db.snapQuotationPackageComplimentary.create({
+        data: { snapPackageId: snapId, complimentaryId: c.complimentaryId, name: c.name, price: c.price, isShowPrice: c.isShowPrice, description: c.description, qty: c.qty, sortOrder: i },
+      }),
+    ),
+    ...pkg.bonuses.map((b, i) =>
+      db.snapQuotationPackageBonus.create({
+        data: { snapPackageId: snapId, bonusId: b.bonusId, name: b.name, price: b.price, description: b.description, qty: b.qty, sortOrder: i },
+      }),
+    ),
+  ];
 }
 
 // ── Create ─────────────────────────────────────────────────────────────────────
@@ -63,8 +135,8 @@ export async function createQuotation(
 
   try {
     const quotationId = crypto.randomUUID();
-    const quotationNo = await generateQuotationNo(input.category);
-    const { subtotal, totalPrice } = computePricing(input.items, input.discount);
+    const quotationNo = await generateQuotationNo();
+    const { subtotal, totalPrice } = computePricing(input.items, input.additionals, input.discount);
 
     // Resolve approval steps for quotations (Manager + Finance).
     // If any role is missing in DB, approvalSteps will be null — we skip approval
@@ -77,7 +149,6 @@ export async function createQuotation(
         data: {
           id: quotationId,
           quotationNo,
-          category: input.category,
           status: "draft",
           clientName: input.clientName,
           clientPhone: input.clientPhone ?? "",
@@ -88,7 +159,9 @@ export async function createQuotation(
           venueName: input.venueName ?? null,
           eventTypeId: input.eventTypeId ?? null,
           eventTypeName: input.eventTypeName ?? null,
-          weddingSession: input.weddingSession ?? null,
+          packageId: input.packageId ?? null,
+          packageName: input.packageName ?? null,
+          pax: input.pax,
           eventDate: input.eventDate ? new Date(input.eventDate) : null,
           eventEndDate: input.eventEndDate ? new Date(input.eventEndDate) : null,
           time: input.time ?? null,
@@ -96,8 +169,10 @@ export async function createQuotation(
           details: input.details ?? null,
           subtotal,
           discount: input.discount,
+          discountName: input.discountName ?? null,
           totalPrice,
           bookingFee: input.bookingFee ?? null,
+          termAndCondition: input.termAndCondition ?? null,
           paymentNote: input.paymentNote ?? null,
           cancellationPolicy: input.cancellationPolicy ?? null,
           closingNote: input.closingNote ?? null,
@@ -107,18 +182,77 @@ export async function createQuotation(
           signatureSales: input.signatureSales ?? null,
         },
       }),
-      // 2. Create items
+      // 2. Create items (regular)
       ...input.items.map((item, idx) =>
         db.quotationItem.create({
           data: {
             id: crypto.randomUUID(),
             quotationId,
+            type: "ITEM",
             title: item.title,
             description: item.description ?? null,
             qty: item.qty,
             price: item.price,
             total: item.total,
             manualTotal: item.manualTotal,
+            sortOrder: idx,
+          },
+        }),
+      ),
+      // 2a. Create additionals
+      ...input.additionals.map((item, idx) =>
+        db.quotationItem.create({
+          data: {
+            id: crypto.randomUUID(),
+            quotationId,
+            type: "ADDITIONAL",
+            title: item.title,
+            description: item.description ?? null,
+            qty: item.qty,
+            price: item.price,
+            total: item.total,
+            manualTotal: item.manualTotal,
+            sortOrder: idx,
+          },
+        }),
+      ),
+      // 2a2. Create prices (Harga)
+      ...input.prices.map((p, idx) =>
+        db.quotationPrice.create({
+          data: {
+            id: crypto.randomUUID(),
+            quotationId,
+            name: p.name,
+            description: p.description ?? null,
+            priceType: p.priceType,
+            qty: p.qty ?? null,
+            price: p.price ?? null,
+            total: p.total,
+            sortOrder: idx,
+          },
+        }),
+      ),
+      // 2a3. Create tax & deposit
+      ...input.taxDeposits.map((t, idx) =>
+        db.quotationTaxDeposit.create({
+          data: {
+            id: crypto.randomUUID(),
+            quotationId,
+            name: t.name,
+            nominal: t.nominal,
+            sortOrder: idx,
+          },
+        }),
+      ),
+      // 2a4. Create terms (TOP)
+      ...input.terms.map((t, idx) =>
+        db.quotationTerm.create({
+          data: {
+            id: crypto.randomUUID(),
+            quotationId,
+            name: t.name,
+            amount: t.amount,
+            dueDate: t.dueDate ? new Date(t.dueDate) : null,
             sortOrder: idx,
           },
         }),
@@ -155,6 +289,17 @@ export async function createQuotation(
         }),
       ),
     ];
+
+    // 2d. Freeze the selected package into snapshot tables
+    if (input.packageId) {
+      const snapOps = await buildPackageSnapshotOps(
+        quotationId,
+        input.packageId,
+        input.packageName ?? "",
+        input.pax,
+      );
+      ops.push(...snapOps);
+    }
 
     // 3. Create approval record + steps (if flow is resolved)
     if (approvalSteps && approvalSteps.length > 0) {
@@ -239,7 +384,7 @@ export async function updateQuotation(
       input.items !== undefined
         ? (() => {
             const discount = input.discount ?? 0;
-            const { subtotal, totalPrice } = computePricing(input.items, discount);
+            const { subtotal, totalPrice } = computePricing(input.items, input.additionals ?? [], discount);
             return { subtotal, discount, totalPrice };
           })()
         : undefined;
@@ -251,7 +396,6 @@ export async function updateQuotation(
       db.quotation.update({
         where: { id: input.id },
         data: {
-          ...(input.category !== undefined && { category: input.category }),
           ...(input.status !== undefined && { status: input.status }),
           ...(input.clientName !== undefined && { clientName: input.clientName }),
           ...(input.clientPhone !== undefined && { clientPhone: input.clientPhone ?? "" }),
@@ -262,7 +406,9 @@ export async function updateQuotation(
           venueName: input.venueName ?? null,
           eventTypeId: input.eventTypeId ?? null,
           eventTypeName: input.eventTypeName ?? null,
-          weddingSession: input.weddingSession ?? null,
+          ...(input.packageId !== undefined && { packageId: input.packageId ?? null }),
+          ...(input.packageName !== undefined && { packageName: input.packageName ?? null }),
+          ...(input.pax !== undefined && { pax: input.pax }),
           eventDate: input.eventDate ? new Date(input.eventDate) : null,
           eventEndDate: input.eventEndDate ? new Date(input.eventEndDate) : null,
           time: input.time ?? null,
@@ -274,6 +420,8 @@ export async function updateQuotation(
             totalPrice: pricingUpdate.totalPrice,
           }),
           bookingFee: input.bookingFee ?? null,
+          discountName: input.discountName ?? null,
+          termAndCondition: input.termAndCondition ?? null,
           paymentNote: input.paymentNote ?? null,
           cancellationPolicy: input.cancellationPolicy ?? null,
           closingNote: input.closingNote ?? null,
@@ -283,8 +431,8 @@ export async function updateQuotation(
           signatureSales: input.signatureSales ?? null,
         },
       }),
-      // 2. Replace items — only when items payload is present
-      ...(input.items !== undefined
+      // 2. Replace items + additionals (both in quotation_items, type distinguishes them)
+      ...(input.items !== undefined || input.additionals !== undefined
         ? [
             db.quotationItem.deleteMany({ where: { quotationId: input.id } }),
             ...items.map((item, idx) =>
@@ -292,12 +440,85 @@ export async function updateQuotation(
                 data: {
                   id: crypto.randomUUID(),
                   quotationId: input.id,
+                  type: "ITEM",
                   title: item.title,
                   description: item.description ?? null,
                   qty: item.qty,
                   price: item.price,
                   total: item.total,
                   manualTotal: item.manualTotal,
+                  sortOrder: idx,
+                },
+              }),
+            ),
+            ...(input.additionals ?? []).map((item, idx) =>
+              db.quotationItem.create({
+                data: {
+                  id: crypto.randomUUID(),
+                  quotationId: input.id,
+                  type: "ADDITIONAL",
+                  title: item.title,
+                  description: item.description ?? null,
+                  qty: item.qty,
+                  price: item.price,
+                  total: item.total,
+                  manualTotal: item.manualTotal,
+                  sortOrder: idx,
+                },
+              }),
+            ),
+          ]
+        : []),
+      // 2b. Replace prices — only when prices payload is present
+      ...(input.prices !== undefined
+        ? [
+            db.quotationPrice.deleteMany({ where: { quotationId: input.id } }),
+            ...(input.prices ?? []).map((p, idx) =>
+              db.quotationPrice.create({
+                data: {
+                  id: crypto.randomUUID(),
+                  quotationId: input.id,
+                  name: p.name,
+                  description: p.description ?? null,
+                  priceType: p.priceType,
+                  qty: p.qty ?? null,
+                  price: p.price ?? null,
+                  total: p.total,
+                  sortOrder: idx,
+                },
+              }),
+            ),
+          ]
+        : []),
+      // 2c. Replace tax & deposit — only when taxDeposits payload is present
+      ...(input.taxDeposits !== undefined
+        ? [
+            db.quotationTaxDeposit.deleteMany({ where: { quotationId: input.id } }),
+            ...(input.taxDeposits ?? []).map((t, idx) =>
+              db.quotationTaxDeposit.create({
+                data: {
+                  id: crypto.randomUUID(),
+                  quotationId: input.id,
+                  name: t.name,
+                  nominal: t.nominal,
+                  sortOrder: idx,
+                },
+              }),
+            ),
+          ]
+        : []),
+      // 2d. Replace terms (TOP) — only when terms payload is present
+      ...(input.terms !== undefined
+        ? [
+            db.quotationTerm.deleteMany({ where: { quotationId: input.id } }),
+            ...(input.terms ?? []).map((t, idx) =>
+              db.quotationTerm.create({
+                data: {
+                  id: crypto.randomUUID(),
+                  quotationId: input.id,
+                  name: t.name,
+                  amount: t.amount,
+                  dueDate: t.dueDate ? new Date(t.dueDate) : null,
                   sortOrder: idx,
                 },
               }),
@@ -346,6 +567,20 @@ export async function updateQuotation(
           ]
         : []),
     ];
+
+    // 2e. Replace package snapshot when a package is (re)selected
+    if (input.packageId !== undefined) {
+      ops.push(db.snapQuotationPackage.deleteMany({ where: { quotationId: input.id } }));
+      if (input.packageId) {
+        const snapOps = await buildPackageSnapshotOps(
+          input.id,
+          input.packageId,
+          input.packageName ?? "",
+          input.pax ?? 0,
+        );
+        ops.push(...snapOps);
+      }
+    }
 
     await db.$transaction(ops);
 

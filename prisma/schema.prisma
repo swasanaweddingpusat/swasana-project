@@ -1539,6 +1539,106 @@ model QuotationBonus {
   @@map("quotation_bonuses")
 }
 
+// ── Quotation MICE package snapshot ─────────────────────────────────────────────
+// Freezes the selected MICE package at the moment it's applied to a quotation.
+// Mix of normalized (FK: packageId/venueId/eventTypeId) + denormalized (name
+// strings) so the quotation document stays stable even if the master package
+// changes later. Child tables hold the frozen item/price/tax/… rows.
+model SnapQuotationPackage {
+  id              String   @id @default(uuid())
+  quotationId     String   @unique
+  packageId       String?
+  packageName     String
+  pax             Int      @default(0)
+  venueId         String?
+  venueName       String?
+  eventTypeId     String?
+  eventTypeName   String?
+  paymentMethodId String?
+  createdAt       DateTime @default(now())
+
+  quotation       Quotation                         @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+  items           SnapQuotationPackageItem[]
+  prices          SnapQuotationPackagePrice[]
+  taxDeposits     SnapQuotationPackageTaxDeposit[]
+  complimentaries SnapQuotationPackageComplimentary[]
+  bonuses         SnapQuotationPackageBonus[]
+
+  @@index([quotationId])
+  @@map("snap_quotation_packages")
+}
+
+model SnapQuotationPackageItem {
+  id              String   @id @default(uuid())
+  snapPackageId   String
+  itemName        String
+  itemDescription String   @default("")
+  sortOrder       Int      @default(0)
+  snapPackage     SnapQuotationPackage @relation(fields: [snapPackageId], references: [id], onDelete: Cascade)
+
+  @@index([snapPackageId])
+  @@map("snap_quotation_package_items")
+}
+
+model SnapQuotationPackagePrice {
+  id            String        @id @default(uuid())
+  snapPackageId String
+  name          String
+  description   String?
+  priceType     MicePriceType @default(QTY)
+  qty           Int?
+  price         Int?
+  total         Int           @default(0)
+  sortOrder     Int           @default(0)
+  snapPackage   SnapQuotationPackage @relation(fields: [snapPackageId], references: [id], onDelete: Cascade)
+
+  @@index([snapPackageId])
+  @@map("snap_quotation_package_prices")
+}
+
+model SnapQuotationPackageTaxDeposit {
+  id            String   @id @default(uuid())
+  snapPackageId String
+  name          String
+  nominal       Int      @default(0)
+  sortOrder     Int      @default(0)
+  snapPackage   SnapQuotationPackage @relation(fields: [snapPackageId], references: [id], onDelete: Cascade)
+
+  @@index([snapPackageId])
+  @@map("snap_quotation_package_tax_deposits")
+}
+
+model SnapQuotationPackageComplimentary {
+  id              String   @id @default(uuid())
+  snapPackageId   String
+  complimentaryId String?
+  name            String
+  price           Int      @default(0)
+  isShowPrice     Boolean  @default(false)
+  description     String?
+  qty             Int      @default(1)
+  sortOrder       Int      @default(0)
+  snapPackage     SnapQuotationPackage @relation(fields: [snapPackageId], references: [id], onDelete: Cascade)
+
+  @@index([snapPackageId])
+  @@map("snap_quotation_package_complimentaries")
+}
+
+model SnapQuotationPackageBonus {
+  id            String   @id @default(uuid())
+  snapPackageId String
+  bonusId       String?
+  name          String
+  price         Int      @default(0)
+  description   String?
+  qty           Int      @default(1)
+  sortOrder     Int      @default(0)
+  snapPackage   SnapQuotationPackage @relation(fields: [snapPackageId], references: [id], onDelete: Cascade)
+
+  @@index([snapPackageId])
+  @@map("snap_quotation_package_bonuses")
+}
+
 model SnapVendorItem {
   id                 String                     @id @default(uuid())
   bookingId          String
@@ -2341,7 +2441,6 @@ enum QuotationStatus {
 model Quotation {
   id          String          @id @default(uuid())
   quotationNo String?
-  category    EventCategory   @default(WEDDINGS)
   status      QuotationStatus @default(draft)
 
   // Client info
@@ -2358,18 +2457,24 @@ model Quotation {
   eventTypeName   String?
   venueName       String?
 
+  // Selected MICE package reference — full data is frozen into SnapQuotationPackage
+  // and copied into the editable tables below (items/prices/taxDeposits/…).
+  packageId   String?
+  packageName String?
+  pax         Int     @default(0)
+
   // Event
-  weddingSession WeddingSession?
-  eventDate      DateTime?
-  eventEndDate   DateTime?
-  time           String?
-  place          String? // Area/ruang venue (mis. Ballroom, Outdoor, Gazebo)
-  details        String?
+  eventDate    DateTime?
+  eventEndDate DateTime?
+  time         String?
+  place        String? // Area/ruang venue (mis. Ballroom, Outdoor, Gazebo)
+  details      String?
 
   // Pricing (server-computed)
-  subtotal   Int  @default(0)
-  discount   Int  @default(0)
-  totalPrice Int  @default(0)
+  subtotal     Int     @default(0)
+  discount     Int     @default(0)
+  discountName String? // editable label (e.g. "Discount" / "Cashback")
+  totalPrice   Int     @default(0)
   // Booking fee required to confirm the reservation (shown in the Term & Payment
   // boilerplate: "Booking Fee of Rp X is required to confirm the reservation").
   bookingFee Int?
@@ -2398,6 +2503,9 @@ model Quotation {
   terms           QuotationTerm[]
   complimentaries QuotationComplimentary[]
   bonuses         QuotationBonus[]
+  prices          QuotationPrice[]
+  taxDeposits     QuotationTaxDeposit[]
+  packageSnapshot SnapQuotationPackage?
 
   @@index([salesId])
   @@index([venueId])
@@ -2405,27 +2513,31 @@ model Quotation {
   @@index([paymentMethodId])
   @@index([status])
   @@index([createdAt])
-  // Composite index buat listing quotations: filter category + status, urut createdAt
-  @@index([category, status, createdAt])
   @@map("quotations")
 }
 
 model QuotationItem {
-  id          String   @id @default(uuid())
+  id          String            @id @default(uuid())
   quotationId String
+  type        QuotationItemType @default(ITEM)
   title       String
   description String? // rich HTML from TipTap
-  qty         Int      @default(0)
-  price       Int      @default(0)
-  total       Int      @default(0)
-  manualTotal Boolean  @default(false)
-  sortOrder   Int      @default(0)
-  createdAt   DateTime @default(now())
+  qty         Int               @default(0)
+  price       Int               @default(0)
+  total       Int               @default(0)
+  manualTotal Boolean           @default(false)
+  sortOrder   Int               @default(0)
+  createdAt   DateTime          @default(now())
 
   quotation Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
 
   @@index([quotationId])
   @@map("quotation_items")
+}
+
+enum QuotationItemType {
+  ITEM
+  ADDITIONAL
 }
 
 model QuotationTerm {
@@ -2443,6 +2555,43 @@ model QuotationTerm {
 
   @@index([quotationId])
   @@map("quotation_terms")
+}
+
+// Step 2 "Harga" — editable copy of PackageMicePrice when a package is applied,
+// or manually added per quotation. Same QTY/NOMINAL convention.
+model QuotationPrice {
+  id          String        @id @default(uuid())
+  quotationId String
+  name        String
+  description String?
+  priceType   MicePriceType @default(QTY)
+  qty         Int?
+  price       Int?
+  total       Int           @default(0)
+  sortOrder   Int           @default(0)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  quotation Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+
+  @@index([quotationId])
+  @@map("quotation_prices")
+}
+
+// Step 4 "Tax & Deposit" — editable copy of PackageMiceTaxDeposit.
+model QuotationTaxDeposit {
+  id          String    @id @default(uuid())
+  quotationId String
+  name        String
+  nominal     Int       @default(0)
+  sortOrder   Int       @default(0)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  quotation Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+
+  @@index([quotationId])
+  @@map("quotation_tax_deposits")
 }
 
 // ── Quotation Template (per venue) ──────────────────────────────────────────────

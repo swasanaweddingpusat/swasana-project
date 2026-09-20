@@ -278,18 +278,27 @@ export function QuotationPreview({
                 {/* Kiri: term & payment */}
                 <div className="space-y-2 text-[11px] leading-relaxed">
                   <p className="font-bold text-foreground">Term &amp; Payment :</p>
-                  {q.bookingFee && q.bookingFee > 0 ? (
-                    <p className="text-foreground">
-                      Booking Fee of{" "}
-                      <span className="font-bold">
-                        {formatRupiah(q.bookingFee)}
-                      </span>{" "}
-                      is required to confirm the reservation.
-                    </p>
-                  ) : null}
-                  <p className="text-muted-foreground">
-                    {q.paymentNote?.trim() || DEFAULT_PAYMENT_NOTE}
-                  </p>
+                  {q.termAndCondition?.trim() ? (
+                    <div
+                      className="text-foreground [&_ol]:list-decimal [&_ol]:pl-4 [&_ul]:list-disc [&_ul]:pl-4 [&_li]:my-0.5 [&_strong]:font-bold"
+                      dangerouslySetInnerHTML={{ __html: q.termAndCondition }}
+                    />
+                  ) : (
+                    <>
+                      {q.bookingFee && q.bookingFee > 0 ? (
+                        <p className="text-foreground">
+                          Booking Fee of{" "}
+                          <span className="font-bold">
+                            {formatRupiah(q.bookingFee)}
+                          </span>{" "}
+                          is required to confirm the reservation.
+                        </p>
+                      ) : null}
+                      <p className="text-muted-foreground">
+                        {q.paymentNote?.trim() || DEFAULT_PAYMENT_NOTE}
+                      </p>
+                    </>
+                  )}
                   <p className="text-foreground">
                     Payment can be made via{" "}
                     <span className="font-bold">bank transfer</span> to the

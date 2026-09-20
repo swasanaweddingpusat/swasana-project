@@ -100,6 +100,32 @@ export interface QuotationBonusItem {
   qty: number;
 }
 
+export interface QuotationPriceItem {
+  id: string;
+  name: string;
+  description?: string;
+  priceType: "QTY" | "NOMINAL";
+  qty: number | null;
+  price: number | null;
+  total: number;
+  sortOrder: number;
+}
+
+export interface QuotationTaxDepositItem {
+  id: string;
+  name: string;
+  nominal: number;
+  sortOrder: number;
+}
+
+export interface QuotationTermItem {
+  id: string;
+  name: string;
+  amount: number;
+  dueDate: string | null;
+  sortOrder: number;
+}
+
 export interface QuotationItem {
   id: string;
   /** Nomor dokumen, mis. "#221-MICE". Optional — di-derive kalau kosong. */
@@ -115,7 +141,6 @@ export interface QuotationItem {
   salesPhone?: string;
   // ── Event ──────────────────────────────────────────────────────
   venue: string;
-  category: "weddings" | "mice";
   eventType: string;
   eventDate: string;
   /** Tanggal akhir event kalau berupa rentang; kosong = single-date. */
@@ -127,11 +152,19 @@ export interface QuotationItem {
   /** mis. "Ballroom" */
   place?: string;
   // ── Paket (ringkasan untuk list) ───────────────────────────────
+  packageId?: string;
   packageName: string;
   variantName: string;
   pax: number;
   // ── Line items (detail penawaran) ──────────────────────────────
   items?: QuotationLineItem[];
+  additionals?: QuotationLineItem[];
+  // ── Harga (step 2) ─────────────────────────────────────────────
+  prices?: QuotationPriceItem[];
+  // ── Tax & Deposit (step 4) ─────────────────────────────────────
+  taxDeposits?: QuotationTaxDepositItem[];
+  // ── Term of Payment / TOP (step 4) ─────────────────────────────
+  terms?: QuotationTermItem[];
   // ── Complimentary (bonus gratis, tidak masuk pricing) ───────────
   complimentaries?: QuotationComplimentaryItem[];
   // ── Bonus (tidak masuk pricing) ─────────────────────────────────
@@ -139,9 +172,11 @@ export interface QuotationItem {
   // ── Pricing ────────────────────────────────────────────────────
   price: number;
   discount: number;
+  discountName?: string;
   totalPrice: number;
   // ── Term & Payment ─────────────────────────────────────────────
   bookingFee?: number;
+  termAndCondition?: string;
   paymentNote?: string;
   cancellationPolicy?: string;
   closingNote?: string;
@@ -174,22 +209,57 @@ function mapRowToQuotationItem(row: QuotationListRow): QuotationItem {
     salesName: row.sales.fullName ?? "",
     salesPhone: row.sales.phoneNumber ?? undefined,
     venue: row.venueName ?? row.venue?.name ?? "",
-    category: row.category.toLowerCase() as "weddings" | "mice",
     eventType: row.eventTypeName ?? row.eventType?.name ?? "",
     eventDate: row.eventDate ? format(new Date(row.eventDate), "yyyy-MM-dd") : "",
     eventEndDate: row.eventEndDate ? format(new Date(row.eventEndDate), "yyyy-MM-dd") : "",
     time: row.time ?? undefined,
     place: row.place ?? undefined,
     details: row.details ?? undefined,
-    // items from DB → QuotationLineItem[]
-    items: row.items.map((it) => ({
-      id: it.id,
-      description: it.title,
-      richDescription: it.description ?? undefined,
-      qty: it.qty,
-      price: it.price,
-      total: it.total,
-      manualTotal: it.manualTotal,
+    // items from DB → QuotationLineItem[] (split by type)
+    items: row.items
+      .filter((it) => it.type !== "ADDITIONAL")
+      .map((it) => ({
+        id: it.id,
+        description: it.title,
+        richDescription: it.description ?? undefined,
+        qty: it.qty,
+        price: it.price,
+        total: it.total,
+        manualTotal: it.manualTotal,
+      })),
+    additionals: row.items
+      .filter((it) => it.type === "ADDITIONAL")
+      .map((it) => ({
+        id: it.id,
+        description: it.title,
+        richDescription: it.description ?? undefined,
+        qty: it.qty,
+        price: it.price,
+        total: it.total,
+        manualTotal: it.manualTotal,
+      })),
+    prices: row.prices.map((p) => ({
+      id: p.id,
+      name: p.name,
+      description: p.description ?? undefined,
+      priceType: p.priceType as "QTY" | "NOMINAL",
+      qty: p.qty,
+      price: p.price,
+      total: p.total,
+      sortOrder: p.sortOrder,
+    })),
+    taxDeposits: row.taxDeposits.map((t) => ({
+      id: t.id,
+      name: t.name,
+      nominal: t.nominal,
+      sortOrder: t.sortOrder,
+    })),
+    terms: row.terms.map((t) => ({
+      id: t.id,
+      name: t.name,
+      amount: t.amount,
+      dueDate: t.dueDate ? format(new Date(t.dueDate), "yyyy-MM-dd") : null,
+      sortOrder: t.sortOrder,
     })),
     complimentaries: row.complimentaries.map((c) => ({
       id: c.id,
@@ -210,8 +280,10 @@ function mapRowToQuotationItem(row: QuotationListRow): QuotationItem {
     })),
     price: row.subtotal,
     discount: row.discount,
+    discountName: row.discountName ?? undefined,
     totalPrice: row.totalPrice,
     bookingFee: row.bookingFee ?? undefined,
+    termAndCondition: row.termAndCondition ?? undefined,
     paymentNote: row.paymentNote ?? undefined,
     cancellationPolicy: row.cancellationPolicy ?? undefined,
     closingNote: row.closingNote ?? undefined,
@@ -225,9 +297,10 @@ function mapRowToQuotationItem(row: QuotationListRow): QuotationItem {
     notes: row.notes ?? "",
     signingLocation: row.signingLocation ?? undefined,
     signatureSales: row.signatureSales ?? undefined,
-    packageName: "",
+    packageId: row.packageId ?? undefined,
+    packageName: row.packageName ?? "",
     variantName: "",
-    pax: 0,
+    pax: row.pax,
   };
 }
 
@@ -558,20 +631,16 @@ export function QuotationsTable() {
                 <Table className="w-full table-fixed">
                   <TableHeader>
                     <TableRow>
-                      {/* # — 3% */}
-                      <TableHead className="w-[3%] text-center">#</TableHead>
-                      {/* Customer — 18% */}
-                      <TableHead className="w-[18%]">Customer</TableHead>
-                      {/* Venue — 15% */}
-                      <TableHead className="w-[15%]">Venue</TableHead>
-                      {/* Sales — 14% — hidden xs */}
-                      <TableHead className="w-[14%] hidden sm:table-cell">Sales</TableHead>
-                      {/* Submit Date — 11% — hidden until md */}
-                      <TableHead className="w-[11%] hidden md:table-cell">Submit</TableHead>
-                      {/* Event Date — 11% — hidden until xl */}
-                      <TableHead className="w-[11%] hidden xl:table-cell">Event</TableHead>
-                      {/* Total — 23% — right-aligned */}
-                      <TableHead className="w-[23%] text-right">Total</TableHead>
+                      {/* # — 4% */}
+                      <TableHead className="w-[4%] text-center">#</TableHead>
+                      {/* Customer — 22% */}
+                      <TableHead className="w-[22%]">Customer</TableHead>
+                      {/* Venue + Event Date — 21% */}
+                      <TableHead className="w-[21%]">Venue</TableHead>
+                      {/* Sales + Submit Date — 21% — hidden xs */}
+                      <TableHead className="w-[21%] hidden sm:table-cell">Sales</TableHead>
+                      {/* Total — 27% — right-aligned */}
+                      <TableHead className="w-[27%] text-right">Total</TableHead>
                       {/* Actions — 5% */}
                       <TableHead className="w-[5%]" />
                     </TableRow>
@@ -579,7 +648,7 @@ export function QuotationsTable() {
                   <TableBody>
                     {isFetching ? (
                       <TableRow>
-                        <TableCell colSpan={7} className="py-10 text-center text-muted-foreground">
+                        <TableCell colSpan={6} className="py-10 text-center text-muted-foreground">
                           <Refresh weight="BoldDuotone" aria-hidden="true" className="h-6 w-6 opacity-40 animate-spin mx-auto" />
                         </TableCell>
                       </TableRow>
@@ -630,14 +699,19 @@ export function QuotationsTable() {
                             </div>
                           </TableCell>
 
-                          {/* Venue */}
+                          {/* Venue + Event Date */}
                           <TableCell className="min-w-0">
-                            <span title={q.venue} className="block truncate text-sm">
-                              {q.venue}
-                            </span>
+                            <div className="min-w-0">
+                              <span title={q.venue} className="block truncate text-sm text-foreground">
+                                {q.venue}
+                              </span>
+                              <span className="block truncate text-xs text-muted-foreground tabular-nums">
+                                {q.eventDate ? formatEventDateRange(q.eventDate, q.eventEndDate) : "—"}
+                              </span>
+                            </div>
                           </TableCell>
 
-                          {/* Sales — hidden xs */}
+                          {/* Sales + Submit Date — hidden xs */}
                           <TableCell className="min-w-0 hidden sm:table-cell">
                             <div className="min-w-0">
                               <span
@@ -646,26 +720,10 @@ export function QuotationsTable() {
                               >
                                 {q.salesName || "—"}
                               </span>
-                              {q.salesPhone && (
-                                <span className="block truncate text-xs text-muted-foreground">
-                                  {q.salesPhone}
-                                </span>
-                              )}
+                              <span className="block truncate text-xs text-muted-foreground tabular-nums">
+                                {q.createdAt ? formatDate(q.createdAt) : "—"}
+                              </span>
                             </div>
-                          </TableCell>
-
-                          {/* Submit Date — hidden until md */}
-                          <TableCell className="min-w-0 hidden md:table-cell">
-                            <span className="block text-sm tabular-nums text-muted-foreground">
-                              {q.createdAt ? formatDate(q.createdAt) : "—"}
-                            </span>
-                          </TableCell>
-
-                          {/* Event Date — hidden until xl */}
-                          <TableCell className="min-w-0 hidden xl:table-cell">
-                            <span className="block text-sm tabular-nums">
-                              {q.eventDate ? formatEventDateRange(q.eventDate, q.eventEndDate) : "—"}
-                            </span>
                           </TableCell>
 
                           {/* Total */}

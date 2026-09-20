@@ -93,7 +93,7 @@ export async function getPackagesForBooking(venueId?: string, category: "WEDDING
  * or filled in manually per quotation). Here we filter on having miceItems
  * instead, and only include the minimal shape the quotation explode needs.
  */
-export async function getMicePackagesForQuotation(venueId?: string) {
+export async function getMicePackagesForQuotation(venueId?: string, eventTypeId?: string) {
   "use cache";
   cacheTag("packages");
   cacheLife("hours");
@@ -103,11 +103,18 @@ export async function getMicePackagesForQuotation(venueId?: string) {
       category: "MICE",
       available: true,
       ...(venueId ? { venueId } : {}),
+      ...(eventTypeId ? { eventTypeId } : {}),
     },
     orderBy: { createdAt: "desc" },
     include: {
       venue: { select: { id: true, name: true } },
+      eventType: { select: { id: true, name: true } },
+      paymentMethod: { select: { id: true, bankName: true, bankAccountNumber: true, bankRecipient: true } },
       miceItems: { orderBy: { sortOrder: "asc" as const } },
+      micePrices: { orderBy: { sortOrder: "asc" as const } },
+      taxDeposits: { orderBy: { sortOrder: "asc" as const } },
+      complimentaries: { orderBy: { sortOrder: "asc" as const }, include: { complimentary: true } },
+      bonuses: { orderBy: { sortOrder: "asc" as const }, include: { bonus: true } },
     },
   });
 
