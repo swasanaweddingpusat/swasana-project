@@ -2313,7 +2313,7 @@ export function QuotationDrawer({
                 <Tabs defaultValue="harga">
                   <TabsList
                     variant="line"
-                    className="h-auto w-full justify-start gap-1 rounded-none border-b border-border bg-transparent p-0 group-data-horizontal/tabs:h-auto"
+                    className="h-auto w-full min-w-0 flex-nowrap justify-start gap-1 overflow-x-auto scrollbar-hide rounded-none border-b border-border bg-transparent p-0 group-data-horizontal/tabs:h-auto"
                   >
                     <TabsTrigger value="harga" className={TAB_TRIGGER_CLASS}>
                       <Calculator weight="BoldDuotone" className="size-4 shrink-0" />
@@ -2475,7 +2475,7 @@ export function QuotationDrawer({
                 <Tabs defaultValue="bonus">
                   <TabsList
                     variant="line"
-                    className="h-auto w-full justify-start gap-1 rounded-none border-b border-border bg-transparent p-0 group-data-horizontal/tabs:h-auto"
+                    className="h-auto w-full min-w-0 flex-nowrap justify-start gap-1 overflow-x-auto scrollbar-hide rounded-none border-b border-border bg-transparent p-0 group-data-horizontal/tabs:h-auto"
                   >
                     <TabsTrigger value="bonus" className={TAB_TRIGGER_CLASS}>
                       <MedalStar weight="BoldDuotone" className="size-4 shrink-0" />
