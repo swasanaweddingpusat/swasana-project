@@ -68,6 +68,14 @@ interface TermConditionEditorProps {
   placeholder?: string;
   className?: string;
   showVariablePanel?: boolean;
+  /**
+   * Opt-in: renders a compact editor box the user can drag-resize vertically
+   * (native CSS resize handle, bottom-right corner) instead of the default
+   * flex-1-stretch-to-parent sizing. Off by default so existing call sites
+   * (e.g. PackageTCDrawer, which relies on the editor filling its flex
+   * parent) are unaffected.
+   */
+  resizable?: boolean;
 }
 
 export function TermConditionEditor({
@@ -77,6 +85,7 @@ export function TermConditionEditor({
   placeholder = "Tulis Term & Condition di sini...",
   className,
   showVariablePanel = true,
+  resizable = false,
 }: TermConditionEditorProps) {
   const editor = useEditor({
     immediatelyRender: false,
@@ -129,9 +138,20 @@ export function TermConditionEditor({
   );
 
   return (
-    <div className={cn("flex flex-col md:flex-row gap-4 flex-1 min-h-0 overflow-hidden", className)}>
+    <div
+      className={cn(
+        "flex flex-col md:flex-row gap-4",
+        resizable ? "overflow-visible" : "flex-1 min-h-0 overflow-hidden",
+        className,
+      )}
+    >
       {/* Editor */}
-      <div className="flex-1 flex flex-col min-w-0 border rounded-lg overflow-hidden min-h-48 md:min-h-0">
+      <div
+        className={cn(
+          "flex flex-col w-full min-w-0 border rounded-lg",
+          resizable ? "resize-y overflow-auto h-44 min-h-32 max-h-96" : "flex-1 overflow-hidden min-h-48 md:min-h-0",
+        )}
+      >
         {editor && (
           <div className="flex items-center gap-0.5 px-2 py-1.5 border-b bg-card">
             <ToolbarButton active={editor.isActive("bold")} onClick={() => editor.chain().focus().toggleBold().run()} title="Bold" disabled={disabled}>

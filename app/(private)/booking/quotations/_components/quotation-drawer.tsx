@@ -125,6 +125,9 @@ interface QuotationFormValues {
   additionals: QuotationItemForm[];
   discount: string;
   bookingFee: string;
+  paymentNote: string;
+  cancellationPolicy: string;
+  closingNote: string;
   validUntil: string;
   notes: string;
   paymentMethodId: string;
@@ -247,6 +250,9 @@ const DEFAULT_VALUES: QuotationFormValues = {
   additionals: [],
   discount: "",
   bookingFee: "",
+  paymentNote: "",
+  cancellationPolicy: "",
+  closingNote: "",
   validUntil: "",
   notes: "",
   paymentMethodId: "",
@@ -681,7 +687,7 @@ function ItemListEditor({
   );
 }
 
-// ── Sub-component: PriceRowCard (Step 4 — same visual language as SortableItemRow) ──
+// ── Sub-component: PriceRowCard (Step 2 "Harga" tab — same visual language as SortableItemRow) ──
 
 interface PriceRowCardProps {
   row: PriceRow;
@@ -1083,7 +1089,7 @@ export function QuotationDrawer({
     });
   }
 
-  // ── Price (Step 4) ────────────────────────────────────────────────────────
+  // ── Price (Step 2 — "Harga" tab) ────────────────────────────────────────────
   // UI-only for now — no master data table, no server/DB wiring yet. Plain
   // useState array (not RHF), same architecture as Bonus/Complimentary above.
   const [prices, setPrices] = useState<PriceRow[]>([]);
@@ -1332,6 +1338,30 @@ export function QuotationDrawer({
   const watchedDiscount = form.watch("discount");
   const watchedEventTypeId = form.watch("eventTypeId");
   const watchedEventDate = form.watch("eventDate");
+  const watchedPaymentMethodId = form.watch("paymentMethodId");
+
+  // ── Selected payment method detail (Bank / Account Number / Account Name) ──
+  // Same queryKey/params shape as BankAccountSelect so this shares its cache
+  // entry instead of firing a second network request.
+  interface PaymentMethodDetail {
+    id: string;
+    bankName: string;
+    bankAccountNumber: string;
+    bankRecipient: string;
+  }
+  const { data: paymentMethodsData } = useQuery<PaymentMethodDetail[]>({
+    queryKey: ["payment-methods", watchedVenueId || "all"],
+    queryFn: async () => {
+      const params = new URLSearchParams({ limit: "100" });
+      if (watchedVenueId) params.set("venueId", watchedVenueId);
+      const r = await fetch(`/api/payment-methods?${params}`);
+      if (!r.ok) return [];
+      const d = await r.json();
+      return Array.isArray(d.data) ? d.data : [];
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+  const selectedPaymentMethod = paymentMethodsData?.find((pm) => pm.id === watchedPaymentMethodId);
 
   // ── MICE packages available for this quotation's venue ───────────────────
   interface MicePackageQuotationOption {
@@ -1398,7 +1428,7 @@ export function QuotationDrawer({
       !watchedEventTypeId ||
       !watchedEventDate);
 
-  // Step 4 (signature) requires a signature + signing location.
+  // Step 6 (signature) requires a signature + signing location.
   const isSignatureComplete = !!signatureSales && !!signingLocation.trim();
 
   // Name shown in the locked sales field — resolves from the current salesId so
@@ -1573,6 +1603,9 @@ export function QuotationDrawer({
           editQuotation.bookingFee && editQuotation.bookingFee > 0
             ? formatNumericDisplay(editQuotation.bookingFee)
             : "",
+        paymentNote: editQuotation.paymentNote ?? "",
+        cancellationPolicy: editQuotation.cancellationPolicy ?? "",
+        closingNote: editQuotation.closingNote ?? "",
         validUntil: editQuotation.validUntil,
         notes: editQuotation.notes,
         paymentMethodId: editQuotation.paymentMethodId ?? "",
@@ -1776,6 +1809,9 @@ export function QuotationDrawer({
       items,
       discount: discountNum,
       bookingFee: bookingFeeNum > 0 ? bookingFeeNum : null,
+      paymentNote: values.paymentNote || null,
+      cancellationPolicy: values.cancellationPolicy || null,
+      closingNote: values.closingNote || null,
       validUntil: values.validUntil,
       notes: values.notes || null,
       paymentMethodId: values.paymentMethodId || null,
@@ -2273,12 +2309,16 @@ export function QuotationDrawer({
                   </div>
                 )}
 
-                {/* ── Items / Additional ──────────────────────────────── */}
-                <Tabs defaultValue="items">
+                {/* ── Harga / Items / Additional / Tax & Deposit ──────── */}
+                <Tabs defaultValue="harga">
                   <TabsList
                     variant="line"
                     className="h-auto w-full justify-start gap-1 rounded-none border-b border-border bg-transparent p-0 group-data-horizontal/tabs:h-auto"
                   >
+                    <TabsTrigger value="harga" className={TAB_TRIGGER_CLASS}>
+                      <Calculator weight="BoldDuotone" className="size-4 shrink-0" />
+                      Harga
+                    </TabsTrigger>
                     <TabsTrigger value="items" className={TAB_TRIGGER_CLASS}>
                       <BillList weight="BoldDuotone" className="size-4 shrink-0" />
                       Items
@@ -2292,6 +2332,49 @@ export function QuotationDrawer({
                       Tax & Deposit
                     </TabsTrigger>
                   </TabsList>
+
+                  {/* ── Harga (UI-only, no server/DB yet) ────────────────── */}
+                  <TabsContent value="harga" keepMounted className="mt-4 animate-in fade-in duration-300 space-y-3">
+                    {prices.length === 0 ? (
+                      <p className="text-sm text-muted-foreground text-center py-6">
+                        No price items yet. Click &quot;Add Item&quot; to add one.
+                      </p>
+                    ) : (
+                      <DndContext
+                        sensors={priceSensors}
+                        collisionDetection={closestCenter}
+                        onDragEnd={handlePriceDragEnd}
+                      >
+                        <SortableContext
+                          items={prices.map((p) => p.id)}
+                          strategy={verticalListSortingStrategy}
+                        >
+                          <div className="space-y-2">
+                            {prices.map((row) => (
+                              <PriceRowCard
+                                key={row.id}
+                                row={row}
+                                isCollapsed={collapsedPrices.has(row.id)}
+                                toggleCollapse={() => togglePriceCollapse(row.id)}
+                                onUpdate={(patch) => updatePriceRow(row.id, patch)}
+                                onRemove={() => removePriceRow(row.id)}
+                              />
+                            ))}
+                          </div>
+                        </SortableContext>
+                      </DndContext>
+                    )}
+
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={addPriceRow}
+                      className="w-full rounded-xl border-dashed"
+                    >
+                      <AddCircle weight="BoldDuotone" className="h-4 w-4 mr-1" />
+                      Add Item
+                    </Button>
+                  </TabsContent>
 
                   {/* ── Items ─────────────────────────────────────────── */}
                   <TabsContent value="items" keepMounted className="mt-4 animate-in fade-in duration-300 space-y-3">
@@ -2416,14 +2499,14 @@ export function QuotationDrawer({
                         onChange={(selectedId) => {
                           const found = bonusOptions.find((x) => x.id === selectedId);
                           if (found) {
-                            setBonuses((prev) => [...prev, {
+                            setBonuses((prev) => [{
                               id: crypto.randomUUID(),
                               bonusId: found.id,
                               name: found.name,
                               price: found.price,
                               description: found.description ?? "",
                               qty: 1,
-                            }]);
+                            }, ...prev]);
                           }
                         }}
                         onAddTrigger={canCreateBonus ? (text) => {
@@ -2513,14 +2596,14 @@ export function QuotationDrawer({
                                 isActive: true,
                               });
                               if (result.success) {
-                                setBonuses((prev) => [...prev, {
+                                setBonuses((prev) => [{
                                   id: crypto.randomUUID(),
                                   bonusId: result.data.id,
                                   name: result.data.name,
                                   price: result.data.price,
                                   description: result.data.description ?? "",
                                   qty: 1,
-                                }]);
+                                }, ...prev]);
                                 setBonusMode("none");
                                 toast.success(`"${result.data.name}" added successfully`);
                               } else {
@@ -2648,7 +2731,7 @@ export function QuotationDrawer({
                     onChange={(selectedId) => {
                       const found = complimentaryOptions.find((x) => x.id === selectedId);
                       if (found) {
-                        setComplimentaries((prev) => [...prev, {
+                        setComplimentaries((prev) => [{
                           id: crypto.randomUUID(),
                           complimentaryId: found.id,
                           name: found.name,
@@ -2656,7 +2739,7 @@ export function QuotationDrawer({
                           isShowPrice: found.isShowPrice,
                           description: found.description ?? "",
                           qty: 1,
-                        }]);
+                        }, ...prev]);
                       }
                     }}
                     onAddTrigger={canCreateComplimentary ? (text) => {
@@ -2751,7 +2834,7 @@ export function QuotationDrawer({
                             isActive: true,
                           });
                           if (result.success && result.item) {
-                            setComplimentaries((prev) => [...prev, {
+                            setComplimentaries((prev) => [{
                               id: crypto.randomUUID(),
                               complimentaryId: result.item!.id,
                               name: result.item!.name,
@@ -2759,7 +2842,7 @@ export function QuotationDrawer({
                               isShowPrice: result.item!.isShowPrice,
                               description: result.item!.description ?? "",
                               qty: 1,
-                            }]);
+                            }, ...prev]);
                             setComplimentaryMode("none");
                             toast.success(`"${result.item.name}" added successfully`);
                           } else {
@@ -2881,59 +2964,233 @@ export function QuotationDrawer({
                 </Tabs>
               </div>
 
-              {/* ════════════════ STEP 4 — PRICE (UI-only, no server/DB yet) ════════════════ */}
+              {/* ════════════════ STEP 4 — KETENTUAN PENAWARAN ════════════════ */}
               <div className={cn(step !== 4 && "hidden", "space-y-4")}>
                 <div className="pb-3 border-b border-border">
-                  <p className="text-sm font-semibold text-foreground">Price</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    Tambahkan item harga untuk quotation ini. Hitung otomatis lewat qty × harga, atau isi nominal langsung.
-                  </p>
+                  <p className="text-sm font-semibold text-foreground">Quotation Terms</p>
                 </div>
 
-                <div className="space-y-3">
-                  {prices.length === 0 ? (
-                    <p className="text-sm text-muted-foreground text-center py-6">
-                      No price items yet. Click &quot;Add Item&quot; to add one.
-                    </p>
-                  ) : (
-                    <DndContext
-                      sensors={priceSensors}
-                      collisionDetection={closestCenter}
-                      onDragEnd={handlePriceDragEnd}
-                    >
-                      <SortableContext
-                        items={prices.map((p) => p.id)}
-                        strategy={verticalListSortingStrategy}
-                      >
-                        <div className="space-y-2">
-                          {prices.map((row) => (
-                            <PriceRowCard
-                              key={row.id}
-                              row={row}
-                              isCollapsed={collapsedPrices.has(row.id)}
-                              toggleCollapse={() => togglePriceCollapse(row.id)}
-                              onUpdate={(patch) => updatePriceRow(row.id, patch)}
-                              onRemove={() => removePriceRow(row.id)}
-                            />
-                          ))}
+                <FormField
+                  control={form.control}
+                  name="paymentMethodId"
+                  render={({ field }) => (
+                    <FormItem className="w-full">
+                      <FormLabel className={LABEL_CLASS}>Payment Method</FormLabel>
+                      <BankAccountSelect
+                        value={field.value ?? ""}
+                        onChange={field.onChange}
+                        venueId={watchedVenueId || undefined}
+                        placeholder="Select payment method..."
+                        disableAdd
+                      />
+                      <FormMessage />
+                      {selectedPaymentMethod && (
+                        <div className="rounded-xl bg-muted p-4 space-y-1.5 text-sm">
+                          <div className="flex items-center justify-between gap-4">
+                            <span className="text-muted-foreground">Bank</span>
+                            <span className="font-medium text-foreground text-right">
+                              {selectedPaymentMethod.bankName}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between gap-4">
+                            <span className="text-muted-foreground">Account Number</span>
+                            <span className="font-medium text-foreground text-right tabular-nums">
+                              {selectedPaymentMethod.bankAccountNumber}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between gap-4">
+                            <span className="text-muted-foreground">Account Name</span>
+                            <span className="font-medium text-foreground text-right">
+                              {selectedPaymentMethod.bankRecipient}
+                            </span>
+                          </div>
                         </div>
-                      </SortableContext>
-                    </DndContext>
+                      )}
+                    </FormItem>
                   )}
+                />
 
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={addPriceRow}
-                    className="w-full rounded-xl border-dashed"
-                  >
-                    <AddCircle weight="BoldDuotone" className="h-4 w-4 mr-1" />
-                    Add Item
-                  </Button>
-                </div>
+                <FormField
+                  control={form.control}
+                  name="bookingFee"
+                  render={({ field }) => (
+                    <FormItem className="w-full">
+                      <FormLabel className={LABEL_CLASS}>
+                        Booking Fee{" "}
+                        <span className="font-normal text-muted-foreground">(optional)</span>
+                      </FormLabel>
+                      <FormControl>
+                        <div className="relative w-full">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground select-none">
+                            Rp
+                          </span>
+                          <Input
+                            value={field.value}
+                            onChange={(e) =>
+                              field.onChange(formatNumericDisplay(e.target.value))
+                            }
+                            placeholder="0"
+                            inputMode="numeric"
+                            className="w-full pl-8"
+                          />
+                        </div>
+                      </FormControl>
+                      <p className="text-xs text-muted-foreground">
+                        Shown in the document: &quot;Booking Fee of Rp X is required to confirm the
+                        reservation&quot;. Leave empty if not applicable.
+                      </p>
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="paymentNote"
+                  render={({ field }) => (
+                    <FormItem className="w-full">
+                      <FormLabel className={LABEL_CLASS}>
+                        Payment Note{" "}
+                        <span className="font-normal text-muted-foreground">(optional)</span>
+                      </FormLabel>
+                      <FormControl>
+                        <Textarea
+                          {...field}
+                          rows={2}
+                          placeholder="The remaining payment shall be completed according to the agreed schedule."
+                          className="w-full"
+                        />
+                      </FormControl>
+                      <p className="text-xs text-muted-foreground">
+                        Sub-note under Terms &amp; Payment. Leave empty to use the default text above.
+                      </p>
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="validUntil"
+                  render={({ field }) => (
+                    <FormItem className="w-full">
+                      <FormLabel className={LABEL_CLASS}>
+                        Valid Until{" "}
+                        <span className="font-normal text-muted-foreground">(optional)</span>
+                      </FormLabel>
+                      <Popover>
+                        <PopoverTrigger
+                          render={
+                            <Button
+                              variant="outline"
+                              className={cn(
+                                "w-full justify-start text-left font-normal",
+                                !field.value && "text-muted-foreground",
+                              )}
+                            >
+                              <CalendarSolarIcon weight="BoldDuotone" className="mr-2 h-4 w-4" />
+                              {field.value
+                                ? format(parseDateOnly(field.value), "dd MMM yyyy")
+                                : "Select valid-until date..."}
+                            </Button>
+                          }
+                        />
+                        <PopoverContent className="w-auto p-0" align="start">
+                          <Calendar
+                            mode="single"
+                            captionLayout="dropdown"
+                            selected={field.value ? new Date(field.value + "T00:00:00") : undefined}
+                            onSelect={(date) => {
+                              if (date) {
+                                const y = date.getFullYear();
+                                const m = String(date.getMonth() + 1).padStart(2, "0");
+                                const d = String(date.getDate()).padStart(2, "0");
+                                field.onChange(`${y}-${m}-${d}`);
+                              } else {
+                                field.onChange("");
+                              }
+                            }}
+                            fromYear={new Date().getFullYear()}
+                            toYear={new Date().getFullYear() + 5}
+                            defaultMonth={field.value ? new Date(field.value + "T00:00:00") : new Date()}
+                          />
+                        </PopoverContent>
+                      </Popover>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="notes"
+                  render={({ field }) => (
+                    <FormItem className="w-full">
+                      <FormLabel className={LABEL_CLASS}>
+                        Notes{" "}
+                        <span className="font-normal text-muted-foreground">(optional)</span>
+                      </FormLabel>
+                      <FormControl>
+                        <Textarea
+                          {...field}
+                          rows={2}
+                          placeholder="Additional notes for the client..."
+                          className="w-full"
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="cancellationPolicy"
+                  render={({ field }) => (
+                    <FormItem className="w-full">
+                      <FormLabel className={LABEL_CLASS}>
+                        Cancellation &amp; Refund Policy{" "}
+                        <span className="font-normal text-muted-foreground">(optional)</span>
+                      </FormLabel>
+                      <FormControl>
+                        <Textarea
+                          {...field}
+                          rows={2}
+                          placeholder="All confirmed transactions are non-cancellable and non-refundable."
+                          className="w-full"
+                        />
+                      </FormControl>
+                      <p className="text-xs text-muted-foreground">
+                        Leave empty to use the default text above.
+                      </p>
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="closingNote"
+                  render={({ field }) => (
+                    <FormItem className="w-full">
+                      <FormLabel className={LABEL_CLASS}>
+                        Closing{" "}
+                        <span className="font-normal text-muted-foreground">(optional)</span>
+                      </FormLabel>
+                      <FormControl>
+                        <Textarea
+                          {...field}
+                          rows={2}
+                          placeholder="We look forward to welcoming you and your team at Kediaman Event Venue — {venue}. Should you require any further assistance, please do not hesitate to contact us."
+                          className="w-full"
+                        />
+                      </FormControl>
+                      <p className="text-xs text-muted-foreground">
+                        Leave empty to use the default text above (venue name is filled in automatically).
+                      </p>
+                    </FormItem>
+                  )}
+                />
               </div>
 
-              {/* ════════════════ STEP 5 — KETENTUAN PENAWARAN ════════════════ */}
+              {/* ════════════════ STEP 5 — SUMMARY ════════════════ */}
               <div className={cn(step !== 5 && "hidden", "space-y-3")}>
                 {/* ── Ringkasan Biaya ───────────────────────────────── */}
                 <div className="rounded-2xl border bg-card p-5 space-y-3">
@@ -2992,136 +3249,6 @@ export function QuotationDrawer({
                       </span>
                     </div>
                   </div>
-                </div>
-
-                {/* ── Ketentuan Penawaran ───────────────────────────── */}
-                <div className="rounded-2xl border bg-card p-5 space-y-3">
-                  <p className="text-sm font-semibold text-foreground mb-1">Quotation Terms</p>
-
-                  <FormField
-                    control={form.control}
-                    name="paymentMethodId"
-                    render={({ field }) => (
-                      <FormItem className="w-full">
-                        <FormLabel className={LABEL_CLASS}>Payment Method</FormLabel>
-                        <BankAccountSelect
-                          value={field.value ?? ""}
-                          onChange={field.onChange}
-                          venueId={watchedVenueId || undefined}
-                          placeholder="Select payment method..."
-                          disableAdd
-                        />
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="bookingFee"
-                    render={({ field }) => (
-                      <FormItem className="w-full">
-                        <FormLabel className={LABEL_CLASS}>
-                          Booking Fee{" "}
-                          <span className="font-normal text-muted-foreground">(optional)</span>
-                        </FormLabel>
-                        <FormControl>
-                          <div className="relative w-full">
-                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground select-none">
-                              Rp
-                            </span>
-                            <Input
-                              value={field.value}
-                              onChange={(e) =>
-                                field.onChange(formatNumericDisplay(e.target.value))
-                              }
-                              placeholder="0"
-                              inputMode="numeric"
-                              className="w-full pl-8"
-                            />
-                          </div>
-                        </FormControl>
-                        <p className="text-xs text-muted-foreground">
-                          Shown in the document: &quot;Booking Fee of Rp X is required to confirm the
-                          reservation&quot;. Leave empty if not applicable.
-                        </p>
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="validUntil"
-                    render={({ field }) => (
-                      <FormItem className="w-full">
-                        <FormLabel className={LABEL_CLASS}>
-                          Valid Until{" "}
-                          <span className="font-normal text-muted-foreground">(optional)</span>
-                        </FormLabel>
-                        <Popover>
-                          <PopoverTrigger
-                            render={
-                              <Button
-                                variant="outline"
-                                className={cn(
-                                  "w-full justify-start text-left font-normal",
-                                  !field.value && "text-muted-foreground",
-                                )}
-                              >
-                                <CalendarSolarIcon weight="BoldDuotone" className="mr-2 h-4 w-4" />
-                                {field.value
-                                  ? format(parseDateOnly(field.value), "dd MMM yyyy")
-                                  : "Select valid-until date..."}
-                              </Button>
-                            }
-                          />
-                          <PopoverContent className="w-auto p-0" align="start">
-                            <Calendar
-                              mode="single"
-                              captionLayout="dropdown"
-                              selected={field.value ? new Date(field.value + "T00:00:00") : undefined}
-                              onSelect={(date) => {
-                                if (date) {
-                                  const y = date.getFullYear();
-                                  const m = String(date.getMonth() + 1).padStart(2, "0");
-                                  const d = String(date.getDate()).padStart(2, "0");
-                                  field.onChange(`${y}-${m}-${d}`);
-                                } else {
-                                  field.onChange("");
-                                }
-                              }}
-                              fromYear={new Date().getFullYear()}
-                              toYear={new Date().getFullYear() + 5}
-                              defaultMonth={field.value ? new Date(field.value + "T00:00:00") : new Date()}
-                            />
-                          </PopoverContent>
-                        </Popover>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="notes"
-                    render={({ field }) => (
-                      <FormItem className="w-full">
-                        <FormLabel className={LABEL_CLASS}>
-                          Notes{" "}
-                          <span className="font-normal text-muted-foreground">(optional)</span>
-                        </FormLabel>
-                        <FormControl>
-                          <Textarea
-                            {...field}
-                            rows={2}
-                            placeholder="Additional notes for the client..."
-                            className="w-full"
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
                 </div>
               </div>
 

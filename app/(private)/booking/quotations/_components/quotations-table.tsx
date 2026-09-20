@@ -142,6 +142,9 @@ export interface QuotationItem {
   totalPrice: number;
   // ── Term & Payment ─────────────────────────────────────────────
   bookingFee?: number;
+  paymentNote?: string;
+  cancellationPolicy?: string;
+  closingNote?: string;
   bankName?: string;
   bankAccountNo?: string;
   bankAccountName?: string;
@@ -209,6 +212,9 @@ function mapRowToQuotationItem(row: QuotationListRow): QuotationItem {
     discount: row.discount,
     totalPrice: row.totalPrice,
     bookingFee: row.bookingFee ?? undefined,
+    paymentNote: row.paymentNote ?? undefined,
+    cancellationPolicy: row.cancellationPolicy ?? undefined,
+    closingNote: row.closingNote ?? undefined,
     status: row.status as QuotationItem["status"],
     paymentMethodId: row.paymentMethodId ?? undefined,
     bankName: row.paymentMethod?.bankName,

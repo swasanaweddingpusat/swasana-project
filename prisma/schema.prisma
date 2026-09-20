@@ -594,8 +594,8 @@ model Package {
   margin                 Float                  @default(0)
   sellingPrice           Int                    @default(0)
   termAndCondition       String?
-  securityDeposit        Int                    @default(0)
   cancellationRefundPolicy String?
+  closingNote            String?
   createdAt              DateTime               @default(now())
   updatedAt              DateTime               @updatedAt
   venue                  Venue?                 @relation(fields: [venueId], references: [id], onDelete: SetNull)
@@ -2360,6 +2360,11 @@ model Quotation {
   // Booking fee required to confirm the reservation (shown in the Term & Payment
   // boilerplate: "Booking Fee of Rp X is required to confirm the reservation").
   bookingFee Int?
+  // Editable document clauses — each falls back to a hardcoded default string
+  // in quotation-preview.tsx when null (legacy rows / not yet customized).
+  paymentNote        String? // sub-note under Term & Payment, e.g. remaining payment schedule
+  cancellationPolicy String? // Cancellation & Refund Policy paragraph
+  closingNote        String? // Closing paragraph before the signature block
 
   // Meta
   validUntil      DateTime?

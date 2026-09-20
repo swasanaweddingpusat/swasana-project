@@ -21,6 +21,16 @@ interface QuotationPreviewProps {
 
 const PRINT_AREA_ID = "quotation-print-area";
 
+// Editable-clause fallbacks — used when the quotation's corresponding field is
+// null (legacy rows / not yet customized via the drawer's Step 5 form).
+const DEFAULT_PAYMENT_NOTE =
+  "The remaining payment shall be completed according to the agreed schedule.";
+const DEFAULT_CANCELLATION_POLICY =
+  "All confirmed transactions are non-cancellable and non-refundable.";
+function defaultClosingNote(venue: string): string {
+  return `We look forward to welcoming you and your team at Kediaman Event Venue — ${venue}. Should you require any further assistance, please do not hesitate to contact us.`;
+}
+
 /**
  * Nomor dokumen — pakai yang tersimpan (format register: "#201-MICE").
  * Fallback untuk row lama tanpa nomor: slug pendek dari id, tetap berpola "#…-MICE".
@@ -277,6 +287,9 @@ export function QuotationPreview({
                       is required to confirm the reservation.
                     </p>
                   ) : null}
+                  <p className="text-muted-foreground">
+                    {q.paymentNote?.trim() || DEFAULT_PAYMENT_NOTE}
+                  </p>
                   <p className="text-foreground">
                     Payment can be made via{" "}
                     <span className="font-bold">bank transfer</span> to the
@@ -350,15 +363,16 @@ export function QuotationPreview({
                 </p>
               ) : null}
 
-              {/* Klausul standar dokumen QUO — muncul di semua venue. */}
+              {/* Cancellation & Refund Policy — editable per quotation, falls back to
+                  the standard clause when not customized. */}
               <p className="mt-6 text-[11px] font-medium text-foreground">
-                All confirm transactions are non-cancellable and non-refundable
+                {q.cancellationPolicy?.trim() || DEFAULT_CANCELLATION_POLICY}
               </p>
 
+              {/* Closing — editable per quotation, falls back to the standard closing
+                  paragraph (with venue name interpolated) when not customized. */}
               <p className="mt-6 text-[11px] leading-relaxed text-muted-foreground">
-                We look forward to welcoming you and your team at Kediaman Event
-                Venue — {q.venue}. Should you require any further assistance,
-                please do not hesitate to contact us.
+                {q.closingNote?.trim() || defaultClosingNote(q.venue)}
               </p>
 
               {/* Signature */}

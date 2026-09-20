@@ -55,6 +55,11 @@ export const createQuotationSchema = z.object({
   // Booking fee for the Term & Payment boilerplate (optional; auto-loaded from
   // the per-venue template, editable per quotation).
   bookingFee: z.coerce.number().int().min(0).optional().nullable(),
+  // Editable document clauses — fall back to a hardcoded default string in
+  // quotation-preview.tsx when null (legacy rows / not yet customized).
+  paymentNote: z.string().optional().nullable(),
+  cancellationPolicy: z.string().optional().nullable(),
+  closingNote: z.string().optional().nullable(),
   validUntil: z.string().optional().nullable(),
   notes: z.string().optional().nullable(),
   paymentMethodId: z.string().optional().nullable(),

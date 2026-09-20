@@ -9,7 +9,6 @@ import { SimpleEditor } from "@/components/shared/SimpleEditor";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { SearchableSelect } from "@/components/ui/searchable-select";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible";
 import { BankAccountSelect } from "@/components/shared/bank-account-select";
@@ -56,15 +55,14 @@ import type { PackageQueryItem } from "@/lib/queries/packages";
 // MICE package is always gated on the "package-mice" permission module.
 const PERM = "package-mice";
 
-// ─── Steps (MICE = 6 steps: Detail, Item, Harga, Payment, Complimentary & Bonus, Tanda Tangan) ──
+// ─── Steps (MICE = 5 steps: Detail, Item & Harga, Payment, Complimentary & Bonus, Tanda Tangan) ──
 
 const stepperSteps = [
   { id: 1, title: "Detail Paket", subtitle: "Informasi dasar paket", icon: Box },
-  { id: 2, title: "Item Paket", subtitle: "Daftar item paket", icon: ClipboardList },
-  { id: 3, title: "Harga", subtitle: "Rincian harga paket", icon: TagPrice },
-  { id: 4, title: "Payment", subtitle: "Rekening & term & condition", icon: Card2 },
-  { id: 5, title: "Complimentary & Bonus", subtitle: "Bonus & komplimen paket", icon: Gift },
-  { id: 6, title: "Tanda Tangan", subtitle: "Konfirmasi & tanda tangan", icon: PenNewSquare },
+  { id: 2, title: "Item & Harga", subtitle: "Harga, item & tax/deposit paket", icon: ClipboardList },
+  { id: 3, title: "Payment", subtitle: "Rekening & term & condition", icon: Card2 },
+  { id: 4, title: "Complimentary & Bonus", subtitle: "Bonus & komplimen paket", icon: Gift },
+  { id: 5, title: "Tanda Tangan", subtitle: "Konfirmasi & tanda tangan", icon: PenNewSquare },
 ];
 
 interface MiceItemState {
@@ -145,8 +143,14 @@ const TAB_TRIGGER_CLASS = cn(
   "h-auto flex-none items-center gap-1.5 rounded-none border-0 border-b border-b-transparent -mb-px bg-transparent px-4 py-2.5 text-sm font-medium text-muted-foreground shadow-none transition-colors after:hidden hover:border-b-border hover:text-foreground data-active:border-b-primary data-active:bg-transparent data-active:text-foreground data-active:shadow-none",
 );
 
-// ─── Sortable accordion row (Item Paket / Harga) ────────────────────────────────
-// Header: drag handle + expand/collapse chevron + live title + delete. Body: collapsible.
+const LABEL_CLASS = cn("text-sm", "font-medium", "text-foreground");
+
+// ─── Sortable accordion row (Item Paket / Tax & Deposit / Harga) ────────────────
+// Header: drag handle + expand/collapse chevron + live title (+ collapsed value
+// badge for price-bearing rows) + delete. Body: shadcn Collapsible.
+// Same visual language as quotation-drawer.tsx's SortableItemRow/PriceRowCard/
+// TaxDepositRowCard — "plain" variant mirrors item rows, "value" variant mirrors
+// price rows (font-heading italic title + collapsed Rupiah badge).
 
 function SortableAccordionRow({
   id,
@@ -156,6 +160,8 @@ function SortableAccordionRow({
   onToggleOpen,
   onRemove,
   children,
+  titleVariant = "plain",
+  valueBadge,
 }: {
   id: string;
   title: string;
@@ -164,62 +170,75 @@ function SortableAccordionRow({
   onToggleOpen: () => void;
   onRemove: () => void;
   children: React.ReactNode;
+  titleVariant?: "plain" | "value";
+  valueBadge?: string;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
-  return (
-    <div
-      ref={setNodeRef}
-      style={{ transform: CSS.Transform.toString(transform), transition }}
-      className={cn(
-        "rounded-2xl border border-border bg-card shadow-sm overflow-hidden",
-        isDragging && "opacity-50 shadow-lg",
-      )}
-    >
-      <div className={cn("flex items-center gap-1 px-3 py-2.5")}>
-        <button
-          type="button"
-          {...attributes}
-          {...listeners}
-          className={cn("p-1 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors cursor-grab active:cursor-grabbing shrink-0 touch-none")}
-          tabIndex={-1}
-          aria-label="Urutkan"
-        >
-          <AlignVerticalSpacing weight="BoldDuotone" className="h-4 w-4" />
-        </button>
-        <button
-          type="button"
-          onClick={onToggleOpen}
-          className={cn("flex flex-1 items-center gap-2 min-w-0 cursor-pointer text-left")}
-        >
-          <AltArrowDown
-            weight="BoldDuotone"
-            className={cn(
-              "h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200",
-              isOpen && "rotate-180",
-            )}
-          />
-          <span className={cn("text-sm font-semibold text-foreground truncate")}>
-            {title.trim() || placeholder}
-          </span>
-        </button>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          onClick={(e) => {
-            e.stopPropagation();
-            onRemove();
-          }}
-          aria-label="Hapus"
-          className={cn("shrink-0 h-8 w-8 text-destructive hover:bg-destructive/10")}
-        >
-          <TrashBinTrash weight="BoldDuotone" className="h-4 w-4" />
-        </Button>
-      </div>
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : undefined,
+  };
 
-      {isOpen && (
-        <div className={cn("px-3 pb-3 pt-1 space-y-3 border-t border-border/60")}>{children}</div>
-      )}
+  return (
+    <div ref={setNodeRef} style={style} {...attributes}>
+      <Collapsible
+        open={isOpen}
+        onOpenChange={onToggleOpen}
+        className="rounded-xl border border-border bg-muted/30 overflow-hidden"
+      >
+        <div className="flex items-center gap-1 px-3 py-2.5">
+          <button
+            type="button"
+            {...listeners}
+            className="shrink-0 p-1.5 rounded-lg cursor-grab touch-none text-muted-foreground hover:bg-muted hover:text-foreground transition-colors active:cursor-grabbing"
+            aria-label="Urutkan"
+          >
+            <AlignVerticalSpacing weight="BoldDuotone" className="h-4 w-4" />
+          </button>
+
+          <CollapsibleTrigger className="flex flex-1 items-center gap-2 min-w-0 cursor-pointer text-left">
+            <AltArrowDown
+              weight="BoldDuotone"
+              className={cn(
+                "h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200",
+                isOpen && "rotate-180",
+              )}
+            />
+            <span
+              className={cn(
+                "flex-1 min-w-0 truncate",
+                titleVariant === "value"
+                  ? cn("font-heading text-base italic", title.trim() ? "text-foreground" : "text-muted-foreground")
+                  : cn("text-sm font-medium", title.trim() ? "text-foreground" : "text-muted-foreground"),
+              )}
+            >
+              {title.trim() || placeholder}
+            </span>
+            {!isOpen && valueBadge && (
+              <span className="shrink-0 text-xs text-muted-foreground tabular-nums">{valueBadge}</span>
+            )}
+          </CollapsibleTrigger>
+
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            onClick={(e) => {
+              e.stopPropagation();
+              onRemove();
+            }}
+            aria-label="Hapus"
+            className="shrink-0 h-7 w-7 text-destructive hover:bg-destructive/10"
+          >
+            <TrashBinTrash weight="BoldDuotone" className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+
+        <CollapsibleContent>
+          <div className="px-3 pb-3 space-y-3 border-t border-border/60 pt-2">{children}</div>
+        </CollapsibleContent>
+      </Collapsible>
     </div>
   );
 }
@@ -287,11 +306,11 @@ export function MicePackageDrawer({ isOpen, onClose, editingPackage }: MicePacka
     });
   }
 
-  // Step 4 — payment (bank account + gated security deposit / T&C / cancellation policy)
+  // Step 4 — payment (bank account + gated T&C / cancellation policy / closing)
   const [paymentMethodId, setPaymentMethodId] = useState("");
-  const [securityDeposit, setSecurityDeposit] = useState("");
   const [termAndCondition, setTermAndCondition] = useState("");
   const [cancellationRefundPolicy, setCancellationRefundPolicy] = useState("");
+  const [closingNote, setClosingNote] = useState("");
 
   // Step 5 — complimentary & bonus
   const [complimentaries, setComplimentaries] = useState<ComplimentaryRow[]>([]);
@@ -347,9 +366,9 @@ export function MicePackageDrawer({ isOpen, onClose, editingPackage }: MicePacka
     setPrices([]);
     setCollapsedPrices(new Set());
     setPaymentMethodId("");
-    setSecurityDeposit("");
     setTermAndCondition("");
     setCancellationRefundPolicy("");
+    setClosingNote("");
     setComplimentaries([]);
     setComplimentaryMode("none");
     setCollapsedComplimentaries(new Set());
@@ -398,9 +417,9 @@ export function MicePackageDrawer({ isOpen, onClose, editingPackage }: MicePacka
         })),
       );
       setPaymentMethodId(editingPackage.paymentMethodId ?? "");
-      setSecurityDeposit(editingPackage.securityDeposit ? formatNumericDisplay(editingPackage.securityDeposit) : "");
       setTermAndCondition(editingPackage.termAndCondition ?? "");
       setCancellationRefundPolicy(editingPackage.cancellationRefundPolicy ?? "");
+      setClosingNote(editingPackage.closingNote ?? "");
       setComplimentaries(
         (editingPackage.complimentaries ?? []).map((c) => ({
           id: c.id,
@@ -445,8 +464,9 @@ export function MicePackageDrawer({ isOpen, onClose, editingPackage }: MicePacka
   // ─── Validation & navigation ─────────────────────────────────────────────────
 
   const isStep1Invalid = !packageName.trim() || !venueId;
-  const isStep2Invalid = items.length === 0 || items.some((it) => !it.itemName.trim());
-  const isStep3Invalid =
+  const isStep2Invalid =
+    items.length === 0 ||
+    items.some((it) => !it.itemName.trim()) ||
     prices.length === 0 ||
     prices.some(
       (p) =>
@@ -454,12 +474,11 @@ export function MicePackageDrawer({ isOpen, onClose, editingPackage }: MicePacka
         (p.priceType === "qty" && (parseNumericInput(p.qty) < 1 || parseNumericInput(p.price) < 1)) ||
         (p.priceType === "nominal" && parseNumericInput(p.total) < 1)
     );
-  // Step 4 (Payment) and Step 5 (Complimentary & Bonus) are optional — no hard validation.
+  // Step 3 (Payment) and Step 4 (Complimentary & Bonus) are optional — no hard validation.
   const isNextDisabled =
     submitting ||
     (currentStep === 1 && isStep1Invalid) ||
-    (currentStep === 2 && isStep2Invalid) ||
-    (currentStep === 3 && isStep3Invalid);
+    (currentStep === 2 && isStep2Invalid);
 
   function handleNext() {
     if (currentStep === 1) {
@@ -473,16 +492,6 @@ export function MicePackageDrawer({ isOpen, onClose, editingPackage }: MicePacka
       }
       setCurrentStep(2);
     } else if (currentStep === 2) {
-      if (items.length === 0) {
-        toast.error("Tambahkan minimal satu item paket");
-        return;
-      }
-      if (items.some((it) => !it.itemName.trim())) {
-        toast.error("Setiap item wajib punya nama");
-        return;
-      }
-      setCurrentStep(3);
-    } else if (currentStep === 3) {
       if (prices.length === 0) {
         toast.error("Tambahkan minimal satu item harga");
         return;
@@ -503,11 +512,19 @@ export function MicePackageDrawer({ isOpen, onClose, editingPackage }: MicePacka
         toast.error("Total wajib diisi untuk tipe Nominal");
         return;
       }
+      if (items.length === 0) {
+        toast.error("Tambahkan minimal satu item paket");
+        return;
+      }
+      if (items.some((it) => !it.itemName.trim())) {
+        toast.error("Setiap item wajib punya nama");
+        return;
+      }
+      setCurrentStep(3);
+    } else if (currentStep === 3) {
       setCurrentStep(4);
     } else if (currentStep === 4) {
       setCurrentStep(5);
-    } else if (currentStep === 5) {
-      setCurrentStep(6);
     }
   }
 
@@ -686,7 +703,7 @@ export function MicePackageDrawer({ isOpen, onClose, editingPackage }: MicePacka
       const tcValue = termAndCondition.trim() && termAndCondition !== "<p></p>" ? termAndCondition : null;
       const crpValue =
         cancellationRefundPolicy.trim() && cancellationRefundPolicy !== "<p></p>" ? cancellationRefundPolicy : null;
-      const securityDepositValue = parseNumericInput(securityDeposit);
+      const closingValue = closingNote.trim() && closingNote !== "<p></p>" ? closingNote : null;
 
       if (isEdit) {
         const res = await updatePkg.mutateAsync({
@@ -698,7 +715,7 @@ export function MicePackageDrawer({ isOpen, onClose, editingPackage }: MicePacka
             notes: notes.trim() || null,
             paymentMethodId: paymentMethodId || null,
             ...(canEditTc
-              ? { securityDeposit: securityDepositValue, termAndCondition: tcValue, cancellationRefundPolicy: crpValue }
+              ? { termAndCondition: tcValue, cancellationRefundPolicy: crpValue, closingNote: closingValue }
               : {}),
             signature,
           },
@@ -716,7 +733,7 @@ export function MicePackageDrawer({ isOpen, onClose, editingPackage }: MicePacka
           notes: notes.trim() || null,
           paymentMethodId: paymentMethodId || null,
           ...(canEditTc
-            ? { securityDeposit: securityDepositValue, termAndCondition: tcValue, cancellationRefundPolicy: crpValue }
+            ? { termAndCondition: tcValue, cancellationRefundPolicy: crpValue, closingNote: closingValue }
             : {}),
           signature,
           category: "MICE",
@@ -885,13 +902,17 @@ export function MicePackageDrawer({ isOpen, onClose, editingPackage }: MicePacka
             </div>
           )}
 
-          {/* ─── Step 2: Item Paket ─── */}
+          {/* ─── Step 2: Item & Harga ─── */}
           {currentStep === 2 && (
-            <Tabs defaultValue="items">
+            <Tabs defaultValue="harga">
               <TabsList
                 variant="line"
                 className="h-auto w-full justify-start gap-1 rounded-none border-b border-border bg-transparent p-0 group-data-horizontal/tabs:h-auto"
               >
+                <TabsTrigger value="harga" className={TAB_TRIGGER_CLASS}>
+                  <TagPrice weight="BoldDuotone" className="size-4 shrink-0" />
+                  Harga
+                </TabsTrigger>
                 <TabsTrigger value="items" className={TAB_TRIGGER_CLASS}>
                   <ClipboardList weight="BoldDuotone" className="size-4 shrink-0" />
                   Items
@@ -902,11 +923,144 @@ export function MicePackageDrawer({ isOpen, onClose, editingPackage }: MicePacka
                 </TabsTrigger>
               </TabsList>
 
+              {/* ── Harga ─────────────────────────────────────────── */}
+              <TabsContent value="harga" keepMounted className="mt-4 animate-in fade-in duration-300 space-y-3">
+                <DndContext sensors={priceSensors} collisionDetection={closestCenter} onDragEnd={handlePriceDragEnd}>
+                  <SortableContext items={prices.map((p) => p.id)} strategy={verticalListSortingStrategy}>
+                    <div className="space-y-2">
+                      {prices.map((p) => (
+                        <SortableAccordionRow
+                          key={p.id}
+                          id={p.id}
+                          title={p.name}
+                          placeholder="Harga Baru"
+                          isOpen={!collapsedPrices.has(p.id)}
+                          onToggleOpen={() => togglePriceCollapse(p.id)}
+                          onRemove={() => removePrice(p.id)}
+                          titleVariant="value"
+                          valueBadge={formatRupiah(parseNumericInput(p.total))}
+                        >
+                          <div>
+                            <Label className={cn("text-xs font-medium text-foreground block mb-1")}>
+                              Nama <span className="text-destructive">*</span>
+                            </Label>
+                            <Input
+                              value={p.name}
+                              onChange={(e) => updatePriceName(p.id, e.target.value)}
+                              placeholder="Nama item harga"
+                              className={cn("text-sm font-medium")}
+                            />
+                          </div>
+
+                          <div>
+                            <Label className={cn("text-xs text-muted-foreground")}>Tipe Harga</Label>
+                            <div className="mt-1.5 grid grid-cols-2 gap-2">
+                              <button
+                                type="button"
+                                onClick={() => updatePriceType(p.id, "qty")}
+                                className={cn(
+                                  "rounded-xl border px-3 py-2 text-sm font-medium transition-colors cursor-pointer",
+                                  p.priceType === "qty"
+                                    ? "border-primary bg-primary/10 text-primary"
+                                    : "border-border text-muted-foreground hover:text-foreground",
+                                )}
+                              >
+                                Qty × Harga
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => updatePriceType(p.id, "nominal")}
+                                className={cn(
+                                  "rounded-xl border px-3 py-2 text-sm font-medium transition-colors cursor-pointer",
+                                  p.priceType === "nominal"
+                                    ? "border-primary bg-primary/10 text-primary"
+                                    : "border-border text-muted-foreground hover:text-foreground",
+                                )}
+                              >
+                                Nominal
+                              </button>
+                            </div>
+                          </div>
+
+                          {p.priceType === "qty" && (
+                            <div className={cn("grid grid-cols-2 gap-2")}>
+                              <div>
+                                <Label className={cn("text-xs text-muted-foreground")}>
+                                  Qty <span className="text-destructive">*</span>
+                                </Label>
+                                <Input
+                                  value={p.qty}
+                                  onChange={(e) => updatePriceQty(p.id, e.target.value)}
+                                  placeholder="0"
+                                  inputMode="numeric"
+                                  className={cn("mt-1 h-8 text-sm")}
+                                />
+                              </div>
+                              <div>
+                                <Label className={cn("text-xs text-muted-foreground")}>
+                                  Harga / unit <span className="text-destructive">*</span>
+                                </Label>
+                                <div className={cn("relative mt-1")}>
+                                  <span className={cn("absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground select-none")}>
+                                    Rp
+                                  </span>
+                                  <Input
+                                    value={p.price}
+                                    onChange={(e) => updatePricePerUnit(p.id, e.target.value)}
+                                    placeholder="0"
+                                    inputMode="numeric"
+                                    className={cn("h-8 text-sm pl-8")}
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                          )}
+
+                          <div>
+                            <Label className={cn("text-xs text-muted-foreground")}>
+                              Total {p.priceType === "nominal" && <span className="text-destructive">*</span>}
+                            </Label>
+                            <div className={cn("relative mt-1")}>
+                              <span className={cn("absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground select-none")}>
+                                Rp
+                              </span>
+                              {p.priceType === "qty" ? (
+                                <Input
+                                  value={p.total}
+                                  readOnly
+                                  className={cn("h-8 text-sm pl-8 bg-muted text-muted-foreground")}
+                                />
+                              ) : (
+                                <Input
+                                  value={p.total}
+                                  onChange={(e) => updatePriceTotalManual(p.id, e.target.value)}
+                                  placeholder="0"
+                                  inputMode="numeric"
+                                  className={cn("h-8 text-sm pl-8")}
+                                />
+                              )}
+                            </div>
+                          </div>
+                        </SortableAccordionRow>
+                      ))}
+                    </div>
+                  </SortableContext>
+                </DndContext>
+
+                <Button
+                  variant="outline"
+                  onClick={addPrice}
+                  className="w-full rounded-xl border-dashed"
+                >
+                  <AddCircle weight="BoldDuotone" className="h-4 w-4 mr-1" />Tambah Item Harga
+                </Button>
+              </TabsContent>
+
               {/* ── Items ─────────────────────────────────────────── */}
               <TabsContent value="items" keepMounted className="mt-4 animate-in fade-in duration-300 space-y-3">
                 <DndContext sensors={itemSensors} collisionDetection={closestCenter} onDragEnd={handleItemDragEnd}>
                   <SortableContext items={items.map((i) => i.id)} strategy={verticalListSortingStrategy}>
-                    <div className="space-y-3">
+                    <div className="space-y-2">
                       {items.map((item) => (
                         <SortableAccordionRow
                           key={item.id}
@@ -943,215 +1097,87 @@ export function MicePackageDrawer({ isOpen, onClose, editingPackage }: MicePacka
                   </SortableContext>
                 </DndContext>
 
-                {items.length === 0 && (
-                  <div className={cn("flex flex-col items-center justify-center py-8 text-muted-foreground")}>
-                    <ClipboardList weight="BoldDuotone" className={cn("h-9 w-9 mb-2 opacity-40")} />
-                    <p className="text-sm">Belum ada item. Tambahkan item pertama.</p>
-                  </div>
-                )}
-
                 <Button
                   variant="outline"
                   onClick={addItem}
-                  className={cn("w-full rounded-full border-dashed text-muted-foreground hover:bg-muted/50")}
+                  className="w-full rounded-xl border-dashed"
                 >
-                  <AddCircle weight="BoldDuotone" className={cn("h-4 w-4 mr-2")} />Tambah Item
+                  <AddCircle weight="BoldDuotone" className="h-4 w-4 mr-1" />Tambah Item
                 </Button>
               </TabsContent>
 
               {/* ── Tax & Deposit ─────────────────────────────────── */}
               <TabsContent value="tax-deposit" keepMounted className="mt-4 animate-in fade-in duration-300 space-y-3">
-                <DndContext sensors={taxDepositSensors} collisionDetection={closestCenter} onDragEnd={handleTaxDepositDragEnd}>
-                  <SortableContext items={taxDeposits.map((t) => t.id)} strategy={verticalListSortingStrategy}>
-                    <div className="space-y-3">
-                      {taxDeposits.map((t) => (
-                        <SortableAccordionRow
-                          key={t.id}
-                          id={t.id}
-                          title={t.name}
-                          placeholder="Tax / Deposit Baru"
-                          isOpen={!collapsedTaxDeposits.has(t.id)}
-                          onToggleOpen={() => toggleTaxDepositCollapse(t.id)}
-                          onRemove={() => removeTaxDeposit(t.id)}
-                        >
-                          <div>
-                            <Label className={cn("text-xs font-medium text-foreground block mb-1")}>Nama</Label>
-                            <Input
-                              value={t.name}
-                              onChange={(e) => updateTaxDepositName(t.id, e.target.value)}
-                              placeholder="Nama tax / deposit"
-                              className={cn("text-sm font-medium")}
-                            />
-                          </div>
-
-                          <div>
-                            <Label className={cn("text-xs text-muted-foreground block mb-1")}>Nominal</Label>
-                            <div className={cn("relative")}>
-                              <span className={cn("absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground select-none")}>
-                                Rp
-                              </span>
+                {taxDeposits.length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-6">
+                    Belum ada tax / deposit (opsional). Klik &quot;Tambah Tax / Deposit&quot; untuk menambahkan.
+                  </p>
+                ) : (
+                  <DndContext sensors={taxDepositSensors} collisionDetection={closestCenter} onDragEnd={handleTaxDepositDragEnd}>
+                    <SortableContext items={taxDeposits.map((t) => t.id)} strategy={verticalListSortingStrategy}>
+                      <div className="space-y-2">
+                        {taxDeposits.map((t) => (
+                          <SortableAccordionRow
+                            key={t.id}
+                            id={t.id}
+                            title={t.name}
+                            placeholder="Tax / Deposit Baru"
+                            isOpen={!collapsedTaxDeposits.has(t.id)}
+                            onToggleOpen={() => toggleTaxDepositCollapse(t.id)}
+                            onRemove={() => removeTaxDeposit(t.id)}
+                            titleVariant="value"
+                            valueBadge={formatRupiah(parseNumericInput(t.nominal))}
+                          >
+                            <div>
+                              <Label className={cn("text-xs font-medium text-foreground block mb-1")}>Nama</Label>
                               <Input
-                                value={t.nominal}
-                                onChange={(e) => updateTaxDepositNominal(t.id, e.target.value)}
-                                placeholder="0"
-                                inputMode="numeric"
-                                className={cn("h-8 text-sm pl-8")}
+                                value={t.name}
+                                onChange={(e) => updateTaxDepositName(t.id, e.target.value)}
+                                placeholder="Nama tax / deposit"
+                                className={cn("text-sm font-medium")}
                               />
                             </div>
-                          </div>
-                        </SortableAccordionRow>
-                      ))}
-                    </div>
-                  </SortableContext>
-                </DndContext>
 
-                {taxDeposits.length === 0 && (
-                  <div className={cn("flex flex-col items-center justify-center py-8 text-muted-foreground")}>
-                    <SafeSquare weight="BoldDuotone" className={cn("h-9 w-9 mb-2 opacity-40")} />
-                    <p className="text-sm">Belum ada tax / deposit (opsional).</p>
-                  </div>
-                )}
-
-                <Button
-                  variant="outline"
-                  onClick={addTaxDeposit}
-                  className={cn("w-full rounded-full border-dashed text-muted-foreground hover:bg-muted/50")}
-                >
-                  <AddCircle weight="BoldDuotone" className={cn("h-4 w-4 mr-2")} />Tambah Tax / Deposit
-                </Button>
-              </TabsContent>
-            </Tabs>
-          )}
-
-          {/* ─── Step 3: Harga ─── */}
-          {currentStep === 3 && (
-            <div className="space-y-3">
-              <DndContext sensors={priceSensors} collisionDetection={closestCenter} onDragEnd={handlePriceDragEnd}>
-                <SortableContext items={prices.map((p) => p.id)} strategy={verticalListSortingStrategy}>
-                  <div className="space-y-3">
-                    {prices.map((p) => (
-                      <SortableAccordionRow
-                        key={p.id}
-                        id={p.id}
-                        title={p.name}
-                        placeholder="Harga Baru"
-                        isOpen={!collapsedPrices.has(p.id)}
-                        onToggleOpen={() => togglePriceCollapse(p.id)}
-                        onRemove={() => removePrice(p.id)}
-                      >
-                        <div>
-                          <Label className={cn("text-xs font-medium text-foreground block mb-1")}>
-                            Nama <span className="text-destructive">*</span>
-                          </Label>
-                          <Input
-                            value={p.name}
-                            onChange={(e) => updatePriceName(p.id, e.target.value)}
-                            placeholder="Nama item harga"
-                            className={cn("text-sm font-medium")}
-                          />
-                        </div>
-
-                        <div>
-                          <Label className={cn("text-xs text-muted-foreground")}>Tipe Harga</Label>
-                          <Select value={p.priceType} onValueChange={(v) => updatePriceType(p.id, v as MicePriceTypeLocal)}>
-                            <SelectTrigger className={cn("mt-1 w-full h-8 text-sm")}>
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="qty">Qty × Harga</SelectItem>
-                              <SelectItem value="nominal">Nominal</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-
-                        {p.priceType === "qty" && (
-                          <div className={cn("grid grid-cols-2 gap-2")}>
                             <div>
-                              <Label className={cn("text-xs text-muted-foreground")}>
-                                Qty <span className="text-destructive">*</span>
-                              </Label>
-                              <Input
-                                value={p.qty}
-                                onChange={(e) => updatePriceQty(p.id, e.target.value)}
-                                placeholder="0"
-                                inputMode="numeric"
-                                className={cn("mt-1 h-8 text-sm")}
-                              />
-                            </div>
-                            <div>
-                              <Label className={cn("text-xs text-muted-foreground")}>
-                                Harga / unit <span className="text-destructive">*</span>
-                              </Label>
-                              <div className={cn("relative mt-1")}>
+                              <Label className={cn("text-xs text-muted-foreground block mb-1")}>Nominal</Label>
+                              <div className={cn("relative")}>
                                 <span className={cn("absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground select-none")}>
                                   Rp
                                 </span>
                                 <Input
-                                  value={p.price}
-                                  onChange={(e) => updatePricePerUnit(p.id, e.target.value)}
+                                  value={t.nominal}
+                                  onChange={(e) => updateTaxDepositNominal(t.id, e.target.value)}
                                   placeholder="0"
                                   inputMode="numeric"
                                   className={cn("h-8 text-sm pl-8")}
                                 />
                               </div>
                             </div>
-                          </div>
-                        )}
+                          </SortableAccordionRow>
+                        ))}
+                      </div>
+                    </SortableContext>
+                  </DndContext>
+                )}
 
-                        <div>
-                          <Label className={cn("text-xs text-muted-foreground")}>
-                            Total {p.priceType === "nominal" && <span className="text-destructive">*</span>}
-                          </Label>
-                          <div className={cn("relative mt-1")}>
-                            <span className={cn("absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground select-none")}>
-                              Rp
-                            </span>
-                            {p.priceType === "qty" ? (
-                              <Input
-                                value={p.total}
-                                disabled
-                                readOnly
-                                className={cn("h-8 text-sm pl-8 bg-muted/60 text-muted-foreground")}
-                              />
-                            ) : (
-                              <Input
-                                value={p.total}
-                                onChange={(e) => updatePriceTotalManual(p.id, e.target.value)}
-                                placeholder="0"
-                                inputMode="numeric"
-                                className={cn("h-8 text-sm pl-8")}
-                              />
-                            )}
-                          </div>
-                        </div>
-                      </SortableAccordionRow>
-                    ))}
-                  </div>
-                </SortableContext>
-              </DndContext>
-
-              {prices.length === 0 && (
-                <div className={cn("flex flex-col items-center justify-center py-8 text-muted-foreground")}>
-                  <TagPrice weight="BoldDuotone" className={cn("h-9 w-9 mb-2 opacity-40")} />
-                  <p className="text-sm">Belum ada item harga. Tambahkan item pertama.</p>
-                </div>
-              )}
-
-              <Button
-                variant="outline"
-                onClick={addPrice}
-                className={cn("w-full rounded-full border-dashed text-muted-foreground hover:bg-muted/50")}
-              >
-                <AddCircle weight="BoldDuotone" className={cn("h-4 w-4 mr-2")} />Tambah Item Harga
-              </Button>
-            </div>
+                <Button
+                  variant="outline"
+                  onClick={addTaxDeposit}
+                  className="w-full rounded-xl border-dashed"
+                >
+                  <AddCircle weight="BoldDuotone" className="h-4 w-4 mr-1" />Tambah Tax / Deposit
+                </Button>
+              </TabsContent>
+            </Tabs>
           )}
 
-          {/* ─── Step 4: Payment ─── */}
-          {currentStep === 4 && (
-            <div className="space-y-4">
+          {/* ─── Step 3: Payment ─── */}
+          {currentStep === 3 && (
+            <div className="rounded-2xl border bg-card p-5 space-y-3">
+              <p className="text-sm font-semibold text-foreground mb-1">Payment</p>
+
               <div>
-                <Label className={cn("text-sm font-medium text-foreground")}>Rekening Pembayaran</Label>
+                <Label className={LABEL_CLASS}>Rekening Pembayaran</Label>
                 <BankAccountSelect
                   value={paymentMethodId}
                   onChange={setPaymentMethodId}
@@ -1163,54 +1189,49 @@ export function MicePackageDrawer({ isOpen, onClose, editingPackage }: MicePacka
 
               {canEditTc ? (
                 <>
-                  <div>
-                    <Label className={cn("text-sm font-medium text-foreground")}>Security Deposit</Label>
-                    <div className={cn("relative mt-1")}>
-                      <span className={cn("absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground select-none")}>
-                        Rp
-                      </span>
-                      <Input
-                        value={securityDeposit}
-                        onChange={(e) => setSecurityDeposit(formatNumericDisplay(e.target.value))}
-                        placeholder="0"
-                        inputMode="numeric"
-                        className={cn("pl-8")}
-                      />
-                    </div>
-                  </div>
-
-                  <div className={cn("flex flex-col min-h-[220px]")}>
-                    <Label className={cn("text-sm font-medium text-foreground mb-1")}>Term &amp; Payment</Label>
+                  <div className={cn("flex flex-col")}>
+                    <Label className={cn(LABEL_CLASS, "mb-1")}>Term &amp; Payment</Label>
                     <TermConditionEditor
                       value={termAndCondition}
                       onChange={setTermAndCondition}
                       placeholder="Tulis Term & Payment di sini..."
-                      className="flex-1"
                       showVariablePanel={false}
+                      resizable
                     />
                   </div>
 
-                  <div className={cn("flex flex-col min-h-[220px]")}>
-                    <Label className={cn("text-sm font-medium text-foreground mb-1")}>Cancellation &amp; Refund Policy</Label>
+                  <div className={cn("flex flex-col")}>
+                    <Label className={cn(LABEL_CLASS, "mb-1")}>Cancellation &amp; Refund Policy</Label>
                     <TermConditionEditor
                       value={cancellationRefundPolicy}
                       onChange={setCancellationRefundPolicy}
                       placeholder="Tulis Cancellation & Refund Policy di sini..."
-                      className="flex-1"
                       showVariablePanel={false}
+                      resizable
+                    />
+                  </div>
+
+                  <div className={cn("flex flex-col")}>
+                    <Label className={cn(LABEL_CLASS, "mb-1")}>Closing</Label>
+                    <TermConditionEditor
+                      value={closingNote}
+                      onChange={setClosingNote}
+                      placeholder="We look forward to welcoming you and your team at [Venue] – [Location]. Should you require any further assistance, please do not hesitate to contact us."
+                      showVariablePanel={false}
+                      resizable
                     />
                   </div>
                 </>
               ) : (
                 <p className={cn("text-xs text-muted-foreground italic")}>
-                  Anda tidak punya akses untuk mengubah Security Deposit, Term &amp; Payment, atau Cancellation &amp; Refund Policy paket ini.
+                  Anda tidak punya akses untuk mengubah Term &amp; Payment, Cancellation &amp; Refund Policy, atau Closing paket ini.
                 </p>
               )}
             </div>
           )}
 
-          {/* ─── Step 5: Complimentary & Bonus ─── */}
-          {currentStep === 5 && (
+          {/* ─── Step 4: Complimentary & Bonus ─── */}
+          {currentStep === 4 && (
             <div className="space-y-3">
               <div className="rounded-2xl border bg-card p-5">
                 <Tabs defaultValue="bonus">
@@ -1689,8 +1710,8 @@ export function MicePackageDrawer({ isOpen, onClose, editingPackage }: MicePacka
             </div>
           )}
 
-          {/* ─── Step 6: Tanda Tangan ─── */}
-          {currentStep === 6 && (
+          {/* ─── Step 5: Tanda Tangan ─── */}
+          {currentStep === 5 && (
             <div className="space-y-4">
               <div className={cn("border border-border rounded-xl p-4 bg-muted/40 space-y-1")}>
                 <p className={cn("text-sm font-medium text-foreground")}>{packageName || "—"}</p>
@@ -1721,13 +1742,13 @@ export function MicePackageDrawer({ isOpen, onClose, editingPackage }: MicePacka
               {currentStep === 1 ? "Batal" : "Sebelumnya"}
             </Button>
             <Button
-              onClick={currentStep === 6 ? handleSubmit : handleNext}
+              onClick={currentStep === 5 ? handleSubmit : handleNext}
               className={cn("flex-1 cursor-pointer")}
-              disabled={isNextDisabled || (currentStep === 6 && !signature) || submitting}
+              disabled={isNextDisabled || (currentStep === 5 && !signature) || submitting}
             >
               {submitting
                 ? "Menyimpan..."
-                : currentStep < 6
+                : currentStep < 5
                 ? "Selanjutnya"
                 : isEdit
                 ? "Simpan Perubahan"

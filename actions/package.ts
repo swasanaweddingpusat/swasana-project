@@ -32,23 +32,25 @@ function permModuleFor(category: PkgCategory): "package" | "package-mice" {
 /**
  * termAndCondition is normally edited via the dedicated updatePackageTC() action
  * (gated by its own "term-&-condition" permission). The MICE drawer now also lets
- * termAndCondition — and, alongside it, the newer cancellationRefundPolicy field
- * (Step 4 "Cancellation & Refund Policy", same editor/gate as Term & Payment) —
- * ride along inside create/update payloads for convenience. We re-check the same
- * permission here and silently strip both fields when the caller lacks it,
- * instead of failing the whole create/update.
+ * termAndCondition — and, alongside it, cancellationRefundPolicy and closingNote
+ * (Step 4 "Cancellation & Refund Policy" / "Closing", same editor/gate as
+ * Term & Payment) — ride along inside create/update payloads for convenience.
+ * We re-check the same permission here and silently strip all three fields
+ * when the caller lacks it, instead of failing the whole create/update.
  */
 async function stripTermAndConditionIfUnauthorized<
-  T extends { termAndCondition?: string | null; cancellationRefundPolicy?: string | null }
+  T extends { termAndCondition?: string | null; cancellationRefundPolicy?: string | null; closingNote?: string | null }
 >(
   data: T,
   mod: "package" | "package-mice",
   session: Session
 ): Promise<T> {
-  if (data.termAndCondition === undefined && data.cancellationRefundPolicy === undefined) return data;
+  if (data.termAndCondition === undefined && data.cancellationRefundPolicy === undefined && data.closingNote === undefined) {
+    return data;
+  }
   const allowed = await hasPermission(session.user.roleId, mod, "term-&-condition", session.user.isSuperAdmin);
   if (allowed) return data;
-  const { termAndCondition: _ignoredTc, cancellationRefundPolicy: _ignoredCrp, ...rest } = data;
+  const { termAndCondition: _ignoredTc, cancellationRefundPolicy: _ignoredCrp, closingNote: _ignoredClosing, ...rest } = data;
   return rest as T;
 }
 
