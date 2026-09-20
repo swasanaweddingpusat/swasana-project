@@ -401,6 +401,7 @@ export async function saveMicePackage(data: unknown): Promise<
           data: {
             packageId,
             name: p.name,
+            description: p.description ?? null,
             priceType: p.priceType,
             qty: p.priceType === "QTY" ? (p.qty ?? null) : null,
             price: p.priceType === "QTY" ? (p.price ?? null) : null,

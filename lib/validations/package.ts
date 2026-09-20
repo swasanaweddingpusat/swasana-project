@@ -63,6 +63,7 @@ export const micePriceTypeSchema = z.enum(["QTY", "NOMINAL"]);
 export const micePriceSchema = z
   .object({
     name: z.string().min(1, "Nama item harga wajib diisi"),
+    description: z.string().nullable().optional(),
     priceType: micePriceTypeSchema,
     qty: z.number().int().nullable().optional(),
     price: z.number().int().nullable().optional(),

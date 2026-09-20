@@ -730,17 +730,18 @@ model PackageMiceItem {
 // packages: QTY rows carry qty+price and derive total = qty*price on the client;
 // NOMINAL rows carry only a directly-editable total (qty/price stay null).
 model PackageMicePrice {
-  id        String        @id @default(uuid())
-  packageId String
-  name      String
-  priceType MicePriceType @default(QTY)
-  qty       Int?
-  price     Int?
-  total     Int           @default(0)
-  sortOrder Int           @default(0)
-  createdAt DateTime      @default(now())
-  updatedAt DateTime      @updatedAt
-  package   Package       @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  id          String        @id @default(uuid())
+  packageId   String
+  name        String
+  description String?
+  priceType   MicePriceType @default(QTY)
+  qty         Int?
+  price       Int?
+  total       Int           @default(0)
+  sortOrder   Int           @default(0)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  package     Package       @relation(fields: [packageId], references: [id], onDelete: Cascade)
 
   @@index([packageId])
   @@map("package_mice_prices")

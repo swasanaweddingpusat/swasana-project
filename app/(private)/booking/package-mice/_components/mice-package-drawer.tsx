@@ -69,6 +69,7 @@ type MicePriceTypeLocal = "qty" | "nominal";
 interface MicePriceState {
   id: string;
   name: string;
+  description: string;
   priceType: MicePriceTypeLocal;
   qty: string;
   price: string;
@@ -417,6 +418,7 @@ export function MicePackageDrawer({ isOpen, onClose, editingPackage }: MicePacka
         (editingPackage.micePrices ?? []).map((p) => ({
           id: p.id,
           name: p.name,
+          description: p.description ?? "",
           priceType: p.priceType === "NOMINAL" ? "nominal" : "qty",
           qty: p.qty ? formatNumericDisplay(p.qty) : "",
           price: p.price ? formatNumericDisplay(p.price) : "",
@@ -641,6 +643,7 @@ export function MicePackageDrawer({ isOpen, onClose, editingPackage }: MicePacka
       {
         id: `temp-price-${prev.length}-${Math.round(performance.now())}`,
         name: "",
+        description: "",
         priceType: "qty",
         qty: "",
         price: "",
@@ -651,6 +654,10 @@ export function MicePackageDrawer({ isOpen, onClose, editingPackage }: MicePacka
 
   function updatePriceName(priceId: string, value: string) {
     setPrices((prev) => prev.map((p) => (p.id === priceId ? { ...p, name: value } : p)));
+  }
+
+  function updatePriceDescription(priceId: string, value: string) {
+    setPrices((prev) => prev.map((p) => (p.id === priceId ? { ...p, description: value } : p)));
   }
 
   function updatePriceType(priceId: string, value: MicePriceTypeLocal) {
@@ -718,9 +725,9 @@ export function MicePackageDrawer({ isOpen, onClose, editingPackage }: MicePacka
           if (p.priceType === "qty") {
             const qty = parseNumericInput(p.qty);
             const price = parseNumericInput(p.price);
-            return { name: p.name.trim(), priceType: "QTY" as const, qty, price, total: qty * price };
+            return { name: p.name.trim(), description: p.description.trim() || null, priceType: "QTY" as const, qty, price, total: qty * price };
           }
-          return { name: p.name.trim(), priceType: "NOMINAL" as const, qty: null, price: null, total: parseNumericInput(p.total) };
+          return { name: p.name.trim(), description: p.description.trim() || null, priceType: "NOMINAL" as const, qty: null, price: null, total: parseNumericInput(p.total) };
         });
 
       const cleanComplimentaries = complimentaries
@@ -913,6 +920,15 @@ export function MicePackageDrawer({ isOpen, onClose, editingPackage }: MicePacka
                               onChange={(e) => updatePriceName(p.id, e.target.value)}
                               placeholder="Nama item harga"
                               className={cn("text-sm font-medium")}
+                            />
+                          </div>
+
+                          <div>
+                            <Label className={cn("text-xs text-muted-foreground block mb-1")}>Deskripsi (opsional)</Label>
+                            <SimpleEditor
+                              value={p.description}
+                              onChange={(html) => updatePriceDescription(p.id, html)}
+                              placeholder="Deskripsi item harga (opsional)..."
                             />
                           </div>
 
