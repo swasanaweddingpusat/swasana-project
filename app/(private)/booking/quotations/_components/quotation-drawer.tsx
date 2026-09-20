@@ -2124,6 +2124,32 @@ export function QuotationDrawer({
                     )}
                   />
 
+                  {/* ── Pilih Package MICE ────────────────────────────── */}
+                  {watchedVenueId && (
+                    <div className="rounded-xl border border-border bg-muted/30 p-3 space-y-2">
+                      <div className="flex items-center gap-1.5">
+                        <Box weight="BoldDuotone" className="h-4 w-4 text-primary" />
+                        <p className={LABEL_CLASS}>Select MICE Package</p>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        {micePackages.length === 0
+                          ? "No approved MICE packages for this venue yet."
+                          : "Select a package — its items will REPLACE the item list below (can be edited afterward)."}
+                      </p>
+                      <SearchableSelect
+                        options={micePackages.map((p) => ({ id: p.id, name: p.packageName }))}
+                        value={selectedPackageId}
+                        onChange={(id) => {
+                          setSelectedPackageId(id);
+                          handleApplyPackage(id);
+                        }}
+                        placeholder="Search & select a MICE package for this venue..."
+                        searchPlaceholder="Search package..."
+                        emptyText="No MICE packages"
+                      />
+                    </div>
+                  )}
+
                   {/* Event Date — bisa single atau rentang (klik 1 tanggal = single, klik ke-2 = rentang) */}
                   <FormField
                     control={form.control}
@@ -2283,32 +2309,6 @@ export function QuotationDrawer({
 
               {/* ════════════════ STEP 2 — ITEMS + RINGKASAN ════════════════ */}
               <div className={cn(step !== 2 && "hidden", "space-y-4")}>
-                {/* ── Pilih Package MICE ────────────────────────────── */}
-                {watchedVenueId && (
-                  <div className="rounded-xl border border-border bg-muted/30 p-3 space-y-2">
-                    <div className="flex items-center gap-1.5">
-                      <Box weight="BoldDuotone" className="h-4 w-4 text-primary" />
-                      <p className={LABEL_CLASS}>Select MICE Package</p>
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      {micePackages.length === 0
-                        ? "No approved MICE packages for this venue yet."
-                        : "Select a package — its items will REPLACE the item list below (can be edited afterward)."}
-                    </p>
-                    <SearchableSelect
-                      options={micePackages.map((p) => ({ id: p.id, name: p.packageName }))}
-                      value={selectedPackageId}
-                      onChange={(id) => {
-                        setSelectedPackageId(id);
-                        handleApplyPackage(id);
-                      }}
-                      placeholder="Search & select a MICE package for this venue..."
-                      searchPlaceholder="Search package..."
-                      emptyText="No MICE packages"
-                    />
-                  </div>
-                )}
-
                 {/* ── Harga / Items / Additional / Tax & Deposit ──────── */}
                 <Tabs defaultValue="harga">
                   <TabsList
