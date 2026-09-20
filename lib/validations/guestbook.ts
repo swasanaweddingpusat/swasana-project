@@ -41,7 +41,7 @@ export const createGuestbookEntrySchema = z
     venueId: z.string().optional().nullable(),
     checkInAt: z.string().min(1, 'Tanggal berkunjung wajib diisi'),
     notes: z.string().optional().nullable(),
-    visitStatus: z.enum(['cold', 'warm', 'hot', 'to_be_discuss', 'deal', 'lost']).optional().nullable(),
+    visitStatus: z.enum(['cold', 'warm', 'hot', 'done_visit', 'to_be_discuss', 'deal', 'lost']).optional().nullable(),
     sourceOfInformationId: z.string().optional().nullable(),
     packageId: z.string().optional().nullable(),
     segmentId: z.string().optional().nullable(),
@@ -99,7 +99,7 @@ export const checkOutGuestbookEntrySchema = z.object({
 });
 
 export const updateGuestbookEntrySchema = z.object({
-  visitStatus: z.enum(['cold', 'warm', 'hot', 'to_be_discuss', 'deal', 'lost']).optional().nullable(),
+  visitStatus: z.enum(['cold', 'warm', 'hot', 'done_visit', 'to_be_discuss', 'deal', 'lost']).optional().nullable(),
   notes: z.string().optional().nullable(),
   sourceOfInformationId: z.string().optional().nullable(),
   packageId: z.string().optional().nullable(),

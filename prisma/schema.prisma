@@ -942,6 +942,7 @@ enum GuestVisitStatus {
   cold
   warm
   hot
+  done_visit
   to_be_discuss
   deal
   lost
