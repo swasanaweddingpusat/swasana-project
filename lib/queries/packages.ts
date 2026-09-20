@@ -4,6 +4,9 @@ import { db } from "@/lib/db";
 const packageInclude = {
   venue: { select: { id: true, name: true, address: true, brandId: true } },
   paymentMethod: { select: { id: true, bankName: true, bankAccountNumber: true, bankRecipient: true } },
+  eventType: { select: { id: true, name: true } },
+  createdBy: { select: { id: true, fullName: true } },
+  updatedBy: { select: { id: true, fullName: true } },
   vendorItems: { orderBy: { sortOrder: "asc" as const } },
   internalItems: { orderBy: { sortOrder: "asc" as const } },
   miceItems: { orderBy: { sortOrder: "asc" as const } },
@@ -99,7 +102,6 @@ export async function getMicePackagesForQuotation(venueId?: string) {
     where: {
       category: "MICE",
       available: true,
-      approvalStatus: "approved",
       ...(venueId ? { venueId } : {}),
     },
     orderBy: { createdAt: "desc" },

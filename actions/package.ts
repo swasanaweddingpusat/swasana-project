@@ -13,11 +13,7 @@ import {
   updatePackageSchema,
   createVendorItemSchema,
   createInternalItemSchema,
-  miceItemSchema,
-  saveMicePricesSchema,
-  savePackageComplimentariesSchema,
-  savePackageBonusesSchema,
-  savePackageTaxDepositsSchema,
+  saveMicePackageSchema,
 } from "@/lib/validations/package";
 import type { Session } from "next-auth";
 
@@ -56,21 +52,6 @@ async function stripTermAndConditionIfUnauthorized<
 
 // ─── Package CRUD ────────────────────────────────────────────────────────────
 
-export async function getPackageCreatedBy(packageId: string): Promise<string | null> {
-  try {
-    const pkg = await db.package.findUnique({ where: { id: packageId }, select: { category: true } });
-    const mod = pkg ? permModuleFor(pkg.category as PkgCategory) : "package";
-    const record = await db.approvalRecord.findUnique({
-      where: { module_entityId: { module: mod, entityId: packageId } },
-      select: { createdBy: { select: { fullName: true } } },
-    });
-    return record?.createdBy?.fullName ?? null;
-  } catch (e) {
-    console.error("[getPackageCreatedBy]", e);
-    return null;
-  }
-}
-
 export async function createPackage(data: unknown): Promise<
   { success: true; data: { id: string; packageName: string } } | { success: false; error: string }
 > {
@@ -88,68 +69,92 @@ export async function createPackage(data: unknown): Promise<
     const { signature, ...rawPkgData } = parsed.data;
     const pkgData = await stripTermAndConditionIfUnauthorized(rawPkgData, mod, session!);
 
-    const steps = await resolveApprovalSteps(mod);
-
     const packageId = crypto.randomUUID();
-    const recordId = crypto.randomUUID();
-    const now = new Date();
-    const creatorRoleId = session!.user.roleId;
-    const creatorStepIdx = steps
-      ? steps.findIndex((s) => s.approverType === "role" && s.approverRoleId === creatorRoleId)
-      : -1;
-    // allAutoApproved: only when flow has exactly 1 step and creator matches that step
-    const allAutoApproved =
-      steps !== null &&
-      steps.length > 0 &&
-      steps.every((_, i) => i === creatorStepIdx);
+    const creatorProfileId = session!.user.profileId!;
 
-    const ops: Prisma.PrismaPromise<unknown>[] = [
-      db.package.create({ data: { id: packageId, ...pkgData, approvalStatus: "pending" } }),
-      ...(steps && steps.length > 0
-        ? [
-            db.approvalRecord.create({
-              data: {
-                id: recordId,
-                module: mod,
-                entityId: packageId,
-                status: "pending",
-                createdById: session!.user.profileId!,
-              },
-            }),
-            ...steps.map((step, i) => {
-              // Auto-approve ONLY the step whose approverRoleId matches the creator's role.
-              const shouldAutoApprove = creatorStepIdx >= 0 && i === creatorStepIdx;
-              return db.approvalRecordStep.create({
+    if (mod === "package-mice") {
+      // MICE packages have no approval flow — created directly as approved.
+      await db.$transaction([
+        db.package.create({
+          data: {
+            id: packageId,
+            ...pkgData,
+            approvalStatus: "approved",
+            createdById: creatorProfileId,
+            updatedById: creatorProfileId,
+          },
+        }),
+      ]);
+    } else {
+      const steps = await resolveApprovalSteps(mod);
+      const recordId = crypto.randomUUID();
+      const now = new Date();
+      const creatorRoleId = session!.user.roleId;
+      const creatorStepIdx = steps
+        ? steps.findIndex((s) => s.approverType === "role" && s.approverRoleId === creatorRoleId)
+        : -1;
+      // allAutoApproved: only when flow has exactly 1 step and creator matches that step
+      const allAutoApproved =
+        steps !== null &&
+        steps.length > 0 &&
+        steps.every((_, i) => i === creatorStepIdx);
+
+      const ops: Prisma.PrismaPromise<unknown>[] = [
+        db.package.create({
+          data: {
+            id: packageId,
+            ...pkgData,
+            approvalStatus: "pending",
+            createdById: creatorProfileId,
+            updatedById: creatorProfileId,
+          },
+        }),
+        ...(steps && steps.length > 0
+          ? [
+              db.approvalRecord.create({
                 data: {
-                  recordId,
-                  stepOrder: step.sortOrder,
-                  approverType: step.approverType,
-                  approverRoleId: step.approverRoleId,
-                  approverUserId: null,
-                  status: shouldAutoApprove ? "approved" : "pending",
-                  decidedById: shouldAutoApprove ? session!.user.profileId! : null,
-                  decidedAt: shouldAutoApprove ? now : null,
-                  signature: shouldAutoApprove ? (signature ?? null) : null,
+                  id: recordId,
+                  module: mod,
+                  entityId: packageId,
+                  status: "pending",
+                  createdById: creatorProfileId,
                 },
-              });
-            }),
-            ...(allAutoApproved
-              ? [
-                  db.approvalRecord.update({
-                    where: { id: recordId },
-                    data: { status: "approved" },
-                  }),
-                  db.package.update({
-                    where: { id: packageId },
-                    data: { approvalStatus: "approved" },
-                  }),
-                ]
-              : []),
-          ]
-        : []),
-    ];
+              }),
+              ...steps.map((step, i) => {
+                // Auto-approve ONLY the step whose approverRoleId matches the creator's role.
+                const shouldAutoApprove = creatorStepIdx >= 0 && i === creatorStepIdx;
+                return db.approvalRecordStep.create({
+                  data: {
+                    recordId,
+                    stepOrder: step.sortOrder,
+                    approverType: step.approverType,
+                    approverRoleId: step.approverRoleId,
+                    approverUserId: null,
+                    status: shouldAutoApprove ? "approved" : "pending",
+                    decidedById: shouldAutoApprove ? creatorProfileId : null,
+                    decidedAt: shouldAutoApprove ? now : null,
+                    signature: shouldAutoApprove ? (signature ?? null) : null,
+                  },
+                });
+              }),
+              ...(allAutoApproved
+                ? [
+                    db.approvalRecord.update({
+                      where: { id: recordId },
+                      data: { status: "approved" },
+                    }),
+                    db.package.update({
+                      where: { id: packageId },
+                      data: { approvalStatus: "approved" },
+                    }),
+                  ]
+                : []),
+            ]
+          : []),
+      ];
 
-    await db.$transaction(ops);
+      await db.$transaction(ops);
+    }
 
     await logAudit({
       userId: session!.user.id,
@@ -187,84 +192,95 @@ export async function updatePackage(id: string, data: unknown): Promise<
 
   const pkgData = await stripTermAndConditionIfUnauthorized(rawPkgData, mod, session!);
 
-  // Read-only queries before transaction
-  const [steps, existingApproval] = await Promise.all([
-    resolveApprovalSteps(mod),
-    db.approvalRecord.findUnique({
-      where: { module_entityId: { module: mod, entityId: id } },
-      select: { id: true },
-    }),
-  ]);
-
   try {
-    const recordId = existingApproval?.id ?? crypto.randomUUID();
-    const now = new Date();
-    const creatorRoleId = session!.user.roleId;
-    const creatorStepIdx = steps
-      ? steps.findIndex((s) => s.approverType === "role" && s.approverRoleId === creatorRoleId)
-      : -1;
-    // allAutoApproved: only when flow has exactly 1 step and creator matches that step
-    const allAutoApproved =
-      steps !== null &&
-      steps.length > 0 &&
-      steps.every((_, i) => i === creatorStepIdx);
+    const updaterProfileId = session!.user.profileId!;
 
-    const ops: Prisma.PrismaPromise<unknown>[] = [
-      db.package.update({ where: { id }, data: { ...pkgData, approvalStatus: "pending" } }),
-      ...(steps && steps.length > 0
-        ? [
-            db.approvalRecordStep.deleteMany({ where: { recordId } }),
-            existingApproval
-              ? db.approvalRecord.update({
-                  where: { id: existingApproval.id },
-                  data: {
-                    status: "pending",
-                    updatedById: session!.user.profileId!,
-                  },
-                })
-              : db.approvalRecord.create({
-                  data: {
-                    id: recordId,
-                    module: mod,
-                    entityId: id,
-                    status: "pending",
-                    createdById: session!.user.profileId!,
-                  },
-                }),
-            ...steps.map((step, i) => {
-              // Auto-approve ONLY the step whose approverRoleId matches the editor's role.
-              const shouldAutoApprove = creatorStepIdx >= 0 && i === creatorStepIdx;
-              return db.approvalRecordStep.create({
-                data: {
-                  recordId,
-                  stepOrder: step.sortOrder,
-                  approverType: step.approverType,
-                  approverRoleId: step.approverRoleId,
-                  approverUserId: null,
-                  status: shouldAutoApprove ? "approved" : "pending",
-                  decidedById: shouldAutoApprove ? session!.user.profileId! : null,
-                  decidedAt: shouldAutoApprove ? now : null,
-                  signature: shouldAutoApprove ? (signature ?? null) : null,
-                },
-              });
-            }),
-            ...(allAutoApproved
-              ? [
-                  db.approvalRecord.update({
-                    where: { id: recordId },
-                    data: { status: "approved" },
-                  }),
-                  db.package.update({
-                    where: { id },
-                    data: { approvalStatus: "approved" },
-                  }),
-                ]
-              : []),
-          ]
-        : []),
-    ];
+    if (mod === "package-mice") {
+      // MICE packages have no approval flow — just update, keep approvalStatus.
+      await db.$transaction([
+        db.package.update({
+          where: { id },
+          data: { ...pkgData, updatedById: updaterProfileId },
+        }),
+      ]);
+    } else {
+      const [steps, existingApproval] = await Promise.all([
+        resolveApprovalSteps(mod),
+        db.approvalRecord.findUnique({
+          where: { module_entityId: { module: mod, entityId: id } },
+          select: { id: true },
+        }),
+      ]);
 
-    await db.$transaction(ops);
+      const recordId = existingApproval?.id ?? crypto.randomUUID();
+      const now = new Date();
+      const creatorRoleId = session!.user.roleId;
+      const creatorStepIdx = steps
+        ? steps.findIndex((s) => s.approverType === "role" && s.approverRoleId === creatorRoleId)
+        : -1;
+      // allAutoApproved: only when flow has exactly 1 step and creator matches that step
+      const allAutoApproved =
+        steps !== null &&
+        steps.length > 0 &&
+        steps.every((_, i) => i === creatorStepIdx);
+
+      const ops: Prisma.PrismaPromise<unknown>[] = [
+        db.package.update({ where: { id }, data: { ...pkgData, approvalStatus: "pending", updatedById: updaterProfileId } }),
+        ...(steps && steps.length > 0
+          ? [
+              db.approvalRecordStep.deleteMany({ where: { recordId } }),
+              existingApproval
+                ? db.approvalRecord.update({
+                    where: { id: existingApproval.id },
+                    data: {
+                      status: "pending",
+                      updatedById: updaterProfileId,
+                    },
+                  })
+                : db.approvalRecord.create({
+                    data: {
+                      id: recordId,
+                      module: mod,
+                      entityId: id,
+                      status: "pending",
+                      createdById: updaterProfileId,
+                    },
+                  }),
+              ...steps.map((step, i) => {
+                // Auto-approve ONLY the step whose approverRoleId matches the editor's role.
+                const shouldAutoApprove = creatorStepIdx >= 0 && i === creatorStepIdx;
+                return db.approvalRecordStep.create({
+                  data: {
+                    recordId,
+                    stepOrder: step.sortOrder,
+                    approverType: step.approverType,
+                    approverRoleId: step.approverRoleId,
+                    approverUserId: null,
+                    status: shouldAutoApprove ? "approved" : "pending",
+                    decidedById: shouldAutoApprove ? updaterProfileId : null,
+                    decidedAt: shouldAutoApprove ? now : null,
+                    signature: shouldAutoApprove ? (signature ?? null) : null,
+                  },
+                });
+              }),
+              ...(allAutoApproved
+                ? [
+                    db.approvalRecord.update({
+                      where: { id: recordId },
+                      data: { status: "approved" },
+                    }),
+                    db.package.update({
+                      where: { id },
+                      data: { approvalStatus: "approved" },
+                    }),
+                  ]
+                : []),
+            ]
+          : []),
+      ];
+
+      await db.$transaction(ops);
+    }
 
     if (paxChanged) {
       await logAudit({
@@ -289,6 +305,162 @@ export async function updatePackage(id: string, data: unknown): Promise<
   } catch (e) {
     console.error("[updatePackage]", e);
     return { success: false, error: "Terjadi kesalahan." };
+  }
+}
+
+// ─── MICE Package save (create/edit + all sub-collections in ONE transaction) ──
+
+export async function saveMicePackage(data: unknown): Promise<
+  { success: true; data: { id: string } } | { success: false; error: string }
+> {
+  const parsed = saveMicePackageSchema.safeParse(data);
+  if (!parsed.success) return { success: false, error: parsed.error.issues[0].message };
+
+  const { id, ...rest } = parsed.data;
+  const isEdit = !!id;
+
+  const { session, error } = await requirePermission({ module: "package-mice", action: isEdit ? "edit" : "create" });
+  if (error) return { success: false, error };
+  if (!mutationLimiter.check(`mice-pkg-save:${session!.user.id}`)) return { success: false, ...rateLimitError() };
+
+  try {
+    const profileId = session!.user.profileId!;
+    const packageId = id ?? crypto.randomUUID();
+
+    const tc = await stripTermAndConditionIfUnauthorized(
+      {
+        termAndCondition: rest.termAndCondition,
+        cancellationRefundPolicy: rest.cancellationRefundPolicy,
+        closingNote: rest.closingNote,
+      },
+      "package-mice",
+      session!,
+    );
+
+    const ops: Prisma.PrismaPromise<unknown>[] = [];
+
+    if (isEdit) {
+      ops.push(
+        db.package.update({
+          where: { id: packageId },
+          data: {
+            packageName: rest.packageName,
+            available: rest.available,
+            venueId: rest.venueId ?? null,
+            eventTypeId: rest.eventTypeId ?? null,
+            notes: rest.notes ?? null,
+            paymentMethodId: rest.paymentMethodId ?? null,
+            ...tc,
+            updatedById: profileId,
+          },
+        }),
+      );
+    } else {
+      ops.push(
+        db.package.create({
+          data: {
+            id: packageId,
+            packageName: rest.packageName,
+            available: rest.available,
+            venueId: rest.venueId ?? null,
+            eventTypeId: rest.eventTypeId ?? null,
+            notes: rest.notes ?? null,
+            paymentMethodId: rest.paymentMethodId ?? null,
+            ...tc,
+            category: "MICE",
+            approvalStatus: "approved",
+            createdById: profileId,
+            updatedById: profileId,
+          },
+        }),
+      );
+    }
+
+    ops.push(db.packageMiceItem.deleteMany({ where: { packageId } }));
+    ops.push(
+      ...rest.items.map((it, i) =>
+        db.packageMiceItem.create({
+          data: { packageId, itemName: it.itemName, itemDescription: it.itemDescription ?? "", sortOrder: i },
+        }),
+      ),
+    );
+
+    ops.push(db.packageMiceTaxDeposit.deleteMany({ where: { packageId } }));
+    ops.push(
+      ...rest.taxDeposits.map((td, i) =>
+        db.packageMiceTaxDeposit.create({
+          data: { packageId, name: td.name, nominal: td.nominal, sortOrder: i },
+        }),
+      ),
+    );
+
+    ops.push(db.packageMicePrice.deleteMany({ where: { packageId } }));
+    ops.push(
+      ...rest.prices.map((p, i) =>
+        db.packageMicePrice.create({
+          data: {
+            packageId,
+            name: p.name,
+            priceType: p.priceType,
+            qty: p.priceType === "QTY" ? (p.qty ?? null) : null,
+            price: p.priceType === "QTY" ? (p.price ?? null) : null,
+            total: p.total,
+            sortOrder: i,
+          },
+        }),
+      ),
+    );
+
+    ops.push(db.packageComplimentary.deleteMany({ where: { packageId } }));
+    ops.push(
+      ...rest.complimentaries.map((c, i) =>
+        db.packageComplimentary.create({
+          data: {
+            packageId,
+            complimentaryId: c.complimentaryId ?? null,
+            name: c.name,
+            price: c.price,
+            isShowPrice: c.isShowPrice,
+            description: c.description ?? null,
+            qty: c.qty,
+            sortOrder: i,
+          },
+        }),
+      ),
+    );
+
+    ops.push(db.packageBonus.deleteMany({ where: { packageId } }));
+    ops.push(
+      ...rest.bonuses.map((b, i) =>
+        db.packageBonus.create({
+          data: {
+            packageId,
+            bonusId: b.bonusId ?? null,
+            name: b.name,
+            price: b.price,
+            description: b.description ?? null,
+            qty: b.qty,
+            sortOrder: i,
+          },
+        }),
+      ),
+    );
+
+    await db.$transaction(ops);
+
+    await logAudit({
+      userId: session!.user.id,
+      action: isEdit ? "packages.update" : "packages.create",
+      entityType: "package-mice",
+      entityId: packageId,
+      description: isEdit ? `Updated MICE package "${rest.packageName}"` : `Created MICE package "${rest.packageName}"`,
+    });
+
+    revalidateTag("packages", "max");
+    return { success: true, data: { id: packageId } };
+  } catch (e) {
+    console.error("[saveMicePackage]", e);
+    return { success: false, error: "Terjadi kesalahan saat menyimpan paket MICE." };
   }
 }
 
@@ -352,8 +524,10 @@ export async function duplicatePackage(id: string): Promise<
           margin: source.margin,
           sellingPrice: source.sellingPrice,
           termAndCondition: source.termAndCondition,
-          approvalStatus: "draft",
+          approvalStatus: source.category === "MICE" ? "approved" : "draft",
           available: false,
+          createdById: session!.user.profileId!,
+          updatedById: session!.user.profileId!,
         },
       }),
       ...source.categoryPrices.map((c) =>
@@ -519,261 +693,6 @@ export async function saveInternalItems(
     return { success: true };
   } catch (e) {
     console.error("[saveInternalItems]", e);
-    return { success: false, error: "Terjadi kesalahan." };
-  }
-}
-
-// ─── MICE Items ───────────────────────────────────────────────────────────────
-
-export async function saveMiceItems(
-  packageId: string,
-  items: { itemName: string; itemDescription: string }[]
-): Promise<{ success: true } | { success: false; error: string }> {
-  const pkg = await db.package.findUnique({ where: { id: packageId }, select: { category: true } });
-  const mod = permModuleFor((pkg?.category ?? "MICE") as PkgCategory);
-  const { session, error } = await requirePermission({ module: mod, action: "edit" });
-  if (error) return { success: false, error };
-  if (!mutationLimiter.check(`mice-items:${session!.user.id}`)) return { success: false, ...rateLimitError() };
-
-  for (const item of items) {
-    const parsed = miceItemSchema.safeParse(item);
-    if (!parsed.success) return { success: false, error: parsed.error.issues[0].message };
-  }
-
-  try {
-    await db.$transaction([
-      db.packageMiceItem.deleteMany({ where: { packageId } }),
-      ...items.map((item, i) =>
-        db.packageMiceItem.create({
-          data: {
-            packageId,
-            itemName: item.itemName,
-            itemDescription: item.itemDescription ?? "",
-            sortOrder: i,
-          },
-        })
-      ),
-    ]);
-
-    await logAudit({
-      userId: session!.user.id,
-      action: "package.save_mice_items",
-      entityType: mod,
-      entityId: packageId,
-      description: `Saved ${items.length} MICE item(s) for package ${packageId}`,
-    });
-
-    revalidateTag("packages", "max");
-    return { success: true };
-  } catch (e) {
-    console.error("[saveMiceItems]", e);
-    return { success: false, error: "Terjadi kesalahan." };
-  }
-}
-
-// ─── MICE Prices ("Harga" step — separate collection from miceItems) ─────────
-
-export async function saveMicePrices(
-  packageId: string,
-  prices: { name: string; priceType: "QTY" | "NOMINAL"; qty?: number | null; price?: number | null; total: number }[]
-): Promise<{ success: true } | { success: false; error: string }> {
-  const pkg = await db.package.findUnique({ where: { id: packageId }, select: { category: true } });
-  const mod = permModuleFor((pkg?.category ?? "MICE") as PkgCategory);
-  const { session, error } = await requirePermission({ module: mod, action: "edit" });
-  if (error) return { success: false, error };
-  if (!mutationLimiter.check(`mice-prices:${session!.user.id}`)) return { success: false, ...rateLimitError() };
-
-  const parsed = saveMicePricesSchema.safeParse(prices);
-  if (!parsed.success) return { success: false, error: parsed.error.issues[0].message };
-
-  try {
-    await db.$transaction([
-      db.packageMicePrice.deleteMany({ where: { packageId } }),
-      ...parsed.data.map((item, i) =>
-        db.packageMicePrice.create({
-          data: {
-            packageId,
-            name: item.name,
-            priceType: item.priceType,
-            qty: item.priceType === "QTY" ? (item.qty ?? null) : null,
-            price: item.priceType === "QTY" ? (item.price ?? null) : null,
-            total: item.total,
-            sortOrder: i,
-          },
-        })
-      ),
-    ]);
-
-    await logAudit({
-      userId: session!.user.id,
-      action: "package.save_mice_prices",
-      entityType: mod,
-      entityId: packageId,
-      description: `Saved ${parsed.data.length} MICE price item(s) for package ${packageId}`,
-    });
-
-    revalidateTag("packages", "max");
-    return { success: true };
-  } catch (e) {
-    console.error("[saveMicePrices]", e);
-    return { success: false, error: "Terjadi kesalahan." };
-  }
-}
-
-// ─── MICE Tax & Deposit ("Item Paket" step 2 sub-collection) ─────────────────
-
-export async function saveTaxDeposits(
-  packageId: string,
-  items: { name: string; nominal: number; sortOrder?: number }[]
-): Promise<{ success: true } | { success: false; error: string }> {
-  const pkg = await db.package.findUnique({ where: { id: packageId }, select: { category: true } });
-  const mod = permModuleFor((pkg?.category ?? "MICE") as PkgCategory);
-  const { session, error } = await requirePermission({ module: mod, action: "edit" });
-  if (error) return { success: false, error };
-  if (!mutationLimiter.check(`pkg-tax-deposits:${session!.user.id}`)) return { success: false, ...rateLimitError() };
-
-  const parsed = savePackageTaxDepositsSchema.safeParse(items);
-  if (!parsed.success) return { success: false, error: parsed.error.issues[0].message };
-
-  try {
-    await db.$transaction([
-      db.packageMiceTaxDeposit.deleteMany({ where: { packageId } }),
-      ...parsed.data.map((item, i) =>
-        db.packageMiceTaxDeposit.create({
-          data: {
-            packageId,
-            name: item.name,
-            nominal: item.nominal,
-            sortOrder: i,
-          },
-        })
-      ),
-    ]);
-
-    await logAudit({
-      userId: session!.user.id,
-      action: "package.save_tax_deposits",
-      entityType: mod,
-      entityId: packageId,
-      description: `Saved ${parsed.data.length} tax/deposit item(s) for package ${packageId}`,
-    });
-
-    revalidateTag("packages", "max");
-    return { success: true };
-  } catch (e) {
-    console.error("[saveTaxDeposits]", e);
-    return { success: false, error: "Terjadi kesalahan." };
-  }
-}
-
-// ─── Package Complimentary & Bonus ("Complimentary & Bonus" step) ────────────
-
-export async function savePackageComplimentaries(
-  packageId: string,
-  items: {
-    complimentaryId?: string | null;
-    name: string;
-    price: number;
-    isShowPrice: boolean;
-    description?: string | null;
-    qty: number;
-    sortOrder?: number;
-  }[]
-): Promise<{ success: true } | { success: false; error: string }> {
-  const pkg = await db.package.findUnique({ where: { id: packageId }, select: { category: true } });
-  const mod = permModuleFor((pkg?.category ?? "MICE") as PkgCategory);
-  const { session, error } = await requirePermission({ module: mod, action: "edit" });
-  if (error) return { success: false, error };
-  if (!mutationLimiter.check(`pkg-complimentaries:${session!.user.id}`)) return { success: false, ...rateLimitError() };
-
-  const parsed = savePackageComplimentariesSchema.safeParse(items);
-  if (!parsed.success) return { success: false, error: parsed.error.issues[0].message };
-
-  try {
-    await db.$transaction([
-      db.packageComplimentary.deleteMany({ where: { packageId } }),
-      ...parsed.data.map((item, i) =>
-        db.packageComplimentary.create({
-          data: {
-            packageId,
-            complimentaryId: item.complimentaryId ?? null,
-            name: item.name,
-            price: item.price,
-            isShowPrice: item.isShowPrice,
-            description: item.description ?? null,
-            qty: item.qty,
-            sortOrder: i,
-          },
-        })
-      ),
-    ]);
-
-    await logAudit({
-      userId: session!.user.id,
-      action: "package.save_complimentaries",
-      entityType: mod,
-      entityId: packageId,
-      description: `Saved ${parsed.data.length} complimentary item(s) for package ${packageId}`,
-    });
-
-    revalidateTag("packages", "max");
-    return { success: true };
-  } catch (e) {
-    console.error("[savePackageComplimentaries]", e);
-    return { success: false, error: "Terjadi kesalahan." };
-  }
-}
-
-export async function savePackageBonuses(
-  packageId: string,
-  items: {
-    bonusId?: string | null;
-    name: string;
-    price: number;
-    description?: string | null;
-    qty: number;
-    sortOrder?: number;
-  }[]
-): Promise<{ success: true } | { success: false; error: string }> {
-  const pkg = await db.package.findUnique({ where: { id: packageId }, select: { category: true } });
-  const mod = permModuleFor((pkg?.category ?? "MICE") as PkgCategory);
-  const { session, error } = await requirePermission({ module: mod, action: "edit" });
-  if (error) return { success: false, error };
-  if (!mutationLimiter.check(`pkg-bonuses:${session!.user.id}`)) return { success: false, ...rateLimitError() };
-
-  const parsed = savePackageBonusesSchema.safeParse(items);
-  if (!parsed.success) return { success: false, error: parsed.error.issues[0].message };
-
-  try {
-    await db.$transaction([
-      db.packageBonus.deleteMany({ where: { packageId } }),
-      ...parsed.data.map((item, i) =>
-        db.packageBonus.create({
-          data: {
-            packageId,
-            bonusId: item.bonusId ?? null,
-            name: item.name,
-            price: item.price,
-            description: item.description ?? null,
-            qty: item.qty,
-            sortOrder: i,
-          },
-        })
-      ),
-    ]);
-
-    await logAudit({
-      userId: session!.user.id,
-      action: "package.save_bonuses",
-      entityType: mod,
-      entityId: packageId,
-      description: `Saved ${parsed.data.length} bonus item(s) for package ${packageId}`,
-    });
-
-    revalidateTag("packages", "max");
-    return { success: true };
-  } catch (e) {
-    console.error("[savePackageBonuses]", e);
     return { success: false, error: "Terjadi kesalahan." };
   }
 }

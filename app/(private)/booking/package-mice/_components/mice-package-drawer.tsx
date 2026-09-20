@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Drawer } from "@/components/shared/drawer";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -18,12 +19,12 @@ import { TermConditionEditor } from "@/components/shared/TermConditionEditor";
 import {
   Box,
   ClipboardList,
-  PenNewSquare,
   AddCircle,
   TrashBinTrash,
   AlignVerticalSpacing,
   TagPrice,
   Card2,
+  DocumentText,
   Gift,
   MedalStar,
   AltArrowDown,
@@ -35,16 +36,8 @@ import { CSS } from "@dnd-kit/utilities";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useVenues } from "@/hooks/use-venues";
-import { SignaturePad } from "@/components/shared/signature-pad";
-import {
-  useCreatePackage,
-  useUpdatePackage,
-  useSaveMiceItems,
-  useSaveMicePrices,
-  useSaveTaxDeposits,
-  useSavePackageComplimentaries,
-  useSavePackageBonuses,
-} from "@/hooks/use-packages";
+import { useEventTypes } from "@/hooks/use-event-types";
+import { useSaveMicePackage } from "@/hooks/use-packages";
 import { useComplimentaries } from "@/hooks/use-complimentaries";
 import { useBonuses } from "@/hooks/use-bonuses";
 import { usePermissions } from "@/hooks/use-permissions";
@@ -55,14 +48,13 @@ import type { PackageQueryItem } from "@/lib/queries/packages";
 // MICE package is always gated on the "package-mice" permission module.
 const PERM = "package-mice";
 
-// ─── Steps (MICE = 5 steps: Detail, Item & Harga, Payment, Complimentary & Bonus, Tanda Tangan) ──
+// ─── Steps (MICE = 4 steps: Detail, Item & Harga, Payment, Complimentary & Bonus) ──
 
 const stepperSteps = [
   { id: 1, title: "Detail Paket", subtitle: "Informasi dasar paket", icon: Box },
   { id: 2, title: "Item & Harga", subtitle: "Harga, item & tax/deposit paket", icon: ClipboardList },
-  { id: 3, title: "Payment", subtitle: "Rekening & term & condition", icon: Card2 },
-  { id: 4, title: "Complimentary & Bonus", subtitle: "Bonus & komplimen paket", icon: Gift },
-  { id: 5, title: "Tanda Tangan", subtitle: "Konfirmasi & tanda tangan", icon: PenNewSquare },
+  { id: 3, title: "Complimentary & Bonus", subtitle: "Bonus & komplimen paket", icon: Gift },
+  { id: 4, title: "Payment", subtitle: "Rekening & term & condition", icon: Card2 },
 ];
 
 interface MiceItemState {
@@ -83,7 +75,7 @@ interface MicePriceState {
   total: string;
 }
 
-// Step 2 "Tax & Deposit" sub-collection — mirrors PackageMiceTaxDeposit (name + nominal).
+// "Tax & Deposit" sub-collection — mirrors PackageMiceTaxDeposit (name + nominal).
 interface TaxDepositState {
   id: string;
   name: string;
@@ -140,7 +132,7 @@ function formatRupiah(amount: number): string {
 }
 
 const TAB_TRIGGER_CLASS = cn(
-  "h-auto flex-none items-center gap-1.5 rounded-none border-0 border-b border-b-transparent -mb-px bg-transparent px-4 py-2.5 text-sm font-medium text-muted-foreground shadow-none transition-colors after:hidden hover:border-b-border hover:text-foreground data-active:border-b-primary data-active:bg-transparent data-active:text-foreground data-active:shadow-none",
+  "h-auto flex-none items-center gap-1.5 rounded-none border-0 border-b-2 border-b-transparent -mb-px bg-transparent px-4 py-2.5 text-sm font-medium text-muted-foreground shadow-none transition-colors after:hidden hover:border-b-border hover:text-foreground data-active:border-b-primary data-active:bg-transparent data-active:font-semibold data-active:text-primary data-active:shadow-none",
 );
 
 const LABEL_CLASS = cn("text-sm", "font-medium", "text-foreground");
@@ -243,17 +235,19 @@ function SortableAccordionRow({
   );
 }
 
+interface PaymentMethodDetail {
+  id: string;
+  bankName: string;
+  bankAccountNumber: string;
+  bankRecipient: string;
+}
+
 // ─── Component ─────────────────────────────────────────────────────────────────
 
 export function MicePackageDrawer({ isOpen, onClose, editingPackage }: MicePackageDrawerProps) {
   const { data: venues = [] } = useVenues();
-  const createPkg = useCreatePackage();
-  const updatePkg = useUpdatePackage();
-  const saveMiceItemsMut = useSaveMiceItems();
-  const saveMicePricesMut = useSaveMicePrices();
-  const saveTaxDepositsMut = useSaveTaxDeposits();
-  const saveComplimentariesMut = useSavePackageComplimentaries();
-  const saveBonusesMut = useSavePackageBonuses();
+  const { data: eventTypes = [] } = useEventTypes("MICE");
+  const savePkg = useSaveMicePackage();
   const { can } = usePermissions();
   const canEditTc = can(PERM, "term-&-condition");
 
@@ -264,6 +258,7 @@ export function MicePackageDrawer({ isOpen, onClose, editingPackage }: MicePacka
   const [packageName, setPackageName] = useState("");
   const [available, setAvailable] = useState(true);
   const [venueId, setVenueId] = useState("");
+  const [eventTypeId, setEventTypeId] = useState("");
   const [notes, setNotes] = useState("");
   const [errors, setErrors] = useState<Record<string, string>>({});
 
@@ -312,6 +307,20 @@ export function MicePackageDrawer({ isOpen, onClose, editingPackage }: MicePacka
   const [cancellationRefundPolicy, setCancellationRefundPolicy] = useState("");
   const [closingNote, setClosingNote] = useState("");
 
+  const { data: paymentMethodsData = [] } = useQuery<PaymentMethodDetail[]>({
+    queryKey: ["payment-methods", venueId || "all"],
+    queryFn: async () => {
+      const params = new URLSearchParams({ limit: "100" });
+      if (venueId) params.set("venueId", venueId);
+      const r = await fetch(`/api/payment-methods?${params}`);
+      if (!r.ok) return [];
+      const d = await r.json();
+      return Array.isArray(d.data) ? d.data : [];
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+  const selectedPaymentMethod = paymentMethodsData.find((pm) => pm.id === paymentMethodId);
+
   // Step 5 — complimentary & bonus
   const [complimentaries, setComplimentaries] = useState<ComplimentaryRow[]>([]);
   const [complimentaryMode, setComplimentaryMode] = useState<"none" | "create-new">("none");
@@ -349,15 +358,13 @@ export function MicePackageDrawer({ isOpen, onClose, editingPackage }: MicePacka
     });
   }
 
-  // Step 6 — signature
-  const [signature, setSignature] = useState<string | null>(null);
-
   const isEdit = !!editingPackage;
 
   function resetForm() {
     setPackageName("");
     setAvailable(true);
     setVenueId("");
+    setEventTypeId("");
     setNotes("");
     setItems([]);
     setCollapsedItems(new Set());
@@ -379,7 +386,6 @@ export function MicePackageDrawer({ isOpen, onClose, editingPackage }: MicePacka
     setCollapsedBonuses(new Set());
     setCreateNewBonus({ name: "", price: 0, description: "" });
     setIsCreatingBonus(false);
-    setSignature(null);
     setCurrentStep(1);
     setErrors({});
   }
@@ -391,6 +397,7 @@ export function MicePackageDrawer({ isOpen, onClose, editingPackage }: MicePacka
       setPackageName(editingPackage.packageName);
       setAvailable(editingPackage.available);
       setVenueId(editingPackage.venueId ?? "");
+      setEventTypeId(editingPackage.eventTypeId ?? "");
       setNotes(editingPackage.notes ?? "");
       setItems(
         (editingPackage.miceItems ?? []).map((it) => ({
@@ -448,7 +455,6 @@ export function MicePackageDrawer({ isOpen, onClose, editingPackage }: MicePacka
       setCollapsedComplimentaries(new Set());
       setBonusMode("none");
       setCollapsedBonuses(new Set());
-      setSignature(null);
       setCurrentStep(1);
       setErrors({});
     } else if (isOpen) {
@@ -474,7 +480,7 @@ export function MicePackageDrawer({ isOpen, onClose, editingPackage }: MicePacka
         (p.priceType === "qty" && (parseNumericInput(p.qty) < 1 || parseNumericInput(p.price) < 1)) ||
         (p.priceType === "nominal" && parseNumericInput(p.total) < 1)
     );
-  // Step 3 (Payment) and Step 4 (Complimentary & Bonus) are optional — no hard validation.
+  // Step 3 (Complimentary & Bonus) and Step 4 (Payment) are optional — no hard validation.
   const isNextDisabled =
     submitting ||
     (currentStep === 1 && isStep1Invalid) ||
@@ -523,8 +529,6 @@ export function MicePackageDrawer({ isOpen, onClose, editingPackage }: MicePacka
       setCurrentStep(3);
     } else if (currentStep === 3) {
       setCurrentStep(4);
-    } else if (currentStep === 4) {
-      setCurrentStep(5);
     }
   }
 
@@ -692,76 +696,21 @@ export function MicePackageDrawer({ isOpen, onClose, editingPackage }: MicePacka
   // ─── Submit ─────────────────────────────────────────────────────────────────
 
   async function handleSubmit() {
-    if (!signature) {
-      toast.error("Tanda tangan wajib diisi");
-      return;
-    }
     try {
       setSubmitting(true);
-      let pkgId: string;
 
       const tcValue = termAndCondition.trim() && termAndCondition !== "<p></p>" ? termAndCondition : null;
       const crpValue =
         cancellationRefundPolicy.trim() && cancellationRefundPolicy !== "<p></p>" ? cancellationRefundPolicy : null;
       const closingValue = closingNote.trim() && closingNote !== "<p></p>" ? closingNote : null;
 
-      if (isEdit) {
-        const res = await updatePkg.mutateAsync({
-          id: editingPackage!.id,
-          data: {
-            packageName,
-            available,
-            venueId: venueId || null,
-            notes: notes.trim() || null,
-            paymentMethodId: paymentMethodId || null,
-            ...(canEditTc
-              ? { termAndCondition: tcValue, cancellationRefundPolicy: crpValue, closingNote: closingValue }
-              : {}),
-            signature,
-          },
-        });
-        if (!res.success) {
-          toast.error(res.error ?? "Gagal update paket");
-          return;
-        }
-        pkgId = editingPackage!.id;
-      } else {
-        const res = await createPkg.mutateAsync({
-          packageName,
-          available,
-          venueId: venueId || null,
-          notes: notes.trim() || null,
-          paymentMethodId: paymentMethodId || null,
-          ...(canEditTc
-            ? { termAndCondition: tcValue, cancellationRefundPolicy: crpValue, closingNote: closingValue }
-            : {}),
-          signature,
-          category: "MICE",
-        });
-        if (!res.success) {
-          toast.error(res.error ?? "Gagal membuat paket");
-          return;
-        }
-        pkgId = res.data!.id;
-      }
-
       const cleanItems = items
         .filter((it) => it.itemName.trim())
-        .map((it) => ({
-          itemName: it.itemName.trim(),
-          itemDescription: it.itemDescription.trim(),
-        }));
-
-      await saveMiceItemsMut.mutateAsync({ packageId: pkgId, items: cleanItems });
+        .map((it) => ({ itemName: it.itemName.trim(), itemDescription: it.itemDescription.trim() }));
 
       const cleanTaxDeposits = taxDeposits
         .filter((t) => t.name.trim())
-        .map((t) => ({
-          name: t.name.trim(),
-          nominal: parseNumericInput(t.nominal),
-        }));
-
-      await saveTaxDepositsMut.mutateAsync({ packageId: pkgId, items: cleanTaxDeposits });
+        .map((t) => ({ name: t.name.trim(), nominal: parseNumericInput(t.nominal) }));
 
       const cleanPrices = prices
         .filter((p) => p.name.trim())
@@ -769,24 +718,10 @@ export function MicePackageDrawer({ isOpen, onClose, editingPackage }: MicePacka
           if (p.priceType === "qty") {
             const qty = parseNumericInput(p.qty);
             const price = parseNumericInput(p.price);
-            return {
-              name: p.name.trim(),
-              priceType: "QTY" as const,
-              qty,
-              price,
-              total: qty * price,
-            };
+            return { name: p.name.trim(), priceType: "QTY" as const, qty, price, total: qty * price };
           }
-          return {
-            name: p.name.trim(),
-            priceType: "NOMINAL" as const,
-            qty: null,
-            price: null,
-            total: parseNumericInput(p.total),
-          };
+          return { name: p.name.trim(), priceType: "NOMINAL" as const, qty: null, price: null, total: parseNumericInput(p.total) };
         });
-
-      await saveMicePricesMut.mutateAsync({ packageId: pkgId, prices: cleanPrices });
 
       const cleanComplimentaries = complimentaries
         .filter((c) => c.name.trim())
@@ -799,8 +734,6 @@ export function MicePackageDrawer({ isOpen, onClose, editingPackage }: MicePacka
           qty: c.qty,
         }));
 
-      await saveComplimentariesMut.mutateAsync({ packageId: pkgId, items: cleanComplimentaries });
-
       const cleanBonuses = bonuses
         .filter((b) => b.name.trim())
         .map((b) => ({
@@ -811,12 +744,33 @@ export function MicePackageDrawer({ isOpen, onClose, editingPackage }: MicePacka
           qty: b.qty,
         }));
 
-      await saveBonusesMut.mutateAsync({ packageId: pkgId, items: cleanBonuses });
+      const res = await savePkg.mutateAsync({
+        id: isEdit ? editingPackage!.id : undefined,
+        packageName,
+        available,
+        venueId: venueId || null,
+        eventTypeId: eventTypeId || null,
+        notes: notes.trim() || null,
+        paymentMethodId: paymentMethodId || null,
+        ...(canEditTc
+          ? { termAndCondition: tcValue, cancellationRefundPolicy: crpValue, closingNote: closingValue }
+          : {}),
+        items: cleanItems,
+        taxDeposits: cleanTaxDeposits,
+        prices: cleanPrices,
+        complimentaries: cleanComplimentaries,
+        bonuses: cleanBonuses,
+      });
+
+      if (!res.success) {
+        toast.error(res.error ?? "Gagal menyimpan paket MICE");
+        return;
+      }
 
       toast.success(isEdit ? "Paket MICE berhasil diupdate!" : "Paket MICE berhasil dibuat!");
       handleClose();
     } catch {
-      toast.error("Terjadi kesalahan");
+      toast.error("Terjadi kesalahan saat menyimpan paket MICE");
     } finally {
       setSubmitting(false);
     }
@@ -880,6 +834,20 @@ export function MicePackageDrawer({ isOpen, onClose, editingPackage }: MicePacka
                 <p className={cn("mt-1.5 text-xs text-muted-foreground")}>Harga paket diatur lewat step &quot;Harga&quot; di bawah.</p>
               </div>
 
+              {/* Jenis Event (MICE) */}
+              <div>
+                <Label className={cn("text-sm font-medium text-foreground")}>Jenis Event</Label>
+                <SearchableSelect
+                  options={eventTypes.map((et) => ({ id: et.id, name: et.name }))}
+                  value={eventTypeId}
+                  onChange={setEventTypeId}
+                  placeholder="Pilih jenis event..."
+                  searchPlaceholder="Cari jenis event..."
+                  emptyText="Tidak ada jenis event MICE"
+                  className={cn("mt-1 w-full")}
+                />
+              </div>
+
               {/* Catatan (opsional) */}
               <div>
                 <Label className={cn("text-sm font-medium text-foreground")}>Catatan (opsional)</Label>
@@ -907,7 +875,7 @@ export function MicePackageDrawer({ isOpen, onClose, editingPackage }: MicePacka
             <Tabs defaultValue="harga">
               <TabsList
                 variant="line"
-                className="h-auto w-full justify-start gap-1 rounded-none border-b border-border bg-transparent p-0 group-data-horizontal/tabs:h-auto"
+                className="h-auto w-full min-w-0 flex-nowrap justify-start gap-1 overflow-x-auto scrollbar-hide rounded-none border-b border-border bg-transparent p-0 group-data-horizontal/tabs:h-auto"
               >
                 <TabsTrigger value="harga" className={TAB_TRIGGER_CLASS}>
                   <TagPrice weight="BoldDuotone" className="size-4 shrink-0" />
@@ -916,10 +884,6 @@ export function MicePackageDrawer({ isOpen, onClose, editingPackage }: MicePacka
                 <TabsTrigger value="items" className={TAB_TRIGGER_CLASS}>
                   <ClipboardList weight="BoldDuotone" className="size-4 shrink-0" />
                   Items
-                </TabsTrigger>
-                <TabsTrigger value="tax-deposit" className={TAB_TRIGGER_CLASS}>
-                  <SafeSquare weight="BoldDuotone" className="size-4 shrink-0" />
-                  Tax & Deposit
                 </TabsTrigger>
               </TabsList>
 
@@ -1106,6 +1070,60 @@ export function MicePackageDrawer({ isOpen, onClose, editingPackage }: MicePacka
                 </Button>
               </TabsContent>
 
+            </Tabs>
+          )}
+
+          {/* ─── Step 4: Payment & Tax/Deposit ─── */}
+          {currentStep === 4 && (
+            <Tabs defaultValue="payment">
+              <TabsList
+                variant="line"
+                className="h-auto w-full min-w-0 flex-nowrap justify-start gap-1 overflow-x-auto scrollbar-hide rounded-none border-b border-border bg-transparent p-0 group-data-horizontal/tabs:h-auto"
+              >
+                <TabsTrigger value="payment" className={TAB_TRIGGER_CLASS}>
+                  <Card2 weight="BoldDuotone" className="size-4 shrink-0" />
+                  Payment
+                </TabsTrigger>
+                <TabsTrigger value="tax-deposit" className={TAB_TRIGGER_CLASS}>
+                  <SafeSquare weight="BoldDuotone" className="size-4 shrink-0" />
+                  Tax & Deposit
+                </TabsTrigger>
+                <TabsTrigger value="term" className={TAB_TRIGGER_CLASS}>
+                  <DocumentText weight="BoldDuotone" className="size-4 shrink-0" />
+                  Term
+                </TabsTrigger>
+              </TabsList>
+
+              {/* ── Payment ─────────────────────────────────────── */}
+              <TabsContent value="payment" keepMounted className="mt-4 animate-in fade-in duration-300 space-y-3">
+                <div>
+                  <Label className={LABEL_CLASS}>Rekening Pembayaran</Label>
+                  <BankAccountSelect
+                    value={paymentMethodId}
+                    onChange={setPaymentMethodId}
+                    venueId={venueId || undefined}
+                    placeholder="Pilih rekening..."
+                    className="mt-1"
+                  />
+                  {selectedPaymentMethod && (
+                    <div className="rounded-xl bg-muted p-4 space-y-1.5 text-sm mt-3">
+                      <div className="flex items-center justify-between gap-4">
+                        <span className="text-muted-foreground">Bank</span>
+                        <span className="font-medium text-foreground text-right">{selectedPaymentMethod.bankName}</span>
+                      </div>
+                      <div className="flex items-center justify-between gap-4">
+                        <span className="text-muted-foreground">Account Number</span>
+                        <span className="font-medium text-foreground text-right tabular-nums">{selectedPaymentMethod.bankAccountNumber}</span>
+                      </div>
+                      <div className="flex items-center justify-between gap-4">
+                        <span className="text-muted-foreground">Account Name</span>
+                        <span className="font-medium text-foreground text-right">{selectedPaymentMethod.bankRecipient}</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </TabsContent>
+
               {/* ── Tax & Deposit ─────────────────────────────────── */}
               <TabsContent value="tax-deposit" keepMounted className="mt-4 animate-in fade-in duration-300 space-y-3">
                 {taxDeposits.length === 0 ? (
@@ -1168,76 +1186,60 @@ export function MicePackageDrawer({ isOpen, onClose, editingPackage }: MicePacka
                   <AddCircle weight="BoldDuotone" className="h-4 w-4 mr-1" />Tambah Tax / Deposit
                 </Button>
               </TabsContent>
+
+              {/* ── Term ─────────────────────────────────────────── */}
+              <TabsContent value="term" keepMounted className="mt-4 animate-in fade-in duration-300 space-y-3">
+                {canEditTc ? (
+                  <>
+                    <div className={cn("flex flex-col")}>
+                      <Label className={cn(LABEL_CLASS, "mb-1")}>Term &amp; Payment</Label>
+                      <TermConditionEditor
+                        value={termAndCondition}
+                        onChange={setTermAndCondition}
+                        placeholder="Tulis Term & Payment di sini..."
+                        showVariablePanel={false}
+                        resizable
+                      />
+                    </div>
+
+                    <div className={cn("flex flex-col")}>
+                      <Label className={cn(LABEL_CLASS, "mb-1")}>Cancellation &amp; Refund Policy</Label>
+                      <TermConditionEditor
+                        value={cancellationRefundPolicy}
+                        onChange={setCancellationRefundPolicy}
+                        placeholder="Tulis Cancellation & Refund Policy di sini..."
+                        showVariablePanel={false}
+                        resizable
+                      />
+                    </div>
+
+                    <div className={cn("flex flex-col")}>
+                      <Label className={cn(LABEL_CLASS, "mb-1")}>Closing</Label>
+                      <TermConditionEditor
+                        value={closingNote}
+                        onChange={setClosingNote}
+                        placeholder="We look forward to welcoming you and your team at [Venue] – [Location]. Should you require any further assistance, please do not hesitate to contact us."
+                        showVariablePanel={false}
+                        resizable
+                      />
+                    </div>
+                  </>
+                ) : (
+                  <p className={cn("text-xs text-muted-foreground italic")}>
+                    Anda tidak punya akses untuk mengubah Term &amp; Payment, Cancellation &amp; Refund Policy, atau Closing paket ini.
+                  </p>
+                )}
+              </TabsContent>
             </Tabs>
           )}
 
-          {/* ─── Step 3: Payment ─── */}
+          {/* ─── Step 3: Complimentary & Bonus ─── */}
           {currentStep === 3 && (
-            <div className="rounded-2xl border bg-card p-5 space-y-3">
-              <p className="text-sm font-semibold text-foreground mb-1">Payment</p>
-
-              <div>
-                <Label className={LABEL_CLASS}>Rekening Pembayaran</Label>
-                <BankAccountSelect
-                  value={paymentMethodId}
-                  onChange={setPaymentMethodId}
-                  venueId={venueId || undefined}
-                  placeholder="Pilih rekening..."
-                  className="mt-1"
-                />
-              </div>
-
-              {canEditTc ? (
-                <>
-                  <div className={cn("flex flex-col")}>
-                    <Label className={cn(LABEL_CLASS, "mb-1")}>Term &amp; Payment</Label>
-                    <TermConditionEditor
-                      value={termAndCondition}
-                      onChange={setTermAndCondition}
-                      placeholder="Tulis Term & Payment di sini..."
-                      showVariablePanel={false}
-                      resizable
-                    />
-                  </div>
-
-                  <div className={cn("flex flex-col")}>
-                    <Label className={cn(LABEL_CLASS, "mb-1")}>Cancellation &amp; Refund Policy</Label>
-                    <TermConditionEditor
-                      value={cancellationRefundPolicy}
-                      onChange={setCancellationRefundPolicy}
-                      placeholder="Tulis Cancellation & Refund Policy di sini..."
-                      showVariablePanel={false}
-                      resizable
-                    />
-                  </div>
-
-                  <div className={cn("flex flex-col")}>
-                    <Label className={cn(LABEL_CLASS, "mb-1")}>Closing</Label>
-                    <TermConditionEditor
-                      value={closingNote}
-                      onChange={setClosingNote}
-                      placeholder="We look forward to welcoming you and your team at [Venue] – [Location]. Should you require any further assistance, please do not hesitate to contact us."
-                      showVariablePanel={false}
-                      resizable
-                    />
-                  </div>
-                </>
-              ) : (
-                <p className={cn("text-xs text-muted-foreground italic")}>
-                  Anda tidak punya akses untuk mengubah Term &amp; Payment, Cancellation &amp; Refund Policy, atau Closing paket ini.
-                </p>
-              )}
-            </div>
-          )}
-
-          {/* ─── Step 4: Complimentary & Bonus ─── */}
-          {currentStep === 4 && (
             <div className="space-y-3">
-              <div className="rounded-2xl border bg-card p-5">
-                <Tabs defaultValue="bonus">
+              <Tabs defaultValue="bonus">
                   <TabsList
                     variant="line"
-                    className="h-auto w-full justify-start gap-1 rounded-none border-b border-border bg-transparent p-0 group-data-horizontal/tabs:h-auto"
+                    className="h-auto w-full min-w-0 flex-nowrap justify-start gap-1 overflow-x-auto scrollbar-hide rounded-none border-b border-border bg-transparent p-0 group-data-horizontal/tabs:h-auto"
                   >
                     <TabsTrigger value="bonus" className={TAB_TRIGGER_CLASS}>
                       <MedalStar weight="BoldDuotone" className="size-4 shrink-0" />
@@ -1706,21 +1708,6 @@ export function MicePackageDrawer({ isOpen, onClose, editingPackage }: MicePacka
                     )}
                   </TabsContent>
                 </Tabs>
-              </div>
-            </div>
-          )}
-
-          {/* ─── Step 5: Tanda Tangan ─── */}
-          {currentStep === 5 && (
-            <div className="space-y-4">
-              <div className={cn("border border-border rounded-xl p-4 bg-muted/40 space-y-1")}>
-                <p className={cn("text-sm font-medium text-foreground")}>{packageName || "—"}</p>
-                <p className={cn("text-xs text-muted-foreground")}>
-                  {venues.find((v) => v.id === venueId)?.name ?? "Venue —"} · {items.filter((i) => i.itemName.trim()).length} item ·{" "}
-                  {prices.filter((p) => p.name.trim()).length} harga
-                </p>
-              </div>
-              <SignaturePad onSignature={setSignature} />
             </div>
           )}
         </div>
@@ -1742,13 +1729,13 @@ export function MicePackageDrawer({ isOpen, onClose, editingPackage }: MicePacka
               {currentStep === 1 ? "Batal" : "Sebelumnya"}
             </Button>
             <Button
-              onClick={currentStep === 5 ? handleSubmit : handleNext}
+              onClick={currentStep === 4 ? handleSubmit : handleNext}
               className={cn("flex-1 cursor-pointer")}
-              disabled={isNextDisabled || (currentStep === 5 && !signature) || submitting}
+              disabled={isNextDisabled || submitting}
             >
               {submitting
                 ? "Menyimpan..."
-                : currentStep < 5
+                : currentStep < 4
                 ? "Selanjutnya"
                 : isEdit
                 ? "Simpan Perubahan"

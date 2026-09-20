@@ -1,5 +1,4 @@
 import { prisma } from "./_client";
-import { resolveApprovalSteps } from "../../lib/approval-flows";
 
 /**
  * MICE package seeder — one representative (most complete) quotation template
@@ -247,16 +246,11 @@ export async function seedMicePackages() {
   const venues = await prisma.venue.findMany({ select: { id: true, code: true } });
   const venueByCode = new Map(venues.map((v) => [v.code, v.id]));
 
-  // Approval creator: prefer sales-mice, fall back to sales, then admin.
+  // Package creator: prefer sales-mice, fall back to sales, then admin.
   const creator =
     (await findProfileByEmail("sales-mice@swasana.com")) ??
     (await findProfileByEmail("sales@swasana.com")) ??
     (await findProfileByEmail("admin@swasana.com"));
-
-  const adminProfile = await findProfileByEmail("admin@swasana.com");
-
-  // package-mice flow = single step (manager-mice). Auto-approve at seed time.
-  const flow = await resolveApprovalSteps("package-mice");
 
   let count = 0;
   for (const tpl of MICE_TEMPLATES) {
@@ -284,7 +278,9 @@ export async function seedMicePackages() {
         margin: 50,
         sellingPrice: 0,
         termAndCondition: null, // MICE has no Terms & Conditions
-        approvalStatus: adminProfile ? "approved" : "pending",
+        approvalStatus: "approved",
+        createdById: creator?.id ?? null,
+        updatedById: creator?.id ?? null,
       },
     });
 
@@ -298,34 +294,6 @@ export async function seedMicePackages() {
           sortOrder: i,
         },
       });
-    }
-
-    // Approval record + steps (mirror wedding seeder), auto-approved at seed time.
-    if (flow && flow.length > 0 && creator) {
-      const approver = adminProfile ?? creator;
-      const record = await prisma.approvalRecord.create({
-        data: {
-          module: "package-mice",
-          entityId: created.id,
-          status: adminProfile ? "approved" : "pending",
-          createdById: creator.id,
-        },
-      });
-
-      for (const step of flow) {
-        await prisma.approvalRecordStep.create({
-          data: {
-            recordId: record.id,
-            stepOrder: step.sortOrder,
-            approverType: step.approverType,
-            approverRoleId: step.approverRoleId,
-            approverUserId: null,
-            status: "approved",
-            decidedById: approver.id,
-            decidedAt: new Date(),
-          },
-        });
-      }
     }
 
     count++;

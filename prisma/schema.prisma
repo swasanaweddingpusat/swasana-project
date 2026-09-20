@@ -163,6 +163,8 @@ model Profile {
   commentReactions             BookingCommentReaction[]
   approvalRecordsCreated       ApprovalRecord[]           @relation("ApprovalRecordCreator")
   approvalRecordsUpdated       ApprovalRecord[]           @relation("ApprovalRecordUpdater")
+  packagesCreated              Package[]                  @relation("PackageCreator")
+  packagesUpdated              Package[]                  @relation("PackageUpdater")
   approvalStepApprovals        ApprovalRecordStep[]       @relation("ApprovalRecordStepApprover")
   approvalStepDecisions        ApprovalRecordStep[]       @relation("ApprovalRecordStepDecider")
   bookingRevisions             BookingRevision[]
@@ -584,6 +586,7 @@ model Package {
   id                     String                 @id @default(uuid())
   packageName            String
   category               EventCategory          @default(WEDDINGS)
+  eventTypeId            String?
   available              Boolean                @default(true)
   approvalStatus         String                 @default("draft")
   venueId                String?
@@ -598,9 +601,14 @@ model Package {
   closingNote            String?
   createdAt              DateTime               @default(now())
   updatedAt              DateTime               @updatedAt
+  createdById            String?
+  updatedById            String?
   venue                  Venue?                 @relation(fields: [venueId], references: [id], onDelete: SetNull)
   packageTypeCategory    PackageTypeCategory?   @relation(fields: [packageTypeCategoryId], references: [id], onDelete: SetNull)
   paymentMethod          PaymentMethod?         @relation(fields: [paymentMethodId], references: [id], onDelete: SetNull)
+  eventType              EventType?             @relation(fields: [eventTypeId], references: [id], onDelete: SetNull)
+  createdBy              Profile?               @relation("PackageCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedBy              Profile?               @relation("PackageUpdater", fields: [updatedById], references: [id], onDelete: SetNull)
   vendorItems            PackageVendorItem[]
   internalItems          PackageInternalItem[]
   miceItems              PackageMiceItem[]
@@ -617,6 +625,9 @@ model Package {
   @@index([category])
   @@index([packageTypeCategoryId])
   @@index([paymentMethodId])
+  @@index([eventTypeId])
+  @@index([createdById])
+  @@index([updatedById])
   @@map("packages")
 }
 
@@ -2113,6 +2124,7 @@ model EventType {
   updatedAt  DateTime        @updatedAt
   leads      Lead[]
   quotations Quotation[]
+  packages   Package[]
 
   @@index([category])
   @@map("event_types")
@@ -2362,6 +2374,7 @@ model Quotation {
   bookingFee Int?
   // Editable document clauses — each falls back to a hardcoded default string
   // in quotation-preview.tsx when null (legacy rows / not yet customized).
+  termAndCondition   String? // full "Term & Payment" paragraph (rich text); overrides the bookingFee/paymentNote boilerplate when set
   paymentNote        String? // sub-note under Term & Payment, e.g. remaining payment schedule
   cancellationPolicy String? // Cancellation & Refund Policy paragraph
   closingNote        String? // Closing paragraph before the signature block

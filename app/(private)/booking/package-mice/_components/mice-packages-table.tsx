@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -20,9 +20,7 @@ import {
   MenuDots,
   Magnifer,
   Filter,
-  ClipboardCheck,
   Refresh,
-  CloseCircle,
   Copy,
 } from "@solar-icons/react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -41,26 +39,31 @@ import {
   useDeletePackage,
   useDuplicatePackage,
   useDeleteBulkPackages,
-  usePackageApprovals,
   useTogglePackageAvailable,
-  useUnverifyPackage,
 } from "@/hooks/use-packages";
 import type { PackageQueryItem } from "@/lib/queries/packages";
 import { toast } from "sonner";
-import { useCurrentUser } from "@/hooks/use-current-user";
 import { MicePackageDrawer } from "./mice-package-drawer";
 import { MicePackageDetailModal } from "./mice-package-detail-modal";
-import { ApprovalDialog } from "../../packages/_components/approval-dialog";
-import { ApproveModal } from "../../packages/_components/approve-modal";
 
 const ROWS_PER_PAGE = 10;
 const PERM = "package-mice" as const;
 
-// MICE packages don't have a "Set Harga" UI (pricing is shared with Package
-// Wedding at the schema level but never populated/used for MICE) — always
-// render the "no price" fallback, consistent with mice-package-detail-modal.tsx.
-function getPackagePrice(): string {
-  return "—";
+// MICE pricing lives in the "Harga" step (packageMicePrices), not the shared
+// categoryPrices/sellingPrice columns (which MICE never populates). Total is the
+// sum of every micePrice row's total.
+function getMiceTotalPrice(pkg: PackageQueryItem): number {
+  return (pkg.micePrices ?? []).reduce((sum, p) => sum + Number(p.total ?? 0), 0);
+}
+
+function formatRupiah(amount: number): string {
+  if (amount <= 0) return "—";
+  return amount.toLocaleString("id-ID", {
+    style: "currency",
+    currency: "IDR",
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  });
 }
 
 function buildPageRange(current: number, total: number): (number | "...")[] {
@@ -87,14 +90,18 @@ function SkeletonTableBody({ rows = ROWS_PER_PAGE }: { rows?: number }) {
           <TableCell>
             <div className="space-y-1.5">
               <Skeleton className="h-4 rounded" style={{ width: `${55 + (i % 5) * 9}%` }} />
-              <Skeleton className="h-3 w-32 rounded lg:hidden" />
+              <Skeleton className="h-3 w-28 rounded" />
             </div>
           </TableCell>
           <TableCell className="hidden sm:table-cell"><Skeleton className="h-4 w-24 rounded" /></TableCell>
-          <TableCell className="hidden md:table-cell"><Skeleton className="h-4 w-28 rounded" /></TableCell>
-          <TableCell className="hidden lg:table-cell"><Skeleton className="h-4 w-10 rounded" /></TableCell>
+          <TableCell className="hidden md:table-cell">
+            <div className="space-y-1.5">
+              <Skeleton className="h-3.5 w-24 rounded" />
+              <Skeleton className="h-3 w-16 rounded" />
+            </div>
+          </TableCell>
+          <TableCell className="hidden md:table-cell"><Skeleton className="h-4 w-20 rounded" /></TableCell>
           <TableCell><Skeleton className="h-5 w-20 rounded-full" /></TableCell>
-          <TableCell className="hidden sm:table-cell"><Skeleton className="h-5 w-16 rounded-full" /></TableCell>
           <TableCell>
             <div className="flex items-center gap-1 justify-end">
               <Skeleton className="h-7 w-7 rounded-md" />
@@ -122,6 +129,10 @@ function SkeletonMobileCards({ rows = ROWS_PER_PAGE }: { rows?: number }) {
           <div className="flex items-center gap-2 flex-wrap">
             <Skeleton className="h-3 w-24 rounded" />
             <Skeleton className="h-3 w-16 rounded" />
+          </div>
+          <div className="flex items-center justify-between">
+            <Skeleton className="h-3 w-16 rounded" />
+            <Skeleton className="h-4 w-20 rounded" />
           </div>
           <div className="flex items-center gap-1 pt-1 border-t border-border">
             <Skeleton className="h-9 flex-1 rounded-lg" />
@@ -165,17 +176,14 @@ export function MicePackagesTable() {
   const deleteMutation = useDeletePackage();
   const duplicateMutation = useDuplicatePackage();
   const bulkDeleteMutation = useDeleteBulkPackages();
-  const { canCreate, can, isAdmin } = usePermissions();
+  const { canCreate, can } = usePermissions();
   const qc = useQueryClient();
   const toggleAvailableMutation = useTogglePackageAvailable();
-  const unverifyMutation = useUnverifyPackage();
-  const { user } = useCurrentUser();
   const [refreshing, setRefreshing] = useState(false);
 
   async function handleRefresh() {
     setRefreshing(true);
     await qc.invalidateQueries({ queryKey: ["packages"] });
-    await qc.invalidateQueries({ queryKey: ["package-approvals"] });
     setRefreshing(false);
   }
 
@@ -189,16 +197,6 @@ export function MicePackagesTable() {
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailPkg, setDetailPkg] = useState<PackageQueryItem | null>(null);
-  const [approvalPkg, setApprovalPkg] = useState<PackageQueryItem | null>(null);
-  const [approveModal, setApproveModal] = useState<{ stepId: string; stepLabel: string; packageName: string } | null>(null);
-
-  const { data: approvals = [], isLoading: approvalsLoading } = usePackageApprovals(PERM);
-
-  const approvalMap = useMemo(() => {
-    const map = new Map<string, typeof approvals[number]>();
-    for (const r of approvals) map.set(r.entityId, r);
-    return map;
-  }, [approvals]);
 
   const paginated = packages;
 
@@ -284,52 +282,6 @@ export function MicePackagesTable() {
   function renderPackageActions(pkg: PackageQueryItem) {
     return (
       <>
-        {approvalMap.has(pkg.id) && (() => {
-          const record = approvalMap.get(pkg.id)!;
-          if (record.status === "approved" || pkg.approvalStatus === "approved") return null;
-          const steps = record.steps;
-          return (
-            <DropdownMenu>
-              <Tooltip>
-                <DropdownMenuTrigger asChild>
-                  <TooltipTrigger className={cn("p-1.5 rounded-md hover:bg-muted cursor-pointer")}>
-                    <ClipboardCheck weight="BoldDuotone" className={cn("h-4 w-4 text-muted-foreground")} />
-                  </TooltipTrigger>
-                </DropdownMenuTrigger>
-                <TooltipContent>Approval</TooltipContent>
-              </Tooltip>
-              <DropdownMenuContent align="end">
-                {steps.map((step) => {
-                  const label = step.approverType === "role" ? step.approverRole?.name : step.approverUser?.fullName;
-                  const isApproved = step.status === "approved";
-                  const isRejected = step.status === "rejected";
-                  const isPending = step.status === "pending";
-                  const canAct = isPending && (
-                    isAdmin ||
-                    (step.approverType === "role" && step.approverRoleId === user?.roleId) ||
-                    (step.approverType === "user" && step.approverUserId === user?.profileId)
-                  );
-                  return (
-                    <DropdownMenuItem
-                      key={step.id}
-                      className="cursor-pointer"
-                      disabled={isApproved || isRejected || (isPending && !canAct)}
-                      onClick={() => {
-                        if (canAct) {
-                          setApproveModal({ stepId: step.id, stepLabel: label ?? "Unknown", packageName: pkg.packageName });
-                        } else {
-                          setApprovalPkg(pkg);
-                        }
-                      }}
-                    >
-                      {isApproved ? `✓ ${label}` : isRejected ? `✗ ${label}` : `Approve ${label}`}
-                    </DropdownMenuItem>
-                  );
-                })}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          );
-        })()}
         {can(PERM, "edit") && (
           <Tooltip>
             <TooltipTrigger
@@ -341,7 +293,7 @@ export function MicePackagesTable() {
             <TooltipContent>Edit</TooltipContent>
           </Tooltip>
         )}
-        {(can(PERM, "view") || can(PERM, "create") || can(PERM, "delete") || (can(PERM, "set-status") && pkg.approvalStatus === "approved")) && (
+        {(can(PERM, "view") || can(PERM, "create") || can(PERM, "delete")) && (
           <DropdownMenu>
             <Tooltip>
               <DropdownMenuTrigger asChild>
@@ -364,26 +316,9 @@ export function MicePackagesTable() {
                   Duplikat
                 </DropdownMenuItem>
               )}
-              {can(PERM, "set-status") && pkg.approvalStatus === "approved" && (
-                <>
-                  {(can(PERM, "view") || can(PERM, "create")) && <DropdownMenuSeparator />}
-                  <DropdownMenuItem
-                    disabled={unverifyMutation.isPending}
-                    onSelect={async () => {
-                      const res = await unverifyMutation.mutateAsync(pkg.id);
-                      if (!res.success) toast.error(res.error ?? "Gagal unverify");
-                      else toast.success("Approval dibatalkan, paket kembali ke draft.");
-                    }}
-                    className="text-destructive focus:text-destructive"
-                  >
-                    <CloseCircle weight="BoldDuotone" className="mr-2 h-4 w-4" />
-                    Batalkan Approval
-                  </DropdownMenuItem>
-                </>
-              )}
               {can(PERM, "delete") && (
                 <>
-                  {(can(PERM, "view") || can(PERM, "create") || (can(PERM, "set-status") && pkg.approvalStatus === "approved")) && <DropdownMenuSeparator />}
+                  {(can(PERM, "view") || can(PERM, "create")) && <DropdownMenuSeparator />}
                   <DropdownMenuItem
                     onSelect={() => { setPkgToDelete(pkg.id); setDeleteConfirmOpen(true); }}
                     className="text-destructive focus:text-destructive"
@@ -405,11 +340,8 @@ export function MicePackagesTable() {
   function renderMobileActions(pkg: PackageQueryItem) {
     const hasDuplicate = can(PERM, "create");
     const hasDelete = can(PERM, "delete");
-    const approvalRecord = approvalMap.get(pkg.id);
-    const hasApproval = !!approvalRecord && approvalRecord.status !== "approved" && pkg.approvalStatus !== "approved";
-    const hasUnverify = can(PERM, "set-status") && pkg.approvalStatus === "approved";
 
-    const hasAnySecondary = hasDuplicate || hasDelete || hasApproval || hasUnverify;
+    const hasAnySecondary = hasDuplicate || hasDelete;
     if (!hasAnySecondary) return null;
 
     return (
@@ -424,63 +356,15 @@ export function MicePackagesTable() {
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="min-w-44">
-          {hasApproval && approvalRecord && (() => {
-            const steps = approvalRecord.steps;
-            return steps.map((step) => {
-              const label = step.approverType === "role" ? step.approverRole?.name : step.approverUser?.fullName;
-              const isApproved = step.status === "approved";
-              const isRejected = step.status === "rejected";
-              const isPending = step.status === "pending";
-              const canAct = isPending && (
-                isAdmin ||
-                (step.approverType === "role" && step.approverRoleId === user?.roleId) ||
-                (step.approverType === "user" && step.approverUserId === user?.profileId)
-              );
-              return (
-                <DropdownMenuItem
-                  key={step.id}
-                  className="cursor-pointer"
-                  disabled={isApproved || isRejected || (isPending && !canAct)}
-                  onClick={() => {
-                    if (canAct) {
-                      setApproveModal({ stepId: step.id, stepLabel: label ?? "Unknown", packageName: pkg.packageName });
-                    } else {
-                      setApprovalPkg(pkg);
-                    }
-                  }}
-                >
-                  <ClipboardCheck weight="BoldDuotone" className="mr-2 h-4 w-4 text-primary" />
-                  {isApproved ? `✓ ${label}` : isRejected ? `✗ ${label}` : `Approve ${label}`}
-                </DropdownMenuItem>
-              );
-            });
-          })()}
           {hasDuplicate && (
             <DropdownMenuItem onSelect={() => { setPkgToDuplicate(pkg); setDuplicateConfirmOpen(true); }}>
               <Copy weight="BoldDuotone" className="mr-2 h-4 w-4 text-primary" />
               Duplikat
             </DropdownMenuItem>
           )}
-          {hasUnverify && (
-            <>
-              {(hasApproval || hasDuplicate) && <DropdownMenuSeparator />}
-              <DropdownMenuItem
-                disabled={unverifyMutation.isPending}
-                onSelect={async () => {
-                  const res = await unverifyMutation.mutateAsync(pkg.id);
-                  if (!res.success) toast.error(res.error ?? "Gagal unverify");
-                  else toast.success("Approval dibatalkan, paket kembali ke draft.");
-                }}
-                className="text-destructive focus:text-destructive"
-              >
-                <CloseCircle weight="BoldDuotone" className="mr-2 h-4 w-4" />
-                Batalkan Approval
-              </DropdownMenuItem>
-            </>
-          )}
           {hasDelete && (
             <>
-              {(hasApproval || hasDuplicate || hasUnverify) && <DropdownMenuSeparator />}
+              {hasDuplicate && <DropdownMenuSeparator />}
               <DropdownMenuItem
                 onSelect={() => { setPkgToDelete(pkg.id); setDeleteConfirmOpen(true); }}
                 className="text-destructive focus:text-destructive"
@@ -495,7 +379,7 @@ export function MicePackagesTable() {
     );
   }
 
-  if (isLoading || approvalsLoading) {
+  if (isLoading) {
     return (
       <Card>
         <CardContent className="p-0">
@@ -669,10 +553,9 @@ export function MicePackagesTable() {
                       <TableHead className="w-10">#</TableHead>
                       <TableHead>Nama Paket</TableHead>
                       <TableHead className={cn("hidden sm:table-cell")}>Venue</TableHead>
-                      <TableHead className={cn("hidden md:table-cell")}>Harga Jual</TableHead>
-                      <TableHead className={cn("hidden lg:table-cell")}>Item</TableHead>
+                      <TableHead className={cn("hidden md:table-cell")}>Event</TableHead>
+                      <TableHead className={cn("hidden md:table-cell text-right")}>Total Harga</TableHead>
                       <TableHead>Status</TableHead>
-                      <TableHead className={cn("hidden sm:table-cell")}>Approval</TableHead>
                       <TableHead className="w-24 text-right pr-4">Aksi</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -695,12 +578,21 @@ export function MicePackagesTable() {
                           <TableCell>
                             <div className="leading-tight">
                               <p className={cn("font-medium text-foreground truncate")}>{pkg.packageName}</p>
-                              <p className={cn("text-xs text-muted-foreground mt-0.5 lg:hidden")}>{pkg.venue?.name ?? "—"}</p>
+                              <p className={cn("text-xs text-muted-foreground mt-0.5 truncate")}>
+                                {[
+                                  pkg.createdBy?.fullName ? `oleh ${pkg.createdBy.fullName}` : null,
+                                  `${(pkg.miceItems ?? []).length} item`,
+                                ]
+                                  .filter(Boolean)
+                                  .join(" · ")}
+                              </p>
                             </div>
                           </TableCell>
                           <TableCell className={cn("hidden sm:table-cell")}>{pkg.venue?.name ?? "-"}</TableCell>
-                          <TableCell className={cn("hidden md:table-cell tabular-nums")}>{getPackagePrice()}</TableCell>
-                          <TableCell className={cn("hidden lg:table-cell")}>{(pkg.miceItems ?? []).length}</TableCell>
+                          <TableCell className={cn("hidden md:table-cell")}>
+                            <p className={cn("text-sm text-foreground truncate")}>{pkg.eventType?.name ?? "—"}</p>
+                          </TableCell>
+                          <TableCell className={cn("hidden md:table-cell tabular-nums text-right font-medium")}>{formatRupiah(getMiceTotalPrice(pkg))}</TableCell>
                           <TableCell>
                             {can(PERM, "set-status") ? (
                               <button
@@ -725,27 +617,6 @@ export function MicePackagesTable() {
                                 {pkg.available ? "Tersedia" : "Tidak Tersedia"}
                               </span>
                             )}
-                          </TableCell>
-                          <TableCell className={cn("hidden sm:table-cell")}>
-                            <button
-                              type="button"
-                              onClick={() => setApprovalPkg(pkg)}
-                              className={cn(
-                                "inline-flex px-2 py-0.5 rounded-full text-xs font-medium cursor-pointer hover:opacity-80 transition-opacity",
-                                pkg.approvalStatus === "pending" && "bg-muted text-muted-foreground",
-                                pkg.approvalStatus === "rejected" && "bg-destructive/10 text-destructive",
-                                pkg.approvalStatus === "draft" && "bg-secondary text-muted-foreground",
-                                pkg.approvalStatus === "approved" && "bg-primary text-primary-foreground",
-                              )}
-                            >
-                              {pkg.approvalStatus === "pending"
-                                ? "Pending"
-                                : pkg.approvalStatus === "rejected"
-                                ? "Ditolak"
-                                : pkg.approvalStatus === "approved"
-                                ? "Approved"
-                                : "Draft"}
-                            </button>
                           </TableCell>
                           <TableCell>
                             <div className={cn("flex items-center gap-1 justify-end")}>
@@ -809,30 +680,19 @@ export function MicePackagesTable() {
 
                         <div className={cn("flex items-center gap-1.5 flex-wrap text-xs text-muted-foreground")}>
                           <span className="truncate">{pkg.venue?.name ?? "Venue —"}</span>
+                          {pkg.eventType?.name && (
+                            <>
+                              <span aria-hidden="true">·</span>
+                              <span className="truncate">{pkg.eventType.name}</span>
+                            </>
+                          )}
                           <span aria-hidden="true">·</span>
                           <span>{(pkg.miceItems ?? []).length} item</span>
                         </div>
 
-                        <div className={cn("flex items-center gap-1.5 flex-wrap text-xs")}>
-                          <button
-                            type="button"
-                            onClick={() => setApprovalPkg(pkg)}
-                            className={cn(
-                              "inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium cursor-pointer hover:opacity-80 transition-opacity",
-                              pkg.approvalStatus === "pending" && "bg-muted text-muted-foreground",
-                              pkg.approvalStatus === "rejected" && "bg-destructive/10 text-destructive",
-                              pkg.approvalStatus === "draft" && "bg-secondary text-muted-foreground",
-                              pkg.approvalStatus === "approved" && "bg-primary text-primary-foreground",
-                            )}
-                          >
-                            {pkg.approvalStatus === "pending"
-                              ? "Pending"
-                              : pkg.approvalStatus === "rejected"
-                              ? "Ditolak"
-                              : pkg.approvalStatus === "approved"
-                              ? "Approved"
-                              : "Draft"}
-                          </button>
+                        <div className={cn("flex items-center justify-between text-sm")}>
+                          <span className={cn("text-xs text-muted-foreground")}>Total Harga</span>
+                          <span className={cn("font-semibold text-foreground tabular-nums")}>{formatRupiah(getMiceTotalPrice(pkg))}</span>
                         </div>
 
                         <div className={cn("flex items-center gap-1.5 pt-2 border-t border-border")}>
@@ -915,37 +775,12 @@ export function MicePackagesTable() {
         }}
       />
 
-      {/* Approval Dialog */}
-      {approvalPkg && user && (
-        <ApprovalDialog
-          open={!!approvalPkg}
-          onClose={() => setApprovalPkg(null)}
-          packageId={approvalPkg.id}
-          packageName={approvalPkg.packageName}
-          userProfileId={user.profileId}
-          userRoleId={user.roleId}
-          isSuperAdmin={user.isSuperAdmin}
-          module={PERM}
-        />
-      )}
-
-      {/* Approve Modal */}
-      {approveModal && (
-        <ApproveModal
-          open={!!approveModal}
-          onClose={() => setApproveModal(null)}
-          stepId={approveModal.stepId}
-          stepLabel={approveModal.stepLabel}
-          packageName={approveModal.packageName}
-        />
-      )}
-
       {/* Duplicate Confirm */}
       <Dialog open={duplicateConfirmOpen} onOpenChange={setDuplicateConfirmOpen}>
         <DialogContent className="max-w-sm">
           <DialogTitle>Duplikat Paket MICE</DialogTitle>
           <p className={cn("text-sm text-muted-foreground")}>
-            Buat salinan dari <span className="font-medium text-foreground">{pkgToDuplicate?.packageName}</span>? Paket baru dibuat sebagai draft dan belum tersedia sampai disetujui.
+            Buat salinan dari <span className="font-medium text-foreground">{pkgToDuplicate?.packageName}</span>? Paket baru dibuat dan belum tersedia sampai diaktifkan.
           </p>
           <div className={cn("flex justify-end gap-2 mt-4")}>
             <Button variant="outline" onClick={() => setDuplicateConfirmOpen(false)}>Batal</Button>

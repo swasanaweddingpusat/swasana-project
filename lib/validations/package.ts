@@ -9,7 +9,8 @@ export const createPackageSchema = z.object({
   category: packageCategorySchema.default("WEDDINGS"),
   available: z.boolean().default(true),
   venueId: z.string().nullable().optional(),
-  packageTypeCategoryId: z.string().min(1, "Kategori paket wajib diisi"),
+  packageTypeCategoryId: z.string().min(1, "Kategori paket wajib diisi").nullable().optional(),
+  eventTypeId: z.string().nullable().optional(),
   paymentMethodId: z.string().nullable().optional(),
   termAndCondition: z.string().nullable().optional(),
   cancellationRefundPolicy: z.string().nullable().optional(),
@@ -55,11 +56,6 @@ export const miceItemSchema = z.object({
   itemDescription: z.string().default(""),
 });
 
-export const saveMiceItemsSchema = z.array(miceItemSchema);
-
-export type MiceItemInput = z.infer<typeof miceItemSchema>;
-export type SaveMiceItemsInput = z.infer<typeof saveMiceItemsSchema>;
-
 // ─── MICE Prices ("Harga" step — separate collection from miceItems) ─────────
 
 export const micePriceTypeSchema = z.enum(["QTY", "NOMINAL"]);
@@ -83,12 +79,6 @@ export const micePriceSchema = z
     }
   });
 
-export const saveMicePricesSchema = z.array(micePriceSchema).min(1, "Minimal 1 item harga");
-
-export type MicePriceType = z.infer<typeof micePriceTypeSchema>;
-export type MicePriceInput = z.infer<typeof micePriceSchema>;
-export type SaveMicePricesInput = z.infer<typeof saveMicePricesSchema>;
-
 // ─── Package Complimentary & Bonus (mirrors QuotationComplimentary/QuotationBonus) ──
 
 export const packageComplimentarySchema = z.object({
@@ -110,14 +100,6 @@ export const packageBonusSchema = z.object({
   sortOrder: z.coerce.number().int().default(0),
 });
 
-export const savePackageComplimentariesSchema = z.array(packageComplimentarySchema);
-export const savePackageBonusesSchema = z.array(packageBonusSchema);
-
-export type PackageComplimentaryInput = z.infer<typeof packageComplimentarySchema>;
-export type PackageBonusInput = z.infer<typeof packageBonusSchema>;
-export type SavePackageComplimentariesInput = z.infer<typeof savePackageComplimentariesSchema>;
-export type SavePackageBonusesInput = z.infer<typeof savePackageBonusesSchema>;
-
 // ─── Package MICE Tax & Deposit (Step 2 sub-collection, optional — no min count) ──
 
 export const packageTaxDepositSchema = z.object({
@@ -126,10 +108,27 @@ export const packageTaxDepositSchema = z.object({
   sortOrder: z.coerce.number().int().default(0),
 });
 
-export const savePackageTaxDepositsSchema = z.array(packageTaxDepositSchema);
+// ─── MICE package save — create/edit + all sub-collections in ONE transaction ──
 
-export type PackageTaxDepositInput = z.infer<typeof packageTaxDepositSchema>;
-export type SavePackageTaxDepositsInput = z.infer<typeof savePackageTaxDepositsSchema>;
+export const saveMicePackageSchema = z.object({
+  id: z.string().optional(),
+  packageName: z.string().min(1, "Nama paket wajib diisi"),
+  available: z.boolean().default(true),
+  venueId: z.string().nullable().optional(),
+  eventTypeId: z.string().nullable().optional(),
+  notes: z.string().nullable().optional(),
+  paymentMethodId: z.string().nullable().optional(),
+  termAndCondition: z.string().nullable().optional(),
+  cancellationRefundPolicy: z.string().nullable().optional(),
+  closingNote: z.string().nullable().optional(),
+  items: z.array(miceItemSchema),
+  taxDeposits: z.array(packageTaxDepositSchema),
+  prices: z.array(micePriceSchema).min(1, "Minimal 1 item harga"),
+  complimentaries: z.array(packageComplimentarySchema),
+  bonuses: z.array(packageBonusSchema),
+});
+
+export type SaveMicePackageInput = z.infer<typeof saveMicePackageSchema>;
 
 export type CreatePackageInput = z.infer<typeof createPackageSchema>;
 export type UpdatePackageInput = z.infer<typeof updatePackageSchema>;
