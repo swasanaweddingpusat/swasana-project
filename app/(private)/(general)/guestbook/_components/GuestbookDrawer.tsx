@@ -1208,6 +1208,7 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
                   <SelectItem value="cold">Cold</SelectItem>
                   <SelectItem value="warm">Warm</SelectItem>
                   <SelectItem value="hot">Hot</SelectItem>
+                  <SelectItem value="done_visit">Done Visit</SelectItem>
                   <SelectItem value="to_be_discuss">To Be Discuss</SelectItem>
                   <SelectItem value="deal">Deal</SelectItem>
                   <SelectItem value="lost">Lost</SelectItem>

@@ -13,6 +13,7 @@ const VISIT_STATUS_LABELS: Record<string, string> = {
   cold: "Cold",
   warm: "Warm",
   hot: "Hot",
+  done_visit: "Done Visit",
   to_be_discuss: "To Be Discuss",
   deal: "Deal",
   lost: "Lost",
