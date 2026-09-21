@@ -14,6 +14,7 @@ import {
   Diploma,
   CalendarMark,
   CalendarDate,
+  ClockCircle,
   Route,
   Sledgehammer,
   Document,
@@ -23,6 +24,9 @@ import {
   GalleryWide,
   Tag,
   Wallet,
+  ClipboardCheck,
+  ChartSquare,
+  Settings,
   type IconProps,
 } from "@solar-icons/react";
 import type { ComponentType } from "react";
@@ -177,15 +181,40 @@ const GROUPS: SettingGroup[] = [
   },
   {
     title: "KPI & Insentif",
-    description: "Konfigurasi master data KPI untuk Sales dan Manager.",
+    description: "Kelola master KPI, penugasan target, dan laporan insentif.",
     items: [
       {
-        title: "Konfigurasi KPI",
+        title: "Master KPI",
         description: "Kelola target item, skema achievement, dan master KPI.",
         icon: Wallet,
-        href: "/settings/kpi-konfigurasi",
+        href: "/kpi-insentif/kpi-master",
         module: "kpi-master",
       },
+      {
+        title: "Penugasan KPI",
+        description: "Tetapkan target KPI untuk Sales dan Manager.",
+        icon: ClipboardCheck,
+        href: "/kpi-insentif/penugasan",
+        module: "kpi-assignment",
+      },
+      {
+        title: "Laporan KPI & Insentif",
+        description: "Lihat hasil KPI, simulasi, dan laporan insentif.",
+        icon: ChartSquare,
+        href: "/kpi-insentif/laporan",
+        module: "kpi-report",
+      },
+    ],
+  },
+  {
+    title: "Manajemen Kehadiran",
+    description: "Kelola rekap, lokasi, shift, assignment, dan pengaturan absensi.",
+    items: [
+      { title: "Rekap Kehadiran", description: "Pantau rekap kehadiran karyawan.", icon: CalendarDate, href: "/settings/attendance/rekap", module: "hr-attendance" },
+      { title: "Lokasi Kerja", description: "Kelola lokasi dan radius kerja.", icon: MapPoint, href: "/settings/attendance/lokasi", module: "hr-attendance" },
+      { title: "Shift Kerja", description: "Kelola jadwal dan toleransi shift.", icon: ClockCircle, href: "/settings/attendance/shift", module: "hr-attendance" },
+      { title: "Assignment Kehadiran", description: "Atur assignment shift dan lokasi karyawan.", icon: UsersGroupRounded, href: "/settings/attendance/assignment", module: "hr-attendance" },
+      { title: "Pengaturan Kehadiran", description: "Atur parameter dan kebijakan absensi.", icon: Settings, href: "/settings/attendance/pengaturan", module: "hr-attendance" },
     ],
   },
   {
@@ -232,6 +261,8 @@ export default async function SettingsHubPage() {
     "settings-banner",
     "settings-package-category",
     "kpi-master",
+    "kpi-assignment", "kpi-report",
+    "hr-attendance",
   ]);
 
   const session = await auth();

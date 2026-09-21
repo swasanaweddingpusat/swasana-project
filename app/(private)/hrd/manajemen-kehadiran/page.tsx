@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
-import { requirePagePermission } from "@/lib/require-page-permission";
-import { AttendanceManagement } from "./_components/AttendanceManagement";
+import { redirect } from "next/navigation";
 
 export const metadata: Metadata = {
   title: "Manajemen Kehadiran - SWASANA",
@@ -8,10 +7,5 @@ export const metadata: Metadata = {
 };
 
 export default async function ManajemenKehadiranPage() {
-  await requirePagePermission("hr", "view-all");
-  return (
-    <div className="flex flex-col gap-6 w-full mb-6">
-      <AttendanceManagement />
-    </div>
-  );
+  redirect("/settings/attendance/rekap");
 }

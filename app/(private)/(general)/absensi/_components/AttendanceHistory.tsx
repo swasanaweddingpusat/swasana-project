@@ -11,6 +11,7 @@ const STATUS_BADGE: Record<string, { label: string; variant: "default" | "second
   on_time: { label: "Hadir", variant: "default" },
   late: { label: "Terlambat", variant: "secondary" },
   absent: { label: "Absen", variant: "destructive" },
+  public_holiday: { label: "Tanggal Merah", variant: "destructive" },
 };
 
 function formatDate(date: string | Date): string {
@@ -65,10 +66,15 @@ export function AttendanceHistory() {
                   return (
                     <TableRow key={record.id}>
                       <TableCell className="font-medium">{formatDate(record.date)}</TableCell>
-                      <TableCell>{formatTimeShort(record.clockInAt)}</TableCell>
-                      <TableCell>{formatTimeShort(record.clockOutAt)}</TableCell>
+                      <TableCell>{record.isPublicHoliday ? "-" : formatTimeShort(record.clockInAt)}</TableCell>
+                      <TableCell>{record.isPublicHoliday ? "-" : formatTimeShort(record.clockOutAt)}</TableCell>
                       <TableCell>
-                        <Badge variant={badge.variant}>{badge.label}</Badge>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Badge variant={badge.variant}>{badge.label}</Badge>
+                          {record.publicHolidayName && (
+                            <span className="text-xs text-muted-foreground">{record.publicHolidayName}</span>
+                          )}
+                        </div>
                       </TableCell>
                     </TableRow>
                   );

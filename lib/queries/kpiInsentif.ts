@@ -90,7 +90,14 @@ const assignmentRowSelect = {
   notes: true,
   createdAt: true,
   updatedAt: true,
-  kpiMaster: { select: { id: true, name: true, businessRole: true } },
+  kpiMaster: {
+    select: {
+      id: true,
+      name: true,
+      businessRole: true,
+      targetItem: { select: { name: true, indicatorType: true, type: true } },
+    },
+  },
   profile: { select: { id: true, fullName: true } },
   venue: { select: { id: true, name: true } },
 };

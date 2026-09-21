@@ -85,14 +85,22 @@ export async function resolveEmployeeShift(profileId: string, date: Date): Promi
 export interface AttendanceContext {
   attendantType: "WORKDAY" | "DAY_OFF";
   isPublicHoliday: boolean;
+  publicHolidayOptions: Array<{ id: string; name: string; date: Date }>;
+  publicHolidayId: string | null;
   publicHolidayName: string | null;
 }
 
 export async function resolveAttendanceContext(profileId: string, date: Date): Promise<AttendanceContext> {
-  const [holiday, assignment] = await Promise.all([
+  const [holiday, publicHolidayOptions, assignment] = await Promise.all([
     db.publicHoliday.findFirst({
       where: { date, isActive: true },
       select: { id: true, name: true },
+    }),
+    db.publicHoliday.findMany({
+      where: { date: { lte: date }, isActive: true },
+      select: { id: true, name: true, date: true },
+      orderBy: { date: "desc" },
+      take: 500,
     }),
     db.employeeWorkAssignment.findFirst({
       where: {
@@ -111,6 +119,8 @@ export async function resolveAttendanceContext(profileId: string, date: Date): P
   return {
     attendantType,
     isPublicHoliday: holiday !== null,
+    publicHolidayOptions,
+    publicHolidayId: holiday?.id ?? null,
     publicHolidayName: holiday?.name ?? null,
   };
 }

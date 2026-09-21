@@ -72,18 +72,50 @@ export async function getAttendanceList(params: AttendanceListQuery) {
 }
 
 export async function getMyAttendanceHistory(profileId: string, limit = 30) {
-  return db.attendance.findMany({
-    where: { profileId },
-    orderBy: { date: "desc" },
-    take: limit,
-    select: {
-      id: true,
-      date: true,
-      clockInAt: true,
-      clockOutAt: true,
-      status: true,
-    },
-  });
+  const today = todayMidnightUTC();
+  const startDate = new Date(today);
+  startDate.setUTCDate(startDate.getUTCDate() - (limit - 1));
+  const dateWhere = { gte: startDate, lte: today };
+
+  const [attendance, holidays] = await Promise.all([
+    db.attendance.findMany({
+      where: { profileId, date: dateWhere },
+      orderBy: { date: "desc" },
+      take: limit,
+      select: {
+        id: true,
+        date: true,
+        clockInAt: true,
+        clockOutAt: true,
+        status: true,
+        isPublicHoliday: true,
+        publicHolidayName: true,
+      },
+    }),
+    db.publicHoliday.findMany({
+      where: { date: dateWhere, isActive: true },
+      orderBy: { date: "desc" },
+      select: { id: true, date: true, name: true },
+      take: limit,
+    }),
+  ]);
+
+  const attendanceDates = new Set(attendance.map((record) => record.date.toISOString()));
+  const holidayRows = holidays
+    .filter((holiday) => !attendanceDates.has(holiday.date.toISOString()))
+    .map((holiday) => ({
+      id: `holiday-${holiday.id}`,
+      date: holiday.date,
+      clockInAt: null,
+      clockOutAt: null,
+      status: "public_holiday" as const,
+      isPublicHoliday: true,
+      publicHolidayName: holiday.name,
+    }));
+
+  return [...attendance, ...holidayRows]
+    .sort((a, b) => b.date.getTime() - a.date.getTime())
+    .slice(0, limit);
 }
 
 export type AttendanceTodayResult = Awaited<ReturnType<typeof getAttendanceToday>>;
