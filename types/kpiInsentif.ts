@@ -47,6 +47,11 @@ export interface KpiAssignmentItem {
     id: string;
     name: string;
     businessRole: KpiBusinessRole;
+    targetItem: {
+      name: string;
+      indicatorType: KpiIndicatorType;
+      type: KpiTargetType;
+    };
   };
   profile: {
     id: string;

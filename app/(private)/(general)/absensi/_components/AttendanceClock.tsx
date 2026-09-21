@@ -45,6 +45,13 @@ function formatDate(date: Date): string {
   return date.toLocaleDateString("id-ID", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
 }
 
+function formatDuration(start: Date | string | null, end: Date | string | null): string {
+  if (!start) return "-";
+  const endDate = end ? new Date(end) : new Date();
+  const minutes = Math.max(0, Math.floor((endDate.getTime() - new Date(start).getTime()) / 60000));
+  return `${Math.floor(minutes / 60)}j ${String(minutes % 60).padStart(2, "0")}m`;
+}
+
 export function AttendanceClock() {
   const [currentTime, setCurrentTime] = useState(new Date());
   const [cameraOpen, setCameraOpen] = useState(false);
@@ -53,6 +60,7 @@ export function AttendanceClock() {
   const [gpsLoading, setGpsLoading] = useState(false);
   const [selectedStatus, setSelectedStatus] = useState<AttendanceStatusValue | "">("");
   const [selectedDayOffType, setSelectedDayOffType] = useState<DayOffTypeValue | "">("");
+  const [selectedPublicHolidayId, setSelectedPublicHolidayId] = useState<string>("");
   const [selectedShiftId, setSelectedShiftId] = useState<string>("");
   const [selectedWorkType, setSelectedWorkType] = useState<string>("");
   const [selectedLocationId, setSelectedLocationId] = useState<string>("");
@@ -66,6 +74,7 @@ export function AttendanceClock() {
 
   const attendance = todayData?.attendance ?? null;
   const context = todayData?.context ?? null;
+  const shift = todayData?.shift ?? null;
 
   useEffect(() => {
     const interval = setInterval(() => setCurrentTime(new Date()), 1000);
@@ -90,6 +99,7 @@ export function AttendanceClock() {
     if (value === "WORKDAY") {
       // Leaving the off flow — clear jenis libur.
       setSelectedDayOffType("");
+      setSelectedPublicHolidayId("");
     } else {
       // Entering the off flow — clear workday-only selections.
       setSelectedShiftId("");
@@ -97,6 +107,11 @@ export function AttendanceClock() {
       setSelectedLocationId("");
     }
   }, []);
+
+  const handleDayOffTypeChange = useCallback((value: string) => {
+    setSelectedDayOffType(value as DayOffTypeValue);
+    setSelectedPublicHolidayId(value === "PUBLIC_HOLIDAY" ? (context?.publicHolidayOptions[0]?.id ?? "") : "");
+  }, [context?.publicHolidayOptions]);
 
   const isMutating = clockInMutation.isPending || clockOutMutation.isPending;
   const isWorkday = selectedStatus === "WORKDAY";
@@ -153,6 +168,10 @@ export function AttendanceClock() {
         toast.error("Pilih jenis libur terlebih dahulu");
         return;
       }
+      if (selectedDayOffType === "PUBLIC_HOLIDAY" && !selectedPublicHolidayId) {
+        toast.error("Pilih public holiday terlebih dahulu");
+        return;
+      }
       // Selfie required, but no GPS/location.
       setPendingAction("in");
       setCameraOpen(true);
@@ -175,7 +194,7 @@ export function AttendanceClock() {
     }
 
     handleAction("in");
-  }, [selectedStatus, isWorkday, selectedDayOffType, selectedShiftId, selectedWorkType, selectedLocationId, handleAction]);
+  }, [selectedStatus, isWorkday, selectedDayOffType, selectedPublicHolidayId, selectedShiftId, selectedWorkType, selectedLocationId, handleAction]);
 
   const handleCapture = useCallback((photoBase64: string) => {
     setCameraOpen(false);
@@ -189,6 +208,7 @@ export function AttendanceClock() {
           {
             attendanceStatus: "DAY_OFF",
             dayOffType: (selectedDayOffType || "REGULAR") as DayOffTypeValue,
+            publicHolidayId: selectedPublicHolidayId || undefined,
             photoBase64,
           },
           {
@@ -248,7 +268,7 @@ export function AttendanceClock() {
         },
       },
     );
-  }, [gpsCoords, pendingAction, isWorkday, selectedDayOffType, clockInMutation, clockOutMutation, selectedShiftId, selectedWorkType, selectedLocationId]);
+  }, [gpsCoords, pendingAction, isWorkday, selectedDayOffType, selectedPublicHolidayId, clockInMutation, clockOutMutation, selectedShiftId, selectedWorkType, selectedLocationId]);
 
   const handleCameraClose = useCallback(() => {
     setCameraOpen(false);
@@ -265,6 +285,7 @@ export function AttendanceClock() {
     gpsLoading ||
     !selectedStatus ||
     (isDayOff && !selectedDayOffType) ||
+    (isDayOff && selectedDayOffType === "PUBLIC_HOLIDAY" && !selectedPublicHolidayId) ||
     (isWorkday && !selectedShiftId) ||
     (isWorkday && !selectedWorkType) ||
     (isWorkday && selectedWorkType === "WFO" && !selectedLocationId);
@@ -288,6 +309,33 @@ export function AttendanceClock() {
 
           <div className="flex items-center justify-center gap-3">
             {getStatusBadge()}
+          </div>
+
+          <div className="grid grid-cols-2 gap-2 rounded-2xl border border-border bg-muted/30 p-3 text-sm sm:grid-cols-4">
+            <div className="min-w-0">
+              <p className="text-[11px] text-muted-foreground">Jadwal</p>
+              <p className="mt-0.5 truncate font-medium">
+                {shift ? `${shift.startTime} - ${shift.endTime}` : "Belum ditentukan"}
+              </p>
+            </div>
+            <div className="min-w-0">
+              <p className="text-[11px] text-muted-foreground">Mode kerja</p>
+              <p className="mt-0.5 truncate font-medium">
+                {attendance?.workType ? WORK_TYPE_LABEL[attendance.workType] : "Belum dipilih"}
+              </p>
+            </div>
+            <div className="min-w-0">
+              <p className="text-[11px] text-muted-foreground">Masuk</p>
+              <p className="mt-0.5 truncate font-medium">
+                {attendance?.clockInAt ? formatTime(new Date(attendance.clockInAt)) : "-"}
+              </p>
+            </div>
+            <div className="min-w-0">
+              <p className="text-[11px] text-muted-foreground">Durasi</p>
+              <p className="mt-0.5 truncate font-medium">
+                {formatDuration(attendance?.clockInAt ?? null, attendance?.clockOutAt ?? null)}
+              </p>
+            </div>
           </div>
 
           {attendance ? (
@@ -336,7 +384,7 @@ export function AttendanceClock() {
                 {isDayOff && (
                   <div className="space-y-1.5">
                     <label className="text-xs font-medium text-muted-foreground">Jenis Libur</label>
-                    <Select value={selectedDayOffType} onValueChange={(v) => setSelectedDayOffType(v as DayOffTypeValue)}>
+                    <Select value={selectedDayOffType} onValueChange={handleDayOffTypeChange}>
                       <SelectTrigger className="w-full rounded-xl">
                         <SelectValue placeholder="Pilih jenis libur" />
                       </SelectTrigger>
@@ -348,6 +396,27 @@ export function AttendanceClock() {
                         ))}
                       </SelectContent>
                     </Select>
+                  </div>
+                )}
+
+                {isDayOff && selectedDayOffType === "PUBLIC_HOLIDAY" && (
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium text-muted-foreground">Public Holiday</label>
+                    <Select value={selectedPublicHolidayId} onValueChange={setSelectedPublicHolidayId} disabled={!context?.publicHolidayOptions.length}>
+                      <SelectTrigger className="w-full rounded-xl">
+                        <SelectValue placeholder="Pilih public holiday" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {context?.publicHolidayOptions.map((holiday) => (
+                          <SelectItem key={holiday.id} value={holiday.id}>
+                            {holiday.name} ({new Date(holiday.date).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {!context?.publicHolidayOptions.length && (
+                      <p className="text-xs text-destructive">Saldo public holiday belum tersedia.</p>
+                    )}
                   </div>
                 )}
 
@@ -465,7 +534,7 @@ export function AttendanceClock() {
                 onClick={handleClockIn}
               >
                 <Login3 weight="BoldDuotone" className="h-5 w-5 mr-2" />
-                {gpsLoading && pendingAction === "in" ? "Mencari lokasi..." : isWorkday ? "Clock In" : "Simpan"}
+                {gpsLoading && pendingAction === "in" ? "Mencari lokasi..." : isWorkday ? "Clock In" : "Catat Kehadiran"}
               </Button>
             )}
 

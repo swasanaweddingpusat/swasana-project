@@ -65,8 +65,28 @@ export interface PaginatedGuestbookEntries {
   total: number;
   weddingCount: number;
   miceCount: number;
+  overview: GuestbookOverview;
   page: number;
   pageSize: number;
+}
+
+export interface GuestbookOverviewBucket {
+  key: string;
+  label: string;
+  count: number;
+}
+
+export interface GuestbookOverview {
+  total: number;
+  checkedOut: number;
+  activeVisits: number;
+  onlineMeetings: number;
+  inPersonVisits: number;
+  byStatus: GuestbookOverviewBucket[];
+  byCategory: GuestbookOverviewBucket[];
+  bySource: GuestbookOverviewBucket[];
+  byVenue: GuestbookOverviewBucket[];
+  byHost: GuestbookOverviewBucket[];
 }
 
 const guestbookEntrySelect = {
@@ -138,6 +158,55 @@ export async function getGuestbookEntries(
     ],
   });
 
+  const buildBuckets = (
+    rows: Array<{ key: string | null; count: number }>,
+    labels: Map<string, string>,
+    fallback: string,
+  ): GuestbookOverviewBucket[] => rows
+    .filter((row) => row.key !== null)
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 10)
+    .map((row) => ({ key: row.key as string, label: labels.get(row.key as string) ?? fallback, count: row.count }));
+
+  const [statusGroups, categoryGroups, sourceGroups, venueGroups, hostGroups, interactionGroups, checkedOut, activeVisits] = await Promise.all([
+    db.guestbookEntry.groupBy({ by: ["visitStatus"], where, _count: { _all: true } }),
+    db.guestbookEntry.groupBy({ by: ["eventCategory"], where, _count: { _all: true } }),
+    db.guestbookEntry.groupBy({ by: ["sourceOfInformationId"], where, _count: { _all: true } }),
+    db.guestbookEntry.groupBy({ by: ["venueId"], where, _count: { _all: true } }),
+    db.guestbookEntry.groupBy({ by: ["hostId"], where, _count: { _all: true } }),
+    db.guestbookEntry.groupBy({ by: ["interactionType"], where, _count: { _all: true } }),
+    db.guestbookEntry.count({ where: { ...where, checkOutAt: { not: null } } }),
+    db.guestbookEntry.count({ where: { ...where, checkOutAt: null } }),
+  ]);
+
+  const sourceIds = sourceGroups.flatMap((row) => row.sourceOfInformationId ? [row.sourceOfInformationId] : []);
+  const venueIds = venueGroups.flatMap((row) => row.venueId ? [row.venueId] : []);
+  const hostIds = hostGroups.flatMap((row) => row.hostId ? [row.hostId] : []);
+  const [sources, venues, hosts] = await Promise.all([
+    db.sourceOfInformation.findMany({ where: { id: { in: sourceIds } }, select: { id: true, name: true } }),
+    db.venue.findMany({ where: { id: { in: venueIds } }, select: { id: true, name: true } }),
+    db.profile.findMany({ where: { id: { in: hostIds } }, select: { id: true, fullName: true } }),
+  ]);
+
+  const sourceLabels = new Map(sources.map((row) => [row.id, row.name]));
+  const venueLabels = new Map(venues.map((row) => [row.id, row.name]));
+  const hostLabels = new Map(hosts.map((row) => [row.id, row.fullName ?? "Tanpa nama"]));
+  const interactionCounts = new Map(interactionGroups.map((row) => [row.interactionType, row._count._all]));
+  const overview: GuestbookOverview = {
+    total: await db.guestbookEntry.count({ where }),
+    checkedOut,
+    activeVisits,
+    onlineMeetings: interactionCounts.get("online_meeting") ?? 0,
+    inPersonVisits: (interactionCounts.get("client_visit") ?? 0) + (interactionCounts.get("jemput_bola") ?? 0),
+    byStatus: buildBuckets(statusGroups.map((row) => ({ key: row.visitStatus, count: row._count._all })), new Map([
+      ["cold", "Cold"], ["warm", "Warm"], ["hot", "Hot"], ["done_visit", "Done Visit"], ["to_be_discuss", "To Be Discuss"], ["deal", "Deal"], ["lost", "Lost"],
+    ]), "Tanpa status"),
+    byCategory: buildBuckets(categoryGroups.map((row) => ({ key: row.eventCategory, count: row._count._all })), new Map([["WEDDINGS", "Wedding"], ["MICE", "MICE"]]), "Tanpa kategori"),
+    bySource: buildBuckets(sourceGroups.map((row) => ({ key: row.sourceOfInformationId, count: row._count._all })), sourceLabels, "Tanpa sumber"),
+    byVenue: buildBuckets(venueGroups.map((row) => ({ key: row.venueId, count: row._count._all })), venueLabels, "Tanpa venue"),
+    byHost: buildBuckets(hostGroups.map((row) => ({ key: row.hostId, count: row._count._all })), hostLabels, "Tanpa PIC"),
+  };
+
   const [data, total, weddingCount, miceCount] = await Promise.all([
     db.guestbookEntry.findMany({
       where,
@@ -151,7 +220,14 @@ export async function getGuestbookEntries(
     db.guestbookEntry.count({ where: categoryCountWhere("MICE") }),
   ]);
 
-  return { data, total, weddingCount, miceCount, page, pageSize };
+  const uncategorizedCount = Math.max(0, total - weddingCount - miceCount);
+  overview.byCategory = [
+    { key: "WEDDINGS", label: "Wedding", count: weddingCount },
+    { key: "MICE", label: "MICE", count: miceCount },
+    ...(uncategorizedCount > 0 ? [{ key: "other", label: "Lainnya", count: uncategorizedCount }] : []),
+  ].filter((bucket) => bucket.count > 0);
+
+  return { data, total, weddingCount, miceCount, overview, page, pageSize };
 }
 
 export type GuestbookEntryItem = GuestbookEntryRow;

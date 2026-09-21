@@ -10,7 +10,6 @@ import {
   CalendarDate,
   AltArrowLeft,
   AltArrowRight,
-  WalletMoney,
 } from "@solar-icons/react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid } from "recharts";
 import {
@@ -35,10 +34,6 @@ function formatCurrency(amount: number): string {
   if (amount >= 1_000_000_000)
     return `Rp ${(amount / 1_000_000_000).toFixed(1)}M`;
   if (amount >= 1_000_000) return `Rp ${(amount / 1_000_000).toFixed(0)}Jt`;
-  return `Rp ${amount.toLocaleString("id-ID")}`;
-}
-
-function formatCurrencyFull(amount: number): string {
   return `Rp ${amount.toLocaleString("id-ID")}`;
 }
 
@@ -227,48 +222,6 @@ function SalesChart({ data }: { data: SalesPerformanceCardItem[] }) {
   );
 }
 
-// ─── Total Revenue Card ──────────────────────────────────────────────────────
-
-function TotalRevenueCard({ data }: { data: SalesPerformanceCardItem[] }) {
-  const totalRevenue = useMemo(
-    () => data.reduce((sum, item) => sum + item.revenue, 0),
-    [data],
-  );
-  const totalBookings = useMemo(
-    () => data.reduce((sum, item) => sum + item.bookingCount, 0),
-    [data],
-  );
-
-  return (
-    <div
-      className={cn(
-        "flex items-center gap-4 rounded-2xl border border-border bg-card p-5 shadow-sm",
-      )}
-    >
-      <div
-        className={cn(
-          "flex h-12 w-12 shrink-0 items-center justify-center rounded-xl",
-          "bg-primary/10",
-        )}
-      >
-        <WalletMoney weight="BoldDuotone" className="h-6 w-6 text-primary" />
-      </div>
-      <div className="min-w-0 flex-1">
-        <p className="text-xs font-medium text-muted-foreground">Total Revenue</p>
-        <p className="font-heading text-xl font-semibold text-foreground sm:text-2xl">
-          {formatCurrencyFull(totalRevenue)}
-        </p>
-      </div>
-      <div className="shrink-0 text-right">
-        <p className="text-xs font-medium text-muted-foreground">Booking</p>
-        <p className="font-heading text-xl font-semibold text-foreground">
-          {totalBookings}
-        </p>
-      </div>
-    </div>
-  );
-}
-
 // ─── Month Picker ────────────────────────────────────────────────────────────
 
 function MonthPicker({
@@ -424,8 +377,6 @@ export function SalesPerformanceSection({
             isCurrentMonth={isCurrentMonth}
           />
         </div>
-
-        <TotalRevenueCard data={data} />
 
         <SalesChart data={data} />
 

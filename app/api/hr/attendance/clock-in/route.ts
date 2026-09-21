@@ -52,7 +52,7 @@ export async function POST(req: Request) {
   // vs Public Holiday). Selfie required as proof of presence, but no venue/GPS (not tied to
   // a work location). ---
   if (attendanceStatus !== "WORKDAY") {
-    const { photoBase64, dayOffType } = parsed.data;
+    const { photoBase64, dayOffType, publicHolidayId } = parsed.data;
     if (!dayOffType) {
       return Response.json({ error: "Jenis libur wajib dipilih" }, { status: 422 });
     }
@@ -67,10 +67,13 @@ export async function POST(req: Request) {
     const isPublicHoliday = dayOffType === "PUBLIC_HOLIDAY";
     const holiday = isPublicHoliday
       ? await db.publicHoliday.findFirst({
-          where: { date: today, isActive: true },
+          where: { id: publicHolidayId, date: { lte: today }, isActive: true },
           select: { id: true, name: true },
         })
       : null;
+    if (isPublicHoliday && !holiday) {
+      return Response.json({ error: "Public holiday tidak tersedia untuk tanggal hari ini" }, { status: 422 });
+    }
     const resolvedHolidayId: string | null = holiday?.id ?? null;
     const resolvedHolidayName: string | null = holiday?.name ?? null;
 

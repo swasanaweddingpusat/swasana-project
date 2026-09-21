@@ -8,7 +8,6 @@ import {
   Documents,
   ShopMinimalistic,
   CartLarge,
-  ClockCircle,
   CheckSquare,
   Dollar,
   FileText,
@@ -99,6 +98,7 @@ export const SETTINGS_MODULES = [
   "settings-tutorial",
   "settings-booking-log",
   "settings-banner",
+  "hr-attendance",
 ] as const;
 
 export type ModuleKey = "finance" | "hrd" | "booking" | "purchase" | "stakeholder";
@@ -115,7 +115,6 @@ export const MODULE_NAV_MAP: Record<ModuleKey, NavItem[]> = {
   ],
   hrd: [
     { name: "Database Karyawan", href: "/hrd/database-karyawan", icon: UsersGroupRounded, subtitle: "Data lengkap seluruh karyawan", permission: { module: "hr", action: "view" } },
-    { name: "Manajemen Kehadiran", href: "/hrd/manajemen-kehadiran", icon: ClockCircle, subtitle: "Monitoring kehadiran real-time", permission: { module: "hr", action: "view" } },
     { name: "Penggajian & Perpajakan", href: "/hrd/penggajian-perpajakan", icon: Dollar, subtitle: "Proses penggajian dan konfigurasi pajak", permission: { module: "hr", action: "view" } },
     { name: "Slip Gaji", href: "/hrd/slip-gaji", icon: FileText, subtitle: "Rekap slip gaji seluruh karyawan", permission: { module: "hr", action: "view" } },
     { name: "Sistem Cuti", href: "/hrd/sistem-cuti", icon: CalendarDate, subtitle: "Pengajuan dan saldo cuti karyawan", permission: { module: "hr", action: "view" } },
