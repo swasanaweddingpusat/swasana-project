@@ -90,6 +90,7 @@ const assignmentRowSelect = {
   notes: true,
   createdAt: true,
   updatedAt: true,
+<<<<<<< HEAD
   kpiMaster: {
     select: {
       id: true,
@@ -98,6 +99,9 @@ const assignmentRowSelect = {
       targetItem: { select: { name: true, indicatorType: true, type: true } },
     },
   },
+=======
+  kpiMaster: { select: { id: true, name: true, businessRole: true } },
+>>>>>>> origin/main
   profile: { select: { id: true, fullName: true } },
   venue: { select: { id: true, name: true } },
 };

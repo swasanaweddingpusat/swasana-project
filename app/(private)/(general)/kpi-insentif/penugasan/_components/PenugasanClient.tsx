@@ -13,6 +13,23 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+<<<<<<< HEAD
+=======
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
+>>>>>>> origin/main
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -27,6 +44,10 @@ import {
   Pen,
   TrashBinTrash,
   Target,
+<<<<<<< HEAD
+=======
+  InfoCircle,
+>>>>>>> origin/main
   UserRounded,
   Filter,
 } from "@solar-icons/react";
@@ -79,6 +100,7 @@ export function PenugasanClient() {
     return true;
   });
 
+<<<<<<< HEAD
   const groupedAssignments = Array.from(
     filtered.reduce((groups, assignment) => {
       const key = `${assignment.profileId}-${assignment.period.toString()}-${assignment.venueId ?? "all"}`;
@@ -89,6 +111,8 @@ export function PenugasanClient() {
     }, new Map<string, KpiAssignmentItem[]>()).values(),
   );
 
+=======
+>>>>>>> origin/main
   async function handleDelete() {
     if (!deleteId) return;
     const res = await deleteMutation.mutateAsync(deleteId);
@@ -103,7 +127,11 @@ export function PenugasanClient() {
   const yearOptions = Array.from({ length: 5 }, (_, i) => now.getFullYear() - 2 + i);
 
   return (
+<<<<<<< HEAD
     <>
+=======
+    <TooltipProvider>
+>>>>>>> origin/main
       <div className="space-y-6">
         <PageHeader
           title="Penugasan Target KPI"
@@ -187,6 +215,7 @@ export function PenugasanClient() {
           </div>
         </div>
 
+<<<<<<< HEAD
         {/* Grouped assignment cards */}
         {isLoading ? (
           <div className="rounded-2xl border bg-card p-8 text-center text-sm text-muted-foreground">Memuat data...</div>
@@ -247,6 +276,132 @@ export function PenugasanClient() {
             })}
           </div>
         )}
+=======
+        {/* Table */}
+        <div className="rounded-2xl border bg-card shadow-sm overflow-hidden">
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-muted/30">
+                  <TableHead className="font-semibold">Nama Karyawan</TableHead>
+                  <TableHead className="font-semibold">KPI Master</TableHead>
+                  <TableHead className="font-semibold">Periode</TableHead>
+                  <TableHead className="font-semibold">Venue</TableHead>
+                  <TableHead className="font-semibold">Target Override</TableHead>
+                  <TableHead className="font-semibold">Status</TableHead>
+                  <TableHead className="font-semibold text-right">Aksi</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {isLoading ? (
+                  <TableRow>
+                    <TableCell colSpan={7} className="h-32 text-center text-muted-foreground">
+                      Memuat data...
+                    </TableCell>
+                  </TableRow>
+                ) : filtered.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={7} className="h-40 text-center">
+                      <div className="flex flex-col items-center gap-3 py-6">
+                        <Target weight="BoldDuotone" className="h-10 w-10 text-muted-foreground/40" />
+                        <p className="text-sm text-muted-foreground">Belum ada penugasan untuk periode ini</p>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="rounded-full gap-1.5"
+                          onClick={() => {
+                            setEditItem(null);
+                            setDrawerOpen(true);
+                          }}
+                        >
+                          <AddCircle weight="BoldDuotone" className="h-4 w-4" />
+                          Tambah Penugasan
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  filtered.map((item) => (
+                    <TableRow key={item.id} className="hover:bg-muted/20 transition-colors">
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <UserRounded weight="BoldDuotone" className="h-4 w-4 text-muted-foreground shrink-0" />
+                          <div>
+                            <p className="font-medium text-sm">{item.profile.fullName ?? "-"}</p>
+                          </div>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <p className="text-sm font-medium">{item.kpiMaster.name}</p>
+                      </TableCell>
+                      <TableCell className="text-sm">
+                        {(() => { const d = new Date(item.period); return buildPeriodString(d.getMonth() + 1, d.getFullYear()); })()}
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {item.venue?.name ?? "-"}
+                      </TableCell>
+                      <TableCell className="text-sm">
+                        {item.targetQty != null ? (
+                          <span>{item.targetQty} unit</span>
+                        ) : item.targetPrice != null ? (
+                          <span>{formatRupiah(item.targetPrice)}</span>
+                        ) : (
+                          <span className="text-muted-foreground text-xs italic">Pakai target master</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {item.isDraft ? (
+                          <Tooltip>
+                            <TooltipTrigger render={
+                              <Badge
+                                variant="secondary"
+                                className="rounded-full gap-1 cursor-help"
+                              >
+                                <InfoCircle weight="BoldDuotone" className="h-3 w-3" />
+                                Draft
+                              </Badge>
+                            } />
+                            <TooltipContent>
+                              {item.kpiMaster.businessRole === "manager"
+                                ? "Periode Manager belum dikonfirmasi"
+                                : "Penugasan masih dalam tahap draft"}
+                            </TooltipContent>
+                          </Tooltip>
+                        ) : (
+                          <Badge variant="default" className="rounded-full">Aktif</Badge>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center justify-end gap-1">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 rounded-full hover:bg-accent"
+                            onClick={() => {
+                              setEditItem(item);
+                              setDrawerOpen(true);
+                            }}
+                          >
+                            <Pen weight="BoldDuotone" className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 rounded-full hover:bg-destructive/10 hover:text-destructive"
+                            onClick={() => setDeleteId(item.id)}
+                          >
+                            <TrashBinTrash weight="BoldDuotone" className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </div>
+>>>>>>> origin/main
       </div>
 
       <PenugasanDrawer
@@ -277,6 +432,10 @@ export function PenugasanClient() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+<<<<<<< HEAD
     </>
+=======
+    </TooltipProvider>
+>>>>>>> origin/main
   );
 }
