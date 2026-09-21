@@ -24,12 +24,9 @@ import {
   GalleryWide,
   Tag,
   Wallet,
-<<<<<<< HEAD
   ClipboardCheck,
   ChartSquare,
   Settings,
-=======
->>>>>>> origin/main
   type IconProps,
 } from "@solar-icons/react";
 import type { ComponentType } from "react";
@@ -184,7 +181,6 @@ const GROUPS: SettingGroup[] = [
   },
   {
     title: "KPI & Insentif",
-<<<<<<< HEAD
     description: "Kelola master KPI, penugasan target, dan laporan insentif.",
     items: [
       {
@@ -219,17 +215,6 @@ const GROUPS: SettingGroup[] = [
       { title: "Shift Kerja", description: "Kelola jadwal dan toleransi shift.", icon: ClockCircle, href: "/settings/attendance/shift", module: "hr-attendance" },
       { title: "Assignment Kehadiran", description: "Atur assignment shift dan lokasi karyawan.", icon: UsersGroupRounded, href: "/settings/attendance/assignment", module: "hr-attendance" },
       { title: "Pengaturan Kehadiran", description: "Atur parameter dan kebijakan absensi.", icon: Settings, href: "/settings/attendance/pengaturan", module: "hr-attendance" },
-=======
-    description: "Konfigurasi master data KPI untuk Sales dan Manager.",
-    items: [
-      {
-        title: "Konfigurasi KPI",
-        description: "Kelola target item, skema achievement, dan master KPI.",
-        icon: Wallet,
-        href: "/settings/kpi-konfigurasi",
-        module: "kpi-master",
-      },
->>>>>>> origin/main
     ],
   },
   {
@@ -276,11 +261,8 @@ export default async function SettingsHubPage() {
     "settings-banner",
     "settings-package-category",
     "kpi-master",
-<<<<<<< HEAD
     "kpi-assignment", "kpi-report",
     "hr-attendance",
-=======
->>>>>>> origin/main
   ]);
 
   const session = await auth();

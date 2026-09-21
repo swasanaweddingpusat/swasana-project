@@ -5,10 +5,7 @@
 // All records seeded with isDraft=true — no production payment amounts are activated.
 // Business decisions still pending (tier bounds, commission base, deduction basis).
 
-<<<<<<< HEAD
 import type { Prisma } from "@prisma/client";
-=======
->>>>>>> origin/main
 import { prisma } from "./_client";
 
 if (process.argv[1]?.includes("kpiInsentif")) {
@@ -377,12 +374,7 @@ export async function seedKpiInsentif() {
       where: { resultId: result.id },
     });
     if (!existingDetails) {
-<<<<<<< HEAD
       const detailRows = [
-=======
-      await prisma.kpiCalculationDetail.createMany({
-        data: [
->>>>>>> origin/main
           {
             resultId: result.id,
             indicatorType: "dealing",
@@ -422,16 +414,11 @@ export async function seedKpiInsentif() {
             deductionPct: null,
             isGatingFailed: false,
           },
-<<<<<<< HEAD
       ] satisfies Prisma.KpiCalculationDetailUncheckedCreateInput[];
 
       for (const detail of detailRows) {
         await prisma.kpiCalculationDetail.create({ data: detail });
       }
-=======
-        ],
-      });
->>>>>>> origin/main
     }
 
     console.log("  CalcResult created for:", profile.fullName, "— Grade:", dealingPct >= 100 ? "A" : dealingPct >= 90 ? "B" : "C/D", "— Net:", netAmount.toLocaleString("id-ID"));

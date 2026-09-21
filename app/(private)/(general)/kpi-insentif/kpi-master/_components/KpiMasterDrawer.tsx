@@ -17,10 +17,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
-<<<<<<< HEAD
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-=======
->>>>>>> origin/main
 import {
   Select,
   SelectContent,
@@ -63,7 +60,6 @@ const DEFAULT_VALUES: FormValues = {
   achievementSchemaId: "",
 };
 
-<<<<<<< HEAD
 function SectionLabel({ text, icon: Icon }: { text: string; icon: typeof Target }) {
   return (
     <div className="flex items-center gap-2 border-b border-border pb-2">
@@ -72,18 +68,6 @@ function SectionLabel({ text, icon: Icon }: { text: string; icon: typeof Target 
       </span>
       <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{text}</p>
     </div>
-=======
-const MONTH_NAMES = [
-  "Januari", "Februari", "Maret", "April", "Mei", "Juni",
-  "Juli", "Agustus", "September", "Oktober", "November", "Desember",
-];
-
-function SectionLabel({ text }: { text: string }) {
-  return (
-    <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground border-b border-border pb-1">
-      {text}
-    </p>
->>>>>>> origin/main
   );
 }
 
@@ -269,7 +253,6 @@ export function KpiMasterDrawer({ isOpen, onClose, editMaster }: KpiMasterDrawer
       isOpen={isOpen}
       onClose={handleClose}
       title={isEditMode ? "Edit KPI Master" : "Tambah KPI Master"}
-<<<<<<< HEAD
       maxWidth="sm:max-w-2xl"
     >
       <form onSubmit={handleSubmit(onSubmit)} className="flex h-full flex-col gap-5">
@@ -293,15 +276,6 @@ export function KpiMasterDrawer({ isOpen, onClose, editMaster }: KpiMasterDrawer
           {/* Draft notice */}
           {isDraft && (
             <div className="flex items-center gap-2 rounded-xl border border-border bg-muted/40 px-4 py-2.5">
-=======
-      maxWidth="sm:max-w-lg"
-    >
-      <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col h-full gap-4">
-        <div className="flex-1 overflow-y-auto space-y-4 pb-2">
-          {/* Draft notice */}
-          {isDraft && (
-            <div className="flex items-center gap-2 rounded-xl bg-muted/50 border border-border px-4 py-2.5">
->>>>>>> origin/main
               <InfoCircle weight="BoldDuotone" className="h-4 w-4 text-muted-foreground shrink-0" />
               <p className="text-xs text-muted-foreground">
                 KPI Master ini berstatus <strong>Draft</strong> — tidak digunakan untuk kalkulasi
@@ -310,14 +284,9 @@ export function KpiMasterDrawer({ isOpen, onClose, editMaster }: KpiMasterDrawer
           )}
 
           {/* Info Section */}
-<<<<<<< HEAD
           <div className="rounded-2xl border border-border bg-card p-5 shadow-sm sm:p-6">
             <div className="space-y-5">
             <SectionLabel text="Informasi KPI Master" icon={InfoCircle} />
-=======
-          <div className="rounded-2xl border bg-card p-5 space-y-4">
-            <SectionLabel text="Informasi KPI Master" />
->>>>>>> origin/main
 
             <div className="space-y-1.5">
               <Label htmlFor="km-name" className="text-sm font-medium">
@@ -346,11 +315,7 @@ export function KpiMasterDrawer({ isOpen, onClose, editMaster }: KpiMasterDrawer
               />
             </div>
 
-<<<<<<< HEAD
             <div className="grid gap-4 sm:grid-cols-2">
-=======
-            <div className="grid grid-cols-2 gap-3">
->>>>>>> origin/main
               <div className="space-y-1.5">
                 <Label className="text-sm font-medium">
                   Business Role <span className="text-destructive">*</span>
@@ -359,7 +324,6 @@ export function KpiMasterDrawer({ isOpen, onClose, editMaster }: KpiMasterDrawer
                   control={control}
                   name="businessRole"
                   render={({ field }) => (
-<<<<<<< HEAD
                     <Tabs value={field.value} onValueChange={field.onChange}>
                       <TabsList
                         variant="line"
@@ -379,28 +343,6 @@ export function KpiMasterDrawer({ isOpen, onClose, editMaster }: KpiMasterDrawer
                         </TabsTrigger>
                       </TabsList>
                     </Tabs>
-=======
-                    <div className="grid grid-cols-2 gap-1.5">
-                      {(["sales", "manager"] as const).map((role) => {
-                        const active = field.value === role;
-                        return (
-                          <button
-                            key={role}
-                            type="button"
-                            onClick={() => field.onChange(role)}
-                            className={[
-                              "flex items-center justify-center py-2 text-xs font-semibold rounded-full transition-colors capitalize",
-                              active
-                                ? "bg-primary text-primary-foreground shadow-sm"
-                                : "bg-muted text-muted-foreground hover:bg-accent",
-                            ].join(" ")}
-                          >
-                            {role === "sales" ? "Sales" : "Manager"}
-                          </button>
-                        );
-                      })}
-                    </div>
->>>>>>> origin/main
                   )}
                 />
               </div>
@@ -438,7 +380,6 @@ export function KpiMasterDrawer({ isOpen, onClose, editMaster }: KpiMasterDrawer
                 <span className="text-muted-foreground">(tidak aktif untuk kalkulasi)</span>
               </Label>
             </div>
-<<<<<<< HEAD
             </div>
           </div>
 
@@ -446,13 +387,6 @@ export function KpiMasterDrawer({ isOpen, onClose, editMaster }: KpiMasterDrawer
           <div className="rounded-2xl border border-border bg-card p-5 shadow-sm sm:p-6">
             <div className="space-y-5">
             <SectionLabel text="Target Item" icon={Target} />
-=======
-          </div>
-
-          {/* Target Item */}
-          <div className="rounded-2xl border bg-card p-5 space-y-4">
-            <SectionLabel text="Target Item" />
->>>>>>> origin/main
 
             <div className="space-y-1.5">
               <Label className="text-sm font-medium">
@@ -491,7 +425,6 @@ export function KpiMasterDrawer({ isOpen, onClose, editMaster }: KpiMasterDrawer
             {selectedTargetItem && (
               <TargetItemSummaryCard item={selectedTargetItem} />
             )}
-<<<<<<< HEAD
             </div>
           </div>
 
@@ -499,13 +432,6 @@ export function KpiMasterDrawer({ isOpen, onClose, editMaster }: KpiMasterDrawer
           <div className="rounded-2xl border border-border bg-card p-5 shadow-sm sm:p-6">
             <div className="space-y-5">
             <SectionLabel text="Skema Achievement" icon={ChartSquare} />
-=======
-          </div>
-
-          {/* Achievement Schema */}
-          <div className="rounded-2xl border bg-card p-5 space-y-4">
-            <SectionLabel text="Skema Achievement" />
->>>>>>> origin/main
 
             <div className="space-y-1.5">
               <Label className="text-sm font-medium">
@@ -558,19 +484,12 @@ export function KpiMasterDrawer({ isOpen, onClose, editMaster }: KpiMasterDrawer
             {selectedSchema && (
               <SchemaSummaryCard schema={selectedSchema} />
             )}
-<<<<<<< HEAD
             </div>
-=======
->>>>>>> origin/main
           </div>
         </div>
 
         {/* Footer */}
-<<<<<<< HEAD
         <div className="sticky bottom-0 flex items-center gap-3 border-t border-border bg-background pt-4">
-=======
-        <div className="sticky bottom-0 bg-background border-t border-border pt-4 flex items-center gap-3">
->>>>>>> origin/main
           <Button
             type="button"
             variant="outline"
