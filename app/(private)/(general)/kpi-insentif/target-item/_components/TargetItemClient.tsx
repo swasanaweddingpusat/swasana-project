@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { AddCircle, Pen, TrashBinTrash, Target, BoxMinimalistic, Magnifer } from "@solar-icons/react";
+import { AddCircle, Pen, TrashBinTrash, BoxMinimalistic, Magnifer } from "@solar-icons/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";

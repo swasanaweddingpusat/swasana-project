@@ -981,21 +981,36 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
                 <Label className="text-sm font-medium">
                   Bitrix ID <span className="text-destructive">*</span>
                 </Label>
-                <BitrixIdField
-                  value={form.bitrixContactId}
-                  onChange={(v, deal) => {
-                    setField("bitrixContactId", v);
-                    // No. telp auto-bind dari kontak Bitrix (dinormalisasi ke format
-                    // simpanan <kodeNegara><nomor>); kalau kosong, biar user isi manual.
-                    if (deal?.phone) {
-                      const norm = normalizePhoneId(deal.phone);
-                      if (norm) setField("phoneNumber", norm);
-                    }
-                  }}
-                />
-                <p className="text-xs text-muted-foreground">
-                  No. telepon terisi otomatis bila kontak Bitrix punya nomor.
-                </p>
+                {can("bitrix", "view") ? (
+                  <>
+                    <BitrixIdField
+                      value={form.bitrixContactId}
+                      onChange={(v, deal) => {
+                        setField("bitrixContactId", v);
+                        // No. telp auto-bind dari kontak Bitrix (dinormalisasi ke format
+                        // simpanan <kodeNegara><nomor>); kalau kosong, biar user isi manual.
+                        if (deal?.phone) {
+                          const norm = normalizePhoneId(deal.phone);
+                          if (norm) setField("phoneNumber", norm);
+                        }
+                      }}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      No. telepon terisi otomatis bila kontak Bitrix punya nomor.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <Input
+                      placeholder="Masukkan Bitrix ID"
+                      value={form.bitrixContactId}
+                      onChange={(e) => setField("bitrixContactId", e.target.value)}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Anda tidak punya akses pencarian Bitrix, masukkan Bitrix ID secara manual.
+                    </p>
+                  </>
+                )}
               </div>
             )}
 

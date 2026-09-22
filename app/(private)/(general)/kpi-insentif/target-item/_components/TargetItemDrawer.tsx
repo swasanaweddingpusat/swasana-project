@@ -2,12 +2,10 @@
 
 import { useEffect } from "react";
 import { useForm, Controller } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
 import {
   AddCircle,
   Pen,
-  Target,
 } from "@solar-icons/react";
 import { Drawer } from "@/components/shared/drawer";
 import { Button } from "@/components/ui/button";
@@ -20,7 +18,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { createTargetItemSchema, type CreateTargetItemInput } from "@/lib/validations/kpiInsentif";
 import { useCreateTargetItem, useUpdateTargetItem } from "@/hooks/useKpiInsentif";
 import type { TargetItemRow } from "@/lib/queries/kpiInsentif";
 
