@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { useAttendanceToday, useAttendanceSettings, useClockIn, useClockOut } from "@/hooks/use-attendance";
+import { useAttendanceToday, useClockIn, useClockOut } from "@/hooks/use-attendance";
 import { useWorkShifts } from "@/hooks/use-work-shifts";
 import { useWorkLocations } from "@/hooks/use-work-locations";
 import type { AttendanceStatusValue, DayOffTypeValue } from "@/lib/validations/attendance";
@@ -66,7 +66,6 @@ export function AttendanceClock() {
   const [selectedLocationId, setSelectedLocationId] = useState<string>("");
 
   const { data: todayData, isLoading: todayLoading } = useAttendanceToday();
-  const { data: settings } = useAttendanceSettings();
   const { data: workShifts } = useWorkShifts();
   const { data: workLocations } = useWorkLocations();
   const clockInMutation = useClockIn();
@@ -126,11 +125,6 @@ export function AttendanceClock() {
   }, [attendance, todayLoading]);
 
   const handleAction = useCallback((action: ClockAction) => {
-    if (!settings) {
-      toast.error("Settings absensi belum dikonfigurasi. Hubungi admin.");
-      return;
-    }
-
     setGpsLoading(true);
     setPendingAction(action);
 
@@ -154,7 +148,7 @@ export function AttendanceClock() {
       },
       { enableHighAccuracy: true, timeout: 10000 },
     );
-  }, [settings]);
+  }, []);
 
   const handleClockIn = useCallback(() => {
     if (!selectedStatus) {
@@ -280,7 +274,6 @@ export function AttendanceClock() {
   const canClockOut = !!attendance?.clockInAt && !attendance?.clockOutAt;
   const isDone = !!attendance?.clockOutAt;
   const clockInDisabled =
-    !settings ||
     isMutating ||
     gpsLoading ||
     !selectedStatus ||
@@ -515,13 +508,6 @@ export function AttendanceClock() {
                   </span>
                 )}
               </div>
-            </div>
-          )}
-
-          {!settings && !todayLoading && (
-            <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive text-center">
-              <MapPoint weight="BoldDuotone" className="inline h-4 w-4 mr-1" />
-              Settings absensi belum dikonfigurasi. Hubungi admin.
             </div>
           )}
 
