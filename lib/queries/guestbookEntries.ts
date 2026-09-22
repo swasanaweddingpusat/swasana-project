@@ -118,10 +118,12 @@ const guestbookEntrySelect = {
   segmentId: true,
   venueId: true,
   salesId: true,
+  attendanceConfirmedAt: true,
   createdAt: true,
   host: { select: { id: true, fullName: true } },
   createdBy: { select: { id: true, fullName: true } },
   sales: { select: { id: true, fullName: true } },
+  attendanceConfirmedBy: { select: { id: true, fullName: true } },
   venue: { select: { id: true, name: true } },
   sourceOfInformation: { select: { id: true, name: true } },
   package: {

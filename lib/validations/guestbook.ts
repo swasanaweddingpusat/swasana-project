@@ -127,3 +127,8 @@ export const updateGuestbookEntrySchema = z.object({
 });
 
 export type UpdateGuestbookEntryInput = z.infer<typeof updateGuestbookEntrySchema>;
+
+/** Sumber informasi dianggap "dari Bitrix" kalau namanya mengandung kata "bitrix" — heuristik yang sama dipakai client (GuestbookDrawer) dan server (actions/guestbook.ts) supaya konsisten. */
+export function isBitrixSourceName(name: string | null | undefined): boolean {
+  return (name ?? "").toLowerCase().includes("bitrix");
+}
