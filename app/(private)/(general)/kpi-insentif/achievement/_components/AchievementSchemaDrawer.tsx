@@ -85,13 +85,6 @@ const DEFAULT_VALUES: FormValues = {
   tiers: [{ ...DEFAULT_TIER }],
 };
 
-const ACTION_TYPE_LABELS: Record<string, string> = {
-  bonus: "Bonus",
-  deduction: "Potongan",
-  warning: "Surat Peringatan",
-  under_performance: "Under Performance",
-};
-
 type DetailTier = NonNullable<AchievementSchemaDetail>["tiers"][number];
 
 function tierToFormRow(tier: DetailTier): TierFormRow {

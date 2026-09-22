@@ -38,6 +38,7 @@ export async function POST(req: Request) {
   }
 
   const today = todayMidnightUTC();
+  const now = new Date();
 
   // 3. Already clocked in today?
   const existing = await getAttendanceToday(profileId);
@@ -100,6 +101,7 @@ export async function POST(req: Request) {
         create: {
           profileId,
           date: today,
+          clockInAt: now,
           attendantType: "DAY_OFF",
           isPublicHoliday,
           publicHolidayId: resolvedHolidayId,
@@ -107,6 +109,7 @@ export async function POST(req: Request) {
           clockInEvidence: clockInEvidence as Prisma.InputJsonValue,
         },
         update: {
+          clockInAt: now,
           attendantType: "DAY_OFF",
           isPublicHoliday,
           publicHolidayId: resolvedHolidayId,
@@ -170,7 +173,6 @@ export async function POST(req: Request) {
   }
 
   // 5. Upload photo — SOP: random-id filename, webp, 50% quality, JSON descriptor
-  const now = new Date();
   const dateStr = today.toISOString().slice(0, 10);
   const base64Data = photoBase64.replace(/^data:image\/\w+;base64,/, "");
   const rawBuffer = Buffer.from(base64Data, "base64");

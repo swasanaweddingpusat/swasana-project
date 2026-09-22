@@ -2,7 +2,7 @@ import { requirePermissionForRoute } from "@/lib/permissions";
 import { apiLimiter } from "@/lib/rate-limit";
 import { getTargetItems } from "@/lib/queries/kpiInsentif";
 
-export async function GET(req: Request): Promise<Response> {
+export async function GET(): Promise<Response> {
   const { session, response } = await requirePermissionForRoute({
     module: "kpi-master",
     action: "view",
