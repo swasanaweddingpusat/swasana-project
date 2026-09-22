@@ -196,6 +196,8 @@ model Profile {
   leaveManagerApprovals        LeaveRequest[]             @relation("LeaveManagerApprover")
   leaveHrApprovals             LeaveRequest[]             @relation("LeaveHrApprover")
   leaveRejections              LeaveRequest[]             @relation("LeaveRejector")
+  holidayTokenGrants           HolidayTokenGrant[]
+  holidayTokenGrantsIssued     HolidayTokenGrant[]        @relation("HolidayTokenGranter")
   employeeSalaries             EmployeeSalary[]
   payslips                     Payslip[]
   payrollsGenerated            PayrollPeriod[]            @relation("PayrollGenerator")
@@ -2485,6 +2487,7 @@ model PublicHoliday {
 
   attendances   Attendance[]
   leaveRequests LeaveRequest[]
+  tokenGrants   HolidayTokenGrant[]
 
   @@index([date])
   @@map("public_holidays")
@@ -2783,6 +2786,27 @@ model LeaveRequest {
   @@index([endDate])
   @@index([publicHolidayId])
   @@map("leave_requests")
+}
+
+model HolidayTokenGrant {
+  id                String   @id @default(uuid())
+  profileId         String
+  publicHolidayId   String
+  publicHolidayName String
+  note              String?
+  grantedBy         String?
+  grantedAt         DateTime @default(now())
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  profile       Profile       @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  publicHoliday PublicHoliday @relation(fields: [publicHolidayId], references: [id], onDelete: Cascade)
+  granter       Profile?      @relation("HolidayTokenGranter", fields: [grantedBy], references: [id], onDelete: SetNull)
+
+  @@unique([profileId, publicHolidayId])
+  @@index([profileId])
+  @@index([publicHolidayId])
+  @@map("holiday_token_grants")
 }
 
 // ─── Payroll Engine ──────────────────────────────────────────────────────────
