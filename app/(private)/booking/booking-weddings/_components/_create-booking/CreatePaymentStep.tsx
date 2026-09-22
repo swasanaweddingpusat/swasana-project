@@ -25,6 +25,7 @@
 
 import React, { useState } from "react";
 import { format } from "date-fns";
+import { toast } from "sonner";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
@@ -50,6 +51,7 @@ import {
   AlignVerticalSpacing,
   AltArrowDown,
   Calendar as CalendarIcon,
+  Copy,
   Pen,
   TrashBinTrash,
 } from "@solar-icons/react";
@@ -145,12 +147,15 @@ export function CreatePaymentStep({
   const priceAfterDiscount = Math.max(0, packagePrice - specialBonusAmount);
   const totalTerms = terms.reduce((s, t) => s + (t.amount || 0), 0);
   const difference = totalTerms - priceAfterDiscount;
+  const differenceText =
+    difference === 0
+      ? "Sesuai"
+      : `${difference < 0 ? "−" : "+"} Rp${fmtRp(Math.abs(difference))}`;
 
-  /** Row terakhir belum diisi — disable tombol Tambah. */
-  const lastTerm = terms[terms.length - 1];
-  const isLastTermEmpty = lastTerm
-    ? !lastTerm.name.trim() || !lastTerm.amount
-    : false;
+  function handleCopyDifference(): void {
+    navigator.clipboard.writeText(differenceText);
+    toast.success("Selisih disalin");
+  }
 
   function toggleTerm(uid: string): void {
     setCollapsedTerms((prev) => {
@@ -361,12 +366,8 @@ export function CreatePaymentStep({
         <Button
           type="button"
           variant="outline"
-          disabled={isLastTermEmpty}
           onClick={onAddTerm}
-          className={cn(
-            "rounded-full",
-            isLastTermEmpty && "cursor-not-allowed opacity-50",
-          )}
+          className="rounded-full"
         >
           <AddCircle weight="BoldDuotone" className="size-4" />
           Tambah Termin
@@ -467,16 +468,24 @@ export function CreatePaymentStep({
           </div>
           <div className="flex min-w-0 flex-col gap-0.5">
             <span className="text-[10px] text-muted-foreground">Selisih</span>
-            <span
-              className={cn(
-                "truncate text-xs font-semibold tabular-nums",
-                difference === 0 ? "text-foreground" : "text-destructive",
-              )}
-            >
-              {difference === 0
-                ? "Sesuai"
-                : `${difference < 0 ? "−" : "+"} Rp${fmtRp(Math.abs(difference))}`}
-            </span>
+            <div className="flex min-w-0 items-center gap-1">
+              <span
+                className={cn(
+                  "truncate text-xs font-semibold tabular-nums",
+                  difference === 0 ? "text-foreground" : "text-destructive",
+                )}
+              >
+                {differenceText}
+              </span>
+              <button
+                type="button"
+                onClick={handleCopyDifference}
+                aria-label="Salin selisih"
+                className="shrink-0 rounded-md p-0.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              >
+                <Copy weight="BoldDuotone" className="size-3" />
+              </button>
+            </div>
           </div>
         </div>
       </div>

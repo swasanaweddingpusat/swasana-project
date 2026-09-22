@@ -65,6 +65,7 @@ export function useSubmitLeaveRequest() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["leave-requests"] });
       qc.invalidateQueries({ queryKey: ["leave-balances"] });
+      qc.invalidateQueries({ queryKey: ["holiday-tokens"] });
     },
   });
 }
@@ -83,7 +84,10 @@ export function useManagerRejectLeave() {
   return useMutation({
     mutationFn: (data: Parameters<typeof managerRejectLeave>[0]) =>
       managerRejectLeave(data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["leave-requests"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["leave-requests"] });
+      qc.invalidateQueries({ queryKey: ["holiday-tokens"] });
+    },
   });
 }
 
@@ -104,7 +108,10 @@ export function useHrRejectLeave() {
   return useMutation({
     mutationFn: (data: Parameters<typeof hrRejectLeave>[0]) =>
       hrRejectLeave(data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["leave-requests"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["leave-requests"] });
+      qc.invalidateQueries({ queryKey: ["holiday-tokens"] });
+    },
   });
 }
 
@@ -116,6 +123,7 @@ export function useCancelLeaveRequest() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["leave-requests"] });
       qc.invalidateQueries({ queryKey: ["leave-balances"] });
+      qc.invalidateQueries({ queryKey: ["holiday-tokens"] });
     },
   });
 }

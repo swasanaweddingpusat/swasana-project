@@ -3,6 +3,8 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Camera } from "@solar-icons/react";
 import type { AttendanceListItem } from "@/lib/queries/attendance";
+import type { FileDescriptor } from "@/lib/validations/common";
+import { resolveAttendancePhotoUrl } from "@/lib/attendance-photo";
 
 interface PhotoPreviewModalProps {
   record: AttendanceListItem | null;
@@ -10,6 +12,9 @@ interface PhotoPreviewModalProps {
 }
 
 export function PhotoPreviewModal({ record, onClose }: PhotoPreviewModalProps) {
+  const clockInUrl = resolveAttendancePhotoUrl((record?.clockInEvidence ?? null) as FileDescriptor | null);
+  const clockOutUrl = resolveAttendancePhotoUrl((record?.clockOutEvidence ?? null) as FileDescriptor | null);
+
   return (
     <Dialog open={!!record} onOpenChange={(isOpen) => { if (!isOpen) onClose(); }}>
       <DialogContent className="sm:max-w-lg">
@@ -24,10 +29,10 @@ export function PhotoPreviewModal({ record, onClose }: PhotoPreviewModalProps) {
           <div className="space-y-2">
             <p className="text-xs font-medium text-muted-foreground text-center">Clock In</p>
             <div className="aspect-[3/4] overflow-hidden rounded-xl bg-muted">
-              {record?.clockInPhotoUrl ? (
+              {clockInUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
-                  src={record.clockInPhotoUrl}
+                  src={clockInUrl}
                   alt="Clock in selfie"
                   className="h-full w-full object-cover"
                 />
@@ -42,10 +47,10 @@ export function PhotoPreviewModal({ record, onClose }: PhotoPreviewModalProps) {
           <div className="space-y-2">
             <p className="text-xs font-medium text-muted-foreground text-center">Clock Out</p>
             <div className="aspect-[3/4] overflow-hidden rounded-xl bg-muted">
-              {record?.clockOutPhotoUrl ? (
+              {clockOutUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
-                  src={record.clockOutPhotoUrl}
+                  src={clockOutUrl}
                   alt="Clock out selfie"
                   className="h-full w-full object-cover"
                 />

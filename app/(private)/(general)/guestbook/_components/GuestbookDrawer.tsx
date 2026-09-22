@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, type ForwardRefExoticComponent, type RefAttributes } from "react";
 import { createPortal } from "react-dom";
 import Image from "next/image";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Drawer } from "@/components/shared/drawer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -58,9 +58,31 @@ import { useVenues } from "@/hooks/use-venues";
 import { useSalesUsers } from "@/hooks/use-sales-users";
 import { usePermissions } from "@/hooks/use-permissions";
 import { useCurrentUser } from "@/hooks/use-current-user";
+import { createSourceOfInformation } from "@/actions/source-of-information";
+import { createDailyActivitySegment } from "@/actions/daily-activity-segment";
 import type { GuestbookEntryItem } from "@/lib/queries/guestbookEntries";
-import type { FileDescriptor, ProofFiles } from "@/lib/validations/guestbook";
+import { isBitrixSourceName, type FileDescriptor, type ProofFiles } from "@/lib/validations/guestbook";
 import { resolveGuestbookPhotoUrl } from "./photo-url";
+
+function formatDateForInput(value: string | Date | null | undefined): string {
+  if (!value) return "";
+
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
+function formatDateTimeForInput(value: string | Date | null | undefined): string {
+  if (!value) return "";
+
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
 
 async function fetchJson<T>(url: string): Promise<T> {
   const res = await fetch(url);
@@ -483,6 +505,7 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
   const salesOptions = salesUsers.map((u) => ({ id: u.id, name: u.fullName ?? u.id }));
   const { can } = usePermissions();
   const { user: currentUser } = useCurrentUser();
+  const queryClient = useQueryClient();
 
   // Sales PIC lock — kalau yang create sales, hostId dikunci ke dirinya sendiri.
   const isSalesRole =
@@ -539,8 +562,9 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
     staleTime: 5 * 60_000,
   });
 
-  const isBitrixSource =
-    sourceOptions.find((o) => o.id === form.sourceOfInformationId)?.name.toLowerCase().includes("bitrix") ?? false;
+  const isBitrixSource = isBitrixSourceName(
+    sourceOptions.find((o) => o.id === form.sourceOfInformationId)?.name
+  );
 
   useEffect(() => {
     if (!isEditMode || !isOpen) return;
@@ -556,7 +580,7 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
         onlineMedium: editEntry.onlineMedium ?? "",
         meetingUrl: editEntry.meetingUrl ?? "",
         meetingLocation: editEntry.meetingLocation ?? "",
-        scheduledAt: editEntry.scheduledAt ? new Date(editEntry.scheduledAt).toISOString().slice(0, 16) : "",
+        scheduledAt: formatDateTimeForInput(editEntry.scheduledAt),
         hostId: editEntry.host?.id ?? "",
         notes: editEntry.notes ?? "",
         visitStatus: editEntry.visitStatus ?? "",
@@ -564,12 +588,10 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
         packageId: editEntry.packageId ?? "",
         segmentId: editEntry.segmentId ?? "",
         eventCategory: editEntry.eventCategory ?? editEntry.package?.category ?? (canWedding ? "WEDDINGS" : "MICE"),
-        checkInAt: editEntry.checkInAt ? new Date(editEntry.checkInAt).toISOString().slice(0, 16) : "",
-        checkOutAt: editEntry.checkOutAt ? new Date(editEntry.checkOutAt).toISOString().slice(0, 16) : "",
-        commitVisitDate: editEntry.commitVisitDate
-          ? new Date(editEntry.commitVisitDate).toISOString().slice(0, 10) : "",
-        commitPayDate: editEntry.commitPayDate
-          ? new Date(editEntry.commitPayDate).toISOString().slice(0, 10) : "",
+        checkInAt: formatDateTimeForInput(editEntry.checkInAt),
+        checkOutAt: formatDateTimeForInput(editEntry.checkOutAt),
+        commitVisitDate: formatDateForInput(editEntry.commitVisitDate),
+        commitPayDate: formatDateForInput(editEntry.commitPayDate),
         proofChatFile: null,
         proofChatPreview: resolveGuestbookPhotoUrl(proofFiles?.chat?.path) ?? "",
         proofPhotoFile: null,
@@ -695,8 +717,8 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
       toast.error("Pilih venue");
       return false;
     }
-    if (!isEditMode && !form.proofPhotoFile && !form.proofPhotoPreview) {
-      toast.error("Bukti foto visit wajib diupload");
+    if (!isEditMode && !form.proofChatFile && !form.proofChatPreview) {
+      toast.error("Bukti chat wajib diupload");
       return false;
     }
     return true;
@@ -913,6 +935,16 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
                 onChange={(v) => {
                   setField("segmentId", v);
                 }}
+                onAdd={async (name) => {
+                  const res = await createDailyActivitySegment(name);
+                  if (!res.success) {
+                    toast.error(res.error ?? "Gagal menambah segmen");
+                    return;
+                  }
+                  await queryClient.invalidateQueries({ queryKey: ["daily-activity-segments"] });
+                  if (res.item) setField("segmentId", res.item.id);
+                  toast.success(`Segmen "${name}" berhasil ditambahkan`);
+                }}
                 placeholder="Pilih segmen / kategori"
                 searchPlaceholder="Cari segmen..."
                 emptyText="Segmen tidak ditemukan"
@@ -929,6 +961,16 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
                 onChange={(v) => {
                   setField("sourceOfInformationId", v);
                 }}
+                onAdd={async (name) => {
+                  const res = await createSourceOfInformation(name);
+                  if (!res.success) {
+                    toast.error(res.error ?? "Gagal menambah sumber");
+                    return;
+                  }
+                  await queryClient.invalidateQueries({ queryKey: ["source-of-informations"] });
+                  if (res.item) setField("sourceOfInformationId", res.item.id);
+                  toast.success(`Sumber "${name}" berhasil ditambahkan`);
+                }}
                 placeholder="Pilih sumber informasi"
                 searchPlaceholder="Cari sumber..."
                 emptyText="Tidak ada sumber"
@@ -940,21 +982,36 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
                 <Label className="text-sm font-medium">
                   Bitrix ID <span className="text-destructive">*</span>
                 </Label>
-                <BitrixIdField
-                  value={form.bitrixContactId}
-                  onChange={(v, deal) => {
-                    setField("bitrixContactId", v);
-                    // No. telp auto-bind dari kontak Bitrix (dinormalisasi ke format
-                    // simpanan <kodeNegara><nomor>); kalau kosong, biar user isi manual.
-                    if (deal?.phone) {
-                      const norm = normalizePhoneId(deal.phone);
-                      if (norm) setField("phoneNumber", norm);
-                    }
-                  }}
-                />
-                <p className="text-xs text-muted-foreground">
-                  No. telepon terisi otomatis bila kontak Bitrix punya nomor.
-                </p>
+                {can("bitrix", "view") ? (
+                  <>
+                    <BitrixIdField
+                      value={form.bitrixContactId}
+                      onChange={(v, deal) => {
+                        setField("bitrixContactId", v);
+                        // No. telp auto-bind dari kontak Bitrix (dinormalisasi ke format
+                        // simpanan <kodeNegara><nomor>); kalau kosong, biar user isi manual.
+                        if (deal?.phone) {
+                          const norm = normalizePhoneId(deal.phone);
+                          if (norm) setField("phoneNumber", norm);
+                        }
+                      }}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      No. telepon terisi otomatis bila kontak Bitrix punya nomor.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <Input
+                      placeholder="Masukkan Bitrix ID"
+                      value={form.bitrixContactId}
+                      onChange={(e) => setField("bitrixContactId", e.target.value)}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Anda tidak punya akses pencarian Bitrix, masukkan Bitrix ID secara manual.
+                    </p>
+                  </>
+                )}
               </div>
             )}
 
@@ -1167,6 +1224,7 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
                   <SelectItem value="cold">Cold</SelectItem>
                   <SelectItem value="warm">Warm</SelectItem>
                   <SelectItem value="hot">Hot</SelectItem>
+                  <SelectItem value="done_visit">Done Visit</SelectItem>
                   <SelectItem value="to_be_discuss">To Be Discuss</SelectItem>
                   <SelectItem value="deal">Deal</SelectItem>
                   <SelectItem value="lost">Lost</SelectItem>
@@ -1193,20 +1251,20 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
             <SectionHeader icon={Camera} title="Bukti" />
             <div className="grid grid-cols-2 gap-4">
               <PhotoUpload
-                label="Bukti Foto Visit"
+                label="Bukti Chat"
                 required
+                fullWidth
+                preview={form.proofChatPreview}
+                onFileChange={(f) => handlePhotoChange("proofChatFile", "proofChatPreview", f)}
+                onClear={() => handlePhotoChange("proofChatFile", "proofChatPreview", null)}
+              />
+              <PhotoUpload
+                label="Bukti Foto Visit"
                 fullWidth
                 withCamera
                 preview={form.proofPhotoPreview}
                 onFileChange={(f) => handlePhotoChange("proofPhotoFile", "proofPhotoPreview", f)}
                 onClear={() => handlePhotoChange("proofPhotoFile", "proofPhotoPreview", null)}
-              />
-              <PhotoUpload
-                label="Bukti Chat"
-                fullWidth
-                preview={form.proofChatPreview}
-                onFileChange={(f) => handlePhotoChange("proofChatFile", "proofChatPreview", f)}
-                onClear={() => handlePhotoChange("proofChatFile", "proofChatPreview", null)}
               />
               <PhotoUpload
                 label="Bukti Lost"

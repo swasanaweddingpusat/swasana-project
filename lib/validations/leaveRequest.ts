@@ -5,6 +5,9 @@ export const submitLeaveRequestSchema = z.object({
   startDate: z.coerce.date(),
   endDate: z.coerce.date(),
   reason: z.string().optional(),
+  documentKey: z.string().max(500).optional(),
+  photoBase64: z.string().min(1, "Bukti wajib diupload"),
+  publicHolidayId: z.string().optional(),
 });
 
 export const approveLeaveSchema = z.object({

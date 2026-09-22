@@ -60,7 +60,7 @@ export async function createMiceBooking(
     let leadRecord: { id: string; convertedToCustomerId: string | null } | null = null;
 
     if (input.leadId) {
-      leadRecord = await db.dailyActivity.findUnique({
+      leadRecord = await db.lead.findUnique({
         where: { id: input.leadId },
         select: { id: true, convertedToCustomerId: true },
       });
@@ -113,7 +113,7 @@ export async function createMiceBooking(
       // Lead conversion tracking — mirror wedding flow
       ...(leadRecord
         ? [
-            db.dailyActivity.update({
+            db.lead.update({
               where: { id: leadRecord.id },
               data: {
                 convertedToBookingId: bookingId,

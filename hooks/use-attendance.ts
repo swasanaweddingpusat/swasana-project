@@ -6,12 +6,13 @@ import {
   fetchAttendanceSettings,
   fetchAttendanceList,
   fetchMyAttendanceHistory,
+  fetchEmployeeAttendanceOverview,
   clockIn,
   clockOut,
   updateAttendanceSettings,
 } from "@/services/attendance-service";
-import type { AttendanceTodayResponse, AttendanceSettingsResult, AttendanceListResult, MyAttendanceHistoryResult } from "@/lib/queries/attendance";
-import type { AttendanceListQuery } from "@/lib/validations/attendance";
+import type { AttendanceTodayResponse, AttendanceSettingsResult, AttendanceListResult, MyAttendanceHistoryResult, EmployeeAttendanceOverview } from "@/lib/queries/attendance";
+import type { AttendanceListQuery, AttendanceOverviewQuery } from "@/lib/validations/attendance";
 
 export function useAttendanceToday() {
   return useQuery<AttendanceTodayResponse>({
@@ -65,6 +66,15 @@ export function useClockOut() {
       qc.invalidateQueries({ queryKey: ["attendance-today"] });
       qc.invalidateQueries({ queryKey: ["attendance-my-history"] });
     },
+  });
+}
+
+export function useEmployeeAttendanceOverview(params: AttendanceOverviewQuery | null) {
+  return useQuery<EmployeeAttendanceOverview>({
+    queryKey: ["attendance-overview", params],
+    queryFn: () => fetchEmployeeAttendanceOverview(params as AttendanceOverviewQuery),
+    enabled: !!params?.profileId,
+    staleTime: 60 * 1000,
   });
 }
 

@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import { isOffdayForDate } from "@/lib/attendance-offdays";
 
 export function haversineDistance(
   lat1: number, lng1: number,
@@ -81,6 +82,49 @@ export async function resolveEmployeeShift(profileId: string, date: Date): Promi
   return null;
 }
 
+export interface AttendanceContext {
+  attendantType: "WORKDAY" | "DAY_OFF";
+  isPublicHoliday: boolean;
+  publicHolidayOptions: Array<{ id: string; name: string; date: Date }>;
+  publicHolidayId: string | null;
+  publicHolidayName: string | null;
+}
+
+export async function resolveAttendanceContext(profileId: string, date: Date): Promise<AttendanceContext> {
+  const [holiday, publicHolidayOptions, assignment] = await Promise.all([
+    db.publicHoliday.findFirst({
+      where: { date, isActive: true },
+      select: { id: true, name: true },
+    }),
+    db.publicHoliday.findMany({
+      where: { date: { lte: date }, isActive: true },
+      select: { id: true, name: true, date: true },
+      orderBy: { date: "desc" },
+      take: 500,
+    }),
+    db.employeeWorkAssignment.findFirst({
+      where: {
+        profileId,
+        isDefault: true,
+        effectiveDate: { lte: date },
+        OR: [{ endDate: null }, { endDate: { gte: date } }],
+      },
+      select: { offdayDays: true },
+    }),
+  ]);
+
+  const attendantType: "WORKDAY" | "DAY_OFF" =
+    assignment && isOffdayForDate(assignment.offdayDays, date) ? "DAY_OFF" : "WORKDAY";
+
+  return {
+    attendantType,
+    isPublicHoliday: holiday !== null,
+    publicHolidayOptions,
+    publicHolidayId: holiday?.id ?? null,
+    publicHolidayName: holiday?.name ?? null,
+  };
+}
+
 interface LocationValidationResult {
   valid: boolean;
   nearestLocationId: string | null;
@@ -89,10 +133,10 @@ interface LocationValidationResult {
 }
 
 export async function validateGpsAgainstLocations(
-  profileId: string,
+  _profileId: string,
   lat: number,
   lng: number,
-  date: Date,
+  _date: Date,
   overrideLocationId: string | null,
 ): Promise<LocationValidationResult> {
   let locations: Array<{ id: string; name: string; latitude: number; longitude: number; radiusMeters: number }>;
@@ -104,19 +148,13 @@ export async function validateGpsAgainstLocations(
     });
     locations = loc ? [loc] : [];
   } else {
-    const assignments = await db.employeeWorkAssignment.findMany({
-      where: {
-        profileId,
-        effectiveDate: { lte: date },
-        OR: [{ endDate: null }, { endDate: { gte: date } }],
-      },
-      include: {
-        workLocation: { select: { id: true, name: true, latitude: true, longitude: true, radiusMeters: true, isActive: true } },
-      },
+    // No override venue selected — validate against ANY active work location,
+    // not just the employee's EmployeeWorkAssignment (attendance is not master-data-scoped).
+    locations = await db.workLocation.findMany({
+      where: { isActive: true },
+      select: { id: true, name: true, latitude: true, longitude: true, radiusMeters: true },
+      take: 200,
     });
-    locations = assignments
-      .map((a) => a.workLocation)
-      .filter((l) => l.isActive);
   }
 
   if (locations.length === 0) {

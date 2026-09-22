@@ -1,14 +1,8 @@
 import { z } from 'zod';
+import { fileDescriptorSchema, type FileDescriptor } from '@/lib/validations/common';
 
 /** Descriptor persisted for every guestbook photo/proof file — path is a storage KEY, never a full URL. */
-export const fileDescriptorSchema = z.object({
-  id: z.string().nullable().optional(),
-  name_file_origin: z.string().nullable().optional(),
-  mimetype: z.string().nullable().optional(),
-  path: z.string(),
-});
-
-export type FileDescriptor = z.infer<typeof fileDescriptorSchema>;
+export { fileDescriptorSchema, type FileDescriptor };
 
 export interface ProofFiles {
   photo?: FileDescriptor | null;
@@ -47,7 +41,7 @@ export const createGuestbookEntrySchema = z
     venueId: z.string().optional().nullable(),
     checkInAt: z.string().min(1, 'Tanggal berkunjung wajib diisi'),
     notes: z.string().optional().nullable(),
-    visitStatus: z.enum(['cold', 'warm', 'hot', 'to_be_discuss', 'deal', 'lost']).optional().nullable(),
+    visitStatus: z.enum(['cold', 'warm', 'hot', 'done_visit', 'to_be_discuss', 'deal', 'lost']).optional().nullable(),
     sourceOfInformationId: z.string().optional().nullable(),
     packageId: z.string().optional().nullable(),
     segmentId: z.string().optional().nullable(),
@@ -105,7 +99,7 @@ export const checkOutGuestbookEntrySchema = z.object({
 });
 
 export const updateGuestbookEntrySchema = z.object({
-  visitStatus: z.enum(['cold', 'warm', 'hot', 'to_be_discuss', 'deal', 'lost']).optional().nullable(),
+  visitStatus: z.enum(['cold', 'warm', 'hot', 'done_visit', 'to_be_discuss', 'deal', 'lost']).optional().nullable(),
   notes: z.string().optional().nullable(),
   sourceOfInformationId: z.string().optional().nullable(),
   packageId: z.string().optional().nullable(),
@@ -133,3 +127,8 @@ export const updateGuestbookEntrySchema = z.object({
 });
 
 export type UpdateGuestbookEntryInput = z.infer<typeof updateGuestbookEntrySchema>;
+
+/** Sumber informasi dianggap "dari Bitrix" kalau namanya mengandung kata "bitrix" — heuristik yang sama dipakai client (GuestbookDrawer) dan server (actions/guestbook.ts) supaya konsisten. */
+export function isBitrixSourceName(name: string | null | undefined): boolean {
+  return (name ?? "").toLowerCase().includes("bitrix");
+}

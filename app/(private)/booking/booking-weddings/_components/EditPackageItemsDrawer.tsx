@@ -12,7 +12,7 @@ import {
   type PackageVendorItemDraft,
   type PackageItemsTab,
 } from "@/components/shared/PackageItemsEditor";
-import { saveSnapInternalItems, saveSnapVendorItems } from "@/actions/snap-package-items";
+import { saveSnapPackageItems } from "@/actions/snap-package-items";
 import { firstError, packageInternalItemsSchema, packageVendorItemsSchema } from "@/lib/validations/booking-form";
 import type { BookingDetail } from "@/lib/queries/bookings";
 
@@ -66,44 +66,39 @@ function PackageItemsBody({
     }
 
     setSaving(true);
-    // Both internal and vendor items stay editable post client-signature (the signed
-    // PO PDF is patched in place to match — see patchSnapshotPackageItems). Save
-    // internal first — if it fails for any other reason, stop before vendor items.
-    const internalRes = await saveSnapInternalItems({
-      bookingId,
-      items: internalItems.map((i, idx) => ({
-        itemName: i.itemName,
-        itemDescription: i.itemDescription,
-        sortOrder: idx,
-      })),
-    });
-    if (!internalRes.success) {
+    try {
+      // Both internal and vendor items stay editable post client-signature (the signed
+      // PO PDF is patched in place to match — see patchSnapshotPackageItems). Both
+      // sections always save together here (no per-tab dirty-tracking in this drawer),
+      // committed atomically in one transaction.
+      const res = await saveSnapPackageItems({
+        bookingId,
+        internalItems: internalItems.map((i, idx) => ({
+          itemName: i.itemName,
+          itemDescription: i.itemDescription,
+          sortOrder: idx,
+        })),
+        vendorItems: vendorItems.map((i, idx) => ({
+          categoryId: i.categoryId,
+          categoryName: i.categoryName,
+          itemText: i.itemText,
+          sortOrder: idx,
+        })),
+      });
+      if (!res.success) {
+        toast.error(res.error ?? "Gagal menyimpan item paket.");
+        return;
+      }
+
+      toast.success("Item paket berhasil diupdate");
+      qc.invalidateQueries({ queryKey: ["bookings"] });
+      qc.invalidateQueries({ queryKey: ["booking-detail", bookingId] });
+      onClose();
+      // Note: in free mode the parent's onClose is a no-op that just shows a
+      // toast and stays on the tab. In linear mode it advances to the next step.
+    } finally {
       setSaving(false);
-      toast.error(internalRes.error ?? "Gagal menyimpan item internal.");
-      return;
     }
-
-    const vendorRes = await saveSnapVendorItems({
-      bookingId,
-      items: vendorItems.map((i, idx) => ({
-        categoryId: i.categoryId,
-        categoryName: i.categoryName,
-        itemText: i.itemText,
-        sortOrder: idx,
-      })),
-    });
-    setSaving(false);
-    if (!vendorRes.success) {
-      toast.error(vendorRes.error ?? "Gagal menyimpan item vendor.");
-      return;
-    }
-
-    toast.success("Item paket berhasil diupdate");
-    qc.invalidateQueries({ queryKey: ["bookings"] });
-    qc.invalidateQueries({ queryKey: ["booking-detail", bookingId] });
-    onClose();
-    // Note: in free mode the parent's onClose is a no-op that just shows a
-    // toast and stays on the tab. In linear mode it advances to the next step.
   };
 
   return (

@@ -2,7 +2,7 @@
 
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import { fetchGuestbookEntries } from "@/services/guestbookService";
-import { createGuestbookEntry, checkOutGuestbookEntry, updateGuestbookEntry, deleteGuestbookEntry } from "@/actions/guestbook";
+import { createGuestbookEntry, checkOutGuestbookEntry, updateGuestbookEntry, deleteGuestbookEntry, confirmGuestbookAttendance } from "@/actions/guestbook";
 import type { GuestbookFilterOptions } from "@/lib/queries/guestbookEntries";
 
 export function useGuestbookEntries(params?: GuestbookFilterOptions & { page?: number; pageSize?: number }) {
@@ -56,6 +56,14 @@ export function useDeleteGuestbookEntry() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => deleteGuestbookEntry(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["guestbook-entries"] }),
+  });
+}
+
+export function useConfirmGuestbookAttendance() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (guestCode: string) => confirmGuestbookAttendance(guestCode),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["guestbook-entries"] }),
   });
 }

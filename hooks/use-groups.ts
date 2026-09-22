@@ -12,8 +12,15 @@ import {
   removeGroupMember,
   setMemberTarget,
   deleteMemberTarget,
+  updateGroupVenues,
 } from "@/actions/groups";
-import type { CreateGroupInput, UpdateGroupInput, SetMemberTargetInput, DeleteMemberTargetInput } from "@/lib/validations/group";
+import type {
+  CreateGroupInput,
+  UpdateGroupInput,
+  SetMemberTargetInput,
+  DeleteMemberTargetInput,
+  UpdateGroupVenuesInput,
+} from "@/lib/validations/group";
 
 export function useGroups(initialData?: GroupsQueryResult) {
   return useQuery({
@@ -107,6 +114,17 @@ export function useUpdateGroupLeader() {
   return useMutation({
     mutationFn: ({ groupId, leaderId }: { groupId: string; leaderId: string }) =>
       updateGroupLeader(groupId, leaderId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["groups"] });
+      queryClient.invalidateQueries({ queryKey: ["groups", "performance"] });
+    },
+  });
+}
+
+export function useUpdateGroupVenues() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: UpdateGroupVenuesInput) => updateGroupVenues(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["groups"] });
       queryClient.invalidateQueries({ queryKey: ["groups", "performance"] });

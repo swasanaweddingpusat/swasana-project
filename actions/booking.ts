@@ -19,7 +19,6 @@ import { canAccessBooking } from "@/lib/access-control";
 import { generateEmaterai } from "@/lib/peruri";
 import { computeFullPrice, calcFinalFromFullPrice } from "@/lib/package-prices";
 import { getTermAllocatedMap } from "@/lib/queries/ledger";
-import { toDateOnly } from "@/lib/utils";
 import { z } from "zod";
 
 export async function createBooking(data: unknown) {
@@ -57,7 +56,7 @@ export async function createBooking(data: unknown) {
     let didLockLeadConversion = false;
 
     if (leadId) {
-      leadRecord = await db.dailyActivity.findUnique({
+      leadRecord = await db.lead.findUnique({
         where: { id: leadId },
         select: {
           id: true,
@@ -117,7 +116,7 @@ export async function createBooking(data: unknown) {
         });
 
         // Step 2: claim the conversion lock — FK is now valid.
-        const lockResult = await db.dailyActivity.updateMany({
+        const lockResult = await db.lead.updateMany({
           where: { id: leadRecord.id, convertedToCustomerId: null },
           data: { convertedToCustomerId: customerId },
         });
@@ -128,7 +127,7 @@ export async function createBooking(data: unknown) {
           await db.customer.delete({ where: { id: customerId } }).catch(() => {
             // Deletion is best-effort; if it fails the row stays as a harmless orphan.
           });
-          const refreshed = await db.dailyActivity.findUnique({
+          const refreshed = await db.lead.findUnique({
             where: { id: leadRecord.id },
             select: { convertedToCustomerId: true },
           });
@@ -204,7 +203,7 @@ export async function createBooking(data: unknown) {
       db.venue.findUniqueOrThrow({ where: { id: input.venueId }, include: { brand: true } }),
       db.package.findUniqueOrThrow({
         where: { id: input.packageId },
-        include: { vendorItems: true, internalItems: true, categoryPrices: true },
+        include: { vendorItems: true, internalItems: true, categoryPrices: true, packageTypeCategory: true },
       }),
     ]);
 
@@ -432,6 +431,8 @@ export async function createBooking(data: unknown) {
           packageId: pkg.id,
           packageName: pkg.packageName,
           notes: pkg.notes,
+          packageTypeCategoryName: pkg.packageTypeCategory?.name ?? null,
+          packageTypeCategoryCode: pkg.packageTypeCategory?.code ?? null,
         },
       }),
     );
@@ -456,7 +457,7 @@ export async function createBooking(data: unknown) {
         leadUpdateData.statusId = convertedStatus.id;
       }
       ops.push(
-        db.dailyActivity.update({
+        db.lead.update({
           where: { id: leadRecord.id },
           data: leadUpdateData,
         })
@@ -569,6 +570,24 @@ export async function createBooking(data: unknown) {
               description: c.description ?? null,
               qty: c.qty,
               sortOrder: c.sortOrder ?? i,
+            },
+          })
+        )
+      );
+    }
+
+    if (input.bookingBonuses && input.bookingBonuses.length > 0) {
+      ops.push(
+        ...input.bookingBonuses.map((b, i) =>
+          db.snapBookingBonus.create({
+            data: {
+              bookingId,
+              bonusId: b.bonusId ?? null,
+              name: b.name,
+              price: b.price,
+              description: b.description ?? null,
+              qty: b.qty,
+              sortOrder: b.sortOrder ?? i,
             },
           })
         )
@@ -1140,7 +1159,7 @@ export async function updateBookingClientInfo(data: unknown): Promise<{ success:
   const parsed = updateBookingClientInfoSchema.safeParse(data);
   if (!parsed.success) return { success: false, error: parsed.error.issues[0]?.message ?? "Validasi gagal." };
 
-  const { id, customerName, contactNumbers, contactEmailCpp, contactEmailCpw, contactIdTypeCpp, contactIdTypeCpw, contactNikCpp, contactNikCpw, contactCppAddress, contactCpwAddress, contactBitrixId, salesId, sourceOfInformationId, sourceOfInformationDetail, createdAt: dealingDateInput } = parsed.data;
+  const { id, customerName, contactNumbers, contactEmailCpp, contactEmailCpw, contactIdTypeCpp, contactIdTypeCpw, contactNikCpp, contactNikCpw, contactCppAddress, contactCpwAddress, contactBitrixId, salesId, sourceOfInformationId, sourceOfInformationDetail } = parsed.data;
 
   if (!session!.user.profileId) return { success: false, error: "Sesi tidak valid, silakan login ulang." };
   const scope = session!.user.dataScope ?? "own";
@@ -1148,24 +1167,12 @@ export async function updateBookingClientInfo(data: unknown): Promise<{ success:
     return { success: false, error: "Anda tidak memiliki akses ke booking ini." };
   }
 
-  // Dealing date override is gated separately (super-admin only by default) — silently
-  // dropped if the caller lacks the permission, even if sent in the payload.
-  const canEditDealingDate = await hasPermission(session!.user.roleId, "booking", "dealing-date", session!.user.isSuperAdmin);
-
   try {
     const booking = await db.booking.findUnique({
       where: { id },
-      select: { customerId: true, snapshotFrozenAt: true, createdAt: true, snapCustomer: { select: { name: true, mobileNumber: true } } },
+      select: { customerId: true, snapshotFrozenAt: true, snapCustomer: { select: { name: true, mobileNumber: true } } },
     });
     if (!booking) return { success: false, error: "Booking tidak ditemukan." };
-
-    // Only counts as a real change (and gets logged) when it actually differs
-    // from the current value — the edit form always resubmits the current
-    // dealing date on every Step-1 save, even when unrelated fields change.
-    const newDealingDate =
-      canEditDealingDate && dealingDateInput && dealingDateInput !== toDateOnly(booking.createdAt)
-        ? new Date(`${dealingDateInput}T00:00:00.000Z`)
-        : undefined;
 
     const contactDisplay = serializeContactNumbersToDisplay(contactNumbers ?? "");
     const contactArray = parseContactNumbersToArray(contactNumbers ?? "");
@@ -1181,7 +1188,6 @@ export async function updateBookingClientInfo(data: unknown): Promise<{ success:
           sourceOfInformationId: sourceOfInformationId ?? undefined,
           sourceOfInformationDetail: sourceOfInformationDetail ?? undefined,
           ...(salesId != null ? { salesId } : {}),
-          ...(newDealingDate && { createdAt: newDealingDate }),
         },
       }),
       ...(skipSnapCustomerWrite
@@ -1240,11 +1246,8 @@ export async function updateBookingClientInfo(data: unknown): Promise<{ success:
       changes: {
         scope: "client-info-only",
         customerName,
-        ...(newDealingDate && { createdAt: { from: booking.createdAt.toISOString(), to: newDealingDate.toISOString() } }),
       },
-      description: newDealingDate
-        ? `Updated client info for booking ${id} (tanggal dealing diubah)`
-        : `Updated client info for booking ${id}`,
+      description: `Updated client info for booking ${id}`,
     });
 
     revalidateTag("bookings", "max");
@@ -1486,6 +1489,8 @@ export async function editBooking(data: unknown) {
     // NOTE: complimentaries are intentionally excluded from material-change detection.
     // They are managed independently via saveSnapComplimentaries (EditComplimentaryDrawer)
     // which does NOT reset approval or client agreement.
+    // NOTE: bonuses (new bonus-based) are likewise excluded from material-change
+    // detection in this iteration — they are not managed by this action at all.
     // Snapshot freeze gate. Once the client signs (snapshotFrozenAt set), the frozen
     // snapshot (SnapCustomer, pricing, internal items) must not be silently overwritten.
     // A material change is the legitimate re-edit path: it spins a NEW revision the
@@ -1542,6 +1547,7 @@ export async function editBooking(data: unknown) {
         where: { id },
         data: {
           eventDate: new Date(`${rest.eventDate}T00:00:00.000Z`),
+          dealingDate: new Date(`${rest.dealingDate}T00:00:00.000Z`),
           venueId: rest.venueId,
           packageId: rest.packageId,
           paymentMethodId: rest.paymentMethodId ?? null,
@@ -1667,12 +1673,18 @@ export async function editBooking(data: unknown) {
     if (shouldRefreshPrice) {
       const newPkg = await db.package.findUniqueOrThrow({
         where: { id: rest.packageId },
-        include: { vendorItems: true, internalItems: true, categoryPrices: true },
+        include: { vendorItems: true, internalItems: true, categoryPrices: true, packageTypeCategory: true },
       });
       ops.push(
         db.snapPackage.update({
           where: { bookingId: id },
-          data: { packageId: newPkg.id, packageName: newPkg.packageName, notes: newPkg.notes },
+          data: {
+            packageId: newPkg.id,
+            packageName: newPkg.packageName,
+            notes: newPkg.notes,
+            packageTypeCategoryName: newPkg.packageTypeCategory?.name ?? null,
+            packageTypeCategoryCode: newPkg.packageTypeCategory?.code ?? null,
+          },
         })
       );
 
@@ -1846,6 +1858,7 @@ export async function editBooking(data: unknown) {
 
     // NOTE: complimentaries are NOT managed here. They are edited independently via
     // saveSnapComplimentaries (EditComplimentaryDrawer) which does not affect approval.
+    // NOTE: bonuses (new bonus-based) are likewise NOT managed here in this iteration.
 
     // Term of payments — re-write when structure OR sort-order changed. TOP kini
     // jadwal murni (name/amount/dueDate/sortOrder); status pembayaran DERIVED dari Ledger.

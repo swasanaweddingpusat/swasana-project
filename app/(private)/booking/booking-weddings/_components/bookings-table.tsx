@@ -476,11 +476,6 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
           <Eye weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4', 'text-primary')} /> Lihat Detail
         </DropdownMenuItem>
         <DropdownMenuSeparator />
-        {can("booking", "edit") && (
-          <DropdownMenuItem className="cursor-pointer" onClick={(e) => { e.stopPropagation(); setEditTarget(booking); }}>
-            <Pencil weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4', 'text-primary')} /> Edit Booking
-          </DropdownMenuItem>
-        )}
         {can("booking", "edit") && booking.bookingStatus !== "Lost" && booking.bookingStatus !== "Rejected" && (
           <DropdownMenuItem className="cursor-pointer" onClick={(e) => { e.stopPropagation(); setSyncPackageTarget(booking); }}>
             <RotateCcw weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4', 'text-primary')} /> Sync Paket dari Master
@@ -643,6 +638,19 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
             {renderPoItems(booking)}
           </DropdownMenuContent>
         </DropdownMenu>
+
+        {/* Edit booking — standalone icon button right before More, extracted
+            from the More dropdown for quicker access. */}
+        {booking.bookingStatus !== "Canceled" && can("booking", "edit") && (
+          <TooltipProvider delay={200}>
+            <Tooltip>
+              <TooltipTrigger render={<Button variant="ghost" size="icon" className={cn('cursor-pointer')} onClick={(e) => { e.stopPropagation(); setEditTarget(booking); }} />}>
+                <Pencil weight="BoldDuotone" className={cn('h-4', 'w-4', 'text-primary')} />
+              </TooltipTrigger>
+              <TooltipContent side="top"><p className="text-xs">Edit Booking</p></TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        )}
 
         {/* More actions dropdown */}
         <DropdownMenu>

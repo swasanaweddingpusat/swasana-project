@@ -91,7 +91,7 @@ export function ProcurementDetailDrawer({
     >
       <div className="space-y-5 pb-4">
         {/* Status row */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
           <Badge
             variant={cfg.variant}
             className="flex items-center gap-1.5 rounded-full text-xs"
@@ -105,117 +105,129 @@ export function ProcurementDetailDrawer({
             {cfg.label}
           </Badge>
           <span className="text-xs text-muted-foreground">
-            {formatDate(item.createdAt)}
+            Dibuat {formatDate(item.createdAt)}
           </span>
         </div>
 
-        {/* Main info */}
-        <div className="bg-muted/30 rounded-2xl p-4 space-y-4">
-          <Field label="Nama Barang" value={item.namaBarang} />
-          <div className="grid grid-cols-2 gap-4">
-            <Field
-              label="Tanggal Permintaan"
-              value={formatDate(item.tanggalPermintaan)}
-            />
-            <Field label="Venue" value={item.venue?.name} />
-            <Field label="Jumlah Barang" value={item.jumlahBarang} />
-            <Field label="Sisa Barang" value={item.sisaBarang} />
-          </div>
-          <Field label="PIC Penerima" value={item.picPenerima} />
-          <Field label="Harga per Unit" value={formatCurrency(item.harga)} />
-          <Field label="Petty Cash" value={formatCurrency(item.pettyCash)} />
-          {item.penggunaan && (
-            <Field label="Penggunaan" value={item.penggunaan} />
-          )}
-          {item.division && <Field label="Divisi" value={item.division} />}
-        </div>
-
-        {/* Event info */}
-        <div className="bg-muted/30 rounded-2xl p-4 space-y-4">
-          <Field
-            label="Keterangan Acara"
-            value={
-              item.keteranganAcara === "WEDDING" ? "Wedding" : "Non Wedding"
-            }
-          />
-          {item.weddingNote && (
-            <Field label="Wedding Note" value={item.weddingNote} />
-          )}
-          {item.nonWeddingNote && (
-            <Field label="Non Wedding Note" value={item.nonWeddingNote} />
-          )}
-          <div className="grid grid-cols-3 gap-3">
-            <Field
-              label="Total Wedding"
-              value={formatCurrency(item.totalWedding)}
-            />
-            <Field
-              label="Total Non Wedding"
-              value={formatCurrency(item.totalNonWedding)}
-            />
-            <Field label="Total" value={formatCurrency(item.total)} />
-          </div>
-        </div>
-
-        {/* Additional */}
-        {(item.linkBarang ?? item.note ?? item.keterangan) && (
+        {/* Section: Info Dasar */}
+        <div className="space-y-3">
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Info Dasar</p>
           <div className="bg-muted/30 rounded-2xl p-4 space-y-4">
-            {item.linkBarang && (
-              <div className="space-y-1">
-                <p className="text-xs text-muted-foreground">Link Barang</p>
-                <a
-                  href={item.linkBarang}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-sm text-foreground underline break-all"
-                >
-                  {item.linkBarang}
-                </a>
+            <Field label="Nama Barang" value={
+              <span className="text-base font-semibold">{item.namaBarang}</span>
+            } />
+            <div className="grid grid-cols-2 gap-4">
+              <Field label="Tanggal Permintaan" value={formatDate(item.tanggalPermintaan)} />
+              <Field label="Venue" value={item.venue?.name} />
+              <Field label="PIC Penerima" value={item.picPenerima} />
+              {item.division && <Field label="Divisi" value={item.division} />}
+            </div>
+            {item.penggunaan && (
+              <Field label="Penggunaan" value={item.penggunaan} />
+            )}
+          </div>
+        </div>
+
+        {/* Section: Kuantitas & Harga */}
+        <div className="space-y-3">
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Kuantitas & Harga</p>
+          <div className="bg-muted/30 rounded-2xl p-4 space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <Field label="Jumlah Barang" value={item.jumlahBarang} />
+              <Field label="Sisa Barang" value={item.sisaBarang} />
+              <Field label="Harga per Unit" value={formatCurrency(item.harga)} />
+              <Field label="Petty Cash" value={formatCurrency(item.pettyCash)} />
+            </div>
+          </div>
+        </div>
+
+        {/* Section: Detail Acara */}
+        <div className="space-y-3">
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Detail Acara</p>
+          <div className="bg-muted/30 rounded-2xl p-4 space-y-4">
+            <Field
+              label="Keterangan Acara"
+              value={item.keteranganAcara === "WEDDING" ? "Wedding" : "Non Wedding"}
+            />
+            {(item.weddingNote ?? item.nonWeddingNote) && (
+              <div className="grid grid-cols-2 gap-4">
+                {item.weddingNote && <Field label="Wedding Note" value={item.weddingNote} />}
+                {item.nonWeddingNote && <Field label="Non Wedding Note" value={item.nonWeddingNote} />}
               </div>
             )}
-            {item.note && <Field label="Catatan" value={item.note} />}
-            {item.keterangan && (
-              <Field label="Keterangan" value={item.keterangan} />
-            )}
+            <div className="grid grid-cols-3 gap-3">
+              <Field label="Total Wedding" value={formatCurrency(item.totalWedding)} />
+              <Field label="Total Non Wedding" value={formatCurrency(item.totalNonWedding)} />
+              <Field label="Total" value={
+                <span className="font-semibold">{formatCurrency(item.total)}</span>
+              } />
+            </div>
           </div>
-        )}
+        </div>
 
-        {/* Bukti Beli */}
-        {item.buktiBelUrl && (
-          <div className="space-y-2">
-            <p className="text-xs text-muted-foreground">Bukti Beli</p>
-            {isImage ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={item.buktiBelUrl}
-                alt="Bukti beli"
-                className="rounded-xl max-h-48 object-cover w-full"
-              />
-            ) : (
-              <a
-                href={item.buktiBelUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-sm text-foreground underline"
-              >
-                Lihat file bukti beli
-              </a>
-            )}
+        {/* Section: Informasi Tambahan */}
+        {(item.linkBarang ?? item.note ?? item.keterangan ?? item.buktiBelUrl) && (
+          <div className="space-y-3">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Informasi Tambahan</p>
+            <div className="bg-muted/30 rounded-2xl p-4 space-y-4">
+              {item.linkBarang && (
+                <div className="space-y-1">
+                  <p className="text-xs text-muted-foreground">Link Barang</p>
+                  <a
+                    href={item.linkBarang}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-sm text-primary underline break-all hover:opacity-80 transition-opacity"
+                  >
+                    {item.linkBarang}
+                  </a>
+                </div>
+              )}
+              {item.note && <Field label="Catatan" value={item.note} />}
+              {item.keterangan && <Field label="Keterangan" value={item.keterangan} />}
+              {item.buktiBelUrl && (
+                <div className="space-y-2">
+                  <p className="text-xs text-muted-foreground">Bukti Beli</p>
+                  {isImage ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={item.buktiBelUrl}
+                      alt="Bukti beli"
+                      className="rounded-xl max-h-48 object-cover w-full"
+                    />
+                  ) : (
+                    <a
+                      href={item.buktiBelUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-sm text-primary underline hover:opacity-80 transition-opacity"
+                    >
+                      Lihat file bukti beli
+                    </a>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         )}
 
         {/* Meta */}
-        <div className="text-xs text-muted-foreground space-y-1 border-t border-border pt-3">
+        <div className="text-xs text-muted-foreground space-y-1.5 border-t border-border pt-4">
           {item.createdBy && (
             <p>
               Dibuat oleh:{" "}
-              {item.createdBy.fullName ?? item.createdBy.nickName ?? "—"}
+              <span className="font-medium text-foreground">
+                {item.createdBy.fullName ?? item.createdBy.nickName ?? "—"}
+              </span>
             </p>
           )}
           {item.approvedBy && (
             <p>
-              Disetujui oleh: {item.approvedBy.fullName ?? "—"} ·{" "}
-              {formatDate(item.approvedAt)}
+              Disetujui oleh:{" "}
+              <span className="font-medium text-foreground">
+                {item.approvedBy.fullName ?? "—"}
+              </span>
+              {" "}· {formatDate(item.approvedAt)}
             </p>
           )}
         </div>

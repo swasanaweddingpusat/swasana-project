@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import Image from "next/image";
+import QRCode from "qrcode";
 import { Drawer } from "@/components/shared/drawer";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
@@ -20,6 +21,8 @@ import {
   MapPoint,
   Database,
   Gift,
+  QrCode,
+  CheckCircle,
 } from "@solar-icons/react";
 import type { GuestbookEntryItem } from "@/lib/queries/guestbookEntries";
 import type { ProofFiles } from "@/lib/validations/guestbook";
@@ -36,6 +39,7 @@ const VISIT_STATUS_LABELS: Record<string, { label: string; className: string }> 
   cold: { label: "Cold", className: "bg-sky-100 text-sky-700 border-0" },
   warm: { label: "Warm", className: "bg-amber-100 text-amber-700 border-0" },
   hot: { label: "Hot", className: "bg-orange-100 text-orange-700 border-0" },
+  done_visit: { label: "Done Visit", className: "bg-emerald-100 text-emerald-700 border-0" },
   to_be_discuss: { label: "To Be Discuss", className: "bg-yellow-100 text-yellow-700 border-0" },
   deal: { label: "Deal", className: "bg-green-100 text-green-700 border-0" },
   lost: { label: "Lost", className: "bg-red-100 text-red-700 border-0" },
@@ -112,6 +116,18 @@ export function GuestbookDetailDrawer({
   allEntries,
 }: GuestbookDetailDrawerProps): ReactNode {
   const [overlayImage, setOverlayImage] = useState<string | null>(null);
+  const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!entry?.guestCode) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setQrDataUrl(null);
+      return;
+    }
+    QRCode.toDataURL(entry.guestCode, { width: 240, margin: 1 })
+      .then((dataUrl) => setQrDataUrl(dataUrl))
+      .catch(() => setQrDataUrl(null));
+  }, [entry?.guestCode]);
 
   if (!entry) return null;
 
@@ -162,6 +178,47 @@ export function GuestbookDetailDrawer({
         </div>
 
         <Separator />
+
+        {/* QR Kehadiran Expo */}
+        {entry.guestCode && (
+          <div className="bg-muted/30 rounded-2xl p-4 space-y-3">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+              <QrCode weight="BoldDuotone" className="h-3.5 w-3.5" />
+              QR Kehadiran Expo
+            </p>
+            <div className="flex flex-col items-center gap-2">
+              {qrDataUrl && (
+                <Image
+                  src={qrDataUrl}
+                  alt="QR Kehadiran Expo"
+                  width={200}
+                  height={200}
+                  className="rounded-xl bg-white p-2"
+                  unoptimized
+                />
+              )}
+              <p className="font-mono text-xs text-muted-foreground">{entry.guestCode}</p>
+              {entry.attendanceConfirmedAt ? (
+                <div className="flex flex-col items-center gap-1 pt-1">
+                  <Badge className="rounded-full text-xs bg-emerald-100 text-emerald-700 border-0">
+                    <CheckCircle weight="BoldDuotone" className="h-3.5 w-3.5 mr-1" />
+                    Hadir Expo
+                  </Badge>
+                  <p className="text-xs text-muted-foreground text-center">
+                    {formatDateTime(entry.attendanceConfirmedAt)}
+                    {entry.attendanceConfirmedBy?.fullName
+                      ? ` oleh ${entry.attendanceConfirmedBy.fullName}`
+                      : ""}
+                  </p>
+                </div>
+              ) : (
+                <Badge variant="secondary" className="rounded-full text-xs">
+                  Belum Konfirmasi Kehadiran
+                </Badge>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Proof photos */}
         {(proofPhoto || proofChat || proofLost || proofReschedule) && (

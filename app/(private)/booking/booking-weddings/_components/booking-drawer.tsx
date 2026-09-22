@@ -6,11 +6,10 @@ import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { useQuery } from "@tanstack/react-query";
 import { format, startOfMonth } from "date-fns";
-import { Calendar as CalendarIcon, CloseCircle, AltArrowDown } from "@solar-icons/react";
+import { Calendar as CalendarIcon, CloseCircle, MedalStar, Gift } from "@solar-icons/react";
 import { CreatePaymentStep } from "@/app/(private)/booking/booking-weddings/_components/_create-booking/CreatePaymentStep";
 import { CreatePaymentRecordStep, type CreatePaymentEntry } from "@/app/(private)/booking/booking-weddings/_components/_create-booking/CreatePaymentRecordStep";
 import { BitrixIdField } from "@/components/shared/BitrixIdField";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import SignatureCanvas from "react-signature-canvas";
 import { Drawer } from "@/components/shared/drawer";
 import { ApprovalWarningDialog } from "@/components/shared/approval-warning-dialog";
@@ -23,6 +22,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { ContactEntry, parseStoredPhone } from "@/components/shared/PhoneInput";
 import { TimeRangePicker } from "@/components/shared/time-range-picker";
 import { cn, formatRupiah, toDateOnly, parseDateOnly } from "@/lib/utils";
@@ -43,10 +43,9 @@ import {
 } from "@/hooks/use-booking-draft";
 import { useSalesUsers } from "@/hooks/use-sales-users";
 import { useCurrentUser } from "@/hooks/use-current-user";
-import { useComplimentaries } from "@/hooks/use-complimentaries";
-import { createComplimentary } from "@/actions/complimentary";
-import { usePermissions } from "@/hooks/use-permissions";
-import { ComplimentarySelect } from "@/components/shared/ComplimentarySelect";
+import { EditComplimentaryContent, type ComplimentaryHandle } from "./EditComplimentaryDrawer";
+import { EditBonusContent, type BonusHandle } from "./EditBonusDrawer";
+import { saveSnapBonusesAndComplimentaries } from "@/actions/snap-package-items";
 import {
   PackageItemsEditor,
   type PackageInternalItemDraft,
@@ -124,7 +123,6 @@ interface PackageData {
   vendorItems?: PackageVendorItemEntry[];
 }
 interface BonusRow { vendorId: string; vendorCategoryId: string; vendorName: string; description: string; qty: number; nominal: number }
-interface ComplimentaryRow { id: string; complimentaryId: string | null; name: string; price: number; isShowPrice: boolean; description: string; qty: number }
 // Fase 5: TOP = jadwal murni. Status/bukti bayar dilacak di Cashbook (Ledger),
 // bukan lagi di termin. Step-5 hanya mengatur jadwal cicilan (nama/nominal/tanggal).
 interface TermRow {
@@ -192,39 +190,34 @@ function subMonths(date: Date, months: number): Date {
   return d;
 }
 
+/** Tambah `months` bulan ke `date` (clamp hari akhir bulan). */
+function addMonths(date: Date, months: number): Date {
+  return subMonths(date, -months);
+}
+
 /**
- * Isi due date termin yang masih kosong, dihitung MUNDUR dari event date.
- * Termin terakhir (pelunasan) jatuh 1 bulan SEBELUM event; tiap termin di atasnya
- * mundur 1 bulan lagi. Kalau event terlalu mepet (termin awal jatuh sebelum hari
- * ini), fallback bagi rata dari hari ini s/d anchor (event − 1 bln) — biar tak ada
- * termin yang jatuh di masa lalu. Hanya create flow (edit pakai edit-top-drawer).
- *
- * Termin yang tanggalnya sudah diisi user dibiarkan, kecuali `force = true`.
+ * Auto-isi due date tiap termin secara BERANTAI maju: Booking Fee (index 0)
+ * default ke hari ini, lalu tiap termin berikutnya (DP, Angsuran, Pelunasan,
+ * Final) = tanggal termin sebelumnya + 1 bulan. Termin yang tanggalnya sudah
+ * diisi manual oleh user dijadikan anchor buat chain berikutnya (dibiarkan,
+ * tidak ditimpa), kecuali `force = true`. Hanya create flow (edit pakai
+ * edit-top-drawer). `eventDate` tidak dipakai untuk hitung tanggal — cuma
+ * gate "wedding date sudah dipilih" di semua call site, tetap wajib truthy.
  */
 function recalcTermDates(terms: TermRow[], eventDate: string, force = false): TermRow[] {
   if (!eventDate || terms.length === 0) return terms;
   const now = new Date();
   now.setHours(0, 0, 0, 0);
-  const event = new Date(eventDate);
-  event.setHours(0, 0, 0, 0);
 
-  // Anchor = pelunasan harus lunas 1 bulan sebelum acara.
-  const anchor = subMonths(event, 1);
-  anchor.setHours(0, 0, 0, 0);
-  if (anchor.getTime() <= now.getTime()) return terms; // event terlalu dekat — biarkan
-
-  const n = terms.length;
-  // Kandidat tanggal per termin (mundur 1 bln dari anchor). Index 0 = paling awal.
-  const spaced = terms.map((_, i) => subMonths(anchor, n - 1 - i));
-  // Kalau termin paling awal jatuh sebelum hari ini → mepet, pakai bagi rata.
-  const tooTight = n > 1 && spaced[0].getTime() < now.getTime();
-  const totalMs = anchor.getTime() - now.getTime();
-
+  let chainDate = now;
   return terms.map((t, i) => {
-    if (!force && t.dueDate) return t; // tanggal manual user — jangan timpa
-    const date = tooTight
-      ? new Date(now.getTime() + Math.round((totalMs * i) / (n - 1 || 1)))
-      : spaced[i];
+    if (!force && t.dueDate) {
+      const parsed = new Date(t.dueDate);
+      if (!Number.isNaN(parsed.getTime())) chainDate = parsed;
+      return t; // tanggal manual user — jangan timpa, tapi tetap jadi anchor chain
+    }
+    const date = i === 0 ? now : addMonths(chainDate, 1);
+    chainDate = date;
     return { ...t, dueDate: toLocalISO(date) };
   });
 }
@@ -262,6 +255,35 @@ function clearWeddingDraftFromStorage() {
   try { localStorage.removeItem(WEDDING_DRAFT_LS_KEY); } catch { /* noop */ }
 }
 
+// ─── localStorage safety net for step-6 (TOP) term edits ────────────────────
+// `terms` (name/amount/dueDate) is only persisted to the DB draft when the user
+// clicks Continue on step 6 (see step3Payload below) — while the user is still
+// on step 6, every manually-typed due date/amount lives only in React state.
+// An accidental refresh or drawer close before that Continue click would lose
+// it, since resuming the draft only restores `terms` from DB (empty until then).
+// This is NOT a general draft store (that's the DB) — just a narrow mirror of
+// `terms`, scoped to the current draft (or "new" pre-draftId), cleared as soon
+// as the data reaches the DB or the wizard is reset/discarded.
+const TERMS_BACKUP_LS_KEY = "swasana_wedding_terms_backup";
+
+function readTermsBackup(scopeId: string): TermRow[] | null {
+  try {
+    const raw = localStorage.getItem(TERMS_BACKUP_LS_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { scopeId?: string; terms?: TermRow[] };
+    if (parsed.scopeId !== scopeId || !Array.isArray(parsed.terms) || parsed.terms.length === 0) return null;
+    return parsed.terms;
+  } catch {
+    return null;
+  }
+}
+function saveTermsBackup(scopeId: string, terms: TermRow[]) {
+  try { localStorage.setItem(TERMS_BACKUP_LS_KEY, JSON.stringify({ scopeId, terms })); } catch { /* noop */ }
+}
+function clearTermsBackup() {
+  try { localStorage.removeItem(TERMS_BACKUP_LS_KEY); } catch { /* noop */ }
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, initialDraftId, resumeDraftId }: BookingDrawerProps) {
@@ -278,6 +300,11 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
   const [showResumePrompt, setShowResumePrompt] = useState(false);
   // Guard against double-click creating two drafts before the first mutateAsync resolves.
   const isCreatingDraftRef = useRef(false);
+
+  // Refs to the embedded Bonus/Complimentary editors in Step 3 (live-save, mirrors edit-booking-drawer)
+  const complimentaryRef = useRef<ComplimentaryHandle>(null);
+  const bonusRef = useRef<BonusHandle>(null);
+  const [isSavingStep3, setIsSavingStep3] = useState(false);
 
   // ── Optimistic save state ──
   // Tracks whether a background save (step 2/3) is in-flight or has failed.
@@ -313,7 +340,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
   const { data: resumeDraftDetail } = useDraftBookingDetail(pendingResumeDraftId);
 
   const [currentStep, setCurrentStep] = useState(1);
-  const totalSteps = 7;
+  const totalSteps = 8;
 
   const sigSalesRef = useRef<SignatureCanvas>(null);
   const [signatureSales, setSignatureSales] = useState("");
@@ -443,29 +470,6 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
   // Vendor bonus UI deprecated (diganti Complimentary). `bonuses` dipreserve (selalu []) agar payload tetap konsisten.
   const [bonuses, setBonuses] = useState<BonusRow[]>([]);
 
-  // New complimentary state (replaces vendor-based bonus in booking drawer UI)
-  const [complimentaries, setComplimentaries] = useState<ComplimentaryRow[]>([]);
-  // "none" = collapsed button | "picker" = SearchableSelect dropdown | "create-new" = inline mini-form
-  const [complimentaryMode, setComplimentaryMode] = useState<"none" | "picker" | "create-new">("none");
-  // Tracks which complimentary rows are collapsed (by c.id). Default = none → all open.
-  const [collapsedComplimentaries, setCollapsedComplimentaries] = useState<Set<string>>(new Set());
-  // Inline "buat baru" form state
-  const [createNewComp, setCreateNewComp] = useState({ name: "", price: 0, description: "", isShowPrice: false });
-  const [isCreatingComp, setIsCreatingComp] = useState(false);
-  const { data: complimentaryResult } = useComplimentaries({ activeOnly: true, pageSize: 100 });
-  const complimentaryOptions = complimentaryResult?.items ?? [];
-  const { can: canPermission, isAdmin: isPermAdmin } = usePermissions();
-
-  function toggleComplimentaryCollapse(id: string) {
-    setCollapsedComplimentaries((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) { next.delete(id); } else { next.add(id); }
-      return next;
-    });
-  }
-
-  const canCreateComplimentary = canPermission("complimentary", "create") || isPermAdmin;
-
   const [terms, setTerms] = useState<TermRow[]>(makeDefaultTerms);
   // Track COLLAPSED terms by uid (stable across drag-reorder) — default empty = semua kebuka
   const [collapsedTerms, setCollapsedTerms] = useState<Set<string>>(new Set());
@@ -490,7 +494,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
 
   const form = useForm<BookingInput>({
     defaultValues: {
-      eventDate: "", customerId: "", venueId: "", packageId: "",
+      eventDate: "", dealingDate: toDateOnly(new Date()), customerId: "", venueId: "", packageId: "",
       salesId: null,
       paymentMethodId: null, sourceOfInformationId: null, sourceOfInformationDetail: null,
       weddingSession: null, weddingType: null, bonuses: [], termOfPayments: [],
@@ -503,8 +507,12 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
   // Helper: reset all form state to clean slate
   function resetToClean() {
     form.reset();
+    // form.reset() falls back to the ORIGINAL defaultValues object (captured once at
+    // first render), so a stale "today" would stick around across sessions — force
+    // a freshly-computed default here.
+    form.setValue("dealingDate", toDateOnly(new Date()));
     setSelectedVenueId(""); setSelectedPackageId(""); setSelectedPackagePrice(0); setOriginalPackagePrice(0); setLastAllocatedPrice(0);
-    setBonuses([]); setComplimentaries([]); setCollapsedComplimentaries(new Set()); setComplimentaryMode("none"); setCreateNewComp({ name: "", price: 0, description: "", isShowPrice: false }); setIsCreatingComp(false); setTerms(makeDefaultTerms()); setCreatePayments([]);
+    setBonuses([]); setTerms(makeDefaultTerms()); setCreatePayments([]);
     setCurrentStep(1); setSignatureSales(""); setSigningLocation(""); setUseDefaultSignature(false);
     setSpecialBonusName("Discount"); setSpecialBonusAmount(0);
     setContactNumbers([]); setContactEmailCpp(""); setContactEmailCpw(""); setContactNikCpp(""); setContactNikCpw(""); setContactIdTypeCpp("KTP"); setContactIdTypeCpw("KTP");
@@ -581,7 +589,6 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
 
   useEffect(() => {
     if (open) {
-      setComplimentaryMode("none");
       setShowResumePrompt(false);
       setHasPendingWriteError(false);
       setPendingWriteErrorMsg(null);
@@ -703,6 +710,12 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
         // The resume prompt (showResumePrompt) will show via the unfinishedDraft effect.
         setDraftId(storedDraftId);
       }
+      // Restore any step-6 term edits that never reached the DB (safety net —
+      // see TERMS_BACKUP_LS_KEY above). If the user later clicks "Lanjutkan" and
+      // the DB draft *does* have termOfPayments, that effect (resumeDraftDetail)
+      // overwrites this with the DB copy — DB always wins once it has data.
+      const backupTerms = readTermsBackup(storedDraftId ?? "new");
+      if (backupTerms) setTerms(backupTerms);
     }
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -800,36 +813,46 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
   // explicitly advances to step 3, making it "sticky" from that point.
   const step2Price = Math.max(0, (originalPackagePrice || selectedPackagePrice) - totalTakeoutNominal);
 
-  // Step 3 complete: Item Paket — items are optional, so this step never blocks.
+  // Step 3 complete: Bonus & Complimentary — placeholder step, real gate added in Task 11.
   const isStep3Complete = true;
 
-  // Step 4 complete: takeout (at least one category must remain included)
-  const isStep4Complete =
+  // Step 4 complete: Item Paket — items are optional, so this step never blocks.
+  const isStep4Complete = true;
+
+  // Step 5 complete: takeout (at least one category must remain included)
+  const isStep5Complete =
     visibleCategories.length === 0 ||
     visibleCategories.some((c) => !(categoryToggles[c.categoryName] ?? false));
 
-  // Step 5 complete: term of payments — TOP is schedule-only (jadwal + discount).
-  // Completeness judged on the balance/dueDate rules; payment recording moves to step 6.
-  const isStep5Complete =
+  // Step 6 complete: term of payments — TOP is schedule-only (jadwal + discount).
+  // Completeness judged on the balance/dueDate rules; payment recording moves to step 7.
+  const isStep6Complete =
     getBasePrice() === 0 || (
       (terms[0]?.amount ?? 0) > 0 &&
       getDifference() === 0 &&
       terms.every((t) => !!t.dueDate)
     );
-  // Step 6 complete: booking fee (termin pertama) sudah tertutup oleh salah satu
+  // Step 7 complete: booking fee (termin pertama) sudah tertutup oleh salah satu
   // pembayaran yang dicatat (payment menunjuk ke uid termin pertama).
   const firstTermUid = terms[0]?.uid;
-  const isStep6Complete =
+  const isStep7Complete =
     !!firstTermUid &&
     (terms[0]?.amount ?? 0) > 0 &&
     createPayments.some((p) => p.amount > 0 && !!p.paymentMethodId && p.termUids.includes(firstTermUid));
-  // Step 7 complete: signing location (+ signature when user IS the sales)
-  const isStep7Complete = !!signingLocation.trim() && (!currentUserIsSales || !!signatureSales);
+  // Step 8 complete: signing location (+ signature when user IS the sales)
+  const isStep8Complete = !!signingLocation.trim() && (!currentUserIsSales || !!signatureSales);
 
   // Recalc term dates when event date changes
   useEffect(() => {
     if (wBookingDate) setTerms((prev) => recalcTermDates(prev, wBookingDate));
   }, [wBookingDate]);
+
+  // Mirror `terms` to the localStorage safety net (see TERMS_BACKUP_LS_KEY) so
+  // step-6 edits survive an accidental refresh/close before they reach the DB.
+  useEffect(() => {
+    if (!open) return;
+    saveTermsBackup(draftId ?? "new", terms);
+  }, [open, draftId, terms]);
 
   // Resolve package price once packages load for a prefilled package (price
   // starts at 0 because the lead only carries the package id, not its pricing).
@@ -940,6 +963,10 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
     if (resumeDraftDetail.eventDate) {
       form.setValue("eventDate", resumeDraftDetail.eventDate);
     }
+    // dealingDate
+    if (resumeDraftDetail.dealingDate) {
+      form.setValue("dealingDate", resumeDraftDetail.dealingDate);
+    }
     // customerId
     if (resumeDraftDetail.customerId) {
       form.setValue("customerId", resumeDraftDetail.customerId);
@@ -1008,19 +1035,6 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
       setTakeoutPrices(priceMap);
     }
 
-    // ── Step 2: complimentaries from draft ──
-    if (resumeDraftDetail.draftComplimentaries.length > 0) {
-      setComplimentaries(resumeDraftDetail.draftComplimentaries.map((c) => ({
-        id: crypto.randomUUID(),
-        complimentaryId: c.complimentaryId ?? null,
-        name: c.name,
-        price: c.price,
-        isShowPrice: c.isShowPrice,
-        description: c.description ?? "",
-        qty: c.qty,
-      })));
-    }
-
     // ── Step 3: package items from draft (fall back to template prefill effect
     // when the draft carries none, e.g. an older draft created before this step). ──
     if (resumeDraftDetail.draftInternalItems.length > 0 || resumeDraftDetail.draftVendorItems.length > 0) {
@@ -1047,9 +1061,9 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
 
     // Clear pending flag so this effect doesn't run again on unrelated re-renders
     setPendingResumeDraftId(null);
-    // If the draft already has a package, skip to step 3 (Takeout);
+    // If the draft already has a package, skip to step 4 (Item Paket);
     // otherwise resume at step 2 (Venue & Paket) so user can complete it.
-    setCurrentStep(resumeDraftDetail.packageId ? 3 : 2);
+    setCurrentStep(resumeDraftDetail.packageId ? 4 : 2);
     toast.info("Draft dilanjutkan. Semua data berhasil dipulihkan.");
   }, [resumeDraftDetail]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -1099,7 +1113,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
   }
 
   // Single source of truth for the step-2 draft payload (package/takeout data +
-  // complimentaries + editable package items). Reused across step 2→3, 3→4, 4→5
+  // editable package items). Reused across step 2→3, 3→4, 4→5
   // background saves so package items are never dropped on any advance.
   const buildStep2Payload = () => ({
     packageId: form.getValues("packageId") || null,
@@ -1111,14 +1125,6 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
       takeoutNominal: c.isShow && (categoryToggles[c.categoryName] ?? false)
         ? (takeoutPrices[c.categoryName] ?? c.basePrice)
         : 0,
-    })),
-    draftComplimentaries: complimentaries.map((c) => ({
-      complimentaryId: c.complimentaryId ?? null,
-      name: c.name,
-      price: c.price,
-      isShowPrice: c.isShowPrice,
-      description: c.description || null,
-      qty: c.qty,
     })),
     draftInternalItems: packageInternalItems
       .filter((i) => i.itemName.trim())
@@ -1176,6 +1182,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
         const draftPayload = {
           id: pendingDraftId,
           eventDate: form.getValues("eventDate"),
+          dealingDate: form.getValues("dealingDate"),
           category: "WEDDINGS" as const,
           venueId: form.getValues("venueId"),
           packageId: form.getValues("packageId") || null,
@@ -1211,7 +1218,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
         setDraftId(confirmedDraftId);
         saveWeddingDraftToStorage(confirmedDraftId);
 
-        // Persist current step-2 data (complimentaries + prefilled package items) to
+        // Persist current step-2 data (prefilled package items) to
         // draft in background so nothing is lost if the user closes before finalize.
         void backgroundSave(
           () => updateStep2Mut.mutateAsync({ draftId: confirmedDraftId, data: buildStep2Payload() }),
@@ -1223,10 +1230,47 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
       return;
     }
 
-    // ── Step 3 → 4: Item Paket — persist edited package items, advance to takeout ──
+    // ── Step 3 → 4: Bonus & Complimentary — save dirty tabs in one transaction, then advance ──
     if (currentStep === 3) {
+      const bonusDirty = bonusRef.current?.isDirty() ?? false;
+      const complimentaryDirty = complimentaryRef.current?.isDirty() ?? false;
+
+      if (!bonusDirty && !complimentaryDirty) {
+        setCurrentStep(4);
+        return;
+      }
+
+      if (bonusDirty) {
+        const err = bonusRef.current!.validate();
+        if (err) { toast.error(err); return; }
+      }
+      if (complimentaryDirty) {
+        const err = complimentaryRef.current!.validate();
+        if (err) { toast.error(err); return; }
+      }
+
+      setIsSavingStep3(true);
+      try {
+        const res = await saveSnapBonusesAndComplimentaries({
+          bookingId: draftId!,
+          bonusItems: bonusDirty ? bonusRef.current!.getItems() : null,
+          complimentaryItems: complimentaryDirty ? complimentaryRef.current!.getItems() : null,
+        });
+        if (!res.success) {
+          toast.error(res.error ?? "Gagal menyimpan Bonus/Complimentary. Coba lagi.");
+          return;
+        }
+        setCurrentStep(4);
+      } finally {
+        setIsSavingStep3(false);
+      }
+      return;
+    }
+
+    // ── Step 4 → 5: Item Paket — persist edited package items, advance to takeout ──
+    if (currentStep === 4) {
       // Advance immediately (optimistic) — items are optional.
-      setCurrentStep(4);
+      setCurrentStep(5);
 
       if (draftId) {
         const capturedDraftId = draftId;
@@ -1238,13 +1282,13 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
       return;
     }
 
-    // ── Step 4 → 5: Takeout — optimistic advance, save takeout data in background ──
-    if (currentStep === 4 && !isStep4Complete) {
+    // ── Step 5 → 6: Takeout — optimistic advance, save takeout data in background ──
+    if (currentStep === 5 && !isStep5Complete) {
       toast.error("Minimal satu kategori harus tetap included.");
       return;
     }
 
-    if (currentStep === 4) {
+    if (currentStep === 5) {
       setSelectedPackagePrice(step2Price);
       // Clear the resume guard: the user is now actively editing, so future
       // package/session changes should trigger allocatePrice normally.
@@ -1254,21 +1298,21 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
         setLastAllocatedPrice(step2Price);
       }
 
-      // Ensure all terms have a dueDate before entering the TOP step.
+      // Ensure every term has a dueDate before entering the TOP step.
       // allocatePrice above only updates amounts (spread ...t preserves dueDate).
       // The recalcTermDates effect fires when wBookingDate changes, but may not
       // have run yet if the user changed eventDate and the component hasn't re-rendered,
       // or if allocatePrice replaced the terms array before the effect could apply.
-      // Calling recalcTermDates here guarantees every term with an empty dueDate
-      // gets a date spread between today and the event date — force=false so any
-      // date the user already set manually (or Booking Fee = today) is untouched.
-      // Resume-draft terms already have dates in DB → they are not empty → also untouched.
+      // Calling recalcTermDates here guarantees the whole chain (Booking Fee = today,
+      // each next term = previous + 1 bulan) gets applied — force=false so any date
+      // the user already set manually is untouched (and still anchors the chain).
+      // Resume-draft terms already have dates in DB → also untouched.
       if (wBookingDate) {
         setTerms((prev) => recalcTermDates(prev, wBookingDate));
       }
 
       // Advance immediately (optimistic)
-      setCurrentStep(5);
+      setCurrentStep(6);
 
       if (draftId) {
         const capturedDraftId = draftId;
@@ -1281,11 +1325,11 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
       return;
     }
 
-    // ── Step 5 → 6: Term of Payments (jadwal murni) ──────────────────────────
-    // TOP = jadwal + discount. Step-5 hanya validasi jadwal + simpan draft
-    // (nama/nominal/tanggal). Pencatatan pembayaran (cash-in) dilakukan di step 6
+    // ── Step 6 → 7: Term of Payments (jadwal murni) ──────────────────────────
+    // TOP = jadwal + discount. Step-6 hanya validasi jadwal + simpan draft
+    // (nama/nominal/tanggal). Pencatatan pembayaran (cash-in) dilakukan di step 7
     // (Payment) dan disimpan saat finalize.
-    if (currentStep === 5) {
+    if (currentStep === 6) {
       const firstTerm = terms[0];
       if (!firstTerm || !firstTerm.amount || firstTerm.amount <= 0) {
         toast.error("Nominal term pertama (Booking Fee) wajib diisi dan harus lebih dari 0.");
@@ -1311,7 +1355,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
         };
         const capturedDraftId = draftId;
 
-        // Simpan step-3 di background — advance ke step-6 (Payment) tak perlu menunggu.
+        // Simpan step-3 di background — advance ke step-7 (Payment) tak perlu menunggu.
         const prev = step3SaveInFlightRef.current;
         const savePromise = backgroundSave(
           async () => {
@@ -1323,7 +1367,10 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
         step3SaveInFlightRef.current = savePromise;
       }
 
-      setCurrentStep(6);
+      // `terms` is now captured in step3Payload (in flight or retried on failure
+      // independent of live state) — the localStorage safety net's job is done.
+      clearTermsBackup();
+      setCurrentStep(7);
       return;
     }
 
@@ -1332,7 +1379,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
 
   const handlePrevious = () => {
     if (currentStep > 1) {
-      if (currentStep === 7) { sigSalesRef.current?.clear(); setSignatureSales(""); setUseDefaultSignature(false); }
+      if (currentStep === 8) { sigSalesRef.current?.clear(); setSignatureSales(""); setUseDefaultSignature(false); }
       setCurrentStep(currentStep - 1);
     }
   };
@@ -1449,15 +1496,6 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
           qty: b.qty,
           nominal: b.nominal,
         })),
-        complimentaries: complimentaries.map((c, i) => ({
-          complimentaryId: c.complimentaryId ?? null,
-          name: c.name,
-          price: c.price,
-          isShowPrice: c.isShowPrice,
-          description: c.description || null,
-          qty: c.qty,
-          sortOrder: i,
-        })),
         categoryToggles: allCategoryPrices.map((c) => {
           const isTakeout = c.isShow ? (categoryToggles[c.categoryName] ?? false) : false;
           return {
@@ -1476,6 +1514,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
 
       clearLocalDraftArtifacts();
       clearWeddingDraftFromStorage();
+      clearTermsBackup();
       toast.success("Booking berhasil dibuat.");
       onSuccess?.();
       onOpenChange(false);
@@ -1503,7 +1542,6 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
       signatureSales: signatureSales || null,
       leadId: selectedLeadId || null,
       bonuses: bonuses.map((b) => ({ vendorId: b.vendorId, vendorCategoryId: b.vendorCategoryId, vendorName: b.vendorName, description: b.description || null, qty: b.qty, nominal: b.nominal })),
-      complimentaries: complimentaries.map((c, i) => ({ complimentaryId: c.complimentaryId ?? null, name: c.name, price: c.price, isShowPrice: c.isShowPrice, description: c.description || null, qty: c.qty, sortOrder: i })),
       termOfPayments: terms.filter((t) => t.dueDate).map((t) => ({ name: t.name, amount: t.amount, dueDate: t.dueDate, sortOrder: t.sortOrder })),
       categoryToggles: allCategoryPrices.map((c) => {
         const isTakeout = c.isShow ? (categoryToggles[c.categoryName] ?? false) : false;
@@ -1522,6 +1560,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
 
     clearLocalDraftArtifacts();
     clearWeddingDraftFromStorage();
+    clearTermsBackup();
     toast.success("Booking berhasil dibuat.");
     onSuccess?.();
     onOpenChange(false);
@@ -1533,10 +1572,11 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
     updateStep3Mut.isPending ||
     updateStep4Mut.isPending ||
     finalizeMut.isPending ||
-    createMut.isPending;
+    createMut.isPending ||
+    isSavingStep3;
 
   // Continue is disabled if:
-  // - The current step's required fields aren't complete (step 1/2/3/4 completeness checks)
+  // - The current step's required fields aren't complete (step 1/2/3/4/5 completeness checks)
   // - A mutation is in-flight (step 1 is await, finalize is await)
   // - hasPendingWriteError: a background save failed and hasn't been retried successfully.
   //   When this flag is set, clicking Continue fires the retry instead of advancing.
@@ -1548,9 +1588,11 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
     (currentStep === 5 && !isStep5Complete) ||
     (currentStep === 6 && !isStep6Complete) ||
     (currentStep === 7 && !isStep7Complete) ||
+    (currentStep === 8 && !isStep8Complete) ||
     (currentStep === 2 && isDraftMutating) ||
-    (currentStep === 7 && isDraftMutating) ||
-    (currentStep === 7 && isSubmitting);
+    (currentStep === 3 && isSavingStep3) ||
+    (currentStep === 8 && isDraftMutating) ||
+    (currentStep === 8 && isSubmitting);
 
   return (
     <Drawer isOpen={open} onClose={() => onOpenChange(false)} title="New Booking" maxWidth="sm:max-w-xl" steps={currentStep} totalSteps={totalSteps} isCloseButton={false}>
@@ -1580,7 +1622,10 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
                   setShowResumePrompt(false);
                   // Clear localStorage pointer and draftId so a new draft is created
                   clearWeddingDraftFromStorage();
+                  // Discard any step-6 backup that belonged to the abandoned draft
+                  clearTermsBackup();
                   setDraftId(null);
+                  setTerms(makeDefaultTerms());
                   // Old draft stays in DB and will be cleaned up by cron
                 }}
               >
@@ -1613,14 +1658,17 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
             <form
               className="space-y-4"
               onKeyDown={(e) => {
-                // Enter must NOT advance the wizard or submit — the user moves on
-                // only by clicking Continue. We still block the browser's native
-                // form submission (buttons default to type="submit"), so Enter is a
-                // no-op here. Excluded: shift+Enter and Enter inside a textarea or a
-                // combobox/select (role="option"/"listbox"), which need it themselves.
+                // Enter must NOT advance the wizard or submit — Continue lives
+                // outside this <form> (footer), only reachable by Tab+Enter on
+                // the button itself. We only need to stop Enter's native
+                // form-submit default on plain text/number inputs. Buttons
+                // (dropdown/popover triggers, Tambah Nomor, Tambah, dst) keep
+                // native Enter-activates-click so they open naturally.
+                // Excluded: shift+Enter, textarea, buttons, and
+                // combobox/listbox content (role="option"/"listbox").
                 if (e.key !== "Enter" || e.shiftKey) return;
                 const target = e.target as HTMLElement;
-                if (target.tagName === "TEXTAREA") return;
+                if (target.tagName === "TEXTAREA" || target.tagName === "BUTTON") return;
                 if (target.closest("[role='listbox']") || target.closest("[role='option']")) return;
                 e.preventDefault();
               }}
@@ -1966,7 +2014,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
                   <FormField control={form.control} name="venueId" render={({ field }) => (
                     <FormItem>
                       <FormLabel className={cn('text-sm', 'font-medium', 'text-foreground')}>Venue <span className="text-destructive">*</span></FormLabel>
-                      <SearchableSelect options={venues} value={field.value} onChange={(id) => { field.onChange(id); setSelectedVenueId(id); setSelectedPackageId(""); setSelectedPackagePrice(0); setOriginalPackagePrice(0); setCategoryToggles({}); setTakeoutPrices({}); form.setValue("packageId", ""); form.setValue("paymentMethodId", null); clearError("venueId"); }} placeholder="Pilih venue..." searchPlaceholder="Cari venue..." emptyText="Tidak ada venue" />
+                      <SearchableSelect options={venues} value={field.value} onChange={(id) => { field.onChange(id); setSelectedVenueId(id); setSelectedPackageId(""); setSelectedPackagePrice(0); setOriginalPackagePrice(0); setCategoryToggles({}); setTakeoutPrices({}); form.setValue("packageId", ""); form.setValue("paymentMethodId", null); clearError("venueId"); }} placeholder="Select venue..." searchPlaceholder="Search venue..." emptyText="No venue" />
                       <FormMessage />
                       {errors.venueId && <p className="mt-1 text-sm text-destructive">{errors.venueId}</p>}
                     </FormItem>
@@ -1975,9 +2023,9 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
                   {/* Pilih Paket */}
                   <FormField control={form.control} name="packageId" render={({ field }) => (
                     <FormItem>
-                      <FormLabel className={cn('text-sm', 'font-medium', 'text-foreground')}>Pilih Paket <span className="text-destructive">*</span></FormLabel>
-                      <SearchableSelect options={packages.map((p) => ({ id: p.id, name: `${p.packageName}${p.pax ? ` — ${p.pax} pax` : ""} — ${formatRupiah(getPackagePrice(p))}` }))} value={field.value} onChange={(id) => { field.onChange(id); setSelectedPackageId(id); setSelectedPackagePrice(0); setOriginalPackagePrice(0); setLastAllocatedPrice(0); setCategoryToggles({}); setTakeoutPrices({}); setUserHasCustomizedTerms(false); const pkg = packages.find((x: PackageData) => x.id === id); if (pkg) { const p = getPackagePrice(pkg); setSelectedPackagePrice(p); setOriginalPackagePrice(p); allocatePrice(p, specialBonusAmount); setLastAllocatedPrice(p); /* Re-prefill Item Paket from the newly chosen package template. */ packageItemsDirtyRef.current = false; setPackageInternalItems((pkg.internalItems ?? []).map((it) => ({ uid: safeRandomUUID(), itemName: it.itemName, itemDescription: it.itemDescription }))); setPackageVendorItems((pkg.vendorItems ?? []).map((it) => ({ uid: safeRandomUUID(), categoryId: it.categoryId ?? null, categoryName: it.categoryName, itemText: it.itemText }))); } clearError("packageId"); }} placeholder={!selectedVenueId ? "Pilih venue dulu" : packagesLoading ? "Memuat paket..." : packagesError ? "Gagal memuat paket" : "Pilih paket..."} disabled={!selectedVenueId || packagesLoading} searchPlaceholder="Cari paket..." emptyText="Tidak ada paket" />
-                      {packagesError && <p className="text-xs text-destructive mt-1">Gagal memuat paket. Coba pilih venue ulang.</p>}
+                      <FormLabel className={cn('text-sm', 'font-medium', 'text-foreground')}>Select Package <span className="text-destructive">*</span></FormLabel>
+                      <SearchableSelect options={packages.map((p) => ({ id: p.id, name: `${p.packageName}${p.pax ? ` — ${p.pax} pax` : ""} — ${formatRupiah(getPackagePrice(p))}` }))} value={field.value} onChange={(id) => { field.onChange(id); setSelectedPackageId(id); setSelectedPackagePrice(0); setOriginalPackagePrice(0); setLastAllocatedPrice(0); setCategoryToggles({}); setTakeoutPrices({}); setUserHasCustomizedTerms(false); const pkg = packages.find((x: PackageData) => x.id === id); if (pkg) { const p = getPackagePrice(pkg); setSelectedPackagePrice(p); setOriginalPackagePrice(p); allocatePrice(p, specialBonusAmount); setLastAllocatedPrice(p); /* Re-prefill Item Paket from the newly chosen package template. */ packageItemsDirtyRef.current = false; setPackageInternalItems((pkg.internalItems ?? []).map((it) => ({ uid: safeRandomUUID(), itemName: it.itemName, itemDescription: it.itemDescription }))); setPackageVendorItems((pkg.vendorItems ?? []).map((it) => ({ uid: safeRandomUUID(), categoryId: it.categoryId ?? null, categoryName: it.categoryName, itemText: it.itemText }))); } clearError("packageId"); }} placeholder={!selectedVenueId ? "Select venue first" : packagesLoading ? "Loading packages..." : packagesError ? "Failed to load packages" : "Select package..."} disabled={!selectedVenueId || packagesLoading} searchPlaceholder="Search package..." emptyText="No package" />
+                      {packagesError && <p className="text-xs text-destructive mt-1">Failed to load packages. Try selecting a venue again.</p>}
                       <FormMessage />
                       {errors.packageId && <p className="mt-1 text-sm text-destructive">{errors.packageId}</p>}
                     </FormItem>
@@ -1990,10 +2038,10 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
                       <FormControl>
                         <SearchableSelect
                           options={[
-                            { id: "R", name: "Resepsi" },
-                            { id: "AR", name: "Akad & Resepsi" },
-                            { id: "TR", name: "Teapai & Resepsi" },
-                            { id: "PR", name: "Pemberkatan Resepsi" },
+                            { id: "R", name: "Reception" },
+                            { id: "AR", name: "Akad & Reception" },
+                            { id: "TR", name: "Teapai & Reception" },
+                            { id: "PR", name: "Blessing & Reception" },
                             { id: "VO", name: "Venue Only" },
                           ]}
                           value={field.value ?? ""}
@@ -2003,13 +2051,44 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
                             field.onChange(v || null);
                             clearError("weddingType");
                           }}
-                          placeholder="Pilih type"
-                          searchPlaceholder="Cari event type..."
-                          emptyText="Tidak ada event type"
+                          placeholder="Select type"
+                          searchPlaceholder="Search event type..."
+                          emptyText="No event type"
                         />
                       </FormControl>
                       <FormMessage />
                       {errors.weddingType && <p className="mt-1 text-sm text-destructive">{errors.weddingType}</p>}
+                    </FormItem>
+                  )} />
+
+                  {/* Dealing Date */}
+                  <FormField control={form.control} name="dealingDate" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className={cn('text-sm', 'font-medium', 'text-foreground')}>Dealing Date <span className="text-destructive">*</span></FormLabel>
+                      <Popover>
+                        <PopoverTrigger render={
+                          <Button
+                            variant="outline"
+                            className={cn("w-full justify-start text-left font-normal", !field.value && "text-muted-foreground")}
+                          >
+                            <CalendarIcon weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4')} />
+                            {field.value ? format(parseDateOnly(field.value), "PPP") : "Select dealing date"}
+                          </Button>
+                        } />
+                        <PopoverContent className={cn('w-auto', 'p-0')} align="start">
+                          <Calendar
+                            mode="single"
+                            captionLayout="dropdown"
+                            selected={field.value ? parseDateOnly(field.value) : undefined}
+                            onSelect={(date) => { field.onChange(date ? toDateOnly(date) : ""); clearError("dealingDate"); }}
+                            startMonth={new Date(new Date().getFullYear() - 10, 0)}
+                            endMonth={new Date(new Date().getFullYear() + 10, 11)}
+                            defaultMonth={field.value ? parseDateOnly(field.value) : new Date()}
+                          />
+                        </PopoverContent>
+                      </Popover>
+                      <FormMessage />
+                      {errors.dealingDate && <p className="mt-1 text-sm text-destructive">{errors.dealingDate}</p>}
                     </FormItem>
                   )} />
 
@@ -2026,8 +2105,8 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
                           >
                             <CalendarIcon weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4')} />
                             {selectedVenueId
-                              ? (field.value ? format(parseDateOnly(field.value), "PPP") : "Pilih tanggal event")
-                              : "Pilih venue terlebih dahulu"}
+                              ? (field.value ? format(parseDateOnly(field.value), "PPP") : "Select event date")
+                              : "Select venue first"}
                           </Button>
                         } />
                         <PopoverContent className={cn('w-auto', 'p-0')} align="start">
@@ -2054,7 +2133,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
                           />
                         </PopoverContent>
                       </Popover>
-                      {availLoading && <p className={cn('text-xs', 'text-muted-foreground', 'mt-1')}>Mengecek ketersediaan...</p>}
+                      {availLoading && <p className={cn('text-xs', 'text-muted-foreground', 'mt-1')}>Checking availability...</p>}
                       <FormMessage />
                       {errors.eventDate && <p className="mt-1 text-sm text-destructive">{errors.eventDate}</p>}
                     </FormItem>
@@ -2065,7 +2144,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
                     // wBookingDate is stored as "yyyy-MM-dd" — use it directly as the key.
                     const dateStr = wBookingDate || null;
                     const sessions = dateStr ? getAvailableSessions(dateStr) : ["morning", "evening", "fullday"];
-                    const SESSION_LABELS: Record<string, string> = { morning: "Pagi", evening: "Malam", fullday: "Fullday" };
+                    const SESSION_LABELS: Record<string, string> = { morning: "Morning", evening: "Evening", fullday: "Full day" };
                     return (
                       <FormItem>
                         <FormLabel className={cn('text-sm', 'font-medium', 'text-foreground')}>Event Session <span className="text-destructive">*</span></FormLabel>
@@ -2079,9 +2158,9 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
                               field.onChange(v || null);
                               clearError("weddingSession");
                             }}
-                            placeholder={!wBookingDate ? "Pilih tanggal dulu" : "Pilih session"}
-                            searchPlaceholder="Cari session..."
-                            emptyText="Tidak ada session tersedia"
+                            placeholder={!wBookingDate ? "Select date first" : "Select session"}
+                            searchPlaceholder="Search session..."
+                            emptyText="No session available"
                             disabled={!wBookingDate}
                           />
                         </FormControl>
@@ -2097,14 +2176,14 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
                       Time <span className="text-destructive">*</span>
                       {wWeddingSession && mapWeddingTypeToEventType(wWeddingType ?? null) && (
                         <span className="ml-2 font-normal text-muted-foreground text-xs">
-                          (auto-filled, bisa diubah manual)
+                          (auto-filled, can be changed manually)
                         </span>
                       )}
                     </FormLabel>
                     <TimeRangePicker
                       value={time}
                       onChange={setTime}
-                      placeholder="Pilih waktu (bisa rentang)..."
+                      placeholder="Select time (can be range)..."
                     />
                   </div>
 
@@ -2113,247 +2192,51 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
                     <FormLabel className={cn('text-sm', 'font-medium', 'text-foreground')}>Note Date Event</FormLabel>
                     <Textarea placeholder="Add note for date event" value={noteDateEvent} onChange={(e) => setNoteDateEvent(e.target.value)} rows={3} className="mt-1" />
                   </div>
-
-                  {/* ─── Complimentary (Bonus) ─── */}
-                  <div className="space-y-2">
-                    <FormLabel className={cn('text-sm', 'font-medium', 'text-foreground')}>Complimentary (Bonus)</FormLabel>
-
-                    {/* Pilih dari daftar (dropdown inline) — "Tambah" muncul di dalam dropdown saat search tidak exact-match */}
-                    {complimentaryMode !== "create-new" && (
-                      <ComplimentarySelect
-                        options={complimentaryOptions
-                          .filter((opt) => !complimentaries.some((c) => c.complimentaryId === opt.id))
-                          .map((opt) => ({ id: opt.id, name: opt.name, badge: formatRupiah(opt.price), description: opt.description ?? undefined }))}
-                        value=""
-                        onChange={(selectedId) => {
-                          const found = complimentaryOptions.find((x) => x.id === selectedId);
-                          if (found) {
-                            setComplimentaries((prev) => [...prev, {
-                              id: crypto.randomUUID(),
-                              complimentaryId: found.id,
-                              name: found.name,
-                              price: found.price,
-                              isShowPrice: found.isShowPrice,
-                              description: found.description ?? "",
-                              qty: 1,
-                            }]);
-                          }
-                        }}
-                        onAddTrigger={canCreateComplimentary ? (text) => {
-                          setComplimentaryMode("create-new");
-                          setCreateNewComp({ name: text, price: 0, description: "", isShowPrice: false });
-                        } : undefined}
-                        placeholder="Pilih dari daftar complimentary..."
-                        searchPlaceholder="Cari complimentary..."
-                        emptyText="Tidak ada complimentary"
-                      />
-                    )}
-
-                    {/* Mode: buat baru */}
-                    {complimentaryMode === "create-new" && (
-                      <div className="rounded-xl border border-border bg-card p-3 space-y-3">
-                        <div className="flex items-center justify-between">
-                          <p className="text-xs font-medium text-muted-foreground">Tambah complimentary baru ke master</p>
-                          <button
-                            type="button"
-                            className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-                            onClick={() => setComplimentaryMode("none")}
-                          >
-                            Batal
-                          </button>
-                        </div>
-
-                        {/* Nama */}
-                        <div>
-                          <label className="text-xs font-medium text-foreground block mb-1">Nama <span className="text-destructive">*</span></label>
-                          <Input
-                            value={createNewComp.name}
-                            onChange={(e) => setCreateNewComp((p) => ({ ...p, name: e.target.value }))}
-                            placeholder="Nama complimentary..."
-                            className="h-8 text-sm"
-                          />
-                        </div>
-
-                        {/* Harga + Tampil harga */}
-                        <div className="flex items-center gap-2">
-                          <div className="relative flex-1">
-                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">Rp</span>
-                            <input
-                              type="text"
-                              inputMode="numeric"
-                              className="w-full pl-8 pr-3 py-1.5 text-sm border border-input rounded-md bg-background"
-                              placeholder="Harga (opsional)"
-                              value={createNewComp.price ? fmtRp(createNewComp.price) : ""}
-                              onChange={(e) => {
-                                const n = Number(e.target.value.replace(/\D/g, ""));
-                                setCreateNewComp((p) => ({ ...p, price: n }));
-                              }}
-                            />
-                          </div>
-                          <label className="flex items-center gap-1.5 shrink-0 cursor-pointer">
-                            <Switch
-                              checked={createNewComp.isShowPrice}
-                              onCheckedChange={(v) => setCreateNewComp((p) => ({ ...p, isShowPrice: v }))}
-                            />
-                            <span className="text-xs text-muted-foreground">Tampil harga</span>
-                          </label>
-                        </div>
-
-                        {/* Deskripsi */}
-                        <div>
-                          <label className="text-xs font-medium text-foreground block mb-1">Deskripsi</label>
-                          <Textarea
-                            value={createNewComp.description}
-                            onChange={(e) => setCreateNewComp((p) => ({ ...p, description: e.target.value }))}
-                            placeholder="Keterangan complimentary (opsional)..."
-                            rows={2}
-                            className="resize-none text-sm"
-                          />
-                        </div>
-
-                        {/* Tombol simpan */}
-                        <Button
-                          type="button"
-                          className="w-full rounded-xl"
-                          disabled={!createNewComp.name.trim() || isCreatingComp}
-                          onClick={async () => {
-                            if (!createNewComp.name.trim() || isCreatingComp) return;
-                            setIsCreatingComp(true);
-                            try {
-                              const result = await createComplimentary({
-                                name: createNewComp.name.trim(),
-                                price: createNewComp.price,
-                                description: createNewComp.description.trim() || null,
-                                isShowPrice: createNewComp.isShowPrice,
-                                isActive: true,
-                              });
-                              if (result.success && result.item) {
-                                setComplimentaries((prev) => [...prev, {
-                                  id: crypto.randomUUID(),
-                                  complimentaryId: result.item!.id,
-                                  name: result.item!.name,
-                                  price: result.item!.price,
-                                  isShowPrice: result.item!.isShowPrice,
-                                  description: result.item!.description ?? "",
-                                  qty: 1,
-                                }]);
-                                setComplimentaryMode("none");
-                                toast.success(`"${result.item.name}" berhasil ditambahkan`);
-                              } else {
-                                toast.error(result.error ?? "Gagal menambahkan complimentary");
-                              }
-                            } finally {
-                              setIsCreatingComp(false);
-                            }
-                          }}
-                        >
-                          {isCreatingComp ? "Menyimpan..." : "Simpan & Tambahkan"}
-                        </Button>
-                      </div>
-                    )}
-
-                    {/* List complimentary yang sudah ditambahkan — collapsible rows */}
-                    {complimentaries.map((c) => {
-                      const isOpen = !collapsedComplimentaries.has(c.id);
-                      return (
-                        <Collapsible
-                          key={c.id}
-                          open={isOpen}
-                          onOpenChange={() => toggleComplimentaryCollapse(c.id)}
-                          className="rounded-xl border border-border bg-muted/30 overflow-hidden"
-                        >
-                          {/* Header */}
-                          <div className="flex items-center gap-1 px-3 py-2.5">
-                            <CollapsibleTrigger className="flex flex-1 items-center gap-2 min-w-0 cursor-pointer text-left">
-                              <AltArrowDown
-                                weight="BoldDuotone"
-                                className={cn(
-                                  "h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200",
-                                  isOpen && "rotate-180",
-                                )}
-                              />
-                              <div className="flex-1 min-w-0">
-                                <p className="text-sm font-medium text-foreground truncate">{c.name}</p>
-                                {!isOpen && (
-                                  <p className="text-xs text-muted-foreground tabular-nums">
-                                    {c.isShowPrice && c.price ? `Rp${fmtRp(c.price)}` : "Harga tidak ditampilkan"}
-                                  </p>
-                                )}
-                              </div>
-                            </CollapsibleTrigger>
-                            <button
-                              type="button"
-                              className="shrink-0 p-1 rounded-lg text-destructive hover:bg-destructive/10 transition-colors"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setComplimentaries((prev) => prev.filter((x) => x.id !== c.id));
-                                setCollapsedComplimentaries((prev) => {
-                                  const next = new Set(prev);
-                                  next.delete(c.id);
-                                  return next;
-                                });
-                              }}
-                              aria-label="Hapus complimentary"
-                            >
-                              <CloseCircle weight="BoldDuotone" className="h-3.5 w-3.5" />
-                            </button>
-                          </div>
-
-                          {/* Body */}
-                          <CollapsibleContent>
-                            <div className="px-3 pb-3 space-y-2 border-t border-border/60 pt-2">
-                              <div>
-                                <label className="text-xs font-medium text-foreground block mb-1">Nama <span className="text-destructive">*</span></label>
-                                <Input
-                                  value={c.name}
-                                  onChange={(e) => setComplimentaries((prev) => prev.map((x) => x.id === c.id ? { ...x, name: e.target.value } : x))}
-                                  placeholder="Nama complimentary..."
-                                  className="h-8 text-sm"
-                                />
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <div className="relative flex-1">
-                                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">Rp</span>
-                                  <input
-                                    type="text"
-                                    inputMode="numeric"
-                                    className="w-full pl-8 pr-3 py-1.5 text-sm border border-input rounded-md bg-background"
-                                    placeholder="Harga"
-                                    value={c.price ? fmtRp(c.price) : ""}
-                                    onChange={(e) => {
-                                      const n = Number(e.target.value.replace(/\D/g, ""));
-                                      setComplimentaries((prev) => prev.map((x) => x.id === c.id ? { ...x, price: n } : x));
-                                    }}
-                                  />
-                                </div>
-                                <label className="flex items-center gap-1.5 shrink-0 cursor-pointer">
-                                  <Switch
-                                    checked={c.isShowPrice}
-                                    onCheckedChange={(v) => setComplimentaries((prev) => prev.map((x) => x.id === c.id ? { ...x, isShowPrice: v } : x))}
-                                  />
-                                  <span className="text-xs text-muted-foreground">Tampil harga</span>
-                                </label>
-                              </div>
-                              <Textarea
-                                value={c.description}
-                                onChange={(e) => setComplimentaries((prev) => prev.map((x) => x.id === c.id ? { ...x, description: e.target.value } : x))}
-                                placeholder="Keterangan complimentary..."
-                                rows={2}
-                                className="resize-none text-sm"
-                              />
-                            </div>
-                          </CollapsibleContent>
-                        </Collapsible>
-                      );
-                    })}
-                    {complimentaries.length === 0 && complimentaryMode === "none" && (
-                      <p className="text-xs text-muted-foreground italic text-center py-1">Belum ada complimentary</p>
-                    )}
-                  </div>
                 </div>
               )}
-              {/* ─── Step 3: Item Paket (Internal & Vendor items) ─── */}
-              {currentStep === 3 && (
+              {/* ─── Step 3: Bonus & Complimentary — live-saved via EditBonus/EditComplimentary ─── */}
+              {currentStep === 3 && draftId && (
+                <Tabs defaultValue="bonus">
+                  <TabsList
+                    variant="line"
+                    className="h-auto w-full justify-start gap-1 rounded-none border-b border-border bg-transparent p-0 group-data-horizontal/tabs:h-auto"
+                  >
+                    <TabsTrigger
+                      value="bonus"
+                      className="h-auto flex-none items-center gap-1.5 rounded-none border-0 border-b border-b-transparent -mb-px bg-transparent px-4 py-2.5 text-sm font-medium text-muted-foreground shadow-none transition-colors after:hidden hover:border-b-border hover:text-foreground data-active:border-b-primary data-active:bg-transparent data-active:text-foreground data-active:shadow-none"
+                    >
+                      <MedalStar weight="BoldDuotone" className="size-4 shrink-0" />
+                      Bonus
+                    </TabsTrigger>
+                    <TabsTrigger
+                      value="complimentary"
+                      className="h-auto flex-none items-center gap-1.5 rounded-none border-0 border-b border-b-transparent -mb-px bg-transparent px-4 py-2.5 text-sm font-medium text-muted-foreground shadow-none transition-colors after:hidden hover:border-b-border hover:text-foreground data-active:border-b-primary data-active:bg-transparent data-active:text-foreground data-active:shadow-none"
+                    >
+                      <Gift weight="BoldDuotone" className="size-4 shrink-0" />
+                      Complimentary
+                    </TabsTrigger>
+                  </TabsList>
+
+                  <TabsContent value="bonus" keepMounted className="mt-4 animate-in fade-in duration-300">
+                    <EditBonusContent
+                      ref={bonusRef}
+                      bookingId={draftId}
+                      onClose={() => { /* stay on tab */ }}
+                      hideActions
+                    />
+                  </TabsContent>
+                  <TabsContent value="complimentary" keepMounted className="mt-4 animate-in fade-in duration-300">
+                    <EditComplimentaryContent
+                      ref={complimentaryRef}
+                      bookingId={draftId}
+                      onClose={() => { /* stay on tab */ }}
+                      hideActions
+                    />
+                  </TabsContent>
+                </Tabs>
+              )}
+              {/* ─── Step 4: Item Paket (Internal & Vendor items) ─── */}
+              {currentStep === 4 && (
                 <div className="space-y-4">
                   <div>
                     <p className={cn('text-sm', 'font-medium', 'text-foreground')}>Item Paket</p>
@@ -2371,8 +2254,8 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
                   />
                 </div>
               )}
-              {/* ─── Step 4: Takeout (Package Prices) ─── */}
-              {currentStep === 4 && (
+              {/* ─── Step 5: Takeout (Package Prices) ─── */}
+              {currentStep === 5 && (
                 <div className="space-y-4">
                   {/* Sticky price summary — second sticky (footer is first) */}
                   <div className="sticky top-0 z-10 bg-background pb-2">
@@ -2459,8 +2342,8 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
                   </div>
                 </div>
               )}
-              {/* ─── Step 5: Term of Payments (jadwal murni) ─── */}
-              {currentStep === 5 && (
+              {/* ─── Step 6: Term of Payments (jadwal murni) ─── */}
+              {currentStep === 6 && (
                 <CreatePaymentStep
                   terms={terms}
                   setTerms={(updater) => {
@@ -2498,18 +2381,18 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
                   packagePrice={getBasePrice()}
                 />
               )}
-              {/* ─── Step 6: Payment (pencatatan cash-in) ─── */}
-              {currentStep === 6 && (
+              {/* ─── Step 7: Payment (pencatatan cash-in) ─── */}
+              {currentStep === 7 && (
                 <CreatePaymentRecordStep
                   terms={terms}
                   payments={createPayments}
                   setPayments={setCreatePayments}
                   defaultPaymentMethodId={wPaymentMethodId ?? ""}
-                  bookingFeeRecorded={isStep6Complete}
+                  bookingFeeRecorded={isStep7Complete}
                 />
               )}
-              {/* ─── Step 7: Signature ─── */}
-              {currentStep === 7 && (
+              {/* ─── Step 8: Signature ─── */}
+              {currentStep === 8 && (
                 <div className="space-y-6">
                   <div>
                     <FormLabel className={cn('text-sm', 'font-medium', 'text-foreground', 'mb-2', 'block')}>Lokasi Tanda Tangan <span className="text-destructive">*</span></FormLabel>

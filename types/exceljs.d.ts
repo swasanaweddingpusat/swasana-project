@@ -34,6 +34,7 @@ declare module "exceljs" {
   export interface Row {
     font: ExcelFont;
     alignment: ExcelAlignment;
+    getCell(indexOrKey: number | string): Cell;
     eachCell(callback: (cell: Cell, colNumber: number) => void): void;
     eachCell(
       opt: { includeEmpty: boolean },

@@ -10,6 +10,17 @@ const STATUS_LABEL: Record<string, string> = {
   on_leave: "Cuti",
 };
 
+const ATTENDANT_TYPE_LABEL: Record<string, string> = {
+  WORKDAY: "Work Day",
+  DAY_OFF: "Day Off",
+};
+
+const WORK_TYPE_LABEL: Record<string, string> = {
+  WFO: "WFO",
+  WFH: "WFH",
+  WFA: "WFA",
+};
+
 function formatDateID(value: string | Date): string {
   return new Date(value).toLocaleDateString("id-ID", {
     day: "2-digit",
@@ -26,6 +37,11 @@ function formatTimeShort(value: string | Date | null): string {
   });
 }
 
+function formatCoord(lat: number | null, lng: number | null): string {
+  if (lat === null || lng === null) return "-";
+  return `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+}
+
 function buildRows(data: AttendanceExportItem[]) {
   return data.map((r, i) => ({
     no: i + 1,
@@ -36,6 +52,11 @@ function buildRows(data: AttendanceExportItem[]) {
     status: STATUS_LABEL[r.status] ?? r.status,
     lokasi: r.workLocation?.name ?? "-",
     shift: r.workShift?.name ?? "-",
+    tipeKerja: r.workType ? (WORK_TYPE_LABEL[r.workType] ?? r.workType) : "-",
+    tipeHari: r.isPublicHoliday ? "Public Holiday" : (ATTENDANT_TYPE_LABEL[r.attendantType] ?? r.attendantType),
+    tanggalMerah: r.isPublicHoliday ? "Ya" : "Tidak",
+    koordinatMasuk: formatCoord(r.clockInLat, r.clockInLng),
+    koordinatKeluar: formatCoord(r.clockOutLat, r.clockOutLng),
   }));
 }
 
@@ -49,6 +70,11 @@ export function exportToExcel(data: AttendanceExportItem[], period: string): voi
     Status: r.status,
     Lokasi: r.lokasi,
     Shift: r.shift,
+    "Tipe Kerja": r.tipeKerja,
+    "Tipe Hari": r.tipeHari,
+    "Tanggal Merah": r.tanggalMerah,
+    "Koordinat Masuk": r.koordinatMasuk,
+    "Koordinat Keluar": r.koordinatKeluar,
   }));
 
   const ws = XLSX.utils.json_to_sheet(rows);
@@ -62,6 +88,11 @@ export function exportToExcel(data: AttendanceExportItem[], period: string): voi
     { wch: 12 },
     { wch: 22 },
     { wch: 16 },
+    { wch: 12 },
+    { wch: 16 },
+    { wch: 14 },
+    { wch: 20 },
+    { wch: 20 },
   ];
 
   const wb = XLSX.utils.book_new();
@@ -93,7 +124,7 @@ export function exportToPDF(
 
   autoTable(doc, {
     startY: 35,
-    head: [["No", "Nama Karyawan", "Tanggal", "Clock In", "Clock Out", "Status", "Lokasi", "Shift"]],
+    head: [["No", "Nama Karyawan", "Tanggal", "Clock In", "Clock Out", "Status", "Lokasi", "Shift", "Tipe Kerja", "Tipe Hari", "Tgl Merah", "Koordinat Masuk", "Koordinat Keluar"]],
     body: rows.map((r) => [
       r.no,
       r.nama,
@@ -103,8 +134,13 @@ export function exportToPDF(
       r.status,
       r.lokasi,
       r.shift,
+      r.tipeKerja,
+      r.tipeHari,
+      r.tanggalMerah,
+      r.koordinatMasuk,
+      r.koordinatKeluar,
     ]),
-    styles: { fontSize: 8, cellPadding: 3 },
+    styles: { fontSize: 7, cellPadding: 2 },
     headStyles: {
       fillColor: [15, 65, 89] as [number, number, number],
       textColor: 255,
@@ -112,14 +148,19 @@ export function exportToPDF(
     },
     alternateRowStyles: { fillColor: [248, 250, 252] as [number, number, number] },
     columnStyles: {
-      0: { cellWidth: 10 },
-      1: { cellWidth: 45 },
-      2: { cellWidth: 28 },
-      3: { cellWidth: 20 },
-      4: { cellWidth: 20 },
-      5: { cellWidth: 22 },
-      6: { cellWidth: 38 },
-      7: { cellWidth: 30 },
+      0: { cellWidth: 7 },
+      1: { cellWidth: 30 },
+      2: { cellWidth: 20 },
+      3: { cellWidth: 13 },
+      4: { cellWidth: 13 },
+      5: { cellWidth: 15 },
+      6: { cellWidth: 24 },
+      7: { cellWidth: 18 },
+      8: { cellWidth: 14 },
+      9: { cellWidth: 16 },
+      10: { cellWidth: 16 },
+      11: { cellWidth: 26 },
+      12: { cellWidth: 26 },
     },
   });
 
