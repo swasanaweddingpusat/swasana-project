@@ -139,9 +139,12 @@ export interface QuotationItem {
   // ── Sales ──────────────────────────────────────────────────────
   salesName: string;
   salesPhone?: string;
+  salesId?: string;
   // ── Event ──────────────────────────────────────────────────────
   venue: string;
+  venueId?: string;
   eventType: string;
+  eventTypeId?: string;
   eventDate: string;
   /** Tanggal akhir event kalau berupa rentang; kosong = single-date. */
   eventEndDate?: string;
@@ -153,6 +156,7 @@ export interface QuotationItem {
   place?: string;
   // ── Paket (ringkasan untuk list) ───────────────────────────────
   packageId?: string;
+  packageSource?: string;
   packageName: string;
   variantName: string;
   pax: number;
@@ -208,8 +212,11 @@ function mapRowToQuotationItem(row: QuotationListRow): QuotationItem {
     instansi: row.instansi ?? undefined,
     salesName: row.sales.fullName ?? "",
     salesPhone: row.sales.phoneNumber ?? undefined,
+    salesId: row.salesId,
     venue: row.venueName ?? row.venue?.name ?? "",
+    venueId: row.venueId ?? undefined,
     eventType: row.eventTypeName ?? row.eventType?.name ?? "",
+    eventTypeId: row.eventTypeId ?? undefined,
     eventDate: row.eventDate ? format(new Date(row.eventDate), "yyyy-MM-dd") : "",
     eventEndDate: row.eventEndDate ? format(new Date(row.eventEndDate), "yyyy-MM-dd") : "",
     time: row.time ?? undefined,
@@ -298,6 +305,7 @@ function mapRowToQuotationItem(row: QuotationListRow): QuotationItem {
     signingLocation: row.signingLocation ?? undefined,
     signatureSales: row.signatureSales ?? undefined,
     packageId: row.packageId ?? undefined,
+    packageSource: row.packageSource ?? undefined,
     packageName: row.packageName ?? "",
     variantName: "",
     pax: row.pax,

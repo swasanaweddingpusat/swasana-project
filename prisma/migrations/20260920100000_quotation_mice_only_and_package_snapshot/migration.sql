@@ -10,6 +10,7 @@ ALTER TABLE "quotations" DROP COLUMN IF EXISTS "weddingSession";
 ALTER TABLE "quotations" ADD COLUMN IF NOT EXISTS "packageId" TEXT;
 ALTER TABLE "quotations" ADD COLUMN IF NOT EXISTS "packageName" TEXT;
 ALTER TABLE "quotations" ADD COLUMN IF NOT EXISTS "pax" INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE "quotations" ADD COLUMN IF NOT EXISTS "packageSource" TEXT;
 ALTER TABLE "quotations" ADD COLUMN IF NOT EXISTS "discountName" TEXT;
 
 -- 3. QuotationItem.type — distinguishes regular items vs "Additional" rows.

@@ -56,7 +56,6 @@ import { BonusSelect } from "@/components/shared/BonusSelect";
 import {
   AddCircle,
   TrashBinTrash,
-  Refresh,
   ArrowRight,
   AltArrowDown,
   Calendar as CalendarSolarIcon,
@@ -116,6 +115,7 @@ interface QuotationFormValues {
   packageId: string;
   packageName: string;
   pax: number;
+  packageSource: string;
   details: string;
   time: string;
   place: string;
@@ -207,6 +207,14 @@ function makeDefaultTaxDeposits(): TaxDepositRow[] {
   ];
 }
 
+// Tab order per step — "Next" walks through these tabs before moving to the next
+// step, and "Back" reverses. Steps without an entry have no tabs.
+const STEP_TABS: Record<number, string[]> = {
+  2: ["harga", "items", "additionals"],
+  3: ["bonus", "complimentary"],
+  4: ["payment", "tax-deposit", "term"],
+};
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function parseNumericInput(raw: string): number {
@@ -270,6 +278,7 @@ const DEFAULT_VALUES: QuotationFormValues = {
   packageId: "",
   packageName: "",
   pax: 0,
+  packageSource: "custom",
   details: "",
   time: "",
   place: "",
@@ -386,7 +395,6 @@ interface SortableItemRowProps {
   toggleExpanded: (id: string) => void;
   watchedArray: QuotationItemForm[];
   recomputeRowTotal: (index: number) => void;
-  revertRowTotal: (index: number) => void;
 }
 
 function SortableItemRow({
@@ -399,7 +407,6 @@ function SortableItemRow({
   toggleExpanded,
   watchedArray,
   recomputeRowTotal,
-  revertRowTotal,
 }: SortableItemRowProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: fieldItem.id,
@@ -411,9 +418,6 @@ function SortableItemRow({
     opacity: isDragging ? 0.5 : undefined,
   };
 
-  const isManual = form.getValues(
-    `${arrayName}.${index}.manualTotal` as FieldPath<QuotationFormValues>,
-  ) as boolean;
   const isOpen = expandedSet.has(fieldItem.id);
   const titleVal = watchedArray?.[index]?.title ?? "";
   const totalVal = watchedArray?.[index]?.total ?? "";
@@ -532,94 +536,74 @@ function SortableItemRow({
             />
 
             {arrayName === "additionals" && (
-              <div className="grid grid-cols-3 gap-2">
-                <FormField
-                  control={form.control}
-                  name={`${arrayName}.${index}.qty` as FieldPath<QuotationFormValues>}
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-xs text-muted-foreground">
-                        Qty <span className="text-destructive">*</span>
-                      </FormLabel>
-                      <FormControl>
-                        <Input
-                          value={field.value as string}
-                          onChange={(e) => {
-                            field.onChange(e.target.value.replace(/\D/g, ""));
-                            recomputeRowTotal(index);
-                          }}
-                          placeholder="0"
-                          inputMode="numeric"
-                          className="w-full"
-                        />
-                      </FormControl>
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name={`${arrayName}.${index}.price` as FieldPath<QuotationFormValues>}
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-xs text-muted-foreground">
-                        Price <span className="text-destructive">*</span>
-                      </FormLabel>
-                      <FormControl>
-                        <Input
-                          value={field.value as string}
-                          onChange={(e) => {
-                            field.onChange(formatNumericDisplay(e.target.value));
-                            recomputeRowTotal(index);
-                          }}
-                          placeholder="0 /pax"
-                          inputMode="numeric"
-                          className="w-full"
-                        />
-                      </FormControl>
-                    </FormItem>
-                  )}
-                />
+              <>
+                <div className="grid grid-cols-2 gap-2">
+                  <FormField
+                    control={form.control}
+                    name={`${arrayName}.${index}.qty` as FieldPath<QuotationFormValues>}
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-xs text-muted-foreground">
+                          Qty <span className="text-destructive">*</span>
+                        </FormLabel>
+                        <FormControl>
+                          <Input
+                            value={field.value as string}
+                            onChange={(e) => {
+                              field.onChange(e.target.value.replace(/\D/g, ""));
+                              recomputeRowTotal(index);
+                            }}
+                            placeholder="0"
+                            inputMode="numeric"
+                            className="w-full"
+                          />
+                        </FormControl>
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name={`${arrayName}.${index}.price` as FieldPath<QuotationFormValues>}
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-xs text-muted-foreground">
+                          Price <span className="text-destructive">*</span>
+                        </FormLabel>
+                        <FormControl>
+                          <Input
+                            value={field.value as string}
+                            onChange={(e) => {
+                              field.onChange(formatNumericDisplay(e.target.value));
+                              recomputeRowTotal(index);
+                            }}
+                            placeholder="0 /pax"
+                            inputMode="numeric"
+                            className="w-full"
+                          />
+                        </FormControl>
+                      </FormItem>
+                    )}
+                  />
+                </div>
                 <FormField
                   control={form.control}
                   name={`${arrayName}.${index}.total` as FieldPath<QuotationFormValues>}
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="flex items-center justify-between text-xs text-muted-foreground">
-                        <span>Total</span>
-                        {isManual && (
-                          <button
-                            type="button"
-                            onClick={() => revertRowTotal(index)}
-                            className="flex items-center gap-0.5 text-[10px] text-primary hover:underline cursor-pointer"
-                            aria-label="Revert to automatic"
-                          >
-                            <Refresh weight="BoldDuotone" className="h-3 w-3" />
-                            auto
-                          </button>
-                        )}
-                      </FormLabel>
+                      <FormLabel className="text-xs text-muted-foreground">Total</FormLabel>
                       <FormControl>
                         <Input
                           value={field.value as string}
-                          onChange={(e) => {
-                            form.setValue(
-                              `${arrayName}.${index}.manualTotal` as FieldPath<QuotationFormValues>,
-                              true,
-                            );
-                            field.onChange(formatNumericDisplay(e.target.value));
-                          }}
+                          disabled
                           placeholder="0"
                           inputMode="numeric"
-                          className={cn(
-                            "w-full",
-                            isManual && "border-primary/50",
-                          )}
+                          className="w-full bg-muted text-muted-foreground"
                         />
                       </FormControl>
                     </FormItem>
                   )}
                 />
-              </div>
+              </>
             )}
           </div>
         </CollapsibleContent>
@@ -658,15 +642,6 @@ function ItemListEditor({
     );
   }
 
-  function revertRowTotal(index: number) {
-    form.setValue(
-      `${arrayName}.${index}.manualTotal` as FieldPath<QuotationFormValues>,
-      false,
-      { shouldDirty: true },
-    );
-    recomputeRowTotal(index);
-  }
-
   function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
@@ -700,7 +675,6 @@ function ItemListEditor({
               toggleExpanded={toggleExpanded}
               watchedArray={watchedArray}
               recomputeRowTotal={recomputeRowTotal}
-              revertRowTotal={revertRowTotal}
             />
           ))}
         </SortableContext>
@@ -1198,6 +1172,7 @@ export function QuotationDrawer({
 }: QuotationDrawerProps) {
   const isEdit = !!editQuotation;
   const [step, setStep] = useState<1 | 2 | 3 | 4 | 5>(1);
+  const [activeTab, setActiveTab] = useState("harga");
   const queryClient = useQueryClient();
 
   // ── Mutation hooks ───────────────────────────────────────────────────────
@@ -1226,9 +1201,6 @@ export function QuotationDrawer({
   const [selectedPackageId, setSelectedPackageId] = useState("");
   // Editable discount label (e.g. "Discount" / "Cashback") — toggled by pen icon.
   const [discountEditing, setDiscountEditing] = useState(false);
-  // Event detail package source: "meeting-package" = pick from MICE package list,
-  // "custom" = manual line items (hides the MICE package picker).
-  const [packageSource, setPackageSource] = useState<"meeting-package" | "custom">("custom");
 
   function toggleItem(id: string) {
     setExpandedItems((prev) => {
@@ -1593,6 +1565,7 @@ export function QuotationDrawer({
   const watchedAdditionals = form.watch("additionals");
   const watchedDiscount = form.watch("discount");
   const watchedDiscountName = form.watch("discountName");
+  const watchedPackageSource = form.watch("packageSource");
   const watchedEventTypeId = form.watch("eventTypeId");
   const watchedEventDate = form.watch("eventDate");
   const watchedPaymentMethodId = form.watch("paymentMethodId");
@@ -1765,7 +1738,6 @@ export function QuotationDrawer({
     );
 
     toast.success(`Package "${pkg.packageName}" applied — all steps auto-filled.`);
-    setSelectedPackageId("");
   }
 
   // TEMP — testing UI Step 1: skip required-field gate so "Lanjut" can be clicked even with
@@ -1859,6 +1831,7 @@ export function QuotationDrawer({
   }
 
   // ── Item totals ──────────────────────────────────────────────────────────
+  const pricesSubtotal = prices.reduce((sum, p) => sum + (p.total || 0), 0);
   const itemsSubtotal = (watchedItems ?? []).reduce(
     (sum, it) => sum + parseNumericInput(it?.total ?? ""),
     0,
@@ -1867,7 +1840,7 @@ export function QuotationDrawer({
     (sum, it) => sum + parseNumericInput(it?.total ?? ""),
     0,
   );
-  const subtotal = itemsSubtotal + additionalsSubtotal;
+  const subtotal = pricesSubtotal + itemsSubtotal + additionalsSubtotal;
   const discountNum = parseNumericInput(watchedDiscount);
   const grandTotal = Math.max(0, subtotal - discountNum);
 
@@ -1875,6 +1848,7 @@ export function QuotationDrawer({
   useEffect(() => {
     if (!open) return;
     setStep(1);
+    setActiveTab("harga");
     // Reset accordion state; auto-expand the FIRST card so at least one card is
     // open when the user reaches step 2.
     setExpandedItems(new Set());
@@ -1892,8 +1866,6 @@ export function QuotationDrawer({
     setSelectedPackageId("");
     // Reset discount label edit mode
     setDiscountEditing(false);
-    // Reset package source (default custom — hides MICE package picker)
-    setPackageSource("custom");
     // Reset Complimentary state
     setComplimentaries([]);
     setComplimentaryMode("none");
@@ -1936,18 +1908,19 @@ export function QuotationDrawer({
         clientName: editQuotation.leadName,
         clientPhone: editQuotation.leadPhone?.trim() ?? "",
         instansi: editQuotation.instansi ?? "",
-        salesId: matchedSales?.id ?? "",
+        salesId: editQuotation.salesId ?? matchedSales?.id ?? "",
         salesName: editQuotation.salesName,
         salesPhone: editQuotation.salesPhone ?? "",
-        eventTypeId: "",
+        eventTypeId: editQuotation.eventTypeId ?? "",
         eventTypeName: editQuotation.eventType,
         packageId: editQuotation.packageId ?? "",
         packageName: editQuotation.packageName ?? "",
         pax: editQuotation.pax ?? 0,
+        packageSource: editQuotation.packageSource ?? "custom",
         details: editQuotation.details ?? "",
         time: editQuotation.time ?? "",
         place: editQuotation.place ?? "",
-        venueId: matchedVenue?.id ?? "",
+        venueId: editQuotation.venueId ?? matchedVenue?.id ?? "",
         venue: editQuotation.venue,
         eventDate: editQuotation.eventDate,
         eventEndDate: editQuotation.eventEndDate ?? "",
@@ -2118,6 +2091,7 @@ export function QuotationDrawer({
     if (step === 1) {
       if (TEMP_SKIP_STEP1_REQUIRED_GATE) {
         setStep(2);
+        setActiveTab("harga");
         return;
       }
       const step1Fields = [
@@ -2128,11 +2102,29 @@ export function QuotationDrawer({
         "eventDate",
       ] as const;
       const ok = await form.trigger([...step1Fields]);
-      if (ok) setStep(2);
-    } else if (step === 2) {
+      if (ok) {
+        setStep(2);
+        setActiveTab("harga");
+      }
+      return;
+    }
+
+    // Advance to the next tab in the current step first.
+    const tabs = STEP_TABS[step];
+    if (tabs) {
+      const idx = tabs.indexOf(activeTab);
+      if (idx >= 0 && idx < tabs.length - 1) {
+        setActiveTab(tabs[idx + 1]);
+        return;
+      }
+    }
+
+    if (step === 2) {
       setStep(3);
+      setActiveTab("bonus");
     } else if (step === 3) {
       setStep(4);
+      setActiveTab("payment");
     } else if (step === 4) {
       const step4Fields = [
         "termAndCondition",
@@ -2145,17 +2137,30 @@ export function QuotationDrawer({
   }
 
   function handlePrevious() {
+    // Retreat to the previous tab in the current step first.
+    const tabs = STEP_TABS[step];
+    if (tabs) {
+      const idx = tabs.indexOf(activeTab);
+      if (idx > 0) {
+        setActiveTab(tabs[idx - 1]);
+        return;
+      }
+    }
+
     if (step === 2) {
       setStep(1);
     } else if (step === 3) {
       setStep(2);
+      setActiveTab("additionals");
     } else if (step === 4) {
       setStep(3);
+      setActiveTab("complimentary");
     } else if (step === 5) {
       // Clear signature saat kembali dari step terakhir (summary + TTD)
       sigSalesRef.current?.clear();
       setSignatureSales("");
       setStep(4);
+      setActiveTab("term");
     }
   }
 
@@ -2225,6 +2230,7 @@ export function QuotationDrawer({
       packageId: values.packageId || null,
       packageName: values.packageName || null,
       pax: values.pax,
+      packageSource: values.packageSource,
       complimentaries: complimentaries.map((c, i) => ({
         complimentaryId: c.complimentaryId,
         name: c.name,
@@ -2577,10 +2583,10 @@ export function QuotationDrawer({
                     <div className="grid grid-cols-2 gap-2">
                       <button
                         type="button"
-                        onClick={() => setPackageSource("meeting-package")}
+                        onClick={() => form.setValue("packageSource", "meeting-package")}
                         className={cn(
                           "rounded-xl border px-3 py-2 text-sm font-medium transition-colors cursor-pointer",
-                          packageSource === "meeting-package"
+                          watchedPackageSource === "meeting-package"
                             ? "border-primary bg-primary/10 text-primary"
                             : "border-border text-muted-foreground hover:text-foreground",
                         )}
@@ -2589,10 +2595,10 @@ export function QuotationDrawer({
                       </button>
                       <button
                         type="button"
-                        onClick={() => setPackageSource("custom")}
+                        onClick={() => form.setValue("packageSource", "custom")}
                         className={cn(
                           "rounded-xl border px-3 py-2 text-sm font-medium transition-colors cursor-pointer",
-                          packageSource === "custom"
+                          watchedPackageSource === "custom"
                             ? "border-primary bg-primary/10 text-primary"
                             : "border-border text-muted-foreground hover:text-foreground",
                         )}
@@ -2603,9 +2609,9 @@ export function QuotationDrawer({
                   </div>
 
                   {/* ── Pilih Package MICE ────────────────────────────── */}
-                  {watchedVenueId && packageSource === "meeting-package" && (
+                  {watchedVenueId && watchedPackageSource === "meeting-package" && (
                     <div className="w-full space-y-1.5">
-                      <p className={LABEL_CLASS}>Select MICE Package</p>
+                      <p className={LABEL_CLASS}>Meeting Package</p>
                       <SearchableSelect
                         options={micePackages.map((p) => ({ id: p.id, name: p.packageName }))}
                         value={selectedPackageId}
@@ -2785,7 +2791,7 @@ export function QuotationDrawer({
               {/* ════════════════ STEP 2 — ITEMS + RINGKASAN ════════════════ */}
               <div className={cn(step !== 2 && "hidden", "space-y-4")}>
                 {/* ── Harga / Items / Additional ──────── */}
-                <Tabs defaultValue="harga">
+                <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as string)}>
                   <TabsList
                     variant="line"
                     className="h-auto w-full min-w-0 flex-nowrap justify-start gap-1 overflow-x-auto scrollbar-hide rounded-none border-b border-border bg-transparent p-0 group-data-horizontal/tabs:h-auto"
@@ -2900,7 +2906,7 @@ export function QuotationDrawer({
 
               {/* ════════════════ STEP 3 — BONUS & COMPLIMENTARY ════════════════ */}
               <div className={cn(step !== 3 && "hidden", "space-y-3")}>
-                <Tabs defaultValue="bonus">
+                <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as string)}>
                   <TabsList
                     variant="line"
                     className="h-auto w-full min-w-0 flex-nowrap justify-start gap-1 overflow-x-auto scrollbar-hide rounded-none border-b border-border bg-transparent p-0 group-data-horizontal/tabs:h-auto"
@@ -3394,7 +3400,7 @@ export function QuotationDrawer({
 
               {/* ════════════════ STEP 4 — KETENTUAN PENAWARAN ════════════════ */}
               <div className={cn(step !== 4 && "hidden", "space-y-4")}>
-                <Tabs defaultValue="payment">
+                <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as string)}>
                   <TabsList
                     variant="line"
                     className="h-auto w-full min-w-0 flex-nowrap justify-start gap-1 overflow-x-auto scrollbar-hide rounded-none border-b border-border bg-transparent p-0 group-data-horizontal/tabs:h-auto"
@@ -3415,6 +3421,52 @@ export function QuotationDrawer({
 
                   {/* ── Payment ─────────────────────────────────────── */}
                   <TabsContent value="payment" keepMounted className="mt-4 animate-in fade-in duration-300 space-y-4">
+
+                {/* ── Term of Payment (TOP) ── */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <p className={LABEL_CLASS}>Term of Payment</p>
+                    {terms.length > 0 && (
+                      <span className="text-xs text-muted-foreground tabular-nums">
+                        {formatRupiah(terms.reduce((s, t) => s + (t.amount || 0), 0))}
+                      </span>
+                    )}
+                  </div>
+
+                  {terms.length === 0 ? (
+                    <p className="text-sm text-muted-foreground text-center py-6">
+                      Belum ada termin. Klik &quot;Tambah Termin&quot; untuk menambahkan.
+                    </p>
+                  ) : (
+                    <DndContext sensors={termSensors} collisionDetection={closestCenter} onDragEnd={handleTermDragEnd}>
+                      <SortableContext items={terms.map((t) => t.id)} strategy={verticalListSortingStrategy}>
+                        <div className="space-y-2">
+                          {terms.map((row, index) => (
+                            <TermRowCard
+                              key={row.id}
+                              row={row}
+                              index={index}
+                              isCollapsed={collapsedTerms.has(row.id)}
+                              toggleCollapse={() => toggleTermCollapse(row.id)}
+                              onUpdate={(patch) => updateTermRow(row.id, patch)}
+                              onRemove={() => removeTermRow(row.id)}
+                            />
+                          ))}
+                        </div>
+                      </SortableContext>
+                    </DndContext>
+                  )}
+
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={addTermRow}
+                    className="w-full rounded-xl border-dashed"
+                  >
+                    <AddCircle weight="BoldDuotone" className="h-4 w-4 mr-1" />
+                    Tambah Termin
+                  </Button>
+                </div>
 
                 <FormField
                   control={form.control}
@@ -3504,52 +3556,6 @@ export function QuotationDrawer({
                       </FormItem>
                     )}
                   />
-                </div>
-
-                {/* ── Term of Payment (TOP) ── */}
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <p className={LABEL_CLASS}>Term of Payment</p>
-                    {terms.length > 0 && (
-                      <span className="text-xs text-muted-foreground tabular-nums">
-                        {formatRupiah(terms.reduce((s, t) => s + (t.amount || 0), 0))}
-                      </span>
-                    )}
-                  </div>
-
-                  {terms.length === 0 ? (
-                    <p className="text-sm text-muted-foreground text-center py-6">
-                      Belum ada termin. Klik &quot;Tambah Termin&quot; untuk menambahkan.
-                    </p>
-                  ) : (
-                    <DndContext sensors={termSensors} collisionDetection={closestCenter} onDragEnd={handleTermDragEnd}>
-                      <SortableContext items={terms.map((t) => t.id)} strategy={verticalListSortingStrategy}>
-                        <div className="space-y-2">
-                          {terms.map((row, index) => (
-                            <TermRowCard
-                              key={row.id}
-                              row={row}
-                              index={index}
-                              isCollapsed={collapsedTerms.has(row.id)}
-                              toggleCollapse={() => toggleTermCollapse(row.id)}
-                              onUpdate={(patch) => updateTermRow(row.id, patch)}
-                              onRemove={() => removeTermRow(row.id)}
-                            />
-                          ))}
-                        </div>
-                      </SortableContext>
-                    </DndContext>
-                  )}
-
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={addTermRow}
-                    className="w-full rounded-xl border-dashed"
-                  >
-                    <AddCircle weight="BoldDuotone" className="h-4 w-4 mr-1" />
-                    Tambah Termin
-                  </Button>
                 </div>
 
                   </TabsContent>

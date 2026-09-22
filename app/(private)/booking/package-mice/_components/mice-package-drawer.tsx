@@ -48,14 +48,16 @@ import type { PackageQueryItem } from "@/lib/queries/packages";
 // MICE package is always gated on the "package-mice" permission module.
 const PERM = "package-mice";
 
-// ─── Steps (MICE = 4 steps: Detail, Item & Harga, Payment, Complimentary & Bonus) ──
+// ─── Steps (MICE = 3 steps: Detail, Item & Harga, Payment) ──
 
 const stepperSteps = [
   { id: 1, title: "Detail Paket", subtitle: "Informasi dasar paket", icon: Box },
-  { id: 2, title: "Item & Harga", subtitle: "Harga, item & tax/deposit paket", icon: ClipboardList },
-  { id: 3, title: "Complimentary & Bonus", subtitle: "Bonus & komplimen paket", icon: Gift },
-  { id: 4, title: "Payment", subtitle: "Rekening & term & condition", icon: Card2 },
+  { id: 2, title: "Item & Harga", subtitle: "Harga, item, bonus & komplimen", icon: ClipboardList },
+  { id: 3, title: "Payment", subtitle: "Rekening, tax/deposit & term", icon: Card2 },
 ];
+
+const STEP_2_TABS = ["harga", "items", "bonus", "complimentary"];
+const STEP_3_TABS = ["payment", "tax-deposit", "term"];
 
 interface MiceItemState {
   id: string;
@@ -253,6 +255,8 @@ export function MicePackageDrawer({ isOpen, onClose, editingPackage }: MicePacka
   const canEditTc = can(PERM, "term-&-condition");
 
   const [currentStep, setCurrentStep] = useState(1);
+  const [step2Tab, setStep2Tab] = useState("harga");
+  const [step3Tab, setStep3Tab] = useState("payment");
   const [submitting, setSubmitting] = useState(false);
 
   // Step 1 — details
@@ -387,6 +391,8 @@ export function MicePackageDrawer({ isOpen, onClose, editingPackage }: MicePacka
     setCollapsedBonuses(new Set());
     setCreateNewBonus({ name: "", price: 0, description: "" });
     setIsCreatingBonus(false);
+    setStep2Tab("harga");
+    setStep3Tab("payment");
     setCurrentStep(1);
     setErrors({});
   }
@@ -457,6 +463,8 @@ export function MicePackageDrawer({ isOpen, onClose, editingPackage }: MicePacka
       setCollapsedComplimentaries(new Set());
       setBonusMode("none");
       setCollapsedBonuses(new Set());
+      setStep2Tab("harga");
+      setStep3Tab("payment");
       setCurrentStep(1);
       setErrors({});
     } else if (isOpen) {
@@ -482,11 +490,13 @@ export function MicePackageDrawer({ isOpen, onClose, editingPackage }: MicePacka
         (p.priceType === "qty" && (parseNumericInput(p.qty) < 1 || parseNumericInput(p.price) < 1)) ||
         (p.priceType === "nominal" && parseNumericInput(p.total) < 1)
     );
-  // Step 3 (Complimentary & Bonus) and Step 4 (Payment) are optional — no hard validation.
+  // Step 3 (Payment) is optional — no hard validation.
+  const isStep2LastTab = step2Tab === STEP_2_TABS[STEP_2_TABS.length - 1];
+  const isLastTab = currentStep === 3 && step3Tab === STEP_3_TABS[STEP_3_TABS.length - 1];
   const isNextDisabled =
     submitting ||
     (currentStep === 1 && isStep1Invalid) ||
-    (currentStep === 2 && isStep2Invalid);
+    (currentStep === 2 && isStep2LastTab && isStep2Invalid);
 
   function handleNext() {
     if (currentStep === 1) {
@@ -498,8 +508,14 @@ export function MicePackageDrawer({ isOpen, onClose, editingPackage }: MicePacka
         toast.error("Lengkapi semua field yang wajib diisi");
         return;
       }
+      setStep2Tab("harga");
       setCurrentStep(2);
     } else if (currentStep === 2) {
+      const idx = STEP_2_TABS.indexOf(step2Tab);
+      if (idx < STEP_2_TABS.length - 1) {
+        setStep2Tab(STEP_2_TABS[idx + 1]);
+        return;
+      }
       if (prices.length === 0) {
         toast.error("Tambahkan minimal satu item harga");
         return;
@@ -528,14 +544,35 @@ export function MicePackageDrawer({ isOpen, onClose, editingPackage }: MicePacka
         toast.error("Setiap item wajib punya nama");
         return;
       }
+      setStep3Tab("payment");
       setCurrentStep(3);
     } else if (currentStep === 3) {
-      setCurrentStep(4);
+      const idx = STEP_3_TABS.indexOf(step3Tab);
+      if (idx < STEP_3_TABS.length - 1) {
+        setStep3Tab(STEP_3_TABS[idx + 1]);
+        return;
+      }
+      handleSubmit();
     }
   }
 
   function handlePrevious() {
-    if (currentStep > 1) setCurrentStep(currentStep - 1);
+    if (currentStep === 2) {
+      const idx = STEP_2_TABS.indexOf(step2Tab);
+      if (idx > 0) {
+        setStep2Tab(STEP_2_TABS[idx - 1]);
+      } else {
+        setCurrentStep(1);
+      }
+    } else if (currentStep === 3) {
+      const idx = STEP_3_TABS.indexOf(step3Tab);
+      if (idx > 0) {
+        setStep3Tab(STEP_3_TABS[idx - 1]);
+      } else {
+        setStep2Tab(STEP_2_TABS[STEP_2_TABS.length - 1]);
+        setCurrentStep(2);
+      }
+    }
   }
 
   // ─── DnD — items ──────────────────────────────────────────────────────────────
@@ -879,7 +916,7 @@ export function MicePackageDrawer({ isOpen, onClose, editingPackage }: MicePacka
 
           {/* ─── Step 2: Item & Harga ─── */}
           {currentStep === 2 && (
-            <Tabs defaultValue="harga">
+            <Tabs value={step2Tab} onValueChange={(v) => setStep2Tab(v)}>
               <TabsList
                 variant="line"
                 className="h-auto w-full min-w-0 flex-nowrap justify-start gap-1 overflow-x-auto scrollbar-hide rounded-none border-b border-border bg-transparent p-0 group-data-horizontal/tabs:h-auto"
@@ -891,6 +928,14 @@ export function MicePackageDrawer({ isOpen, onClose, editingPackage }: MicePacka
                 <TabsTrigger value="items" className={TAB_TRIGGER_CLASS}>
                   <ClipboardList weight="BoldDuotone" className="size-4 shrink-0" />
                   Items
+                </TabsTrigger>
+                <TabsTrigger value="bonus" className={TAB_TRIGGER_CLASS}>
+                  <MedalStar weight="BoldDuotone" className="size-4 shrink-0" />
+                  Bonus
+                </TabsTrigger>
+                <TabsTrigger value="complimentary" className={TAB_TRIGGER_CLASS}>
+                  <Gift weight="BoldDuotone" className="size-4 shrink-0" />
+                  Complimentary
                 </TabsTrigger>
               </TabsList>
 
@@ -1086,12 +1131,468 @@ export function MicePackageDrawer({ isOpen, onClose, editingPackage }: MicePacka
                 </Button>
               </TabsContent>
 
+              {/* ── Bonus ─────────────────────────────────────────── */}
+              <TabsContent value="bonus" keepMounted className="mt-4 animate-in fade-in duration-300 space-y-3">
+                {bonusMode !== "create-new" && (
+                  <BonusSelect
+                    options={bonusOptions
+                      .filter((opt) => !bonuses.some((b) => b.bonusId === opt.id))
+                      .map((opt) => ({ id: opt.id, name: opt.name, badge: formatRupiah(opt.price), description: opt.description ?? undefined }))}
+                    value=""
+                    onChange={(selectedId) => {
+                      const found = bonusOptions.find((x) => x.id === selectedId);
+                      if (found) {
+                        setBonuses((prev) => [...prev, {
+                          id: crypto.randomUUID(),
+                          bonusId: found.id,
+                          name: found.name,
+                          price: found.price,
+                          description: found.description ?? "",
+                          qty: 1,
+                        }]);
+                      }
+                    }}
+                    onAddTrigger={canCreateBonus ? (text) => {
+                      setBonusMode("create-new");
+                      setCreateNewBonus({ name: text, price: 0, description: "" });
+                    } : undefined}
+                    placeholder="Pilih dari daftar bonus..."
+                    searchPlaceholder="Cari bonus..."
+                    emptyText="Tidak ada bonus"
+                  />
+                )}
+
+                {bonusMode === "create-new" && (
+                  <div className="rounded-xl border border-border bg-muted/30 p-3 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs font-medium text-muted-foreground">Tambah bonus baru ke master list</p>
+                      <button
+                        type="button"
+                        className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                        onClick={() => setBonusMode("none")}
+                      >
+                        Batal
+                      </button>
+                    </div>
+
+                    <div>
+                      <label className="text-xs font-medium text-foreground block mb-1">
+                        Nama <span className="text-destructive">*</span>
+                      </label>
+                      <Input
+                        value={createNewBonus.name}
+                        onChange={(e) => setCreateNewBonus((p) => ({ ...p, name: e.target.value }))}
+                        placeholder="Nama bonus..."
+                        className="h-8 text-sm"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-xs font-medium text-foreground block mb-1">
+                        Harga <span className="text-destructive">*</span>
+                      </label>
+                      <div className="relative">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground select-none">
+                          Rp
+                        </span>
+                        <Input
+                          value={createNewBonus.price ? formatNumericDisplay(createNewBonus.price) : ""}
+                          onChange={(e) => {
+                            const n = parseNumericInput(e.target.value);
+                            setCreateNewBonus((p) => ({ ...p, price: n }));
+                          }}
+                          placeholder="Harga"
+                          inputMode="numeric"
+                          className="h-8 text-sm pl-8"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="text-xs font-medium text-foreground block mb-1">Deskripsi</label>
+                      <Textarea
+                        value={createNewBonus.description}
+                        onChange={(e) => setCreateNewBonus((p) => ({ ...p, description: e.target.value }))}
+                        placeholder="Deskripsi bonus (opsional)..."
+                        rows={2}
+                        className="resize-none text-sm"
+                      />
+                    </div>
+
+                    <Button
+                      type="button"
+                      className="w-full rounded-xl"
+                      disabled={!createNewBonus.name.trim() || !createNewBonus.price || isCreatingBonus}
+                      onClick={async () => {
+                        if (!createNewBonus.name.trim() || !createNewBonus.price || isCreatingBonus) return;
+                        setIsCreatingBonus(true);
+                        try {
+                          const result = await createBonus({
+                            name: createNewBonus.name.trim(),
+                            price: createNewBonus.price,
+                            description: createNewBonus.description.trim() || null,
+                            isActive: true,
+                          });
+                          if (result.success) {
+                            setBonuses((prev) => [...prev, {
+                              id: crypto.randomUUID(),
+                              bonusId: result.data.id,
+                              name: result.data.name,
+                              price: result.data.price,
+                              description: result.data.description ?? "",
+                              qty: 1,
+                            }]);
+                            setBonusMode("none");
+                            toast.success(`"${result.data.name}" berhasil ditambahkan`);
+                          } else {
+                            toast.error(result.error ?? "Gagal menambahkan bonus");
+                          }
+                        } finally {
+                          setIsCreatingBonus(false);
+                        }
+                      }}
+                    >
+                      {isCreatingBonus ? "Menyimpan..." : "Simpan & Tambah"}
+                    </Button>
+                  </div>
+                )}
+
+                {bonuses.map((b) => {
+                  const isOpen = !collapsedBonuses.has(b.id);
+                  return (
+                    <Collapsible
+                      key={b.id}
+                      open={isOpen}
+                      onOpenChange={() => toggleBonusCollapse(b.id)}
+                      className="rounded-xl border border-border bg-muted/30 overflow-hidden"
+                    >
+                      <div className="flex items-center gap-1 px-3 py-2.5">
+                        <CollapsibleTrigger className="flex flex-1 items-center gap-2 min-w-0 cursor-pointer text-left">
+                          <AltArrowDown
+                            weight="BoldDuotone"
+                            className={cn(
+                              "h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200",
+                              isOpen && "rotate-180",
+                            )}
+                          />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-foreground truncate">{b.name}</p>
+                            {!isOpen && (
+                              <p className="text-xs text-muted-foreground tabular-nums">
+                                {b.price ? formatRupiah(b.price) : ""}
+                              </p>
+                            )}
+                          </div>
+                        </CollapsibleTrigger>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setBonuses((prev) => prev.filter((x) => x.id !== b.id));
+                            setCollapsedBonuses((prev) => {
+                              const next = new Set(prev);
+                              next.delete(b.id);
+                              return next;
+                            });
+                          }}
+                          aria-label="Hapus bonus"
+                          className="shrink-0 h-7 w-7 text-destructive hover:bg-destructive/10"
+                        >
+                          <TrashBinTrash weight="BoldDuotone" className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+
+                      <CollapsibleContent>
+                        <div className="px-3 pb-3 space-y-2 border-t border-border/60 pt-2">
+                          <div>
+                            <label className="text-xs font-medium text-foreground block mb-1">
+                              Nama <span className="text-destructive">*</span>
+                            </label>
+                            <Input
+                              value={b.name}
+                              onChange={(e) => setBonuses((prev) => prev.map((x) => x.id === b.id ? { ...x, name: e.target.value } : x))}
+                              placeholder="Nama bonus..."
+                              className="h-8 text-sm"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-xs font-medium text-foreground block mb-1">
+                              Harga <span className="text-destructive">*</span>
+                            </label>
+                            <div className="relative">
+                              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground select-none">
+                                Rp
+                              </span>
+                              <Input
+                                value={b.price ? formatNumericDisplay(b.price) : ""}
+                                onChange={(e) => {
+                                  const n = parseNumericInput(e.target.value);
+                                  setBonuses((prev) => prev.map((x) => x.id === b.id ? { ...x, price: n } : x));
+                                }}
+                                placeholder="Harga"
+                                inputMode="numeric"
+                                className="h-8 text-sm pl-8"
+                              />
+                            </div>
+                          </div>
+                          <Textarea
+                            value={b.description}
+                            onChange={(e) => setBonuses((prev) => prev.map((x) => x.id === b.id ? { ...x, description: e.target.value } : x))}
+                            placeholder="Deskripsi bonus..."
+                            rows={2}
+                            className="resize-none text-sm"
+                          />
+                        </div>
+                      </CollapsibleContent>
+                    </Collapsible>
+                  );
+                })}
+                {bonuses.length === 0 && bonusMode === "none" && (
+                  <p className="text-xs text-muted-foreground italic text-center py-1">Belum ada bonus</p>
+                )}
+              </TabsContent>
+
+              {/* ── Complimentary ─────────────────────────────────── */}
+              <TabsContent value="complimentary" keepMounted className="mt-4 animate-in fade-in duration-300 space-y-3">
+                {complimentaryMode !== "create-new" && (
+                  <ComplimentarySelect
+                    options={complimentaryOptions
+                      .filter((opt) => !complimentaries.some((c) => c.complimentaryId === opt.id))
+                      .map((opt) => ({ id: opt.id, name: opt.name, badge: formatRupiah(opt.price), description: opt.description ?? undefined }))}
+                    value=""
+                    onChange={(selectedId) => {
+                      const found = complimentaryOptions.find((x) => x.id === selectedId);
+                      if (found) {
+                        setComplimentaries((prev) => [...prev, {
+                          id: crypto.randomUUID(),
+                          complimentaryId: found.id,
+                          name: found.name,
+                          price: found.price,
+                          isShowPrice: found.isShowPrice,
+                          description: found.description ?? "",
+                          qty: 1,
+                        }]);
+                      }
+                    }}
+                    onAddTrigger={canCreateComplimentary ? (text) => {
+                      setComplimentaryMode("create-new");
+                      setCreateNewComp({ name: text, price: 0, description: "", isShowPrice: false });
+                    } : undefined}
+                    placeholder="Pilih dari daftar complimentary..."
+                    searchPlaceholder="Cari complimentary..."
+                    emptyText="Tidak ada complimentary"
+                  />
+                )}
+
+                {complimentaryMode === "create-new" && (
+                  <div className="rounded-xl border border-border bg-muted/30 p-3 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs font-medium text-muted-foreground">Tambah complimentary baru ke master list</p>
+                      <button
+                        type="button"
+                        className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                        onClick={() => setComplimentaryMode("none")}
+                      >
+                        Batal
+                      </button>
+                    </div>
+
+                    <div>
+                      <label className="text-xs font-medium text-foreground block mb-1">
+                        Nama <span className="text-destructive">*</span>
+                      </label>
+                      <Input
+                        value={createNewComp.name}
+                        onChange={(e) => setCreateNewComp((p) => ({ ...p, name: e.target.value }))}
+                        placeholder="Nama complimentary..."
+                        className="h-8 text-sm"
+                      />
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <div className="relative flex-1">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground select-none">
+                          Rp
+                        </span>
+                        <Input
+                          value={createNewComp.price ? formatNumericDisplay(createNewComp.price) : ""}
+                          onChange={(e) => {
+                            const n = parseNumericInput(e.target.value);
+                            setCreateNewComp((p) => ({ ...p, price: n }));
+                          }}
+                          placeholder="Harga (opsional)"
+                          inputMode="numeric"
+                          className="h-8 text-sm pl-8"
+                        />
+                      </div>
+                      <label className="flex items-center gap-1.5 shrink-0 cursor-pointer">
+                        <Switch
+                          checked={createNewComp.isShowPrice}
+                          onCheckedChange={(v) => setCreateNewComp((p) => ({ ...p, isShowPrice: v }))}
+                        />
+                        <span className="text-xs text-muted-foreground">Tampilkan harga</span>
+                      </label>
+                    </div>
+
+                    <div>
+                      <label className="text-xs font-medium text-foreground block mb-1">Deskripsi</label>
+                      <Textarea
+                        value={createNewComp.description}
+                        onChange={(e) => setCreateNewComp((p) => ({ ...p, description: e.target.value }))}
+                        placeholder="Deskripsi complimentary (opsional)..."
+                        rows={2}
+                        className="resize-none text-sm"
+                      />
+                    </div>
+
+                    <Button
+                      type="button"
+                      className="w-full rounded-xl"
+                      disabled={!createNewComp.name.trim() || isCreatingComp}
+                      onClick={async () => {
+                        if (!createNewComp.name.trim() || isCreatingComp) return;
+                        setIsCreatingComp(true);
+                        try {
+                          const result = await createComplimentary({
+                            name: createNewComp.name.trim(),
+                            price: createNewComp.price,
+                            description: createNewComp.description.trim() || null,
+                            isShowPrice: createNewComp.isShowPrice,
+                            isActive: true,
+                          });
+                          if (result.success && result.item) {
+                            setComplimentaries((prev) => [...prev, {
+                              id: crypto.randomUUID(),
+                              complimentaryId: result.item!.id,
+                              name: result.item!.name,
+                              price: result.item!.price,
+                              isShowPrice: result.item!.isShowPrice,
+                              description: result.item!.description ?? "",
+                              qty: 1,
+                            }]);
+                            setComplimentaryMode("none");
+                            toast.success(`"${result.item.name}" berhasil ditambahkan`);
+                          } else {
+                            toast.error(result.error ?? "Gagal menambahkan complimentary");
+                          }
+                        } finally {
+                          setIsCreatingComp(false);
+                        }
+                      }}
+                    >
+                      {isCreatingComp ? "Menyimpan..." : "Simpan & Tambah"}
+                    </Button>
+                  </div>
+                )}
+
+                {complimentaries.map((c) => {
+                  const isOpen = !collapsedComplimentaries.has(c.id);
+                  return (
+                    <Collapsible
+                      key={c.id}
+                      open={isOpen}
+                      onOpenChange={() => toggleComplimentaryCollapse(c.id)}
+                      className="rounded-xl border border-border bg-muted/30 overflow-hidden"
+                    >
+                      <div className="flex items-center gap-1 px-3 py-2.5">
+                        <CollapsibleTrigger className="flex flex-1 items-center gap-2 min-w-0 cursor-pointer text-left">
+                          <AltArrowDown
+                            weight="BoldDuotone"
+                            className={cn(
+                              "h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200",
+                              isOpen && "rotate-180",
+                            )}
+                          />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-foreground truncate">{c.name}</p>
+                            {!isOpen && (
+                              <p className="text-xs text-muted-foreground tabular-nums">
+                                {c.isShowPrice && c.price ? formatRupiah(c.price) : "Harga tidak ditampilkan"}
+                              </p>
+                            )}
+                          </div>
+                        </CollapsibleTrigger>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setComplimentaries((prev) => prev.filter((x) => x.id !== c.id));
+                            setCollapsedComplimentaries((prev) => {
+                              const next = new Set(prev);
+                              next.delete(c.id);
+                              return next;
+                            });
+                          }}
+                          aria-label="Hapus complimentary"
+                          className="shrink-0 h-7 w-7 text-destructive hover:bg-destructive/10"
+                        >
+                          <TrashBinTrash weight="BoldDuotone" className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+
+                      <CollapsibleContent>
+                        <div className="px-3 pb-3 space-y-2 border-t border-border/60 pt-2">
+                          <div>
+                            <label className="text-xs font-medium text-foreground block mb-1">
+                              Nama <span className="text-destructive">*</span>
+                            </label>
+                            <Input
+                              value={c.name}
+                              onChange={(e) => setComplimentaries((prev) => prev.map((x) => x.id === c.id ? { ...x, name: e.target.value } : x))}
+                              placeholder="Nama complimentary..."
+                              className="h-8 text-sm"
+                            />
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <div className="relative flex-1">
+                              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground select-none">
+                                Rp
+                              </span>
+                              <Input
+                                value={c.price ? formatNumericDisplay(c.price) : ""}
+                                onChange={(e) => {
+                                  const n = parseNumericInput(e.target.value);
+                                  setComplimentaries((prev) => prev.map((x) => x.id === c.id ? { ...x, price: n } : x));
+                                }}
+                                placeholder="Harga"
+                                inputMode="numeric"
+                                className="h-8 text-sm pl-8"
+                              />
+                            </div>
+                            <label className="flex items-center gap-1.5 shrink-0 cursor-pointer">
+                              <Switch
+                                checked={c.isShowPrice}
+                                onCheckedChange={(v) => setComplimentaries((prev) => prev.map((x) => x.id === c.id ? { ...x, isShowPrice: v } : x))}
+                              />
+                              <span className="text-xs text-muted-foreground">Tampilkan harga</span>
+                            </label>
+                          </div>
+                          <Textarea
+                            value={c.description}
+                            onChange={(e) => setComplimentaries((prev) => prev.map((x) => x.id === c.id ? { ...x, description: e.target.value } : x))}
+                            placeholder="Deskripsi complimentary..."
+                            rows={2}
+                            className="resize-none text-sm"
+                          />
+                        </div>
+                      </CollapsibleContent>
+                    </Collapsible>
+                  );
+                })}
+                {complimentaries.length === 0 && complimentaryMode === "none" && (
+                  <p className="text-xs text-muted-foreground italic text-center py-1">Belum ada complimentary</p>
+                )}
+              </TabsContent>
             </Tabs>
           )}
 
-          {/* ─── Step 4: Payment & Tax/Deposit ─── */}
-          {currentStep === 4 && (
-            <Tabs defaultValue="payment">
+          {/* ─── Step 3: Payment & Tax/Deposit ─── */}
+          {currentStep === 3 && (
+            <Tabs value={step3Tab} onValueChange={(v) => setStep3Tab(v)}>
               <TabsList
                 variant="line"
                 className="h-auto w-full min-w-0 flex-nowrap justify-start gap-1 overflow-x-auto scrollbar-hide rounded-none border-b border-border bg-transparent p-0 group-data-horizontal/tabs:h-auto"
@@ -1248,484 +1749,6 @@ export function MicePackageDrawer({ isOpen, onClose, editingPackage }: MicePacka
               </TabsContent>
             </Tabs>
           )}
-
-          {/* ─── Step 3: Complimentary & Bonus ─── */}
-          {currentStep === 3 && (
-            <div className="space-y-3">
-              <Tabs defaultValue="bonus">
-                  <TabsList
-                    variant="line"
-                    className="h-auto w-full min-w-0 flex-nowrap justify-start gap-1 overflow-x-auto scrollbar-hide rounded-none border-b border-border bg-transparent p-0 group-data-horizontal/tabs:h-auto"
-                  >
-                    <TabsTrigger value="bonus" className={TAB_TRIGGER_CLASS}>
-                      <MedalStar weight="BoldDuotone" className="size-4 shrink-0" />
-                      Bonus
-                    </TabsTrigger>
-                    <TabsTrigger value="complimentary" className={TAB_TRIGGER_CLASS}>
-                      <Gift weight="BoldDuotone" className="size-4 shrink-0" />
-                      Complimentary
-                    </TabsTrigger>
-                  </TabsList>
-
-                  {/* ── Bonus ─────────────────────────────────────────── */}
-                  <TabsContent value="bonus" keepMounted className="mt-4 animate-in fade-in duration-300 space-y-3">
-                    {bonusMode !== "create-new" && (
-                      <BonusSelect
-                        options={bonusOptions
-                          .filter((opt) => !bonuses.some((b) => b.bonusId === opt.id))
-                          .map((opt) => ({ id: opt.id, name: opt.name, badge: formatRupiah(opt.price), description: opt.description ?? undefined }))}
-                        value=""
-                        onChange={(selectedId) => {
-                          const found = bonusOptions.find((x) => x.id === selectedId);
-                          if (found) {
-                            setBonuses((prev) => [...prev, {
-                              id: crypto.randomUUID(),
-                              bonusId: found.id,
-                              name: found.name,
-                              price: found.price,
-                              description: found.description ?? "",
-                              qty: 1,
-                            }]);
-                          }
-                        }}
-                        onAddTrigger={canCreateBonus ? (text) => {
-                          setBonusMode("create-new");
-                          setCreateNewBonus({ name: text, price: 0, description: "" });
-                        } : undefined}
-                        placeholder="Pilih dari daftar bonus..."
-                        searchPlaceholder="Cari bonus..."
-                        emptyText="Tidak ada bonus"
-                      />
-                    )}
-
-                    {bonusMode === "create-new" && (
-                      <div className="rounded-xl border border-border bg-muted/30 p-3 space-y-3">
-                        <div className="flex items-center justify-between">
-                          <p className="text-xs font-medium text-muted-foreground">Tambah bonus baru ke master list</p>
-                          <button
-                            type="button"
-                            className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-                            onClick={() => setBonusMode("none")}
-                          >
-                            Batal
-                          </button>
-                        </div>
-
-                        <div>
-                          <label className="text-xs font-medium text-foreground block mb-1">
-                            Nama <span className="text-destructive">*</span>
-                          </label>
-                          <Input
-                            value={createNewBonus.name}
-                            onChange={(e) => setCreateNewBonus((p) => ({ ...p, name: e.target.value }))}
-                            placeholder="Nama bonus..."
-                            className="h-8 text-sm"
-                          />
-                        </div>
-
-                        <div>
-                          <label className="text-xs font-medium text-foreground block mb-1">
-                            Harga <span className="text-destructive">*</span>
-                          </label>
-                          <div className="relative">
-                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground select-none">
-                              Rp
-                            </span>
-                            <Input
-                              value={createNewBonus.price ? formatNumericDisplay(createNewBonus.price) : ""}
-                              onChange={(e) => {
-                                const n = parseNumericInput(e.target.value);
-                                setCreateNewBonus((p) => ({ ...p, price: n }));
-                              }}
-                              placeholder="Harga"
-                              inputMode="numeric"
-                              className="h-8 text-sm pl-8"
-                            />
-                          </div>
-                        </div>
-
-                        <div>
-                          <label className="text-xs font-medium text-foreground block mb-1">Deskripsi</label>
-                          <Textarea
-                            value={createNewBonus.description}
-                            onChange={(e) => setCreateNewBonus((p) => ({ ...p, description: e.target.value }))}
-                            placeholder="Deskripsi bonus (opsional)..."
-                            rows={2}
-                            className="resize-none text-sm"
-                          />
-                        </div>
-
-                        <Button
-                          type="button"
-                          className="w-full rounded-xl"
-                          disabled={!createNewBonus.name.trim() || !createNewBonus.price || isCreatingBonus}
-                          onClick={async () => {
-                            if (!createNewBonus.name.trim() || !createNewBonus.price || isCreatingBonus) return;
-                            setIsCreatingBonus(true);
-                            try {
-                              const result = await createBonus({
-                                name: createNewBonus.name.trim(),
-                                price: createNewBonus.price,
-                                description: createNewBonus.description.trim() || null,
-                                isActive: true,
-                              });
-                              if (result.success) {
-                                setBonuses((prev) => [...prev, {
-                                  id: crypto.randomUUID(),
-                                  bonusId: result.data.id,
-                                  name: result.data.name,
-                                  price: result.data.price,
-                                  description: result.data.description ?? "",
-                                  qty: 1,
-                                }]);
-                                setBonusMode("none");
-                                toast.success(`"${result.data.name}" berhasil ditambahkan`);
-                              } else {
-                                toast.error(result.error ?? "Gagal menambahkan bonus");
-                              }
-                            } finally {
-                              setIsCreatingBonus(false);
-                            }
-                          }}
-                        >
-                          {isCreatingBonus ? "Menyimpan..." : "Simpan & Tambah"}
-                        </Button>
-                      </div>
-                    )}
-
-                    {bonuses.map((b) => {
-                      const isOpen = !collapsedBonuses.has(b.id);
-                      return (
-                        <Collapsible
-                          key={b.id}
-                          open={isOpen}
-                          onOpenChange={() => toggleBonusCollapse(b.id)}
-                          className="rounded-xl border border-border bg-muted/30 overflow-hidden"
-                        >
-                          <div className="flex items-center gap-1 px-3 py-2.5">
-                            <CollapsibleTrigger className="flex flex-1 items-center gap-2 min-w-0 cursor-pointer text-left">
-                              <AltArrowDown
-                                weight="BoldDuotone"
-                                className={cn(
-                                  "h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200",
-                                  isOpen && "rotate-180",
-                                )}
-                              />
-                              <div className="flex-1 min-w-0">
-                                <p className="text-sm font-medium text-foreground truncate">{b.name}</p>
-                                {!isOpen && (
-                                  <p className="text-xs text-muted-foreground tabular-nums">
-                                    {b.price ? formatRupiah(b.price) : ""}
-                                  </p>
-                                )}
-                              </div>
-                            </CollapsibleTrigger>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setBonuses((prev) => prev.filter((x) => x.id !== b.id));
-                                setCollapsedBonuses((prev) => {
-                                  const next = new Set(prev);
-                                  next.delete(b.id);
-                                  return next;
-                                });
-                              }}
-                              aria-label="Hapus bonus"
-                              className="shrink-0 h-7 w-7 text-destructive hover:bg-destructive/10"
-                            >
-                              <TrashBinTrash weight="BoldDuotone" className="h-3.5 w-3.5" />
-                            </Button>
-                          </div>
-
-                          <CollapsibleContent>
-                            <div className="px-3 pb-3 space-y-2 border-t border-border/60 pt-2">
-                              <div>
-                                <label className="text-xs font-medium text-foreground block mb-1">
-                                  Nama <span className="text-destructive">*</span>
-                                </label>
-                                <Input
-                                  value={b.name}
-                                  onChange={(e) => setBonuses((prev) => prev.map((x) => x.id === b.id ? { ...x, name: e.target.value } : x))}
-                                  placeholder="Nama bonus..."
-                                  className="h-8 text-sm"
-                                />
-                              </div>
-                              <div>
-                                <label className="text-xs font-medium text-foreground block mb-1">
-                                  Harga <span className="text-destructive">*</span>
-                                </label>
-                                <div className="relative">
-                                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground select-none">
-                                    Rp
-                                  </span>
-                                  <Input
-                                    value={b.price ? formatNumericDisplay(b.price) : ""}
-                                    onChange={(e) => {
-                                      const n = parseNumericInput(e.target.value);
-                                      setBonuses((prev) => prev.map((x) => x.id === b.id ? { ...x, price: n } : x));
-                                    }}
-                                    placeholder="Harga"
-                                    inputMode="numeric"
-                                    className="h-8 text-sm pl-8"
-                                  />
-                                </div>
-                              </div>
-                              <Textarea
-                                value={b.description}
-                                onChange={(e) => setBonuses((prev) => prev.map((x) => x.id === b.id ? { ...x, description: e.target.value } : x))}
-                                placeholder="Deskripsi bonus..."
-                                rows={2}
-                                className="resize-none text-sm"
-                              />
-                            </div>
-                          </CollapsibleContent>
-                        </Collapsible>
-                      );
-                    })}
-                    {bonuses.length === 0 && bonusMode === "none" && (
-                      <p className="text-xs text-muted-foreground italic text-center py-1">Belum ada bonus</p>
-                    )}
-                  </TabsContent>
-
-                  {/* ── Complimentary ─────────────────────────────────── */}
-                  <TabsContent value="complimentary" keepMounted className="mt-4 animate-in fade-in duration-300 space-y-3">
-                    {complimentaryMode !== "create-new" && (
-                      <ComplimentarySelect
-                        options={complimentaryOptions
-                          .filter((opt) => !complimentaries.some((c) => c.complimentaryId === opt.id))
-                          .map((opt) => ({ id: opt.id, name: opt.name, badge: formatRupiah(opt.price), description: opt.description ?? undefined }))}
-                        value=""
-                        onChange={(selectedId) => {
-                          const found = complimentaryOptions.find((x) => x.id === selectedId);
-                          if (found) {
-                            setComplimentaries((prev) => [...prev, {
-                              id: crypto.randomUUID(),
-                              complimentaryId: found.id,
-                              name: found.name,
-                              price: found.price,
-                              isShowPrice: found.isShowPrice,
-                              description: found.description ?? "",
-                              qty: 1,
-                            }]);
-                          }
-                        }}
-                        onAddTrigger={canCreateComplimentary ? (text) => {
-                          setComplimentaryMode("create-new");
-                          setCreateNewComp({ name: text, price: 0, description: "", isShowPrice: false });
-                        } : undefined}
-                        placeholder="Pilih dari daftar complimentary..."
-                        searchPlaceholder="Cari complimentary..."
-                        emptyText="Tidak ada complimentary"
-                      />
-                    )}
-
-                    {complimentaryMode === "create-new" && (
-                      <div className="rounded-xl border border-border bg-muted/30 p-3 space-y-3">
-                        <div className="flex items-center justify-between">
-                          <p className="text-xs font-medium text-muted-foreground">Tambah complimentary baru ke master list</p>
-                          <button
-                            type="button"
-                            className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-                            onClick={() => setComplimentaryMode("none")}
-                          >
-                            Batal
-                          </button>
-                        </div>
-
-                        <div>
-                          <label className="text-xs font-medium text-foreground block mb-1">
-                            Nama <span className="text-destructive">*</span>
-                          </label>
-                          <Input
-                            value={createNewComp.name}
-                            onChange={(e) => setCreateNewComp((p) => ({ ...p, name: e.target.value }))}
-                            placeholder="Nama complimentary..."
-                            className="h-8 text-sm"
-                          />
-                        </div>
-
-                        <div className="flex items-center gap-2">
-                          <div className="relative flex-1">
-                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground select-none">
-                              Rp
-                            </span>
-                            <Input
-                              value={createNewComp.price ? formatNumericDisplay(createNewComp.price) : ""}
-                              onChange={(e) => {
-                                const n = parseNumericInput(e.target.value);
-                                setCreateNewComp((p) => ({ ...p, price: n }));
-                              }}
-                              placeholder="Harga (opsional)"
-                              inputMode="numeric"
-                              className="h-8 text-sm pl-8"
-                            />
-                          </div>
-                          <label className="flex items-center gap-1.5 shrink-0 cursor-pointer">
-                            <Switch
-                              checked={createNewComp.isShowPrice}
-                              onCheckedChange={(v) => setCreateNewComp((p) => ({ ...p, isShowPrice: v }))}
-                            />
-                            <span className="text-xs text-muted-foreground">Tampilkan harga</span>
-                          </label>
-                        </div>
-
-                        <div>
-                          <label className="text-xs font-medium text-foreground block mb-1">Deskripsi</label>
-                          <Textarea
-                            value={createNewComp.description}
-                            onChange={(e) => setCreateNewComp((p) => ({ ...p, description: e.target.value }))}
-                            placeholder="Deskripsi complimentary (opsional)..."
-                            rows={2}
-                            className="resize-none text-sm"
-                          />
-                        </div>
-
-                        <Button
-                          type="button"
-                          className="w-full rounded-xl"
-                          disabled={!createNewComp.name.trim() || isCreatingComp}
-                          onClick={async () => {
-                            if (!createNewComp.name.trim() || isCreatingComp) return;
-                            setIsCreatingComp(true);
-                            try {
-                              const result = await createComplimentary({
-                                name: createNewComp.name.trim(),
-                                price: createNewComp.price,
-                                description: createNewComp.description.trim() || null,
-                                isShowPrice: createNewComp.isShowPrice,
-                                isActive: true,
-                              });
-                              if (result.success && result.item) {
-                                setComplimentaries((prev) => [...prev, {
-                                  id: crypto.randomUUID(),
-                                  complimentaryId: result.item!.id,
-                                  name: result.item!.name,
-                                  price: result.item!.price,
-                                  isShowPrice: result.item!.isShowPrice,
-                                  description: result.item!.description ?? "",
-                                  qty: 1,
-                                }]);
-                                setComplimentaryMode("none");
-                                toast.success(`"${result.item.name}" berhasil ditambahkan`);
-                              } else {
-                                toast.error(result.error ?? "Gagal menambahkan complimentary");
-                              }
-                            } finally {
-                              setIsCreatingComp(false);
-                            }
-                          }}
-                        >
-                          {isCreatingComp ? "Menyimpan..." : "Simpan & Tambah"}
-                        </Button>
-                      </div>
-                    )}
-
-                    {complimentaries.map((c) => {
-                      const isOpen = !collapsedComplimentaries.has(c.id);
-                      return (
-                        <Collapsible
-                          key={c.id}
-                          open={isOpen}
-                          onOpenChange={() => toggleComplimentaryCollapse(c.id)}
-                          className="rounded-xl border border-border bg-muted/30 overflow-hidden"
-                        >
-                          <div className="flex items-center gap-1 px-3 py-2.5">
-                            <CollapsibleTrigger className="flex flex-1 items-center gap-2 min-w-0 cursor-pointer text-left">
-                              <AltArrowDown
-                                weight="BoldDuotone"
-                                className={cn(
-                                  "h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200",
-                                  isOpen && "rotate-180",
-                                )}
-                              />
-                              <div className="flex-1 min-w-0">
-                                <p className="text-sm font-medium text-foreground truncate">{c.name}</p>
-                                {!isOpen && (
-                                  <p className="text-xs text-muted-foreground tabular-nums">
-                                    {c.isShowPrice && c.price ? formatRupiah(c.price) : "Harga tidak ditampilkan"}
-                                  </p>
-                                )}
-                              </div>
-                            </CollapsibleTrigger>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setComplimentaries((prev) => prev.filter((x) => x.id !== c.id));
-                                setCollapsedComplimentaries((prev) => {
-                                  const next = new Set(prev);
-                                  next.delete(c.id);
-                                  return next;
-                                });
-                              }}
-                              aria-label="Hapus complimentary"
-                              className="shrink-0 h-7 w-7 text-destructive hover:bg-destructive/10"
-                            >
-                              <TrashBinTrash weight="BoldDuotone" className="h-3.5 w-3.5" />
-                            </Button>
-                          </div>
-
-                          <CollapsibleContent>
-                            <div className="px-3 pb-3 space-y-2 border-t border-border/60 pt-2">
-                              <div>
-                                <label className="text-xs font-medium text-foreground block mb-1">
-                                  Nama <span className="text-destructive">*</span>
-                                </label>
-                                <Input
-                                  value={c.name}
-                                  onChange={(e) => setComplimentaries((prev) => prev.map((x) => x.id === c.id ? { ...x, name: e.target.value } : x))}
-                                  placeholder="Nama complimentary..."
-                                  className="h-8 text-sm"
-                                />
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <div className="relative flex-1">
-                                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground select-none">
-                                    Rp
-                                  </span>
-                                  <Input
-                                    value={c.price ? formatNumericDisplay(c.price) : ""}
-                                    onChange={(e) => {
-                                      const n = parseNumericInput(e.target.value);
-                                      setComplimentaries((prev) => prev.map((x) => x.id === c.id ? { ...x, price: n } : x));
-                                    }}
-                                    placeholder="Harga"
-                                    inputMode="numeric"
-                                    className="h-8 text-sm pl-8"
-                                  />
-                                </div>
-                                <label className="flex items-center gap-1.5 shrink-0 cursor-pointer">
-                                  <Switch
-                                    checked={c.isShowPrice}
-                                    onCheckedChange={(v) => setComplimentaries((prev) => prev.map((x) => x.id === c.id ? { ...x, isShowPrice: v } : x))}
-                                  />
-                                  <span className="text-xs text-muted-foreground">Tampilkan harga</span>
-                                </label>
-                              </div>
-                              <Textarea
-                                value={c.description}
-                                onChange={(e) => setComplimentaries((prev) => prev.map((x) => x.id === c.id ? { ...x, description: e.target.value } : x))}
-                                placeholder="Deskripsi complimentary..."
-                                rows={2}
-                                className="resize-none text-sm"
-                              />
-                            </div>
-                          </CollapsibleContent>
-                        </Collapsible>
-                      );
-                    })}
-                    {complimentaries.length === 0 && complimentaryMode === "none" && (
-                      <p className="text-xs text-muted-foreground italic text-center py-1">Belum ada complimentary</p>
-                    )}
-                  </TabsContent>
-                </Tabs>
-            </div>
-          )}
         </div>
 
         {/* Footer */}
@@ -1745,17 +1768,17 @@ export function MicePackageDrawer({ isOpen, onClose, editingPackage }: MicePacka
               {currentStep === 1 ? "Batal" : "Sebelumnya"}
             </Button>
             <Button
-              onClick={currentStep === 4 ? handleSubmit : handleNext}
+              onClick={handleNext}
               className={cn("flex-1 cursor-pointer")}
               disabled={isNextDisabled || submitting}
             >
               {submitting
                 ? "Menyimpan..."
-                : currentStep < 4
-                ? "Selanjutnya"
-                : isEdit
-                ? "Simpan Perubahan"
-                : "Buat Paket"}
+                : isLastTab
+                ? isEdit
+                  ? "Simpan Perubahan"
+                  : "Buat Paket"
+                : "Selanjutnya"}
             </Button>
           </div>
         </div>

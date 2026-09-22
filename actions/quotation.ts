@@ -29,6 +29,7 @@ async function getRequestMeta(): Promise<{ ipAddress: string; userAgent: string 
 function computePricing(
   items: CreateQuotationInput["items"],
   additionals: CreateQuotationInput["additionals"],
+  prices: CreateQuotationInput["prices"],
   discount: number,
 ): {
   subtotal: number;
@@ -36,7 +37,8 @@ function computePricing(
 } {
   const itemsTotal = items.reduce((sum, item) => sum + item.total, 0);
   const additionalsTotal = additionals.reduce((sum, item) => sum + item.total, 0);
-  const subtotal = itemsTotal + additionalsTotal;
+  const pricesTotal = prices.reduce((sum, p) => sum + p.total, 0);
+  const subtotal = itemsTotal + additionalsTotal + pricesTotal;
   const totalPrice = Math.max(0, subtotal - discount);
   return { subtotal, totalPrice };
 }
@@ -136,7 +138,7 @@ export async function createQuotation(
   try {
     const quotationId = crypto.randomUUID();
     const quotationNo = await generateQuotationNo();
-    const { subtotal, totalPrice } = computePricing(input.items, input.additionals, input.discount);
+    const { subtotal, totalPrice } = computePricing(input.items, input.additionals, input.prices, input.discount);
 
     // Resolve approval steps for quotations (Manager + Finance).
     // If any role is missing in DB, approvalSteps will be null — we skip approval
@@ -162,6 +164,7 @@ export async function createQuotation(
           packageId: input.packageId ?? null,
           packageName: input.packageName ?? null,
           pax: input.pax,
+          packageSource: input.packageSource ?? null,
           eventDate: input.eventDate ? new Date(input.eventDate) : null,
           eventEndDate: input.eventEndDate ? new Date(input.eventEndDate) : null,
           time: input.time ?? null,
@@ -384,7 +387,7 @@ export async function updateQuotation(
       input.items !== undefined
         ? (() => {
             const discount = input.discount ?? 0;
-            const { subtotal, totalPrice } = computePricing(input.items, input.additionals ?? [], discount);
+            const { subtotal, totalPrice } = computePricing(input.items, input.additionals ?? [], input.prices ?? [], discount);
             return { subtotal, discount, totalPrice };
           })()
         : undefined;
@@ -409,6 +412,7 @@ export async function updateQuotation(
           ...(input.packageId !== undefined && { packageId: input.packageId ?? null }),
           ...(input.packageName !== undefined && { packageName: input.packageName ?? null }),
           ...(input.pax !== undefined && { pax: input.pax }),
+          ...(input.packageSource !== undefined && { packageSource: input.packageSource ?? null }),
           eventDate: input.eventDate ? new Date(input.eventDate) : null,
           eventEndDate: input.eventEndDate ? new Date(input.eventEndDate) : null,
           time: input.time ?? null,

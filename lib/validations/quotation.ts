@@ -67,6 +67,7 @@ export const createQuotationSchema = z.object({
   packageId: z.string().optional().nullable(),
   packageName: z.string().optional().nullable(),
   pax: z.coerce.number().int().min(0).default(0),
+  packageSource: z.string().optional().nullable(),
   eventDate: z.string().optional().nullable(),
   eventEndDate: z.string().optional().nullable(),
   time: z.string().optional().nullable(),
