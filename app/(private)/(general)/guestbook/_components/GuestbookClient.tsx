@@ -2,6 +2,7 @@
 
 import { Suspense, useEffect, useRef, useState } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { format } from "date-fns";
 import type { DateRange } from "react-day-picker";
@@ -35,9 +36,12 @@ import {
   Eye,
   Filter,
   Pen,
+  QrCode,
   Refresh,
   TrashBinTrash,
   UserCircle,
+  ChartSquare,
+  Buildings2,
 } from "@solar-icons/react";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
@@ -46,7 +50,7 @@ import { computeFullPrice } from "@/lib/package-prices";
 import { useGuestbookEntries, useDeleteGuestbookEntry } from "@/hooks/use-guestbook";
 import { useVenues } from "@/hooks/use-venues";
 import { useSalesUsers } from "@/hooks/use-sales-users";
-import type { GuestbookEntryItem, GuestbookCategoryFilter } from "@/lib/queries/guestbookEntries";
+import type { GuestbookEntryItem, GuestbookCategoryFilter, GuestbookOverview } from "@/lib/queries/guestbookEntries";
 import type { GuestInteractionType, GuestVisitStatus } from "@prisma/client";
 import type { ProofFiles } from "@/lib/validations/guestbook";
 import { GUEST_VISIT_STATUS_LABELS } from "@/lib/guestbook-status";
@@ -60,6 +64,7 @@ const STATUS_BADGE_CLASSNAMES: Record<GuestVisitStatus, string> = {
   cold: "bg-sky-100 text-sky-700 border-0",
   warm: "bg-amber-100 text-amber-700 border-0",
   hot: "bg-orange-100 text-orange-700 border-0",
+  done_visit: "bg-emerald-100 text-emerald-700 border-0",
   to_be_discuss: "bg-yellow-100 text-yellow-700 border-0",
   deal: "bg-green-100 text-green-700 border-0",
   lost: "bg-red-100 text-red-700 border-0",
@@ -102,6 +107,69 @@ function getPackagePrice(pkg: NonNullable<GuestbookEntryItem["package"]>): numbe
   if (pkg.sellingPrice > 0) return pkg.sellingPrice;
   const base = (pkg.categoryPrices ?? []).reduce((sum, c) => sum + c.basePrice, 0);
   return computeFullPrice([{ basePrice: base }], pkg.margin ?? 0);
+}
+
+function GuestbookOverview({
+  overview,
+}: {
+  overview: GuestbookOverview;
+}) {
+  const metrics = [
+    { label: "Total Kunjungan", value: overview.total, icon: UsersGroupRounded },
+    { label: "Sedang Berlangsung", value: overview.activeVisits, icon: ChartSquare },
+    { label: "Sudah Checkout", value: overview.checkedOut, icon: Buildings2 },
+    { label: "Online Meeting", value: overview.onlineMeetings, icon: ChartSquare },
+    { label: "Kunjungan Fisik", value: overview.inPersonVisits, icon: UsersGroupRounded },
+  ];
+
+  const lists = [
+    { title: "Status Kunjungan", items: overview.byStatus },
+    { title: "Kategori Event", items: overview.byCategory },
+    { title: "Sumber Informasi", items: overview.bySource },
+    { title: "Venue Teratas", items: overview.byVenue },
+    { title: "PIC Teratas", items: overview.byHost },
+  ];
+
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+      {metrics.map(({ label, value, icon: Icon }) => (
+        <Card key={label} className="rounded-2xl shadow-sm">
+          <CardContent className="flex items-center gap-3 p-4">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+              <Icon weight="BoldDuotone" className="h-5 w-5" />
+            </div>
+            <div>
+              <p className="text-xs font-medium text-muted-foreground">{label}</p>
+              <p className="font-heading text-2xl font-semibold tabular-nums text-foreground">{value}</p>
+            </div>
+          </CardContent>
+        </Card>
+      ))}
+      </div>
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+        {lists.map(({ title, items }) => (
+          <Card key={title} className="rounded-2xl shadow-sm">
+            <CardContent className="p-4">
+              <p className="mb-3 text-sm font-semibold text-foreground">{title}</p>
+              {items.length === 0 ? (
+                <p className="text-xs text-muted-foreground">Belum ada data</p>
+              ) : (
+                <div className="space-y-2">
+                  {items.slice(0, 5).map((item) => (
+                    <div key={item.key} className="flex items-center justify-between gap-3 text-xs">
+                      <span className="min-w-0 truncate text-muted-foreground">{item.label}</span>
+                      <Badge variant="secondary" className="shrink-0 rounded-full">{item.count}</Badge>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 function SkeletonRows() {
@@ -402,6 +470,20 @@ function GuestbookClientInner() {
 
   return (
     <div className="flex flex-col gap-3">
+      <GuestbookOverview
+        overview={guestbookData?.overview ?? {
+          total: 0,
+          checkedOut: 0,
+          activeVisits: 0,
+          onlineMeetings: 0,
+          inPersonVisits: 0,
+          byStatus: [],
+          byCategory: [],
+          bySource: [],
+          byVenue: [],
+          byHost: [],
+        }}
+      />
       {/* Table — desktop */}
       <Card className="rounded-2xl shadow-sm hidden sm:block py-0">
         <CardContent className="p-0">
@@ -442,6 +524,17 @@ function GuestbookClientInner() {
               >
                 <Refresh weight="BoldDuotone" className="h-3.5 w-3.5" />
                 Refresh
+              </Button>
+
+              <Button
+                variant="outline"
+                size="sm"
+                nativeButton={false}
+                className="rounded-full text-xs h-8 gap-1.5"
+                render={<Link href="/guestbook/scan" />}
+              >
+                <QrCode weight="BoldDuotone" className="h-3.5 w-3.5" />
+                Scan Kehadiran
               </Button>
 
               <Button

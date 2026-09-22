@@ -8,7 +8,6 @@ import {
   Documents,
   ShopMinimalistic,
   CartLarge,
-  ClockCircle,
   CheckSquare,
   Dollar,
   FileText,
@@ -26,6 +25,7 @@ import {
   DocumentAdd,
   Sledgehammer,
   Gift,
+  MedalStar,
   TagPrice,
   ClipboardCheck,
   ChartSquare,
@@ -42,6 +42,7 @@ import {
   Bolt,
   ChatRound,
   UserRounded,
+  Wallet,
 } from "@solar-icons/react";
 
 type SolarIcon = ForwardRefExoticComponent<Omit<IconProps, "ref"> & RefAttributes<SVGSVGElement>>;
@@ -97,6 +98,7 @@ export const SETTINGS_MODULES = [
   "settings-tutorial",
   "settings-booking-log",
   "settings-banner",
+  "hr-attendance",
 ] as const;
 
 export type ModuleKey = "finance" | "hrd" | "booking" | "purchase" | "stakeholder";
@@ -113,7 +115,6 @@ export const MODULE_NAV_MAP: Record<ModuleKey, NavItem[]> = {
   ],
   hrd: [
     { name: "Database Karyawan", href: "/hrd/database-karyawan", icon: UsersGroupRounded, subtitle: "Data lengkap seluruh karyawan", permission: { module: "hr", action: "view" } },
-    { name: "Manajemen Kehadiran", href: "/hrd/manajemen-kehadiran", icon: ClockCircle, subtitle: "Monitoring kehadiran real-time", permission: { module: "hr", action: "view" } },
     { name: "Penggajian & Perpajakan", href: "/hrd/penggajian-perpajakan", icon: Dollar, subtitle: "Proses penggajian dan konfigurasi pajak", permission: { module: "hr", action: "view" } },
     { name: "Slip Gaji", href: "/hrd/slip-gaji", icon: FileText, subtitle: "Rekap slip gaji seluruh karyawan", permission: { module: "hr", action: "view" } },
     { name: "Sistem Cuti", href: "/hrd/sistem-cuti", icon: CalendarDate, subtitle: "Pengajuan dan saldo cuti karyawan", permission: { module: "hr", action: "view" } },
@@ -129,6 +130,7 @@ export const MODULE_NAV_MAP: Record<ModuleKey, NavItem[]> = {
   booking: [
     { name: "Calendar Events", href: "/booking/calendar-events", icon: CalendarDate, subtitle: "Lihat jadwal event di kalender", permission: { module: "booking", action: "view" } },
     { name: "Daily Report Manager", href: "/booking/daily-report-manager", icon: Chart2, subtitle: "Laporan harian manager per grup", permission: { module: "daily-report-manager", action: "view" } },
+    { name: "Daily Activity", href: "/booking/daily-activity", icon: ClipboardList, subtitle: "Kelola aktivitas harian sales & prospek", permission: { module: "daily-activity", action: "view" } },
     { name: "Quotations", href: "/booking/quotations", icon: DocumentAdd, subtitle: "Kelola penawaran harga untuk lead", permission: { module: "quotations", action: "view" } },
     { name: "Booking MICE", href: "/booking/booking-mice", icon: TicketSale, subtitle: "Kelola data booking MICE", permission: { module: "booking-mice", action: "view" } },
     { name: "Booking Weddings", href: "/booking/booking-weddings", icon: Ticket, subtitle: "Kelola data booking weddings", permission: { module: "booking", action: "view" } },
@@ -136,6 +138,7 @@ export const MODULE_NAV_MAP: Record<ModuleKey, NavItem[]> = {
     { name: "Mice Package", href: "/booking/package-mice", icon: Case, subtitle: "Kelola paket MICE per venue", permission: { module: "package-mice", action: "view" } },
     { name: "Groups", href: "/booking/groups", icon: UsersGroupRounded, subtitle: "Kelola tim dan pantau kinerja penjualan", permission: { module: "groups", action: "view" } },
     { name: "Complimentary", href: "/booking/complimentary", icon: Gift, subtitle: "Kelola master item complimentary untuk booking", permission: { module: "complimentary", action: "view" } },
+    { name: "Bonus", href: "/booking/bonus", icon: MedalStar, subtitle: "Kelola master item bonus untuk booking", permission: { module: "bonus", action: "view" } },
     { name: "Voucher / Program", href: "/booking/voucher", icon: TagPrice, subtitle: "Program voucher & discount aktif", permission: { module: "promo", action: "view" } },
   ],
   purchase: [
@@ -188,14 +191,28 @@ export const GENERAL_NAV: NavItem[] = [
       { name: "Pengumuman", href: "/procurement/pengumuman", icon: BellBing, permission: { module: "procurement-announcement", action: "view" } },
       { name: "Anggaran Venue", href: "/procurement/anggaran-venue", icon: Wallet2, permission: { module: "procurement-budget", action: "view" } },
     ] },
-  { name: "Internal FAQ", href: "/internal-faq", icon: Documents, subtitle: "Kelola memo internal dan product knowledge", permission: { module: "internal-faq", action: "view" },
+  { name: "Announcement", href: "/announcement", icon: BellBing, subtitle: "Kelola pengumuman, memo internal, dan product knowledge", anyPermission: [
+      { module: "announcement", action: "view" },
+      { module: "internal-faq", action: "view" },
+    ],
     submenu: [
-      { name: "Memo", href: "/internal-faq/memo", icon: FileText, subtitle: "Kelola memo internal perusahaan" },
-      { name: "Product Knowledge", href: "/internal-faq/product-knowledge", icon: Notebook, subtitle: "Kelola dokumen product knowledge" },
+      { name: "Announcement", href: "/announcement", icon: BellBing, subtitle: "Kumpulan pengumuman untuk seluruh karyawan", permission: { module: "announcement", action: "view" } },
+      { name: "Memo", href: "/internal-faq/memo", icon: FileText, subtitle: "Kelola memo internal perusahaan", permission: { module: "internal-faq", action: "view" } },
+      { name: "Product Knowledge", href: "/internal-faq/product-knowledge", icon: Notebook, subtitle: "Kelola dokumen product knowledge", permission: { module: "internal-faq", action: "view" } },
     ] },
-  { name: "Announcement", href: "/announcement", icon: BellBing, subtitle: "Kumpulan pengumuman untuk seluruh karyawan", permission: { module: "announcement", action: "view" } },
   { name: "Pengajuan Cuti", href: "/cuti", icon: CalendarDate, subtitle: "Pengajuan dan saldo cuti" },
   { name: "Slip Gaji", href: "/slip-gaji", icon: FileText, subtitle: "Lihat slip gaji bulanan saya" },
+  {
+    name: "KPI & Insentif",
+    href: "/kpi-insentif",
+    icon: Wallet,
+    subtitle: "Kelola KPI, komisi, dan bonus Sales & Manager",
+    permission: { module: "kpi-insentif", action: "view" },
+    submenu: [
+      { name: "Penugasan Target", href: "/kpi-insentif/penugasan", icon: UserHands, subtitle: "Tugaskan KPI ke Sales atau Manager", permission: { module: "kpi-assignment", action: "view" } },
+      { name: "Kalkulasi & Laporan", href: "/kpi-insentif/kalkulasi", icon: ChartSquare, subtitle: "Simulasi kalkulasi dan laporan final insentif", permission: { module: "kpi-simulation", action: "view" } },
+    ],
+  },
 ];
 
 /** Settings entry — pinned to the very bottom of the sidebar, always visible

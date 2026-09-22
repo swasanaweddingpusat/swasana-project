@@ -5,13 +5,14 @@ import { toast } from "sonner";
 import { ProcurementStats } from "./ProcurementStats";
 import { ProcurementFilters } from "./ProcurementFilters";
 import { ProcurementTable } from "./ProcurementTable";
+import { AddProcurementDrawer } from "./AddProcurementDrawer";
 import { EditProcurementDrawer } from "./EditProcurementDrawer";
 import { ProcurementDetailDrawer } from "./ProcurementDetailDrawer";
 import { ApproveProcurementDialog } from "./ApproveProcurementDialog";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { AltArrowDown } from "@solar-icons/react";
+import { AltArrowDown, AddSquare, CheckSquare, CloseSquare } from "@solar-icons/react";
 import {
   useProcurementList,
   useProcurementSummary,
@@ -36,6 +37,7 @@ export function ProcurementClient({
   const { data, isLoading, isError, error } = useProcurementList(filters);
   const { data: summary } = useProcurementSummary(filters.venueId);
 
+  const [addOpen, setAddOpen] = useState(false);
   const [editItem, setEditItem] = useState<ProcurementItem | null>(null);
   const [detailItem, setDetailItem] = useState<ProcurementItem | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
@@ -162,9 +164,27 @@ export function ProcurementClient({
 
   const deleteItemName = deleteId ? (findItem(deleteId)?.namaBarang ?? "") : "";
 
+  const hasSelection = selectedIds.length > 0;
+
   return (
     <div className="space-y-6">
       <ProcurementStats summary={summary} isLoading={!summary} />
+
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-lg font-heading font-semibold text-foreground">Daftar Pengajuan</h2>
+          <p className="text-sm text-muted-foreground">
+            {data ? `${data.total} pengajuan ditemukan` : "Memuat..."}
+          </p>
+        </div>
+        <Button
+          onClick={() => setAddOpen(true)}
+          className="rounded-full shrink-0"
+        >
+          <AddSquare weight="BoldDuotone" className="h-4 w-4 mr-1.5" />
+          Tambah Pengajuan
+        </Button>
+      </div>
 
       <ProcurementFilters
         venues={initialVenues}
@@ -180,49 +200,55 @@ export function ProcurementClient({
         </div>
       )}
 
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-2 flex-wrap">
-          <Button
-            variant="secondary"
-            size="sm"
-            className="rounded-full"
-            onClick={() => setBulkApproveOpen(true)}
-            disabled={selectedIds.length === 0 || isBulkApproving}
-          >
-            <span className="text-sm">
-              Setujui Terpilih ({selectedIds.length})
-            </span>
-          </Button>
-          <span className="text-sm text-muted-foreground min-w-[180px]">
-            Pilih baris status Menunggu untuk aksi bulk.
-          </span>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="outline"
-                size="sm"
-                className="rounded-full flex items-center gap-2"
-                disabled={isExporting}
-              >
-                <AltArrowDown weight="BoldDuotone" className="h-4 w-4" />
-                Ekspor
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onSelect={() => { void handleExport("pdf"); }}>PDF</DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => { void handleExport("excel"); }}>Excel</DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => { void handleExport("csv"); }}>CSV</DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-        <p className="text-sm text-muted-foreground">
-          {selectedIds.length > 0
-            ? allPagesSelected
+      {/* Contextual bulk actions toolbar — only visible when items are selected */}
+      {hasSelection && (
+        <div className="flex items-center gap-3 rounded-2xl border border-primary/20 bg-primary/5 px-4 py-3 animate-in fade-in slide-in-from-top-2 duration-200">
+          <span className="text-sm font-medium text-foreground">
+            {allPagesSelected
               ? `Semua ${selectedIds.length} pengajuan Menunggu dipilih`
-              : `${selectedIds.length} pengajuan dipilih`
-            : "Pilih pengajuan untuk aksi massal."}
-        </p>
-      </div>
+              : `${selectedIds.length} pengajuan dipilih`}
+          </span>
+          <div className="flex items-center gap-2 ml-auto">
+            <Button
+              variant="default"
+              size="sm"
+              className="rounded-full"
+              onClick={() => setBulkApproveOpen(true)}
+              disabled={isBulkApproving}
+            >
+              <CheckSquare weight="BoldDuotone" className="h-4 w-4 mr-1.5" />
+              Setujui Terpilih
+            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="rounded-full"
+                  disabled={isExporting}
+                >
+                  <AltArrowDown weight="BoldDuotone" className="h-4 w-4 mr-1.5" />
+                  Ekspor
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onSelect={() => { void handleExport("pdf"); }}>PDF</DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => { void handleExport("excel"); }}>Excel</DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => { void handleExport("csv"); }}>CSV</DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="rounded-full text-muted-foreground"
+              onClick={() => { setSelectedIds([]); setAllPagesSelected(false); }}
+            >
+              <CloseSquare weight="BoldDuotone" className="h-4 w-4 mr-1" />
+              Batal
+            </Button>
+          </div>
+        </div>
+      )}
 
       <ProcurementTable
         items={data?.items ?? []}
@@ -242,6 +268,12 @@ export function ProcurementClient({
         onEdit={(id) => setEditItem(findItem(id))}
         onDelete={(id) => setDeleteId(id)}
         onApprove={(id) => setApproveItem(findItem(id))}
+      />
+
+      <AddProcurementDrawer
+        open={addOpen}
+        onOpenChange={setAddOpen}
+        venues={initialVenues}
       />
 
       <EditProcurementDrawer

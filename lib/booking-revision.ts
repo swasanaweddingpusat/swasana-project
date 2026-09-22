@@ -12,6 +12,7 @@ const snapshotInclude = {
   snapComplimentaries: { orderBy: { sortOrder: "asc" as const } },
   snapVendorItems: true,
   snapBonuses: true,
+  snapBookingBonuses: { orderBy: { sortOrder: "asc" as const } },
   termOfPayments: { orderBy: { sortOrder: "asc" as const } },
   paymentMethod: true,
   sales: { select: { fullName: true } },
@@ -41,6 +42,7 @@ function buildSnapshotData(booking: BookingWithSnapshot) {
     snapComplimentaries: booking.snapComplimentaries,
     snapVendorItems: booking.snapVendorItems,
     snapBonuses: booking.snapBonuses,
+    snapBookingBonuses: booking.snapBookingBonuses,
     termOfPayments: booking.termOfPayments,
     paymentMethod: booking.paymentMethod,
     sales: booking.sales,
@@ -305,6 +307,47 @@ export async function patchSnapshotComplimentaries(bookingId: string): Promise<b
   await db.bookingRevision.update({
     where: { id: booking.currentRevisionId },
     data: { snapshotData: patched as Prisma.InputJsonValue },
+  });
+
+  return true;
+}
+
+/**
+ * Targeted patch of the booking-bonus snapshot field so a post-signature edit to
+ * Bonus still propagates into the signed PO PDF. Bonus is a non-trigger field —
+ * editable after the client signs without re-approval (mirrors patchSnapshotComplimentaries).
+ *
+ * Writes EVEN when snapshotFrozenAt is set (that is the point). Narrow patch: only
+ * snapBookingBonuses is overwritten; every other snapshot field is left untouched.
+ * No-ops when there is no current revision. Best-effort.
+ */
+export async function patchSnapshotBookingBonuses(bookingId: string): Promise<boolean> {
+  const booking = await db.booking.findUnique({
+    where: { id: bookingId },
+    select: { currentRevisionId: true },
+  });
+  if (!booking?.currentRevisionId) return false;
+
+  const revision = await db.bookingRevision.findUnique({
+    where: { id: booking.currentRevisionId },
+    select: { snapshotData: true },
+  });
+  if (!revision) return false;
+
+  const bookingBonuses = await db.snapBookingBonus.findMany({
+    where: { bookingId },
+    orderBy: { sortOrder: "asc" },
+  });
+
+  const existingBonusSnap = (revision.snapshotData ?? {}) as Record<string, unknown>;
+  const patchedBonusSnap: Record<string, unknown> = {
+    ...existingBonusSnap,
+    snapBookingBonuses: bookingBonuses,
+  };
+
+  await db.bookingRevision.update({
+    where: { id: booking.currentRevisionId },
+    data: { snapshotData: patchedBonusSnap as Prisma.InputJsonValue },
   });
 
   return true;

@@ -19,6 +19,7 @@ import { toast } from "sonner";
 import { useCreatePackage, useUpdatePackage, useSaveVendorItems, useSaveInternalItems } from "@/hooks/use-packages";
 import { useVenues } from "@/hooks/use-venues";
 import { useCategories, useCreateCategory } from "@/hooks/use-categories";
+import { usePackageTypeCategories } from "@/hooks/use-package-type-categories";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import type { PackageQueryItem } from "@/lib/queries/packages";
 import { SignaturePad } from "@/components/shared/signature-pad";
@@ -80,6 +81,7 @@ export function DrawerPackage({ isOpen, onClose, editingPackage, packageType = "
   const { data: venues = [] } = useVenues();
   const { data: categories = [] } = useCategories();
   const createCategoryMut = useCreateCategory();
+  const { data: packageTypeCategories = [] } = usePackageTypeCategories();
 
   const [currentStep, setCurrentStep] = useState(1);
   const [submitting, setSubmitting] = useState(false);
@@ -88,6 +90,7 @@ export function DrawerPackage({ isOpen, onClose, editingPackage, packageType = "
   const [packageName, setPackageName] = useState("");
   const [available, setAvailable] = useState(true);
   const [venueId, setVenueId] = useState("");
+  const [packageTypeCategoryId, setPackageTypeCategoryId] = useState("");
   const [notes, setNotes] = useState("");
   const [pax, setPax] = useState(0);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -109,6 +112,7 @@ export function DrawerPackage({ isOpen, onClose, editingPackage, packageType = "
       setPackageName(editingPackage.packageName);
       setAvailable(editingPackage.available);
       setVenueId(editingPackage.venueId ?? "");
+      setPackageTypeCategoryId(editingPackage.packageTypeCategoryId ?? "");
       setNotes(editingPackage.notes ?? "");
       setPax(editingPackage.pax ?? 0);
       setVendorItems(
@@ -140,6 +144,7 @@ export function DrawerPackage({ isOpen, onClose, editingPackage, packageType = "
       if (d.packageName) setPackageName(d.packageName);
       if (d.available !== undefined) setAvailable(d.available);
       if (d.venueId) setVenueId(d.venueId);
+      if (d.packageTypeCategoryId) setPackageTypeCategoryId(d.packageTypeCategoryId);
       if (d.notes) setNotes(d.notes);
       if (typeof d.pax === "number") setPax(d.pax);
       if (d.vendorItems?.length) {
@@ -165,11 +170,11 @@ export function DrawerPackage({ isOpen, onClose, editingPackage, packageType = "
     if (!isOpen || isEdit) return;
     const timer = setTimeout(() => {
       try {
-        localStorage.setItem(DRAFT_KEY, JSON.stringify({ packageName, available, venueId, notes, pax, vendorItems, internalItems, currentStep }));
+        localStorage.setItem(DRAFT_KEY, JSON.stringify({ packageName, available, venueId, packageTypeCategoryId, notes, pax, vendorItems, internalItems, currentStep }));
       } catch { /* storage full */ }
     }, 500);
     return () => clearTimeout(timer);
-  }, [isOpen, isEdit, DRAFT_KEY, packageName, available, venueId, notes, pax, vendorItems, internalItems, currentStep]);
+  }, [isOpen, isEdit, DRAFT_KEY, packageName, available, venueId, packageTypeCategoryId, notes, pax, vendorItems, internalItems, currentStep]);
 
   function clearDraft() {
     localStorage.removeItem(DRAFT_KEY);
@@ -179,6 +184,7 @@ export function DrawerPackage({ isOpen, onClose, editingPackage, packageType = "
     setPackageName("");
     setAvailable(true);
     setVenueId("");
+    setPackageTypeCategoryId("");
     setNotes("");
     setPax(0);
     setVendorItems([]);
@@ -198,12 +204,13 @@ export function DrawerPackage({ isOpen, onClose, editingPackage, packageType = "
   function validateStep1(): string | null {
     const newErrors: Record<string, string> = {};
     if (!packageName.trim()) newErrors.packageName = "Nama paket wajib diisi";
+    if (!packageTypeCategoryId) newErrors.packageTypeCategoryId = "Kategori paket wajib diisi";
     setErrors(newErrors);
     if (Object.keys(newErrors).length > 0) return Object.values(newErrors)[0];
     return null;
   }
 
-  const isStep1Invalid = !packageName.trim();
+  const isStep1Invalid = !packageName.trim() || !packageTypeCategoryId;
   const isNextDisabled = submitting || (currentStep === 1 && isStep1Invalid);
 
   function handleNext() {
@@ -259,13 +266,13 @@ export function DrawerPackage({ isOpen, onClose, editingPackage, packageType = "
       if (isEdit) {
         const res = await updatePkg.mutateAsync({
           id: editingPackage!.id,
-          data: { packageName, available, venueId: venueId || null, notes: notes || null, pax, signature },
+          data: { packageName, available, venueId: venueId || null, packageTypeCategoryId, notes: notes || null, pax, signature },
         });
         if (!res.success) { toast.error(res.error ?? "Gagal update"); return; }
         pkgId = editingPackage!.id;
       } else {
         const category = packageType === "mice" ? "MICE" : "WEDDINGS";
-        const res = await createPkg.mutateAsync({ packageName, available, venueId: venueId || null, notes: notes || null, pax, signature, category });
+        const res = await createPkg.mutateAsync({ packageName, available, venueId: venueId || null, packageTypeCategoryId, notes: notes || null, pax, signature, category });
         if (!res.success) { toast.error(res.error ?? "Gagal membuat paket"); return; }
         pkgId = res.data!.id;
       }
@@ -348,6 +355,24 @@ export function DrawerPackage({ isOpen, onClose, editingPackage, packageType = "
                   placeholder="Masukkan nama paket"
                 />
                 {errors.packageName && <p className={cn("mt-1 text-xs text-destructive")}>{errors.packageName}</p>}
+              </div>
+
+              <div>
+                <Label className={cn("text-sm font-medium text-gray-700")}>Kategori Paket *</Label>
+                <Select
+                  value={packageTypeCategoryId}
+                  onValueChange={(val) => { setPackageTypeCategoryId(val); setErrors((p) => { const n = { ...p }; delete n.packageTypeCategoryId; return n; }); }}
+                >
+                  <SelectTrigger className={cn("mt-1 w-full border-[#CCCCCC] bg-[#F9F9F9]", errors.packageTypeCategoryId && "border-red-500")}>
+                    <SelectValue placeholder="Pilih kategori paket" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {packageTypeCategories.map((c) => (
+                      <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {errors.packageTypeCategoryId && <p className={cn("mt-1 text-xs text-destructive")}>{errors.packageTypeCategoryId}</p>}
               </div>
 
               <div className="grid grid-cols-2 gap-3">

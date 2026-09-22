@@ -10,6 +10,11 @@ export interface SalesCategoryBreakdown {
   mice: { count: number; revenue: number };
 }
 
+export interface SalesPackageTypeBreakdown {
+  reguler: { count: number; pct: number };
+  hadjatan: { count: number; pct: number };
+}
+
 export interface SalesPerformanceCardItem {
   profileId: string;
   name: string;
@@ -21,6 +26,7 @@ export interface SalesPerformanceCardItem {
   hasTarget: boolean;
   achievementPct: number;
   breakdown: SalesCategoryBreakdown;
+  packageTypeBreakdown: SalesPackageTypeBreakdown;
 }
 
 // ─── Helper: compute category breakdown in-memory ─────────────────────────────
@@ -43,6 +49,27 @@ function computeBreakdown(
     mice: {
       count: mice.length,
       revenue: mice.reduce((s, b) => s + b.price, 0),
+    },
+  };
+}
+
+// ─── Helper: compute Reguler/Hadjatan package-type breakdown in-memory ────────
+
+function computePackageTypeBreakdown(
+  bookings: { packageTypeCategoryCode: string | null }[],
+): SalesPackageTypeBreakdown {
+  const total = bookings.length;
+  const regulerCount = bookings.filter((b) => b.packageTypeCategoryCode === "REGULAR").length;
+  const hadjatanCount = bookings.filter((b) => b.packageTypeCategoryCode === "HADJATAN").length;
+
+  return {
+    reguler: {
+      count: regulerCount,
+      pct: total > 0 ? Math.round((regulerCount / total) * 100) : 0,
+    },
+    hadjatan: {
+      count: hadjatanCount,
+      pct: total > 0 ? Math.round((hadjatanCount / total) * 100) : 0,
     },
   };
 }
@@ -95,6 +122,7 @@ async function _queryTopSales(
         bookingStatus: true,
         category: true,
         snapPackagePricing: { select: { price: true } },
+        snapPackage: { select: { packageTypeCategoryCode: true } },
       },
       take: 5000,
     }),
@@ -138,7 +166,12 @@ async function _queryTopSales(
   // Group bookings by salesId.
   const bookingsBySalesId = new Map<
     string,
-    { bookingStatus: BookingStatus; category: EventCategory; price: number }[]
+    {
+      bookingStatus: BookingStatus;
+      category: EventCategory;
+      price: number;
+      packageTypeCategoryCode: string | null;
+    }[]
   >();
   for (const b of allBookings) {
     // salesId is nullable ("tanpa PIC"); the query already filters to candidate
@@ -149,6 +182,7 @@ async function _queryTopSales(
       bookingStatus: b.bookingStatus,
       category: b.category,
       price: b.snapPackagePricing?.price ?? 0,
+      packageTypeCategoryCode: b.snapPackage?.packageTypeCategoryCode ?? null,
     });
     bookingsBySalesId.set(b.salesId, list);
   }
@@ -167,6 +201,7 @@ async function _queryTopSales(
     const achievementPct =
       hasTarget && target > 0 ? Math.round((revenue / target) * 100) : 0;
     const breakdown = computeBreakdown(bookings);
+    const packageTypeBreakdown = computePackageTypeBreakdown(bookings);
 
     return {
       profileId,
@@ -179,6 +214,7 @@ async function _queryTopSales(
       hasTarget,
       achievementPct,
       breakdown,
+      packageTypeBreakdown,
     };
   });
 

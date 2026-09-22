@@ -32,6 +32,7 @@ import {
   AddCircle,
   PenNewSquare,
   TrashBinTrash,
+  MapPoint,
 } from "@solar-icons/react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -360,6 +361,21 @@ export function GroupDetailClient({
           )}
         </div>
       </div>
+
+      {/* Assigned venues — informational, filter only (read-only here, edit via GroupFormDialog) */}
+      {group.venues.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          <MapPoint weight="BoldDuotone" className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+          {group.venues.map((v) => (
+            <span
+              key={v.id}
+              className="inline-flex items-center px-2.5 py-1 rounded-full bg-secondary text-secondary-foreground text-xs font-medium"
+            >
+              {v.name}
+            </span>
+          ))}
+        </div>
+      )}
 
       {/* Team Pace — hero: achievement ring (gold) + supporting stats. */}
       <TeamPaceHero

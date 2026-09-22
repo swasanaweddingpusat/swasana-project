@@ -154,6 +154,7 @@ export async function POST(req: Request) {
       snapVendorItems: [],
       snapBonuses: [],
       snapComplimentaries: [],
+      snapBookingBonuses: [],
 
       termOfPayments: [
         {

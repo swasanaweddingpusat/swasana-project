@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/permissions";
 import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
 import { logAudit } from "@/lib/audit";
+import { createNotifications } from "@/lib/notifications";
 import {
   addAnnouncementCommentSchema,
   createAnnouncementSchema,
@@ -24,6 +25,25 @@ async function generateNoAnnouncement(): Promise<string> {
 
   const seq = (count + 1).toString().padStart(3, "0");
   return `ANN/${year}/${seq}`;
+}
+
+async function notifyPublishedAnnouncement(announcement: { id: string; title: string }): Promise<void> {
+  const profiles = await db.profile.findMany({
+    where: { status: "active" },
+    select: { id: true },
+    take: 500,
+  });
+
+  await createNotifications(
+    profiles.map((profile) => ({
+      userId: profile.id,
+      title: "Pengumuman Baru",
+      message: announcement.title,
+      type: "announcement_created",
+      entityType: "announcement",
+      entityId: announcement.id,
+    })),
+  );
 }
 
 export async function createAnnouncement(
@@ -59,6 +79,10 @@ export async function createAnnouncement(
       description: `Created announcement "${noAnnouncement}" — ${announcement.title}`,
     });
 
+    if (parsed.data.status === "published") {
+      await notifyPublishedAnnouncement(announcement);
+    }
+
     revalidateTag("announcements", "max");
     return { success: true };
   } catch (e) {
@@ -82,7 +106,7 @@ export async function updateAnnouncement(
   try {
     const existing = await db.announcement.findUnique({
       where: { id },
-      select: { id: true, title: true },
+      select: { id: true, title: true, status: true },
     });
     if (!existing) return { success: false, error: "Pengumuman tidak ditemukan." };
 
@@ -100,6 +124,13 @@ export async function updateAnnouncement(
       entityId: id,
       description: `Updated announcement "${existing.title}"`,
     });
+
+    if (parsed.data.status === "published" && existing.status !== "published") {
+      await notifyPublishedAnnouncement({
+        id: existing.id,
+        title: parsed.data.title ?? existing.title,
+      });
+    }
 
     revalidateTag("announcements", "max");
     return { success: true };
@@ -225,7 +256,7 @@ export async function publishAnnouncement(
   try {
     const existing = await db.announcement.findUnique({
       where: { id },
-      select: { id: true, title: true },
+      select: { id: true, title: true, status: true },
     });
     if (!existing) return { success: false, error: "Pengumuman tidak ditemukan." };
 
@@ -243,6 +274,10 @@ export async function publishAnnouncement(
       entityId: id,
       description: `Published announcement "${existing.title}"`,
     });
+
+    if (existing.status !== "published") {
+      await notifyPublishedAnnouncement(existing);
+    }
 
     revalidateTag("announcements", "max");
     return { success: true };

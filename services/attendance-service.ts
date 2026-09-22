@@ -4,8 +4,9 @@ import type {
   AttendanceListResult,
   MyAttendanceHistoryResult,
   AttendanceExportItem,
+  EmployeeAttendanceOverview,
 } from "@/lib/queries/attendance";
-import type { AttendanceListQuery, ClockInInput, ClockOutInput, AttendanceSettingsInput } from "@/lib/validations/attendance";
+import type { AttendanceListQuery, AttendanceOverviewQuery, ClockInInput, ClockOutInput, AttendanceSettingsInput } from "@/lib/validations/attendance";
 
 export async function fetchAttendanceToday(): Promise<AttendanceTodayResponse> {
   const res = await fetch("/api/hr/attendance/today");
@@ -88,4 +89,17 @@ export async function fetchAttendanceExport(params: {
   const res = await fetch(`/api/hr/attendance/export?${sp.toString()}`);
   if (!res.ok) throw new Error("Gagal mengambil data export");
   return res.json() as Promise<AttendanceExportItem[]>;
+}
+
+export async function fetchEmployeeAttendanceOverview(params: AttendanceOverviewQuery): Promise<EmployeeAttendanceOverview> {
+  const sp = new URLSearchParams();
+  sp.set("profileId", params.profileId);
+  if (params.date) sp.set("date", params.date);
+  if (params.month) sp.set("month", String(params.month));
+  if (params.year) sp.set("year", String(params.year));
+
+  const res = await fetch(`/api/hr/attendance/overview?${sp.toString()}`);
+  const json = await res.json();
+  if (!res.ok) throw new Error(json.error ?? "Gagal mengambil data overview");
+  return json as EmployeeAttendanceOverview;
 }

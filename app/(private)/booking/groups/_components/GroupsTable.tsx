@@ -14,6 +14,7 @@ import {
   GraphDown,
   GraphUp,
   UsersGroupRounded,
+  MapPoint,
 } from "@solar-icons/react";
 import type { GroupWithPerformance } from "@/lib/queries/groups";
 
@@ -232,6 +233,26 @@ function GroupCard({
             <span className="text-xs text-muted-foreground">
               Belum ada leader · {group._count.members} anggota
             </span>
+          </div>
+        )}
+
+        {/* ── Row 3: assigned venues (informational, filter only) ── */}
+        {group.venues.length > 0 && (
+          <div className="flex flex-wrap items-center gap-1">
+            <MapPoint weight="BoldDuotone" className="h-3 w-3 text-muted-foreground shrink-0" />
+            {group.venues.slice(0, 3).map((v) => (
+              <span
+                key={v.id}
+                className="inline-flex items-center px-2 py-0.5 rounded-full bg-secondary text-secondary-foreground text-[10px] font-medium truncate max-w-24"
+              >
+                {v.name}
+              </span>
+            ))}
+            {group.venues.length > 3 && (
+              <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-muted text-muted-foreground text-[10px] font-medium">
+                +{group.venues.length - 3}
+              </span>
+            )}
           </div>
         )}
 

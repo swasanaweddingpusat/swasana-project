@@ -13,6 +13,7 @@ import {
   setMemberTargetSchema,
   deleteMemberTargetSchema,
   updateGroupLeaderSchema,
+  updateGroupVenuesSchema,
 } from "@/lib/validations/group";
 
 // ─── Create Group ─────────────────────────────────────────────────────────────
@@ -41,6 +42,15 @@ export async function createGroup(data: unknown) {
         sortOrder: (lastGroup?.sortOrder ?? 0) + 1,
       },
     });
+
+    // Sync homebase venues join table if provided
+    if (parsed.data.homebaseVenueIds?.length) {
+      await db.$transaction(
+        parsed.data.homebaseVenueIds.map((venueId) =>
+          db.userGroupHomebase.create({ data: { groupId: group.id, venueId } })
+        )
+      );
+    }
 
     // If leader is set, ensure they are a member and have dataScope = "group"
     if (newLeaderId) {
@@ -89,7 +99,7 @@ export async function updateGroup(data: unknown) {
   const parsed = updateGroupSchema.safeParse(data);
   if (!parsed.success) return { success: false, error: parsed.error.issues[0].message };
 
-  const { id, name, description, leaderId } = parsed.data;
+  const { id, name, description, leaderId, homebaseVenueIds } = parsed.data;
 
   try {
     // ── Phase 1: Reads (before any write) ──
@@ -163,6 +173,16 @@ export async function updateGroup(data: unknown) {
 
     // ── Phase 3: Single atomic transaction ──
     const [group] = await db.$transaction([groupUpdateOp, ...sideOps]);
+
+    // ── Phase 4: Sync homebase venues join table (if provided) ──
+    if (homebaseVenueIds !== undefined) {
+      await db.$transaction([
+        db.userGroupHomebase.deleteMany({ where: { groupId: id } }),
+        ...homebaseVenueIds.map((venueId) =>
+          db.userGroupHomebase.create({ data: { groupId: id, venueId } })
+        ),
+      ]);
+    }
 
     const groupName = name ?? currentGroup.name;
 
@@ -540,6 +560,67 @@ export async function updateGroupLeader(groupId: string, leaderId: string) {
     return { success: true };
   } catch (e) {
     console.error("[updateGroupLeader]", e);
+    return { success: false, error: "Terjadi kesalahan." };
+  }
+}
+
+// ─── Update Group Venues (many-to-many, informational/filter only) ────────────
+// NOTE: does NOT touch lib/access-control.ts / dataScope — purely informational
+// assignment for filtering/display. Replace-semantics: deleteMany old + create
+// new, in one array-form transaction (Neon HTTP has no createMany).
+
+export async function updateGroupVenues(data: unknown) {
+  const { session, error } = await requirePermission({ module: "groups", action: "edit" });
+  if (error) return { success: false, error };
+  if (!mutationLimiter.check(`groups-venues:${session!.user.id}`)) return { success: false, ...rateLimitError() };
+
+  const parsed = updateGroupVenuesSchema.safeParse(data);
+  if (!parsed.success) return { success: false, error: parsed.error.issues[0].message };
+
+  const { groupId, venueIds } = parsed.data;
+  const uniqueVenueIds = [...new Set(venueIds)];
+
+  try {
+    const group = await db.userGroup.findUnique({ where: { id: groupId }, select: { name: true } });
+    if (!group) return { success: false, error: "Grup tidak ditemukan." };
+
+    if (uniqueVenueIds.length > 0) {
+      const existingVenues = await db.venue.findMany({
+        where: { id: { in: uniqueVenueIds } },
+        select: { id: true },
+      });
+      if (existingVenues.length !== uniqueVenueIds.length) {
+        return { success: false, error: "Ada venue yang tidak valid." };
+      }
+    }
+
+    const venueOps: Prisma.PrismaPromise<unknown>[] = [
+      db.userGroupVenue.deleteMany({ where: { groupId } }),
+      ...uniqueVenueIds.map((venueId) =>
+        db.userGroupVenue.create({ data: { groupId, venueId } }),
+      ),
+    ];
+    await db.$transaction(venueOps);
+
+    const h = await headers();
+    await logAudit({
+      userId: session!.user.profileId,
+      action: "group.venues_updated",
+      entityType: "group",
+      entityId: groupId,
+      description: `Venue grup "${group.name}" diperbarui`,
+      changes: { after: { venueIds: uniqueVenueIds } },
+      ipAddress: h.get("x-forwarded-for") ?? undefined,
+      userAgent: h.get("user-agent") ?? undefined,
+    });
+
+    revalidateTag("groups", "max");
+    revalidatePath(`/booking/groups/${groupId}`);
+    revalidatePath("/booking/groups");
+
+    return { success: true };
+  } catch (e) {
+    console.error("[updateGroupVenues]", e);
     return { success: false, error: "Terjadi kesalahan." };
   }
 }

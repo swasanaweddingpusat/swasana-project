@@ -33,8 +33,9 @@ import {
   useHrApproveLeave,
   useHrRejectLeave,
 } from "@/hooks/use-leave-requests";
-import { CheckCircle, CloseCircle, ClockCircle } from "@solar-icons/react";
+import { CheckCircle, CloseCircle, ClockCircle, Gallery } from "@solar-icons/react";
 import type { LeaveRequestItem } from "@/lib/queries/leaveRequests";
+import { LeaveEvidenceModal } from "./LeaveEvidenceModal";
 
 type DialogMode = "approve" | "reject";
 type DialogScope = "manager" | "hr";
@@ -64,6 +65,7 @@ export function LeaveApprovalTable() {
   const [dialogMode, setDialogMode] = useState<DialogMode>("approve");
   const [dialogScope, setDialogScope] = useState<DialogScope>("manager");
   const [dialogNote, setDialogNote] = useState("");
+  const [evidenceTarget, setEvidenceTarget] = useState<LeaveRequestItem | null>(null);
 
   const openDialog = useCallback(
     (request: LeaveRequestItem, mode: DialogMode, scope: DialogScope) => {
@@ -196,7 +198,7 @@ export function LeaveApprovalTable() {
             <CardHeader className="pb-3">
               <CardTitle className="font-heading text-lg flex items-center gap-2">
                 <ClockCircle weight="BoldDuotone" className="h-5 w-5" />
-                Menunggu Persetujuan Anda
+                Persetujuan Manager
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -214,6 +216,7 @@ export function LeaveApprovalTable() {
                   scope="manager"
                   onApprove={(req) => openDialog(req, "approve", "manager")}
                   onReject={(req) => openDialog(req, "reject", "manager")}
+                  onViewEvidence={setEvidenceTarget}
                 />
               )}
             </CardContent>
@@ -226,7 +229,7 @@ export function LeaveApprovalTable() {
             <CardHeader className="pb-3">
               <CardTitle className="font-heading text-lg flex items-center gap-2">
                 <ClockCircle weight="BoldDuotone" className="h-5 w-5" />
-                Menunggu Persetujuan HR
+                Persetujuan HR
                 {pendingHr && pendingHr.length > 0 && (
                   <Badge variant="secondary" className="rounded-full ml-2">
                     {pendingHr.length}
@@ -261,6 +264,7 @@ export function LeaveApprovalTable() {
                   scope="hr"
                   onApprove={(req) => openDialog(req, "approve", "hr")}
                   onReject={(req) => openDialog(req, "reject", "hr")}
+                  onViewEvidence={setEvidenceTarget}
                 />
               )}
             </CardContent>
@@ -349,6 +353,11 @@ export function LeaveApprovalTable() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <LeaveEvidenceModal
+        request={evidenceTarget}
+        onClose={() => setEvidenceTarget(null)}
+      />
     </>
   );
 }
@@ -360,11 +369,13 @@ function ApprovalTableContent({
   scope,
   onApprove,
   onReject,
+  onViewEvidence,
 }: {
   requests: LeaveRequestItem[];
   scope: "manager" | "hr";
   onApprove: (req: LeaveRequestItem) => void;
   onReject: (req: LeaveRequestItem) => void;
+  onViewEvidence: (req: LeaveRequestItem) => void;
 }) {
   return (
     <div className="overflow-x-auto">
@@ -395,7 +406,16 @@ function ApprovalTableContent({
                   )}
                 </div>
               </TableCell>
-              <TableCell className="text-sm">{req.leaveType.name}</TableCell>
+              <TableCell className="text-sm">
+                <div className="flex flex-col gap-1">
+                  <span>{req.leaveType.name}</span>
+                  {req.publicHolidayName && (
+                    <Badge variant="secondary" className="w-fit rounded-full text-xs">
+                      Libur Hari Besar — {req.publicHolidayName}
+                    </Badge>
+                  )}
+                </div>
+              </TableCell>
               <TableCell className="text-sm">
                 {formatDate(req.startDate)} - {formatDate(req.endDate)}
               </TableCell>
@@ -410,6 +430,17 @@ function ApprovalTableContent({
               )}
               <TableCell>
                 <div className="flex items-center gap-1">
+                  {req.evidence && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 rounded-full"
+                      onClick={() => onViewEvidence(req)}
+                      title="Lihat bukti"
+                    >
+                      <Gallery weight="BoldDuotone" className="h-4 w-4" />
+                    </Button>
+                  )}
                   <Button
                     variant="ghost"
                     size="icon"

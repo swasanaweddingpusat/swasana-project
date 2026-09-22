@@ -39,7 +39,7 @@ export function parseContactNumbers(raw: unknown): ContactNumber[] {
 
 // ─── Aggregated / joined types used in UI ────────────────────────────────────
 
-export type DailyActivityWithRelations = Prisma.DailyActivityGetPayload<{
+export type DailyActivityWithRelations = Prisma.LeadGetPayload<{
   include: {
     status: true;
     venue: { select: { id: true; name: true } };

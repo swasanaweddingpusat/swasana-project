@@ -166,8 +166,9 @@ model Profile {
   bookingRevisions             BookingRevision[]
   userTargets                  UserTarget[]               @relation("UserTargets")
   userTargetsSet               UserTarget[]               @relation("UserTargetsSetBy")
-  leadsCreated                 DailyActivity[]
-  leadsAssigned                DailyActivity[]            @relation("LeadAssignee")
+  leadsCreated                 Lead[]
+  leadsAssigned                Lead[]            @relation("LeadAssignee")
+  dailyActivities              DailyActivity[]            @relation("DailyActivitySales")
   quotations                   Quotation[]
   ledgersCreated               Ledger[]                   @relation("LedgerCreator")
   ledgersAcknowledged          Ledger[]                   @relation("LedgerAcknowledger")
@@ -226,6 +227,7 @@ model Profile {
   guestbookHosted              GuestbookEntry[]           @relation("GuestbookHost")
   guestbookCreated             GuestbookEntry[]           @relation("GuestbookCreator")
   guestbookSales               GuestbookEntry[]           @relation("GuestbookSales")
+  guestbookAttendanceConfirmed GuestbookEntry[]           @relation("GuestbookAttendanceConfirmer")
   blacklistCreated             BlacklistEntry[]           @relation("BlacklistCreator")
   memosCreated                 Memo[]                     @relation("MemoCreator")
   memoComments                 MemoComment[]              @relation("MemoCommentAuthor")
@@ -234,6 +236,13 @@ model Profile {
   announcementComments         AnnouncementComment[]      @relation("AnnouncementCommentAuthor")
   announcementReads            AnnouncementReader[]       @relation("AnnouncementReader")
   onboardingFormLinksCreated   OnboardingFormLink[]       @relation("OnboardingFormLinkCreator")
+  kpiMastersCreated            KpiMaster[]                @relation("KpiMasterCreatedBy")
+  kpiAssignments               KpiAssignment[]            @relation("KpiAssignments")
+  kpiAssignmentsCreated        KpiAssignment[]            @relation("KpiAssignmentCreatedBy")
+  kpiResults                   KpiCalculationResult[]     @relation("KpiResults")
+  kpiResultsFinalized          KpiCalculationResult[]     @relation("KpiResultFinalizedBy")
+  kpiCommissionPoliciesApproved KpiCommissionPolicy[]     @relation("KpiCommissionPolicyApprovedBy")
+  kpiPolicySnapshotsCreated    KpiPolicySnapshot[]        @relation("KpiPolicySnapshotCreatedBy")
 
   @@index([roleId])
   @@index([managerId])
@@ -314,20 +323,32 @@ model EmailVerificationToken {
 // ─── Data Groups (untuk scope = 'group') ─────────────────────────────────────
 
 model UserGroup {
-  id          String            @id @default(uuid())
-  name        String
-  description String?
-  leaderId    String?
-  sortOrder   Int               @default(0)
-  createdBy   String?
-  createdAt   DateTime          @default(now())
-  updatedAt   DateTime          @updatedAt
-  leader       Profile?          @relation("GroupLeader", fields: [leaderId], references: [id], onDelete: SetNull)
+  id           String              @id @default(uuid())
+  name         String
+  description  String?
+  leaderId     String?
+  sortOrder    Int                 @default(0)
+  createdBy    String?
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+  leader       Profile?            @relation("GroupLeader", fields: [leaderId], references: [id], onDelete: SetNull)
+  homebases    UserGroupHomebase[]
   members      UserGroupMember[]
+  venues       UserGroupVenue[]
   dailyReports DailyReport[]
 
   @@index([leaderId])
   @@map("user_groups")
+}
+
+model UserGroupHomebase {
+  groupId   String
+  venueId   String
+  group     UserGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  venue     Venue     @relation("GroupHomebases", fields: [venueId], references: [id], onDelete: Cascade)
+
+  @@id([groupId, venueId])
+  @@map("user_group_homebases")
 }
 
 model UserGroupMember {
@@ -341,6 +362,20 @@ model UserGroupMember {
   @@id([groupId, userId])
   @@index([userId])
   @@map("user_group_members")
+}
+
+// Many-to-many: satu Group (sales team) bisa di-assign ke banyak Venue sekaligus.
+// Informational/filter only — TIDAK dipakai oleh access-control / dataScope.
+model UserGroupVenue {
+  groupId   String
+  venueId   String
+  createdAt DateTime  @default(now())
+  group     UserGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  venue     Venue     @relation(fields: [venueId], references: [id], onDelete: Cascade)
+
+  @@id([groupId, venueId])
+  @@index([venueId])
+  @@map("user_group_venues")
 }
 
 // ─── Venue (dipakai untuk user invitation — assign venue ke user) ─────────────
@@ -372,8 +407,8 @@ model Venue {
   packages                  Package[]
   paymentMethods            PaymentMethod[]
   bookings                  Booking[]
-  leads                     DailyActivity[]            @relation("LeadPrimaryVenue")
-  leadsSecondary            DailyActivity[]            @relation("LeadSecondaryVenue")
+  leads                     Lead[]            @relation("LeadPrimaryVenue")
+  leadsSecondary            Lead[]            @relation("LeadSecondaryVenue")
   quotations                Quotation[]
   quotationTemplates        QuotationTemplate[]
   maintenanceTickets        MaintenanceTicket[]
@@ -387,6 +422,10 @@ model Venue {
   memos                     Memo[]
   announcements             Announcement[]
   onboardingFormSubmissions OnboardingFormSubmission[]
+  groupAssignments          UserGroupVenue[]
+  kpiAssignments            KpiAssignment[]            @relation("KpiAssignmentVenue")
+  kpiResults                KpiCalculationResult[]     @relation("KpiResultVenue")
+  homebases                 UserGroupHomebase[]         @relation("GroupHomebases")
 
   @@index([brandId])
   @@map("venues")
@@ -534,30 +573,33 @@ model PaymentMethod {
 // ─── Packages ────────────────────────────────────────────────────────────────
 
 model Package {
-  id               String                 @id @default(uuid())
-  packageName      String
-  category         EventCategory          @default(WEDDINGS)
-  available        Boolean                @default(true)
-  approvalStatus   String                 @default("draft")
-  venueId          String?
-  notes            String?
-  pax              Int                    @default(0)
-  margin           Float                  @default(0)
-  sellingPrice     Int                    @default(0)
-  termAndCondition String?
-  createdAt        DateTime               @default(now())
-  updatedAt        DateTime               @updatedAt
-  venue            Venue?                 @relation(fields: [venueId], references: [id], onDelete: SetNull)
-  vendorItems      PackageVendorItem[]
-  internalItems    PackageInternalItem[]
-  miceItems        PackageMiceItem[]
-  categoryPrices   PackageCategoryPrice[]
-  bookings         Booking[]
-  leads            DailyActivity[]
-  guestbookEntries GuestbookEntry[]
+  id                     String                 @id @default(uuid())
+  packageName            String
+  category               EventCategory          @default(WEDDINGS)
+  available              Boolean                @default(true)
+  approvalStatus         String                 @default("draft")
+  venueId                String?
+  packageTypeCategoryId  String?
+  notes                  String?
+  pax                    Int                    @default(0)
+  margin                 Float                  @default(0)
+  sellingPrice           Int                    @default(0)
+  termAndCondition       String?
+  createdAt              DateTime               @default(now())
+  updatedAt              DateTime               @updatedAt
+  venue                  Venue?                 @relation(fields: [venueId], references: [id], onDelete: SetNull)
+  packageTypeCategory    PackageTypeCategory?   @relation(fields: [packageTypeCategoryId], references: [id], onDelete: SetNull)
+  vendorItems            PackageVendorItem[]
+  internalItems          PackageInternalItem[]
+  miceItems              PackageMiceItem[]
+  categoryPrices         PackageCategoryPrice[]
+  bookings               Booking[]
+  leads                  Lead[]
+  guestbookEntries       GuestbookEntry[]
 
   @@index([venueId])
   @@index([category])
+  @@index([packageTypeCategoryId])
   @@map("packages")
 }
 
@@ -574,6 +616,22 @@ model Category {
   vendorItems    PackageVendorItem[]
 
   @@map("categories")
+}
+
+// Package type master — groups Packages themselves (e.g. "Paket Hadjatan", "Paket
+// Regular"). Standalone reference data, separate from `Category` above (which is
+// vendor-item master data used inside a package, e.g. Catering/Dekorasi).
+model PackageTypeCategory {
+  id        String    @id @default(uuid())
+  name      String    @unique
+  code      String    @unique
+  sortOrder Int       @default(0)
+  isActive  Boolean   @default(true)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  packages  Package[]
+
+  @@map("package_type_category")
 }
 
 model PackageCategoryPrice {
@@ -667,7 +725,7 @@ model Customer {
   updatedAt             DateTime             @updatedAt
   bookings              Booking[]
   sourceOfInformation   SourceOfInformation? @relation(fields: [sourceOfInformationId], references: [id], onDelete: SetNull)
-  convertedFromLeads    DailyActivity[]      @relation("LeadConvertedCustomer")
+  convertedFromLeads    Lead[]      @relation("LeadConvertedCustomer")
 
   @@index([name])
   @@map("customers")
@@ -691,7 +749,8 @@ model SourceOfInformation {
   createdAt        DateTime         @default(now())
   bookings         Booking[]
   customers        Customer[]
-  leads            DailyActivity[]
+  leads            Lead[]
+  dailyActivities  DailyActivity[] @relation("DailyActivitySource")
   guestbookEntries GuestbookEntry[]
 
   @@map("source_of_informations")
@@ -756,6 +815,17 @@ enum AttendanceStatus {
   late
   absent
   on_leave
+}
+
+enum AttendantType {
+  WORKDAY
+  DAY_OFF
+}
+
+enum WorkType {
+  WFO
+  WFH
+  WFA
 }
 
 enum LeaveRequestStatus {
@@ -873,6 +943,7 @@ enum GuestVisitStatus {
   cold
   warm
   hot
+  done_visit
   to_be_discuss
   deal
   lost
@@ -947,6 +1018,7 @@ model Booking {
   poNumber                  String?
   poYear                    Int?
   poSeq                     Int?
+  dealingDate               DateTime? // tanggal dealing booking; user-editable, default hari ini saat create, backfilled dari createdAt untuk data lama
   eventDate                 DateTime? // required for saved bookings; null only during MICE draft steps
   quotationId               String?
   salesSignature            String?
@@ -972,6 +1044,7 @@ model Booking {
   // Draft-only fields: persisted during multi-step form, cleared on finalize (kept as null for saved bookings)
   draftCategoryToggles      Json? // { categoryName: string, isTakeout: boolean, takeoutNominal: number }[]
   draftComplimentaries      Json? // { complimentaryId: string | null, name: string, price: number, isShowPrice: boolean, description: string | null, qty: number }[]
+  draftBonuses              Json? // { bonusId: string | null, name: string, price: number, description: string | null, qty: number }[]
   draftInternalItems        Json? // { itemName: string, itemDescription: string }[] — editable package internal items during draft
   draftVendorItems          Json? // { categoryId: string | null, categoryName: string, itemText: string }[] — editable package vendor items during draft
   // Tracks the active revision for approval step filtering (snapshot approach)
@@ -995,7 +1068,7 @@ model Booking {
   paymentMethod       PaymentMethod?       @relation(fields: [paymentMethodId], references: [id], onDelete: SetNull)
   sourceOfInformation SourceOfInformation? @relation(fields: [sourceOfInformationId], references: [id], onDelete: SetNull)
   currentRevision     BookingRevision?     @relation("BookingCurrentRevision", fields: [currentRevisionId], references: [id], onDelete: SetNull)
-  lead                DailyActivity?       @relation("BookingFromLead", fields: [leadId], references: [id], onDelete: SetNull)
+  lead                Lead?       @relation("BookingFromLead", fields: [leadId], references: [id], onDelete: SetNull)
   recognizedBy        Profile?             @relation("BookingRecognizer", fields: [recognizedById], references: [id], onDelete: SetNull)
 
   // Snapshot relations (1:1)
@@ -1011,6 +1084,7 @@ model Booking {
   snapBonuses               SnapBonus[]
   snapVendorItems           SnapVendorItem[]
   snapComplimentaries       SnapComplimentary[]
+  snapBookingBonuses        SnapBookingBonus[]
 
   // Live relations
   termOfPayments     TermOfPayment[]
@@ -1023,7 +1097,7 @@ model Booking {
   bookingComments    BookingComment[]
   commentReads       BookingCommentRead[]
   revisions          BookingRevision[]
-  convertedFromLeads DailyActivity[]            @relation("LeadConvertedBooking")
+  convertedFromLeads Lead[]            @relation("LeadConvertedBooking")
   editDraft          BookingEditDraft?
   eventEvaluations   EventEvaluation[]
   creditBalance      CreditBalance?
@@ -1142,13 +1216,15 @@ model SnapVenue {
 }
 
 model SnapPackage {
-  id          String   @id @default(uuid())
-  bookingId   String   @unique
-  packageId   String
-  packageName String
-  notes       String?
-  createdAt   DateTime @default(now())
-  booking     Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  id                      String   @id @default(uuid())
+  bookingId               String   @unique
+  packageId               String
+  packageName             String
+  packageTypeCategoryName String?
+  packageTypeCategoryCode String?
+  notes                   String?
+  createdAt               DateTime @default(now())
+  booking                 Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
 
   @@map("snap_packages")
 }
@@ -1272,6 +1348,40 @@ model SnapComplimentary {
   @@index([bookingId])
   @@index([complimentaryId])
   @@map("snap_complimentaries")
+}
+
+// ─── Bonus Master ─────────────────────────────────────────────────────────────
+
+model Bonus {
+  id                 String             @id @default(uuid())
+  name               String
+  price              Int
+  description        String?
+  isActive           Boolean            @default(true)
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+  snapBookingBonuses SnapBookingBonus[]
+
+  @@map("bonuses")
+}
+
+model SnapBookingBonus {
+  id          String   @id @default(uuid())
+  bookingId   String
+  bonusId     String?
+  name        String
+  price       Int
+  description String?
+  qty         Int      @default(1)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  booking     Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  bonus       Bonus?   @relation(fields: [bonusId], references: [id], onDelete: SetNull)
+
+  @@index([bookingId])
+  @@index([bonusId])
+  @@map("snap_booking_bonuses")
 }
 
 model QuotationComplimentary {
@@ -1878,7 +1988,7 @@ model EventType {
   isActive   Boolean         @default(true)
   createdAt  DateTime        @default(now())
   updatedAt  DateTime        @updatedAt
-  leads      DailyActivity[]
+  leads      Lead[]
   quotations Quotation[]
 
   @@index([category])
@@ -1915,7 +2025,7 @@ model LeadStatus {
   isActive  Boolean         @default(true)
   createdAt DateTime        @default(now())
   updatedAt DateTime        @updatedAt
-  leads     DailyActivity[]
+  leads     Lead[]
 
   @@index([sortOrder])
   @@map("lead_statuses")
@@ -1928,7 +2038,8 @@ model DailyActivitySegment {
   sortOrder        Int              @default(0)
   createdAt        DateTime         @default(now())
   updatedAt        DateTime         @updatedAt
-  leads            DailyActivity[]
+  leads            Lead[]
+  dailyActivities  DailyActivity[] @relation("DailyActivitySegmentRel")
   guestbookEntries GuestbookEntry[]
 
   // Physical table kept as "lead_segments" — no data migration needed.
@@ -1936,7 +2047,7 @@ model DailyActivitySegment {
   @@map("lead_segments")
 }
 
-model DailyActivity {
+model Lead {
   id             String    @id @default(uuid())
   name           String
   contactNumbers Json      @default("[]") // Array of { label: string, number: string }
@@ -2021,6 +2132,49 @@ model DailyActivity {
   // Composite index buat listing "assigned to me" urut terbaru
   @@index([assignedToId, createdAt])
   @@map("leads")
+}
+
+enum ProgressStatus {
+  COLD
+  WARM
+  HOT
+  FREEZE
+  DEAL
+  LOST
+}
+
+model DailyActivity {
+  id                    String         @id @default(uuid())
+  salesId               String
+  activityDate          DateTime       @db.Date
+  companyName           String?
+  segmentId             String
+  sourceOfInformationId String
+  sourceOfInformationDetail String?
+  bitrixId              String?
+  contactName           String?
+  phoneNumber           String?
+  email                 String?
+  location              String?
+  siteVisitAt           DateTime?
+  milestone             String
+  progressStatus        ProgressStatus
+  notes                 String?
+  createdAt             DateTime       @default(now())
+  updatedAt             DateTime       @updatedAt
+  deletedAt             DateTime?
+
+  sales               Profile              @relation("DailyActivitySales", fields: [salesId], references: [id])
+  segment             DailyActivitySegment @relation("DailyActivitySegmentRel", fields: [segmentId], references: [id])
+  sourceOfInformation SourceOfInformation  @relation("DailyActivitySource", fields: [sourceOfInformationId], references: [id])
+
+  @@index([salesId])
+  @@index([segmentId])
+  @@index([sourceOfInformationId])
+  @@index([activityDate])
+  @@index([progressStatus])
+  @@index([deletedAt])
+  @@map("daily_activities")
 }
 
 model UserTarget {
@@ -2283,32 +2437,57 @@ model Attendance {
   date      DateTime
 
   clockInAt       DateTime?
-  clockInPhotoUrl String?
+  clockInEvidence Json?
   clockInLat      Float?
   clockInLng      Float?
 
   clockOutAt       DateTime?
-  clockOutPhotoUrl String?
+  clockOutEvidence Json?
   clockOutLat      Float?
   clockOutLng      Float?
 
-  status         AttendanceStatus @default(absent)
-  workLocationId String?
-  workShiftId    String?
+  status          AttendanceStatus @default(absent)
+  workLocationId  String?
+  workShiftId     String?
+  workType        WorkType?
+  attendantType   AttendantType    @default(WORKDAY)
+  isPublicHoliday Boolean          @default(false)
+
+  // Selected "Hari Besar" when jenis libur = PUBLIC_HOLIDAY. FK links to the master;
+  // publicHolidayName is a snapshot so the attendance survives a rename/delete.
+  publicHolidayId   String?
+  publicHolidayName String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  profile      Profile       @relation(fields: [profileId], references: [id], onDelete: Cascade)
-  workLocation WorkLocation? @relation(fields: [workLocationId], references: [id], onDelete: SetNull)
-  workShift    WorkShift?    @relation(fields: [workShiftId], references: [id], onDelete: SetNull)
+  profile       Profile        @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  workLocation  WorkLocation?  @relation(fields: [workLocationId], references: [id], onDelete: SetNull)
+  workShift     WorkShift?     @relation(fields: [workShiftId], references: [id], onDelete: SetNull)
+  publicHoliday PublicHoliday? @relation(fields: [publicHolidayId], references: [id], onDelete: SetNull)
 
   @@unique([profileId, date])
   @@index([profileId])
   @@index([date])
   @@index([workLocationId])
   @@index([workShiftId])
+  @@index([publicHolidayId])
   @@map("attendances")
+}
+
+model PublicHoliday {
+  id        String   @id @default(uuid())
+  date      DateTime @unique
+  name      String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  attendances   Attendance[]
+  leaveRequests LeaveRequest[]
+
+  @@index([date])
+  @@map("public_holidays")
 }
 
 model AttendanceSettings {
@@ -2559,14 +2738,18 @@ model LeaveBalance {
 }
 
 model LeaveRequest {
-  id          String             @id @default(uuid())
-  profileId   String
-  leaveTypeId String
-  startDate   DateTime
-  endDate     DateTime
-  totalDays   Int
-  reason      String?
-  status      LeaveRequestStatus @default(pending)
+  id                String             @id @default(uuid())
+  profileId         String
+  leaveTypeId       String
+  startDate         DateTime
+  endDate           DateTime
+  totalDays         Int
+  reason            String?
+  documentKey       String?
+  evidence          Json?
+  status            LeaveRequestStatus @default(pending)
+  publicHolidayId   String?
+  publicHolidayName String?
 
   managerApprovedBy String?
   managerApprovedAt DateTime?
@@ -2586,17 +2769,19 @@ model LeaveRequest {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  profile         Profile   @relation(fields: [profileId], references: [id], onDelete: Cascade)
-  leaveType       LeaveType @relation(fields: [leaveTypeId], references: [id], onDelete: Cascade)
-  managerApprover Profile?  @relation("LeaveManagerApprover", fields: [managerApprovedBy], references: [id], onDelete: SetNull)
-  hrApprover      Profile?  @relation("LeaveHrApprover", fields: [hrApprovedBy], references: [id], onDelete: SetNull)
-  rejector        Profile?  @relation("LeaveRejector", fields: [rejectedBy], references: [id], onDelete: SetNull)
+  profile         Profile        @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  leaveType       LeaveType      @relation(fields: [leaveTypeId], references: [id], onDelete: Cascade)
+  managerApprover Profile?       @relation("LeaveManagerApprover", fields: [managerApprovedBy], references: [id], onDelete: SetNull)
+  hrApprover      Profile?       @relation("LeaveHrApprover", fields: [hrApprovedBy], references: [id], onDelete: SetNull)
+  rejector        Profile?       @relation("LeaveRejector", fields: [rejectedBy], references: [id], onDelete: SetNull)
+  publicHoliday   PublicHoliday? @relation(fields: [publicHolidayId], references: [id], onDelete: SetNull)
 
   @@index([profileId])
   @@index([leaveTypeId])
   @@index([status])
   @@index([startDate])
   @@index([endDate])
+  @@index([publicHolidayId])
   @@map("leave_requests")
 }
 
@@ -3615,10 +3800,13 @@ model GuestbookEntry {
   sourceOfInformationId String?
   packageId             String?
   segmentId             String?
+  attendanceConfirmedAt DateTime?
+  attendanceConfirmedById String?
   createdAt             DateTime              @default(now())
   updatedAt             DateTime              @updatedAt
 
   host                Profile?              @relation("GuestbookHost", fields: [hostId], references: [id], onDelete: SetNull)
+  attendanceConfirmedBy Profile?             @relation("GuestbookAttendanceConfirmer", fields: [attendanceConfirmedById], references: [id], onDelete: SetNull)
   createdBy           Profile?              @relation("GuestbookCreator", fields: [createdById], references: [id], onDelete: SetNull)
   sales               Profile?              @relation("GuestbookSales", fields: [salesId], references: [id], onDelete: SetNull)
   venue               Venue?                @relation(fields: [venueId], references: [id], onDelete: SetNull)
@@ -3848,4 +4036,342 @@ model DailyReport {
   @@index([submittedById])
   @@index([reportDate])
   @@map("daily_reports")
+}
+
+// ─── KPI & Insentif Module ────────────────────────────────────────────────────
+//
+// Tiga entitas inti sesuai gambar (master_kpi / target_item / achievement) +
+// ekstensi teknis (assignment, commission policy, calculation result).
+//
+// KEPUTUSAN BISNIS BELUM FINAL — lihat catatan DRAFT di masing-masing model.
+// Aktifkan hanya setelah konfirmasi: arti achievement, periode Manager,
+// batas tier (inclusive/exclusive), sumber komisi dasar, dan definisi homebase.
+
+enum KpiTargetType {
+  qty   // count (dealing)
+  price // nominal Rupiah (omset)
+}
+
+enum KpiIndicatorType {
+  dealing   // Jumlah dealing
+  omset     // Jumlah omset
+  homebase  // Mandatory home base venue
+}
+
+enum KpiBusinessRole {
+  sales
+  manager
+}
+
+enum KpiTierAction {
+  bonus             // eligible bonus amount
+  deduction         // potongan komisi %
+  warning           // surat peringatan (flag only, no auto-send)
+  under_performance // status, bukan angka
+}
+
+// Status hasil kalkulasi — pisahkan simulasi dari produksi
+enum KpiResultStatus {
+  DRAFT             // belum lengkap / sedang diedit
+  SIMULATED         // preview dengan asumsi, belum bisa finalisasi
+  PENDING_REVIEW    // menunggu approval HR/manager
+  FINALIZED         // dikunci — tidak boleh dihitung ulang dengan data berbeda
+}
+
+// ── TargetItem — master ukuran KPI ──────────────────────────────────────────
+
+model KpiTargetItem {
+  id               String           @id @default(cuid())
+  name             String
+  indicatorType    KpiIndicatorType
+  type             KpiTargetType
+  // Total target — gunakan qty untuk dealing/homebase, price untuk omset
+  qty              Int?
+  price            Decimal?         @db.Decimal(15, 2)
+  // Rincian per kategori paket (opsional — Reguler & Hadjatan)
+  // KEPUTUSAN: mapping Reguler/Hadjatan ke EventCategory belum dikonfirmasi.
+  // Placeholder: null = belum dipetakan. Konfirmasi sebelum realisasi otomatis diaktifkan.
+  qtyReguler       Int?
+  qtyHadjatan      Int?
+  priceReguler     Decimal?         @db.Decimal(15, 2)
+  priceHadjatan    Decimal?         @db.Decimal(15, 2)
+  // EventCategory yang mewakili "Reguler" dan "Hadjatan" — diisi admin saat konfigurasi
+  regulerCategory  EventCategory?
+  hadjatanCategory EventCategory?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  kpiMasters KpiMaster[]
+
+  @@map("kpi_target_items")
+}
+
+// ── AchievementSchema — profil matriks bonus/potongan per role ───────────────
+
+model KpiAchievementSchema {
+  id           String          @id @default(cuid())
+  name         String
+  description  String?
+  businessRole KpiBusinessRole
+  // DRAFT: batas tier dan nilai bonus dari sumber MASIH ASUMSI.
+  // isDraft=true = belum aktif untuk kalkulasi produksi.
+  isDraft      Boolean         @default(true)
+  // Untuk Manager: minimal N indikator tercapai agar bonus unlock.
+  // KEPUTUSAN: definisi "tercapai" (≥100%? >100%? kombinasi mana?) belum dikonfirmasi.
+  gatingMinIndicators Int?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tiers      KpiAchievementTier[]
+  kpiMasters KpiMaster[]
+
+  @@map("kpi_achievement_schemas")
+}
+
+// ── AchievementTier — satu baris pada matriks bonus/potongan ─────────────────
+
+model KpiAchievementTier {
+  id                  String               @id @default(cuid())
+  achievementSchemaId String
+  sortOrder           Int                  @default(0)
+  label               String               // label tampilan, e.g. ">100%–105%"
+  // Batas persentase — stored 4 decimal places (e.g. 100.0000 = 100%)
+  // KEPUTUSAN: inclusive/exclusive per batas masih asumsi; gunakan isDraftBounds=true
+  lowerBound          Decimal              @db.Decimal(8, 4)
+  upperBound          Decimal?             @db.Decimal(8, 4) // null = tidak terbatas atas
+  lowerInclusive      Boolean              @default(false)   // false = > (exclusive)
+  upperInclusive      Boolean              @default(true)    // true = ≤ (inclusive)
+  isDraftBounds       Boolean              @default(true)    // true = normalisasi batas belum disahkan
+  actionType          KpiTierAction
+  // Bonus per indikator — null = tidak berlaku (tier Under Performance/Warning tidak ada bonus)
+  dealingBonus        Decimal?             @db.Decimal(15, 2)
+  omsetBonus          Decimal?             @db.Decimal(15, 2)
+  homebaseBonus       Decimal?             @db.Decimal(15, 2)
+  // Potongan persentase — berlaku untuk tier deduction (e.g. 50.00 = 50%)
+  deductionPct        Decimal?             @db.Decimal(5, 2)
+  // Warning flag — hanya Manager tier <70% (flag, tidak auto-publish)
+  isWarningFlag       Boolean              @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  achievementSchema KpiAchievementSchema @relation(fields: [achievementSchemaId], references: [id], onDelete: Restrict)
+
+  @@index([achievementSchemaId])
+  @@map("kpi_achievement_tiers")
+}
+
+// ── KpiMaster — definisi KPI per periode, role, dan indikator ─────────────────
+
+model KpiMaster {
+  id                  String               @id @default(cuid())
+  name                String
+  description         String?
+  // Disimpan sebagai tanggal pertama bulan (e.g. 2026-10-01 00:00:00 UTC)
+  month               DateTime             @db.Date
+  businessRole        KpiBusinessRole
+  isDraft             Boolean              @default(true)
+  targetItemId        String
+  achievementSchemaId String
+  createdById         String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  targetItem        KpiTargetItem        @relation(fields: [targetItemId], references: [id], onDelete: Restrict)
+  achievementSchema KpiAchievementSchema @relation(fields: [achievementSchemaId], references: [id], onDelete: Restrict)
+  createdBy         Profile?             @relation("KpiMasterCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  assignments       KpiAssignment[]
+
+  @@index([month])
+  @@index([businessRole])
+  @@index([targetItemId])
+  @@map("kpi_masters")
+}
+
+// ── KpiCommissionPolicy — kebijakan komisi dasar (belum ada formula dari sumber) ──
+
+model KpiCommissionPolicy {
+  id              String          @id @default(cuid())
+  name            String
+  description     String?
+  businessRole    KpiBusinessRole
+  // KEPUTUSAN: formula/tarif komisi dasar BELUM TERSEDIA dari sumber.
+  // isDraft=true = tidak bisa dipakai untuk kalkulasi final.
+  isDraft         Boolean         @default(true)
+  // Jika komisi per-deal: nominalPerDeal Decimal
+  nominalPerDeal  Decimal?        @db.Decimal(15, 2)
+  // Jika komisi % omset: pctOfRevenue Decimal
+  pctOfRevenue    Decimal?        @db.Decimal(5, 4) // e.g. 0.0089 = 0.89%
+  // Berlaku untuk kategori paket tertentu (null = semua)
+  packageCategory EventCategory?
+  effectiveFrom   DateTime?       @db.Date
+  effectiveTo     DateTime?       @db.Date
+  approvedById    String?
+  approvedAt      DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  approvedBy Profile? @relation("KpiCommissionPolicyApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+
+  @@index([businessRole])
+  @@map("kpi_commission_policies")
+}
+
+// ── KpiAssignment — penugasan KPI ke orang/tim/venue untuk suatu periode ─────
+
+model KpiAssignment {
+  id          String          @id @default(cuid())
+  kpiMasterId String
+  profileId   String
+  venueId     String?         // null = semua venue dalam cakupan profile
+  period      DateTime        @db.Date  // first of month
+  // Override target per orang (null = pakai dari KpiTargetItem master)
+  targetQty   Int?
+  targetPrice Decimal?        @db.Decimal(15, 2)
+  // KEPUTUSAN: periode Manager belum dikonfirmasi → isDraft=true untuk Manager assignments
+  isDraft     Boolean         @default(false)
+  notes       String?
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  createdById String?
+
+  kpiMaster KpiMaster @relation(fields: [kpiMasterId], references: [id], onDelete: Restrict)
+  profile   Profile   @relation("KpiAssignments", fields: [profileId], references: [id], onDelete: Restrict)
+  venue     Venue?    @relation("KpiAssignmentVenue", fields: [venueId], references: [id], onDelete: SetNull)
+  createdBy Profile?  @relation("KpiAssignmentCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@unique([kpiMasterId, profileId, period])
+  @@index([profileId])
+  @@index([period])
+  @@index([kpiMasterId])
+  @@map("kpi_assignments")
+}
+
+// ── KpiCalculationResult — hasil kalkulasi per orang per periode ──────────────
+//
+// Satu record = satu orang, satu periode, SEMUA indikator KPI-nya.
+// Simpan snapshot versi kebijakan agar hasil final tidak berubah jika master diubah.
+
+model KpiCalculationResult {
+  id                    String          @id @default(cuid())
+  profileId             String
+  venueId               String?
+  period                DateTime        @db.Date
+
+  // ── Realisasi (dihitung dari Booking atau input terotorisasi) ──────────────
+  realDealingTotal      Int?
+  realDealingReguler    Int?
+  realDealingHadjatan   Int?
+  realOmsetTotal        Decimal?        @db.Decimal(15, 2)
+  realOmsetReguler      Decimal?        @db.Decimal(15, 2)
+  realOmsetHadjatan     Decimal?        @db.Decimal(15, 2)
+  realHomebase          Int?
+
+  // ── Target (dari KpiAssignment / KpiTargetItem) ────────────────────────────
+  targetDealingTotal    Int?
+  targetOmsetTotal      Decimal?        @db.Decimal(15, 2)
+  targetHomebase        Int?
+
+  // ── Pencapaian % (presisi penuh, tampilan dibulatkan) ─────────────────────
+  dealingAchievementPct Decimal?        @db.Decimal(8, 4)
+  omsetAchievementPct   Decimal?        @db.Decimal(8, 4)
+  homebaseAchievementPct Decimal?       @db.Decimal(8, 4)
+
+  // ── Tier yang digunakan ────────────────────────────────────────────────────
+  dealingTierId         String?
+  omsetTierId           String?
+  homebaseTierId        String?
+
+  // ── Bonus per indikator (null = Under Performance / tidak eligible) ────────
+  dealingBonus          Decimal?        @db.Decimal(15, 2)
+  omsetBonus            Decimal?        @db.Decimal(15, 2)
+  homebaseBonus         Decimal?        @db.Decimal(15, 2)
+  totalBonus            Decimal?        @db.Decimal(15, 2)
+
+  // ── Komisi dasar (null = belum dikonfigurasi / missing) ───────────────────
+  baseCommissionReguler Decimal?        @db.Decimal(15, 2)
+  baseCommissionHadjatan Decimal?       @db.Decimal(15, 2)
+  baseCommissionTotal   Decimal?        @db.Decimal(15, 2)
+
+  // ── Potongan ───────────────────────────────────────────────────────────────
+  // KEPUTUSAN: basis dan pemicu potongan belum dikonfirmasi
+  deductionTriggerIndicator String?     // indicator yang memicu (dealing/omset/homebase)
+  deductionPct              Decimal?    @db.Decimal(5, 2)
+  deductionAmount           Decimal?    @db.Decimal(15, 2)
+
+  // ── Hasil ─────────────────────────────────────────────────────────────────
+  grossAmount               Decimal?    @db.Decimal(15, 2) // komisi + bonus sebelum potongan
+  netAmount                 Decimal?    @db.Decimal(15, 2) // gross - potongan
+
+  // ── Status & metadata ─────────────────────────────────────────────────────
+  status                    KpiResultStatus @default(DRAFT)
+  // Versi snapshot kebijakan yang dipakai (hash atau ID referensi)
+  policySnapshotId          String?
+  // Alasan tidak bisa difinalisasi (daftar kode/pesan)
+  missingDataReasons        String[]    @default([])
+  // Grade — BELUM DIKONFIGURASI: hanya ditampilkan jika ada mapping
+  grade                     String?
+  calculatedAt              DateTime?
+  finalizedAt               DateTime?
+  finalizedById             String?
+  notes                     String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  profile        Profile                       @relation("KpiResults", fields: [profileId], references: [id], onDelete: Restrict)
+  venue          Venue?                        @relation("KpiResultVenue", fields: [venueId], references: [id], onDelete: SetNull)
+  finalizedBy    Profile?                      @relation("KpiResultFinalizedBy", fields: [finalizedById], references: [id], onDelete: SetNull)
+  details        KpiCalculationDetail[]
+  policySnapshot KpiPolicySnapshot?            @relation(fields: [policySnapshotId], references: [id], onDelete: SetNull)
+
+  @@unique([profileId, period, venueId])
+  @@index([profileId])
+  @@index([period])
+  @@index([status])
+  @@map("kpi_calculation_results")
+}
+
+// ── KpiCalculationDetail — breakdown per baris KPI untuk transparansi ─────────
+
+model KpiCalculationDetail {
+  id             String           @id @default(cuid())
+  resultId       String
+  indicatorType  KpiIndicatorType
+  targetValue    Decimal?         @db.Decimal(15, 2)
+  realValue      Decimal?         @db.Decimal(15, 2)
+  achievementPct Decimal?         @db.Decimal(8, 4)
+  tierId         String?
+  tierLabel      String?
+  actionType     KpiTierAction?
+  bonusAmount    Decimal?         @db.Decimal(15, 2)
+  deductionPct   Decimal?         @db.Decimal(5, 2)
+  isGatingFailed Boolean          @default(false)
+  notes          String?
+
+  createdAt DateTime @default(now())
+
+  result KpiCalculationResult @relation(fields: [resultId], references: [id], onDelete: Cascade)
+
+  @@index([resultId])
+  @@map("kpi_calculation_details")
+}
+
+// ── KpiPolicySnapshot — snapshot versi aturan yang dipakai saat kalkulasi final ─
+
+model KpiPolicySnapshot {
+  id         String   @id @default(cuid())
+  snapshotData Json   // full copy of achievement schema + tiers + commission policy at finalization time
+  createdAt  DateTime @default(now())
+  createdById String?
+
+  createdBy Profile? @relation("KpiPolicySnapshotCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  results   KpiCalculationResult[]
+
+  @@map("kpi_policy_snapshots")
 }

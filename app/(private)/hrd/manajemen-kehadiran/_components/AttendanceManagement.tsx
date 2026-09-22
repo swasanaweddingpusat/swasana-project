@@ -1,13 +1,12 @@
 "use client";
 
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { CalendarDate, MapPoint, ClockCircle, UsersGroupRounded, Pen, Settings } from "@solar-icons/react";
+import { CalendarDate, MapPoint, ClockCircle, UsersGroupRounded, Settings } from "@solar-icons/react";
 import { AttendanceFilter } from "./AttendanceFilter";
 import { AttendanceTable } from "./AttendanceTable";
 import { WorkLocationManager } from "./WorkLocationManager";
 import { WorkShiftManager } from "./WorkShiftManager";
 import { WorkAssignmentManager } from "./WorkAssignmentManager";
-import { ShiftOverrideManager } from "./ShiftOverrideManager";
 import { AttendanceSettingsPanel } from "./AttendanceSettingsPanel";
 import { GlobalSettingsPanel } from "./GlobalSettingsPanel";
 
@@ -31,10 +30,6 @@ export function AttendanceManagement() {
           <UsersGroupRounded weight="BoldDuotone" className="h-4 w-4" />
           Assignment
         </TabsTrigger>
-        <TabsTrigger value="override" className="rounded-xl gap-2">
-          <Pen weight="BoldDuotone" className="h-4 w-4" />
-          Override Shift
-        </TabsTrigger>
         <TabsTrigger value="settings" className="rounded-xl gap-2">
           <Settings weight="BoldDuotone" className="h-4 w-4" />
           Pengaturan
@@ -52,9 +47,6 @@ export function AttendanceManagement() {
       </TabsContent>
       <TabsContent value="assignment">
         <WorkAssignmentManager />
-      </TabsContent>
-      <TabsContent value="override">
-        <ShiftOverrideManager />
       </TabsContent>
       <TabsContent value="settings" className="space-y-4">
         <AttendanceSettingsPanel />

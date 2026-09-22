@@ -1,0 +1,29 @@
+name: Auto Merge
+
+# Enables GitHub's native auto-merge only for PRs explicitly labeled `automerge`.
+# The PR still waits for required CI checks and branch-protection approvals.
+
+on:
+  pull_request_target:
+    types: [labeled, synchronize, reopened]
+    branches:
+      - main
+      - production
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  enable:
+    name: Enable auto-merge
+    if: >-
+      contains(github.event.pull_request.labels.*.name, 'automerge') &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - name: Enable squash auto-merge
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+        run: gh pr merge "$PR_URL" --auto --squash --delete-branch

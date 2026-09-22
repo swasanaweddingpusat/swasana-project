@@ -35,6 +35,8 @@ export const moduleActions: Record<string, string[]> = {
   "settings-users": ["view", "create", "edit", "delete"],
   "settings-education-level": ["view", "create", "edit", "delete"],
   "settings-event-types": ["view", "create", "edit", "delete"],
+  "settings-package-category": ["view", "create", "edit", "delete"],
+  "settings-public-holiday": ["view", "create", "edit", "delete"],
   "settings-order-status": ["view", "create", "edit", "delete"],
   "settings-payment-methods": ["view", "create", "edit", "delete"],
   "settings-quotation-templates": ["view", "create", "edit", "delete"],
@@ -46,6 +48,7 @@ export const moduleActions: Record<string, string[]> = {
   // booking Wedding + MICE. View-only: tidak ada mutasi dari halaman ini.
   "settings-booking-log": ["view"],
   complimentary: ["view", "create", "edit", "delete"],
+  bonus: ["view", "create", "edit", "delete"],
   // CRM modules
   "daily-activity": ["view", "create", "edit", "delete"],
   quotations: ["view", "create", "edit", "delete"],
@@ -94,6 +97,15 @@ export const moduleActions: Record<string, string[]> = {
   // Performance Sales — read-only monitoring hub for the STAKEHOLDER world.
   // View-only: no mutation surface (dashboard reads getGroupsWithPerformance).
   "performance-sales": ["view"],
+  // KPI & Insentif — modul Sales/Manager KPI + komisi + bonus.
+  // Terbagi per aksi: kpi-insentif = main view; kpi-master = CRUD master data;
+  // kpi-assignment = penugasan target per orang; kpi-simulation = jalankan kalkulasi;
+  // kpi-report = laporan final (FINALIZED only).
+  "kpi-insentif": ["view", "create", "edit", "delete", "finalize"],
+  "kpi-master": ["view", "create", "edit", "delete"],
+  "kpi-assignment": ["view", "create", "edit", "delete"],
+  "kpi-simulation": ["view", "run"],
+  "kpi-report": ["view"],
 };
 
 // Modules removed (not used in code):
@@ -123,6 +135,7 @@ export const rolePermissionMap: Record<string, Record<string, string[]>> = {
     quotations: ["view", "create", "edit", "delete"],
     "settings-quotation-templates": ["view", "create", "edit", "delete"],
     complimentary: ["view", "create", "edit", "delete"],
+    bonus: ["view", "create", "edit", "delete"],
     guestbook: ["view", "create", "edit", "delete"],
     promo: ["view"],
     bitrix: ["view"],
@@ -130,6 +143,12 @@ export const rolePermissionMap: Record<string, Record<string, string[]>> = {
     "internal-faq": ["view"],
     announcement: ["view"],
     "settings-booking-log": ["view"],
+    // KPI & Insentif — direktur-sales bisa lihat simulasi + laporan semua Sales
+    "kpi-insentif": ["view"],
+    "kpi-master": ["view"],
+    "kpi-assignment": ["view"],
+    "kpi-simulation": ["view", "run"],
+    "kpi-report": ["view"],
   },
   // Manager: CRUD only on dashboard, calendar-event, groups, booking-weddings,
   // package, complimentary, vendors, and customers.
@@ -141,8 +160,10 @@ export const rolePermissionMap: Record<string, Record<string, string[]>> = {
     groups: ["view", "create", "edit", "delete"],
     // daily-activity sengaja DICABUT — cuma manager-mice yang butuh.
     package: ["view", "create", "edit", "delete", "set-harga", "term-&-condition", "set-status"],
+    "settings-package-category": ["view", "create", "edit", "delete"],
     vendor: ["view", "create", "edit", "delete"],
     complimentary: ["view", "create", "edit", "delete"],
+    bonus: ["view", "create", "edit", "delete"],
     guestbook: ["view", "create", "edit", "delete"],
     promo: ["view"],
     procurement: ["view", "create", "edit", "delete", "approve"],
@@ -155,6 +176,11 @@ export const rolePermissionMap: Record<string, Record<string, string[]>> = {
     "internal-faq": ["view", "create", "edit", "delete"],
     announcement: ["view", "create", "edit", "delete"],
     "settings-booking-log": ["view"],
+    // KPI & Insentif — manager bisa lihat/run simulasi timnya sendiri
+    "kpi-insentif": ["view"],
+    "kpi-assignment": ["view", "create", "edit"],
+    "kpi-simulation": ["view", "run"],
+    "kpi-report": ["view"],
   },
   "direktur-operational": {
     booking: ["view", "create", "edit", "approve", "comment", "print"],
@@ -211,6 +237,7 @@ export const rolePermissionMap: Record<string, Record<string, string[]>> = {
     booking: ["view", "create", "edit", "print", "approve", "cancel", "transfer", "transfer-manager", "comment", "client-agreement", "edit-set-harga"],
     "booking-mice": ["view"],
     complimentary: ["view", "create"],
+    bonus: ["view", "create"],
     bitrix: ["view"],
   },
   // Finance AR only — Accounts Receivable + Cashflow (+ Overview). Can record/ack
@@ -247,12 +274,15 @@ export const rolePermissionMap: Record<string, Record<string, string[]>> = {
     guestbook: ["view", "create", "edit", "delete"],
     // Full CRUD — sales kelola master complimentary sendiri.
     complimentary: ["view", "create", "edit", "delete"],
+    bonus: ["view", "create", "edit", "delete"],
     promo: ["view", "create", "edit", "delete"],
     // Only tab Pengadaan — Ringkasan/Pengumuman/Anggaran Venue reserved for management roles.
     procurement: ["view"],
     bitrix: ["view"],
     // Full CRUD — sales kelola customer sendiri.
     customers: ["view", "create", "edit", "delete"],
+    // KPI Saya — sales bisa lihat target & pencapaian KPI sendiri.
+    "kpi-insentif": ["view"],
   },
   "vendor-specialist": {
     "vendor-specialist": ["view", "create", "edit", "delete"],
@@ -275,6 +305,13 @@ export const rolePermissionMap: Record<string, Record<string, string[]>> = {
     "hr-attendance": ["view", "create", "edit", "delete"],
     "hr-recruitment": ["view", "create", "edit", "delete", "hire", "approve"],
     procurement: ["view"],
+    "settings-public-holiday": ["view", "create", "edit", "delete"],
+    // KPI & Insentif — HR mengelola master data + assignment + finalisasi
+    "kpi-insentif": ["view", "create", "edit", "delete", "finalize"],
+    "kpi-master": ["view", "create", "edit", "delete"],
+    "kpi-assignment": ["view", "create", "edit", "delete"],
+    "kpi-simulation": ["view", "run"],
+    "kpi-report": ["view"],
   },
   // Sales MICE — persis daftar menu yang disepakati (11 item):
   //   Groups · Daily Activity · Bookings MICE · Quotations · Mice Package ·
@@ -291,6 +328,7 @@ export const rolePermissionMap: Record<string, Record<string, string[]>> = {
     "daily-activity": ["view", "create", "edit", "delete"],
     // Full CRUD — sales-mice kelola master complimentary sendiri.
     complimentary: ["view", "create", "edit", "delete"],
+    bonus: ["view", "create", "edit", "delete"],
     guestbook: ["view", "create", "edit", "delete"],
     // sales-mice can view/create/edit packages but NOT set-harga and NOT delete
     "package-mice": ["view", "create", "edit", "term-&-condition"],
@@ -299,6 +337,8 @@ export const rolePermissionMap: Record<string, Record<string, string[]>> = {
     bitrix: ["view"],
     // sales-mice bisa nambah customer baru.
     customers: ["view", "create"],
+    // KPI Saya — sales-mice bisa lihat target & pencapaian KPI sendiri.
+    "kpi-insentif": ["view"],
   },
   "manager-mice": {
     "booking-mice": ["view", "create", "edit", "delete", "print", "approve", "mark-lost", "restore", "transfer", "reject", "comment", "client-agreement"],
@@ -308,8 +348,10 @@ export const rolePermissionMap: Record<string, Record<string, string[]>> = {
     customers: ["view", "create", "edit", "delete"],
     "settings-event-types": ["view", "create", "edit", "delete"],
     "settings-quotation-templates": ["view", "create", "edit", "delete"],
+    "settings-package-category": ["view", "create", "edit", "delete"],
     "package-mice": ["view", "create", "edit", "delete", "set-harga", "set-status", "term-&-condition"],
     complimentary: ["view", "create", "edit", "delete"],
+    bonus: ["view", "create", "edit", "delete"],
     bitrix: ["view"],
     "daily-report-manager": ["view", "create", "edit", "delete"],
     "internal-faq": ["view"],
