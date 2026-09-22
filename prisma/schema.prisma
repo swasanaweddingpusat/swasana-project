@@ -227,6 +227,7 @@ model Profile {
   guestbookHosted              GuestbookEntry[]           @relation("GuestbookHost")
   guestbookCreated             GuestbookEntry[]           @relation("GuestbookCreator")
   guestbookSales               GuestbookEntry[]           @relation("GuestbookSales")
+  guestbookAttendanceConfirmed GuestbookEntry[]           @relation("GuestbookAttendanceConfirmer")
   blacklistCreated             BlacklistEntry[]           @relation("BlacklistCreator")
   memosCreated                 Memo[]                     @relation("MemoCreator")
   memoComments                 MemoComment[]              @relation("MemoCommentAuthor")
@@ -3799,10 +3800,13 @@ model GuestbookEntry {
   sourceOfInformationId String?
   packageId             String?
   segmentId             String?
+  attendanceConfirmedAt DateTime?
+  attendanceConfirmedById String?
   createdAt             DateTime              @default(now())
   updatedAt             DateTime              @updatedAt
 
   host                Profile?              @relation("GuestbookHost", fields: [hostId], references: [id], onDelete: SetNull)
+  attendanceConfirmedBy Profile?             @relation("GuestbookAttendanceConfirmer", fields: [attendanceConfirmedById], references: [id], onDelete: SetNull)
   createdBy           Profile?              @relation("GuestbookCreator", fields: [createdById], references: [id], onDelete: SetNull)
   sales               Profile?              @relation("GuestbookSales", fields: [salesId], references: [id], onDelete: SetNull)
   venue               Venue?                @relation(fields: [venueId], references: [id], onDelete: SetNull)

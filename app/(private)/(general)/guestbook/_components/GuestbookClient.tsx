@@ -2,6 +2,7 @@
 
 import { Suspense, useEffect, useRef, useState } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { format } from "date-fns";
 import type { DateRange } from "react-day-picker";
@@ -35,6 +36,7 @@ import {
   Eye,
   Filter,
   Pen,
+  QrCode,
   Refresh,
   TrashBinTrash,
   UserCircle,
@@ -508,6 +510,17 @@ function GuestbookClientInner() {
               >
                 <Refresh weight="BoldDuotone" className="h-3.5 w-3.5" />
                 Refresh
+              </Button>
+
+              <Button
+                variant="outline"
+                size="sm"
+                nativeButton={false}
+                className="rounded-full text-xs h-8 gap-1.5"
+                render={<Link href="/guestbook/scan" />}
+              >
+                <QrCode weight="BoldDuotone" className="h-3.5 w-3.5" />
+                Scan Kehadiran
               </Button>
 
               <Button

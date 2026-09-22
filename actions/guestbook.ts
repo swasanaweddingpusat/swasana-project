@@ -8,7 +8,7 @@ import { requirePermission } from "@/lib/permissions";
 import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
 import { logAudit } from "@/lib/audit";
 import { canAccessGuestbookEntry } from "@/lib/access-control";
-import { createGuestbookEntrySchema, updateGuestbookEntrySchema } from "@/lib/validations/guestbook";
+import { createGuestbookEntrySchema, updateGuestbookEntrySchema, isBitrixSourceName } from "@/lib/validations/guestbook";
 import { normalizePhoneId } from "@/lib/phone";
 
 function parseLocalDateTime(value: string | null | undefined): Date | undefined {
@@ -49,6 +49,16 @@ export async function createGuestbookEntry(data: unknown): Promise<{ success: bo
 
   const parsed = createGuestbookEntrySchema.safeParse(data);
   if (!parsed.success) return { success: false, error: parsed.error.issues[0].message };
+
+  if (parsed.data.sourceOfInformationId) {
+    const source = await db.sourceOfInformation.findUnique({
+      where: { id: parsed.data.sourceOfInformationId },
+      select: { name: true },
+    });
+    if (isBitrixSourceName(source?.name) && !parsed.data.bitrixContactId?.trim()) {
+      return { success: false, error: "Bitrix ID wajib diisi untuk sumber Bitrix." };
+    }
+  }
 
   const { checkInAt, scheduledAt, commitVisitDate, commitPayDate, proofFiles, ...rest } = parsed.data;
   const salesId = rest.hostId ?? session!.user.profileId;
@@ -149,6 +159,72 @@ export async function checkOutGuestbookEntry(id: string): Promise<{ success: boo
   }
 }
 
+export interface ConfirmAttendanceResult {
+  success: boolean;
+  error?: string;
+  visitorName?: string;
+  companyName?: string | null;
+  alreadyConfirmed?: boolean;
+  confirmedAt?: string;
+}
+
+export async function confirmGuestbookAttendance(guestCode: string): Promise<ConfirmAttendanceResult> {
+  const { session, error } = await requirePermission({ module: "guestbook", action: "edit" });
+  if (error) return { success: false, error };
+  if (!mutationLimiter.check(`guestbook-confirm-attendance:${session!.user.id}`)) {
+    return { success: false, ...rateLimitError() };
+  }
+
+  const code = guestCode.trim();
+  if (!code) return { success: false, error: "Kode tidak valid." };
+
+  try {
+    const existing = await db.guestbookEntry.findUnique({
+      where: { guestCode: code },
+      select: { id: true, visitorName: true, companyName: true, attendanceConfirmedAt: true },
+    });
+    if (!existing) return { success: false, error: "Kode tidak ditemukan." };
+
+    if (existing.attendanceConfirmedAt) {
+      return {
+        success: true,
+        alreadyConfirmed: true,
+        visitorName: existing.visitorName,
+        companyName: existing.companyName,
+        confirmedAt: existing.attendanceConfirmedAt.toISOString(),
+      };
+    }
+
+    const now = new Date();
+    await db.$transaction([
+      db.guestbookEntry.update({
+        where: { id: existing.id },
+        data: { attendanceConfirmedAt: now, attendanceConfirmedById: session!.user.profileId },
+      }),
+    ]);
+
+    await logAudit({
+      userId: session!.user.profileId,
+      action: "guestbook_entry.confirm_attendance",
+      entityType: "GuestbookEntry",
+      entityId: existing.id,
+      description: `Confirmed expo attendance for "${existing.visitorName}"`,
+    });
+
+    revalidateTag("guestbook-entries", "max");
+    return {
+      success: true,
+      alreadyConfirmed: false,
+      visitorName: existing.visitorName,
+      companyName: existing.companyName,
+      confirmedAt: now.toISOString(),
+    };
+  } catch (e) {
+    console.error("[confirmGuestbookAttendance]", e);
+    return { success: false, error: "Terjadi kesalahan." };
+  }
+}
+
 export async function updateGuestbookEntry(
   id: string,
   data: unknown
@@ -169,9 +245,24 @@ export async function updateGuestbookEntry(
   try {
     const existing = await db.guestbookEntry.findUnique({
       where: { id },
-      select: { id: true, visitorName: true },
+      select: { id: true, visitorName: true, sourceOfInformationId: true, bitrixContactId: true },
     });
     if (!existing) return { success: false, error: "Data tidak ditemukan." };
+
+    const effectiveSourceId =
+      parsed.data.sourceOfInformationId !== undefined ? parsed.data.sourceOfInformationId : existing.sourceOfInformationId;
+    const effectiveBitrixContactId =
+      parsed.data.bitrixContactId !== undefined ? parsed.data.bitrixContactId : existing.bitrixContactId;
+
+    if (effectiveSourceId) {
+      const source = await db.sourceOfInformation.findUnique({
+        where: { id: effectiveSourceId },
+        select: { name: true },
+      });
+      if (isBitrixSourceName(source?.name) && !effectiveBitrixContactId?.trim()) {
+        return { success: false, error: "Bitrix ID wajib diisi untuk sumber Bitrix." };
+      }
+    }
 
     const { checkInAt, checkOutAt, scheduledAt, commitVisitDate, commitPayDate, phoneNumber, proofFiles, ...rest } = parsed.data;
     // Recompute the normalized index whenever phoneNumber is part of the payload —

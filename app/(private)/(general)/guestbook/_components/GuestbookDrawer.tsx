@@ -61,7 +61,7 @@ import { useCurrentUser } from "@/hooks/use-current-user";
 import { createSourceOfInformation } from "@/actions/source-of-information";
 import { createDailyActivitySegment } from "@/actions/daily-activity-segment";
 import type { GuestbookEntryItem } from "@/lib/queries/guestbookEntries";
-import type { FileDescriptor, ProofFiles } from "@/lib/validations/guestbook";
+import { isBitrixSourceName, type FileDescriptor, type ProofFiles } from "@/lib/validations/guestbook";
 import { resolveGuestbookPhotoUrl } from "./photo-url";
 
 function formatDateForInput(value: string | Date | null | undefined): string {
@@ -562,8 +562,9 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
     staleTime: 5 * 60_000,
   });
 
-  const isBitrixSource =
-    sourceOptions.find((o) => o.id === form.sourceOfInformationId)?.name.toLowerCase().includes("bitrix") ?? false;
+  const isBitrixSource = isBitrixSourceName(
+    sourceOptions.find((o) => o.id === form.sourceOfInformationId)?.name
+  );
 
   useEffect(() => {
     if (!isEditMode || !isOpen) return;

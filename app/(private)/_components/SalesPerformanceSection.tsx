@@ -406,6 +406,16 @@ export function SalesPerformanceSection({
                   <p className="text-xs text-muted-foreground">{item.groupName}</p>
                 )}
                 <p className="text-xs text-muted-foreground">{item.bookingCount} booking</p>
+                {item.bookingCount > 0 && (
+                  <div className="mt-1 flex flex-wrap items-center gap-1">
+                    <Badge variant="outline" className="text-[10px]">
+                      Reguler {item.packageTypeBreakdown.reguler.pct}%
+                    </Badge>
+                    <Badge variant="outline" className="text-[10px]">
+                      Hadjatan {item.packageTypeBreakdown.hadjatan.pct}%
+                    </Badge>
+                  </div>
+                )}
               </div>
               <p className="shrink-0 text-sm font-semibold text-foreground tabular-nums">
                 {formatCurrency(item.revenue)}
