@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useMemo, useRef } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { toast } from "sonner";
 import { useSession } from "next-auth/react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -20,8 +20,6 @@ import { useLeaveBalances } from "@/hooks/use-leave-balances";
 import { useSubmitLeaveRequest } from "@/hooks/use-leave-requests";
 import { useHolidayTokens } from "@/hooks/use-holiday-tokens";
 import { countWeekdays, getAvailableBalance } from "@/lib/leave-helpers";
-import { uploadFileDirect } from "@/lib/upload-client";
-import { MAX_UPLOAD_SIZE_BYTES } from "@/lib/validations/upload";
 import { DocumentText } from "@solar-icons/react";
 
 interface FormState {
@@ -61,9 +59,6 @@ export function LeaveRequestForm({ inDialog = false, onSubmitted }: LeaveRequest
   );
 
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [isUploading, setIsUploading] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const selectedType = useMemo(
     () => leaveTypes?.find((t) => t.id === form.leaveTypeId),
@@ -140,26 +135,12 @@ export function LeaveRequestForm({ inDialog = false, onSubmitted }: LeaveRequest
       return;
     }
 
-    let documentKey: string | undefined;
-    if (selectedFile) {
-      setIsUploading(true);
-      try {
-        const upload = await uploadFileDirect(selectedFile, "leave-documents");
-        documentKey = upload.key;
-      } catch (error) {
-        setIsUploading(false);
-        toast.error(error instanceof Error ? error.message : "Gagal mengunggah surat cuti");
-        return;
-      }
-    }
-
     submitMutation.mutate(
       {
         leaveTypeId: form.leaveTypeId,
         startDate: form.startDate,
         endDate: isHolidayToken ? form.startDate : form.endDate,
         reason: form.reason || undefined,
-        documentKey,
         photoBase64: form.photoBase64,
         publicHolidayId: isHolidayToken ? form.publicHolidayId : undefined,
       },
@@ -168,22 +149,17 @@ export function LeaveRequestForm({ inDialog = false, onSubmitted }: LeaveRequest
           if (result.success) {
             toast.success("Pengajuan cuti berhasil dikirim");
             setForm(EMPTY_FORM);
-            setSelectedFile(null);
-            setIsUploading(false);
-            if (fileInputRef.current) fileInputRef.current.value = "";
             onSubmitted?.();
           } else {
-            setIsUploading(false);
             toast.error(result.error ?? "Gagal mengajukan cuti");
           }
         },
         onError: () => {
-          setIsUploading(false);
           toast.error("Terjadi kesalahan");
         },
       }
     );
-  }, [form, isHolidayToken, calculatedDays, onSubmitted, selectedFile, submitMutation]);
+  }, [form, isHolidayToken, calculatedDays, onSubmitted, submitMutation]);
 
   return (
     <Card className={inDialog ? "border-0 shadow-none" : "rounded-2xl shadow-sm"}>
@@ -302,30 +278,6 @@ export function LeaveRequestForm({ inDialog = false, onSubmitted }: LeaveRequest
             </>
           )}
 
-          <div className="grid gap-2 sm:col-span-2">
-            <Label htmlFor="leave-document">Surat Cuti (opsional)</Label>
-            <Input
-              ref={fileInputRef}
-              id="leave-document"
-              type="file"
-              accept=".pdf,.doc,.docx,image/*"
-              className="h-auto rounded-xl py-2.5"
-              onChange={(event) => {
-                const file = event.target.files?.[0] ?? null;
-                if (file && file.size > MAX_UPLOAD_SIZE_BYTES) {
-                  toast.error("Ukuran surat cuti maksimal 10MB");
-                  event.target.value = "";
-                  setSelectedFile(null);
-                  return;
-                }
-                setSelectedFile(file);
-              }}
-            />
-            <p className="text-xs text-muted-foreground">
-              PDF, Word, atau gambar. Maksimal 10MB.
-            </p>
-          </div>
-
           {calculatedDays > 0 && (
             <div className="sm:col-span-2 flex flex-wrap items-center gap-x-6 gap-y-2 rounded-xl border bg-muted/40 px-4 py-3">
               <p className="text-sm font-medium text-foreground">
@@ -384,7 +336,6 @@ export function LeaveRequestForm({ inDialog = false, onSubmitted }: LeaveRequest
               onClick={handleSubmit}
               disabled={
                 submitMutation.isPending ||
-                isUploading ||
                 !form.leaveTypeId ||
                 !form.startDate ||
                 !form.photoBase64 ||
@@ -392,7 +343,7 @@ export function LeaveRequestForm({ inDialog = false, onSubmitted }: LeaveRequest
                 isInsufficientBalance
               }
             >
-              {isUploading ? "Mengunggah..." : submitMutation.isPending ? "Mengirim..." : "Ajukan Cuti"}
+              {submitMutation.isPending ? "Mengirim..." : "Ajukan Cuti"}
             </Button>
           </div>
         </div>

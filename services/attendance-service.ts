@@ -5,6 +5,7 @@ import type {
   MyAttendanceHistoryResult,
   AttendanceExportItem,
   EmployeeAttendanceOverview,
+  PendingWorkTypeApprovalItem,
 } from "@/lib/queries/attendance";
 import type { AttendanceListQuery, AttendanceOverviewQuery, ClockInInput, ClockOutInput, AttendanceSettingsInput } from "@/lib/validations/attendance";
 
@@ -89,6 +90,12 @@ export async function fetchAttendanceExport(params: {
   const res = await fetch(`/api/hr/attendance/export?${sp.toString()}`);
   if (!res.ok) throw new Error("Gagal mengambil data export");
   return res.json() as Promise<AttendanceExportItem[]>;
+}
+
+export async function fetchWorkTypeApprovals(): Promise<PendingWorkTypeApprovalItem[]> {
+  const res = await fetch("/api/hr/attendance/work-type-approvals");
+  if (!res.ok) throw new Error("Gagal memuat data persetujuan WFH/WFA");
+  return res.json();
 }
 
 export async function fetchEmployeeAttendanceOverview(params: AttendanceOverviewQuery): Promise<EmployeeAttendanceOverview> {

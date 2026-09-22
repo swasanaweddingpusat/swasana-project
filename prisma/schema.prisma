@@ -196,6 +196,9 @@ model Profile {
   leaveManagerApprovals        LeaveRequest[]             @relation("LeaveManagerApprover")
   leaveHrApprovals             LeaveRequest[]             @relation("LeaveHrApprover")
   leaveRejections              LeaveRequest[]             @relation("LeaveRejector")
+  attendanceCorrections         AttendanceCorrection[]
+  attendanceCorrectionsReviewed AttendanceCorrection[] @relation("AttendanceCorrectionReviewer")
+  attendanceWorkTypeApprovals   Attendance[]           @relation("AttendanceWorkTypeApprover")
   holidayTokenGrants           HolidayTokenGrant[]
   holidayTokenGrantsIssued     HolidayTokenGrant[]        @relation("HolidayTokenGranter")
   employeeSalaries             EmployeeSalary[]
@@ -828,6 +831,25 @@ enum WorkType {
   WFO
   WFH
   WFA
+}
+
+enum WorkTypeApprovalStatus {
+  pending
+  approved
+  rejected
+}
+
+enum AttendanceCorrectionType {
+  CLOCK_IN
+  CLOCK_OUT
+  BOTH
+}
+
+enum AttendanceCorrectionStatus {
+  pending
+  approved
+  rejected
+  cancelled
 }
 
 enum LeaveRequestStatus {
@@ -2460,13 +2482,21 @@ model Attendance {
   publicHolidayId   String?
   publicHolidayName String?
 
+  // WFH/WFA butuh approval HR (WFO & Day Off tidak relevan, field ini null).
+  workTypeReason         String?
+  workTypeApprovalStatus WorkTypeApprovalStatus?
+  workTypeApprovedBy     String?
+  workTypeApprovedAt     DateTime?
+  workTypeReviewNote     String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  profile       Profile        @relation(fields: [profileId], references: [id], onDelete: Cascade)
-  workLocation  WorkLocation?  @relation(fields: [workLocationId], references: [id], onDelete: SetNull)
-  workShift     WorkShift?     @relation(fields: [workShiftId], references: [id], onDelete: SetNull)
-  publicHoliday PublicHoliday? @relation(fields: [publicHolidayId], references: [id], onDelete: SetNull)
+  profile          Profile        @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  workLocation     WorkLocation?  @relation(fields: [workLocationId], references: [id], onDelete: SetNull)
+  workShift        WorkShift?     @relation(fields: [workShiftId], references: [id], onDelete: SetNull)
+  publicHoliday    PublicHoliday? @relation(fields: [publicHolidayId], references: [id], onDelete: SetNull)
+  workTypeApprover Profile?       @relation("AttendanceWorkTypeApprover", fields: [workTypeApprovedBy], references: [id], onDelete: SetNull)
 
   @@unique([profileId, date])
   @@index([profileId])
@@ -2474,6 +2504,7 @@ model Attendance {
   @@index([workLocationId])
   @@index([workShiftId])
   @@index([publicHolidayId])
+  @@index([workTypeApprovalStatus])
   @@map("attendances")
 }
 
@@ -2528,6 +2559,7 @@ model WorkLocation {
   assignments EmployeeWorkAssignment[]
   overrides   ShiftOverride[]
   attendances Attendance[]
+  attendanceCorrections AttendanceCorrection[]
 
   clockInAssignments  EmployeeWorkAssignment[] @relation("ClockInLocation")
   clockOutAssignments EmployeeWorkAssignment[] @relation("ClockOutLocation")
@@ -2551,6 +2583,7 @@ model WorkShift {
   assignments EmployeeWorkAssignment[]
   overrides   ShiftOverride[]
   attendances Attendance[]
+  attendanceCorrections AttendanceCorrection[]
 
   @@map("work_shifts")
 }
@@ -2786,6 +2819,43 @@ model LeaveRequest {
   @@index([endDate])
   @@index([publicHolidayId])
   @@map("leave_requests")
+}
+
+model AttendanceCorrection {
+  id        String   @id @default(uuid())
+  profileId String
+  date      DateTime
+
+  type                AttendanceCorrectionType
+  requestedClockInAt  DateTime?
+  requestedClockOutAt DateTime?
+
+  workShiftId    String?
+  workLocationId String?
+  workType       WorkType?
+
+  reason   String
+  evidence Json?
+
+  status     AttendanceCorrectionStatus @default(pending)
+  reviewedBy String?
+  reviewedAt DateTime?
+  reviewNote String?
+
+  cancelledAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  profile      Profile       @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  workShift    WorkShift?    @relation(fields: [workShiftId], references: [id], onDelete: SetNull)
+  workLocation WorkLocation? @relation(fields: [workLocationId], references: [id], onDelete: SetNull)
+  reviewer     Profile?      @relation("AttendanceCorrectionReviewer", fields: [reviewedBy], references: [id], onDelete: SetNull)
+
+  @@index([profileId])
+  @@index([date])
+  @@index([status])
+  @@map("attendance_corrections")
 }
 
 model HolidayTokenGrant {

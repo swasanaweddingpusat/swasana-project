@@ -9,6 +9,7 @@ import { CameraModal } from "./CameraModal";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import { ClockCircle, Login3, Logout3, MapPoint } from "@solar-icons/react";
@@ -35,6 +36,11 @@ const WORK_TYPE_LABEL: Record<string, string> = {
   WFO: "WFO",
   WFH: "WFH",
   WFA: "WFA",
+};
+
+const WORK_TYPE_APPROVAL_BADGE: Record<string, { label: string; variant: "secondary" | "destructive" } | undefined> = {
+  pending: { label: "Menunggu Persetujuan", variant: "secondary" },
+  rejected: { label: "Ditolak", variant: "destructive" },
 };
 
 function formatTime(date: Date): string {
@@ -64,6 +70,7 @@ export function AttendanceClock() {
   const [selectedShiftId, setSelectedShiftId] = useState<string>("");
   const [selectedWorkType, setSelectedWorkType] = useState<string>("");
   const [selectedLocationId, setSelectedLocationId] = useState<string>("");
+  const [workTypeReason, setWorkTypeReason] = useState<string>("");
 
   const { data: todayData, isLoading: todayLoading } = useAttendanceToday();
   const { data: workShifts } = useWorkShifts();
@@ -104,6 +111,7 @@ export function AttendanceClock() {
       setSelectedShiftId("");
       setSelectedWorkType("");
       setSelectedLocationId("");
+      setWorkTypeReason("");
     }
   }, []);
 
@@ -229,10 +237,15 @@ export function AttendanceClock() {
           workShiftId: selectedShiftId,
           workType: selectedWorkType as "WFO" | "WFH" | "WFA",
           workLocationId: selectedWorkType === "WFO" ? selectedLocationId : undefined,
+          workTypeReason: selectedWorkType !== "WFO" ? workTypeReason || undefined : undefined,
         },
         {
           onSuccess: () => {
-            toast.success("Clock in berhasil!");
+            if (selectedWorkType === "WFO") {
+              toast.success("Clock in berhasil!");
+            } else {
+              toast.success("Clock in berhasil! Menunggu persetujuan HR untuk tipe kerja WFH/WFA.");
+            }
             setPendingAction(null);
             setGpsCoords(null);
           },
@@ -262,7 +275,7 @@ export function AttendanceClock() {
         },
       },
     );
-  }, [gpsCoords, pendingAction, isWorkday, selectedDayOffType, selectedPublicHolidayId, clockInMutation, clockOutMutation, selectedShiftId, selectedWorkType, selectedLocationId]);
+  }, [gpsCoords, pendingAction, isWorkday, selectedDayOffType, selectedPublicHolidayId, clockInMutation, clockOutMutation, selectedShiftId, selectedWorkType, selectedLocationId, workTypeReason]);
 
   const handleCameraClose = useCallback(() => {
     setCameraOpen(false);
@@ -466,6 +479,22 @@ export function AttendanceClock() {
                     </Select>
                   </div>
                 )}
+
+                {isWorkday && (selectedWorkType === "WFH" || selectedWorkType === "WFA") && (
+                  <div className="space-y-1.5 sm:col-span-2">
+                    <label className="text-xs font-medium text-muted-foreground">Alasan WFH/WFA (opsional)</label>
+                    <Textarea
+                      value={workTypeReason}
+                      onChange={(e) => setWorkTypeReason(e.target.value)}
+                      placeholder="Tulis alasan kerja dari luar kantor..."
+                      className="rounded-xl"
+                      rows={2}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Tipe kerja ini butuh persetujuan HR sebelum tercatat final.
+                    </p>
+                  </div>
+                )}
               </div>
 
               {isDayOff && context?.isPublicHoliday && (
@@ -501,6 +530,13 @@ export function AttendanceClock() {
                 {attendance.workType && (
                   <Badge variant="outline">{WORK_TYPE_LABEL[attendance.workType] ?? attendance.workType}</Badge>
                 )}
+                {attendance.workType !== "WFO" &&
+                  attendance.workTypeApprovalStatus &&
+                  WORK_TYPE_APPROVAL_BADGE[attendance.workTypeApprovalStatus] && (
+                    <Badge variant={WORK_TYPE_APPROVAL_BADGE[attendance.workTypeApprovalStatus]!.variant}>
+                      {WORK_TYPE_APPROVAL_BADGE[attendance.workTypeApprovalStatus]!.label}
+                    </Badge>
+                  )}
                 {attendance.workLocation && (
                   <span className="flex items-center gap-1">
                     <MapPoint weight="BoldDuotone" className="h-4 w-4 shrink-0" />

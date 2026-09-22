@@ -15,6 +15,7 @@ export const clockInSchema = z
     workShiftId: z.string().optional(),
     workLocationId: z.string().optional(),
     workType: z.enum(["WFO", "WFH", "WFA"]).optional(),
+    workTypeReason: z.string().max(500).optional(),
     photoBase64: z.string().optional(),
     lat: z.number().optional(),
     lng: z.number().optional(),

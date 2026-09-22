@@ -135,7 +135,7 @@ export async function POST(req: Request) {
   }
 
   // --- Normal flow: employee self-selects shift + work type (+ venue for WFO) ---
-  const { workShiftId, workLocationId, workType, photoBase64, lat, lng } = parsed.data;
+  const { workShiftId, workLocationId, workType, workTypeReason, photoBase64, lat, lng } = parsed.data;
   if (!workShiftId || !workType || !photoBase64 || lat === undefined || lng === undefined) {
     return Response.json({ error: "Data absensi tidak lengkap" }, { status: 422 });
   }
@@ -212,6 +212,11 @@ export async function POST(req: Request) {
         isPublicHoliday: false,
         publicHolidayId: null,
         publicHolidayName: null,
+        workTypeReason: workType === "WFO" ? null : (workTypeReason ?? null),
+        workTypeApprovalStatus: workType === "WFO" ? null : "pending",
+        workTypeApprovedBy: null,
+        workTypeApprovedAt: null,
+        workTypeReviewNote: null,
       },
       update: {
         clockInAt: now,
@@ -226,6 +231,11 @@ export async function POST(req: Request) {
         isPublicHoliday: false,
         publicHolidayId: null,
         publicHolidayName: null,
+        workTypeReason: workType === "WFO" ? null : (workTypeReason ?? null),
+        workTypeApprovalStatus: workType === "WFO" ? null : "pending",
+        workTypeApprovedBy: null,
+        workTypeApprovedAt: null,
+        workTypeReviewNote: null,
       },
     });
 
