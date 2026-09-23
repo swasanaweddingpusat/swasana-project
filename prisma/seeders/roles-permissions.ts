@@ -82,6 +82,10 @@ export const moduleActions: Record<string, string[]> = {
   attendance: ["view"],
   // HR Attendance Management — CRUD for work locations, shifts, assignments, overrides
   "hr-attendance": ["view", "create", "edit", "delete"],
+  // Attendance Correction — employee self-service submit (create/delete own via
+  // cancel), Manager approval is ownership-based (no permission needed), HR
+  // final approval needs `approve`.
+  "attendance-correction": ["view", "create", "edit", "delete", "approve"],
   // HR Recruitment & Onboarding — seeded originally via migration 20260622180000.
   // Listed here so the seeder treats it as a valid module (else step 3b would
   // delete these permissions) and can assign them per the role matrix.
@@ -303,6 +307,7 @@ export const rolePermissionMap: Record<string, Record<string, string[]>> = {
   "human-resource": {
     hr: ["view", "create", "edit", "delete", "approve"],
     "hr-attendance": ["view", "create", "edit", "delete"],
+    "attendance-correction": ["view", "create", "edit", "delete", "approve"],
     "hr-recruitment": ["view", "create", "edit", "delete", "hire", "approve"],
     procurement: ["view"],
     "settings-public-holiday": ["view", "create", "edit", "delete"],

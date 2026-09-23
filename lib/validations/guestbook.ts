@@ -50,11 +50,11 @@ export const createGuestbookEntrySchema = z
     commitPayDate: z.string().optional().nullable(),
   })
   .superRefine((val, ctx) => {
-    if (!val.proofFiles?.photo) {
+    if (val.eventCategory === 'MICE' && !val.segmentId?.trim()) {
       ctx.addIssue({
-        path: ['proofFiles', 'photo'],
+        path: ['segmentId'],
         code: z.ZodIssueCode.custom,
-        message: 'Bukti Foto Visit wajib diupload',
+        message: 'Segmen wajib dipilih',
       });
     }
 
@@ -124,6 +124,14 @@ export const updateGuestbookEntrySchema = z.object({
   proofFiles: proofFilesSchema,
   commitVisitDate: z.string().optional().nullable(),
   commitPayDate: z.string().optional().nullable(),
+}).superRefine((val, ctx) => {
+  if (val.eventCategory === 'MICE' && !val.segmentId?.trim()) {
+    ctx.addIssue({
+      path: ['segmentId'],
+      code: z.ZodIssueCode.custom,
+      message: 'Segmen wajib dipilih',
+    });
+  }
 });
 
 export type UpdateGuestbookEntryInput = z.infer<typeof updateGuestbookEntrySchema>;

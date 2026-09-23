@@ -128,6 +128,7 @@ model Profile {
   // Access control
   roleId    String?
   managerId String?
+  homebaseVenueId String?
   dataScope DataScope     @default(own)
   status    ProfileStatus @default(active)
 
@@ -148,6 +149,7 @@ model Profile {
   user                         User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
   manager                      Profile?                   @relation("ProfileManager", fields: [managerId], references: [id], onDelete: SetNull)
   subordinates                 Profile[]                  @relation("ProfileManager")
+  homebaseVenue                Venue?                     @relation("ProfileHomebase", fields: [homebaseVenueId], references: [id], onDelete: SetNull)
   dataGroupMemberships         UserGroupMember[]
   ledGroups                    UserGroup[]                @relation("GroupLeader")
   dailyReportsSubmitted        DailyReport[]              @relation("DailyReportSubmitter")
@@ -196,6 +198,10 @@ model Profile {
   leaveManagerApprovals        LeaveRequest[]             @relation("LeaveManagerApprover")
   leaveHrApprovals             LeaveRequest[]             @relation("LeaveHrApprover")
   leaveRejections              LeaveRequest[]             @relation("LeaveRejector")
+  attendanceCorrections        AttendanceCorrection[]
+  correctionManagerApprovals   AttendanceCorrection[]     @relation("CorrectionManagerApprover")
+  correctionHrApprovals        AttendanceCorrection[]     @relation("CorrectionHrApprover")
+  correctionRejections         AttendanceCorrection[]     @relation("CorrectionRejector")
   employeeSalaries             EmployeeSalary[]
   payslips                     Payslip[]
   payrollsGenerated            PayrollPeriod[]            @relation("PayrollGenerator")
@@ -423,6 +429,7 @@ model Venue {
   announcements             Announcement[]
   onboardingFormSubmissions OnboardingFormSubmission[]
   groupAssignments          UserGroupVenue[]
+  profileHomebases          Profile[]                  @relation("ProfileHomebase")
   kpiAssignments            KpiAssignment[]            @relation("KpiAssignmentVenue")
   kpiResults                KpiCalculationResult[]     @relation("KpiResultVenue")
   homebases                 UserGroupHomebase[]         @relation("GroupHomebases")
@@ -2783,6 +2790,47 @@ model LeaveRequest {
   @@index([endDate])
   @@index([publicHolidayId])
   @@map("leave_requests")
+}
+
+model AttendanceCorrection {
+  id        String   @id @default(uuid())
+  profileId String
+  date      DateTime
+
+  requestedClockInAt  DateTime?
+  requestedClockOutAt DateTime?
+  reason              String
+  evidence            Json?
+
+  status LeaveRequestStatus @default(pending)
+
+  managerApprovedBy String?
+  managerApprovedAt DateTime?
+  managerNote       String?
+
+  hrApprovedBy String?
+  hrApprovedAt DateTime?
+  hrNote       String?
+
+  rejectedBy      String?
+  rejectedAt      DateTime?
+  rejectionReason String?
+
+  cancelledAt        DateTime?
+  cancellationReason String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  profile         Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  managerApprover Profile? @relation("CorrectionManagerApprover", fields: [managerApprovedBy], references: [id], onDelete: SetNull)
+  hrApprover      Profile? @relation("CorrectionHrApprover", fields: [hrApprovedBy], references: [id], onDelete: SetNull)
+  rejector        Profile? @relation("CorrectionRejector", fields: [rejectedBy], references: [id], onDelete: SetNull)
+
+  @@index([profileId])
+  @@index([status])
+  @@index([date])
+  @@map("attendance_corrections")
 }
 
 // ─── Payroll Engine ──────────────────────────────────────────────────────────
