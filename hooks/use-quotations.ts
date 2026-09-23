@@ -79,7 +79,6 @@ export function useDuplicateQuotationRevision() {
     mutationFn: (id: string) => duplicateQuotationAsRevision(id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["quotations"] });
-      qc.invalidateQueries({ queryKey: ["quotation-approvals"] });
     },
   });
 }
