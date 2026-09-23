@@ -30,16 +30,6 @@ export async function submitLeaveRequest(data: unknown): Promise<{ success: bool
   if (!profileId) return { success: false, error: "Profile tidak ditemukan." };
 
   try {
-    // JWT only checks token existence; verify the account is still active
-    // (mirrors the check already done in managerApproveLeave/managerRejectLeave).
-    const callerProfile = await db.profile.findUnique({
-      where: { id: profileId },
-      select: { status: true },
-    });
-    if (!callerProfile || callerProfile.status !== "active") {
-      return { success: false, error: "Akun Anda tidak aktif." };
-    }
-
     const leaveType = await db.leaveType.findUnique({
       where: { id: parsed.data.leaveTypeId },
       select: {
@@ -332,34 +322,6 @@ export async function hrApproveLeave(data: unknown): Promise<{ success: boolean;
       return { success: false, error: "Pengajuan belum disetujui manager." };
     }
 
-    if (request.leaveType.isDeductible) {
-      const currentYear = request.startDate.getFullYear();
-      const balance = await db.leaveBalance.findUnique({
-        where: {
-          profileId_leaveTypeId_year: {
-            profileId: request.profileId,
-            leaveTypeId: request.leaveTypeId,
-            year: currentYear,
-          },
-        },
-        select: { id: true },
-      });
-      if (balance) {
-        // Atomic, condition-guarded increment — the WHERE clause re-checks available
-        // balance at write time (not read time), so two concurrent HR approvals can't
-        // both pass a pre-transaction read check and jointly overdraft the balance.
-        const affected = await db.$executeRaw`
-          UPDATE "leave_balances"
-          SET "usedDays" = "usedDays" + ${request.totalDays}
-          WHERE id = ${balance.id}
-            AND ("totalDays" + "carryOverDays" + "adjustmentDays" - "usedDays") >= ${request.totalDays}
-        `;
-        if (affected === 0) {
-          return { success: false, error: "Saldo cuti tidak mencukupi untuk disetujui." };
-        }
-      }
-    }
-
     const ops: Prisma.PrismaPromise<unknown>[] = [
       db.leaveRequest.update({
         where: { id: parsed.data.requestId },
@@ -371,6 +333,33 @@ export async function hrApproveLeave(data: unknown): Promise<{ success: boolean;
         },
       }),
     ];
+
+    if (request.leaveType.isDeductible) {
+      const currentYear = request.startDate.getFullYear();
+      const balance = await db.leaveBalance.findUnique({
+        where: {
+          profileId_leaveTypeId_year: {
+            profileId: request.profileId,
+            leaveTypeId: request.leaveTypeId,
+            year: currentYear,
+          },
+        },
+        select: { id: true, totalDays: true, usedDays: true, carryOverDays: true, adjustmentDays: true },
+      });
+      if (balance) {
+        // Re-validate at approval time to prevent overdraft from concurrent approvals
+        const available = getAvailableBalance(balance);
+        if (request.totalDays > available) {
+          return { success: false, error: "Saldo cuti tidak mencukupi untuk disetujui." };
+        }
+        ops.push(
+          db.leaveBalance.update({
+            where: { id: balance.id },
+            data: { usedDays: { increment: request.totalDays } },
+          })
+        );
+      }
+    }
 
     const isHolidayToken = request.leaveType.code === "public_holiday";
 
@@ -494,16 +483,6 @@ export async function cancelLeaveRequest(data: unknown): Promise<{ success: bool
   if (!profileId) return { success: false, error: "Profile tidak ditemukan." };
 
   try {
-    // JWT only checks token existence; verify the account is still active
-    // (mirrors the check already done in managerApproveLeave/managerRejectLeave).
-    const callerProfile = await db.profile.findUnique({
-      where: { id: profileId },
-      select: { status: true },
-    });
-    if (!callerProfile || callerProfile.status !== "active") {
-      return { success: false, error: "Akun Anda tidak aktif." };
-    }
-
     const request = await db.leaveRequest.findUnique({
       where: { id: parsed.data.requestId },
       include: { leaveType: { select: { isDeductible: true, code: true } } },

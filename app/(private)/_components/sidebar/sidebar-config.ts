@@ -133,9 +133,9 @@ export const MODULE_NAV_MAP: Record<ModuleKey, NavItem[]> = {
     { name: "Daily Activity", href: "/booking/daily-activity", icon: ClipboardList, subtitle: "Kelola aktivitas harian sales & prospek", permission: { module: "daily-activity", action: "view" } },
     { name: "Quotations", href: "/booking/quotations", icon: DocumentAdd, subtitle: "Kelola penawaran harga untuk lead", permission: { module: "quotations", action: "view" } },
     { name: "Booking MICE", href: "/booking/booking-mice", icon: TicketSale, subtitle: "Kelola data booking MICE", permission: { module: "booking-mice", action: "view" } },
-    { name: "Mice Package", href: "/booking/package-mice", icon: Case, subtitle: "Kelola paket MICE per venue", permission: { module: "package-mice", action: "view" } },
     { name: "Booking Weddings", href: "/booking/booking-weddings", icon: Ticket, subtitle: "Kelola data booking weddings", permission: { module: "booking", action: "view" } },
     { name: "Wedding Package", href: "/booking/packages", icon: Documents, subtitle: "Kelola paket wedding", permission: { module: "package", action: "view" } },
+    { name: "Mice Package", href: "/booking/package-mice", icon: Case, subtitle: "Kelola paket MICE per venue", permission: { module: "package-mice", action: "view" } },
     { name: "Groups", href: "/booking/groups", icon: UsersGroupRounded, subtitle: "Kelola tim dan pantau kinerja penjualan", permission: { module: "groups", action: "view" } },
     { name: "Complimentary", href: "/booking/complimentary", icon: Gift, subtitle: "Kelola master item complimentary untuk booking", permission: { module: "complimentary", action: "view" } },
     { name: "Bonus", href: "/booking/bonus", icon: MedalStar, subtitle: "Kelola master item bonus untuk booking", permission: { module: "bonus", action: "view" } },
@@ -209,16 +209,8 @@ export const GENERAL_NAV: NavItem[] = [
     subtitle: "Kelola KPI, komisi, dan bonus Sales & Manager",
     permission: { module: "kpi-insentif", action: "view" },
     submenu: [
-      { name: "Dashboard KPI", href: "/kpi-insentif", icon: PieChart, subtitle: "Ringkasan penilaian, kelengkapan, dan review", permission: { module: "kpi-insentif", action: "view" } },
-      { name: "KPI Saya", href: "/kpi-insentif/kpi-saya", icon: UserHands, subtitle: "Lihat target dan hasil penilaian pribadi", permission: { module: "kpi-insentif", action: "view" } },
-      { name: "Master & Template", href: "/kpi-insentif/konfigurasi", icon: ClipboardList, subtitle: "Kelola indikator, skema, dan versi KPI", permission: { module: "kpi-master", action: "view" }, submenu: [
-        { name: "Target Item", href: "/kpi-insentif/target-item", permission: { module: "kpi-master", action: "view" } },
-        { name: "Skema Achievement", href: "/kpi-insentif/achievement", permission: { module: "kpi-master", action: "view" } },
-        { name: "Master KPI", href: "/kpi-insentif/kpi-master", permission: { module: "kpi-master", action: "view" } },
-      ] },
       { name: "Penugasan Target", href: "/kpi-insentif/penugasan", icon: UserHands, subtitle: "Tugaskan KPI ke Sales atau Manager", permission: { module: "kpi-assignment", action: "view" } },
-      { name: "Review & Simulasi", href: "/kpi-insentif/simulasi", icon: ChartSquare, subtitle: "Tinjau hasil sementara dan jalankan kalkulasi", permission: { module: "kpi-simulation", action: "view" } },
-      { name: "Laporan & Riwayat", href: "/kpi-insentif/laporan", icon: GraphNew, subtitle: "Lihat hasil final dan riwayat penilaian", permission: { module: "kpi-report", action: "view" } },
+      { name: "Kalkulasi & Laporan", href: "/kpi-insentif/kalkulasi", icon: ChartSquare, subtitle: "Simulasi kalkulasi dan laporan final insentif", permission: { module: "kpi-simulation", action: "view" } },
     ],
   },
 ];

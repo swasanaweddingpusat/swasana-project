@@ -8,7 +8,6 @@ import { CheckCircle, AltArrowDown, Magnifer, AddCircle, CloseCircle } from "@so
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { useVenues } from "@/hooks/use-venues";
 
 interface PaymentMethod {
   id: string;
@@ -35,12 +34,8 @@ export function BankAccountSelect({ value, onChange, placeholder = "Pilih rekeni
   const [open, setOpen] = React.useState(false);
   const [search, setSearch] = React.useState("");
   const [showAdd, setShowAdd] = React.useState(false);
-  const [form, setForm] = React.useState({ bankName: "", bankAccountNumber: "", bankRecipient: "", venueId: venueId ?? "" });
+  const [form, setForm] = React.useState({ bankName: "", bankAccountNumber: "", bankRecipient: "" });
   const [saving, setSaving] = React.useState(false);
-  const { data: venues = [] } = useVenues();
-  const [venuePickerOpen, setVenuePickerOpen] = React.useState(false);
-  const [venueSearch, setVenueSearch] = React.useState("");
-  const venuePickerRef = React.useRef<HTMLDivElement>(null);
   const containerRef = React.useRef<HTMLDivElement>(null);
   const portalRef = React.useRef<HTMLDivElement>(null);
   const [pos, setPos] = React.useState<{ top: number; left: number; width: number; openUp: boolean } | null>(null);
@@ -78,11 +73,9 @@ export function BankAccountSelect({ value, onChange, placeholder = "Pilih rekeni
       setPos(null);
       setShowAdd(false);
       setSearch("");
-      setForm({ bankName: "", bankAccountNumber: "", bankRecipient: "", venueId: venueId ?? "" });
-      setVenuePickerOpen(false);
-      setVenueSearch("");
+      setForm({ bankName: "", bankAccountNumber: "", bankRecipient: "" });
     }
-  }, [open, minDropdownWidth, venueId]);
+  }, [open, minDropdownWidth]);
 
   React.useEffect(() => {
     if (!open) return;
@@ -95,29 +88,15 @@ export function BankAccountSelect({ value, onChange, placeholder = "Pilih rekeni
     return () => document.removeEventListener("mousedown", handler);
   }, [open]);
 
-  React.useEffect(() => {
-    if (!venuePickerOpen) return;
-    const handler = (e: MouseEvent) => {
-      if (venuePickerRef.current?.contains(e.target as Node)) return;
-      setVenuePickerOpen(false);
-    };
-    setTimeout(() => document.addEventListener("mousedown", handler), 0);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [venuePickerOpen]);
-
-  const selectedVenue = venues.find((v) => v.id === form.venueId);
-  const filteredVenues = venues.filter((v) => v.name.toLowerCase().includes(venueSearch.toLowerCase()));
-
   const handleSave = async () => {
-    if (!form.bankName || !form.bankAccountNumber || !form.bankRecipient || !form.venueId) {
+    if (!form.bankName || !form.bankAccountNumber || !form.bankRecipient) {
       toast.error("Semua field wajib diisi");
       return;
     }
     setSaving(true);
     try {
       const { createPaymentMethod } = await import("@/actions/payment-method");
-      const { venueId: formVenueId, ...rest } = form;
-      const result = await createPaymentMethod({ ...rest, venueId: formVenueId });
+      const result = await createPaymentMethod({ ...form, venueId: venueId ?? null });
       if (!result.success || !result.data) { toast.error(result.error ?? "Gagal menyimpan"); return; }
       toast.success("Rekening berhasil ditambahkan");
       await qc.invalidateQueries({ queryKey: ["payment-methods"] });
@@ -182,53 +161,6 @@ export function BankAccountSelect({ value, onChange, placeholder = "Pilih rekeni
             <button type="button" onClick={() => setShowAdd(false)} className="text-muted-foreground hover:text-foreground">
               <CloseCircle weight="BoldDuotone" className="h-3.5 w-3.5" />
             </button>
-          </div>
-          <div className="relative" ref={venuePickerRef}>
-            <button
-              type="button"
-              onClick={() => setVenuePickerOpen((o) => !o)}
-              className={cn(
-                "flex h-8 w-full items-center justify-between rounded-md border border-input bg-background px-2 text-xs",
-                "hover:bg-accent/50 focus:outline-none",
-                !selectedVenue && "text-muted-foreground"
-              )}
-            >
-              <span className="truncate">{selectedVenue ? selectedVenue.name : "Pilih venue"}</span>
-              <AltArrowDown weight="BoldDuotone" className={cn("ml-2 h-3.5 w-3.5 shrink-0 opacity-50 transition-transform", venuePickerOpen && "rotate-180")} />
-            </button>
-            {venuePickerOpen && (
-              <div className="absolute z-10 mt-1 w-full rounded-md border bg-popover text-popover-foreground shadow-md">
-                <div className="flex items-center border-b px-2">
-                  <Magnifer weight="BoldDuotone" className="h-3.5 w-3.5 shrink-0 opacity-50 mr-1.5" />
-                  <input
-                    autoFocus
-                    className="flex h-8 w-full bg-transparent text-xs outline-none placeholder:text-muted-foreground"
-                    placeholder="Cari venue..."
-                    value={venueSearch}
-                    onChange={(e) => setVenueSearch(e.target.value)}
-                  />
-                </div>
-                <div className="max-h-32 overflow-y-auto p-1">
-                  {filteredVenues.length === 0 && (
-                    <p className="text-xs text-muted-foreground text-center py-2">Venue tidak ditemukan</p>
-                  )}
-                  {filteredVenues.map((v) => (
-                    <div
-                      key={v.id}
-                      className="flex items-center justify-between rounded-sm px-2 py-1.5 text-xs cursor-pointer hover:bg-accent"
-                      onClick={() => {
-                        setForm((f) => ({ ...f, venueId: v.id }));
-                        setVenuePickerOpen(false);
-                        setVenueSearch("");
-                      }}
-                    >
-                      <span className="truncate">{v.name}</span>
-                      {form.venueId === v.id && <CheckCircle weight="BoldDuotone" className="h-3.5 w-3.5 shrink-0 ml-2" />}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
           </div>
           <Input placeholder="Nama bank" value={form.bankName} onChange={(e) => setForm((f) => ({ ...f, bankName: e.target.value }))} className="h-8 text-xs" />
           <Input placeholder="No. rekening" value={form.bankAccountNumber} onChange={(e) => setForm((f) => ({ ...f, bankAccountNumber: e.target.value.replace(/\D/g, "").slice(0, 16) }))} inputMode="numeric" maxLength={16} className="h-8 text-xs" />

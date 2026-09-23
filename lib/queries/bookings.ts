@@ -648,7 +648,6 @@ const miceListInclude = {
   venue: { select: { id: true, name: true } },
   sales: { select: { id: true, fullName: true } },
   sourceOfInformation: { select: { id: true, name: true } },
-  quotation: { select: { id: true, quotationNo: true, status: true, totalPrice: true } },
   termOfPayments: {
     orderBy: { sortOrder: "asc" as const },
     select: { id: true, name: true, amount: true, dueDate: true },
@@ -709,7 +708,6 @@ export async function getMiceBookingById(id: string) {
       venue: { select: { id: true, name: true } },
       sales: { select: { id: true, fullName: true } },
       sourceOfInformation: { select: { id: true, name: true } },
-      quotation: { select: { id: true, quotationNo: true, status: true, totalPrice: true } },
       termOfPayments: { orderBy: { sortOrder: "asc" } },
     },
   });

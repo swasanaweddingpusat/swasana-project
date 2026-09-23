@@ -19,7 +19,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { AddCircle, PenNewSquare, TrashBinTrash, Refresh, Magnifer, Eye, Filter, Download } from "@solar-icons/react";
+import { AddCircle, PenNewSquare, TrashBinTrash, Refresh, Magnifer, Eye, Filter } from "@solar-icons/react";
 import { PaginationBar } from "@/components/shared/pagination-bar";
 import { useDailyActivities, useDeleteDailyActivity } from "@/hooks/use-daily-activities";
 import { usePermissions } from "@/hooks/use-permissions";
@@ -105,7 +105,6 @@ export function DailyActivityTable({
   const [detailItem, setDetailItem] = useState<DailyActivityItem | null>(null);
   const [deletingItem, setDeletingItem] = useState<DailyActivityItem | null>(null);
   const [filterOpen, setFilterOpen] = useState(false);
-  const [isExporting, setIsExporting] = useState(false);
 
   useEffect(() => {
     const t = setTimeout(() => {
@@ -190,43 +189,6 @@ export function DailyActivityTable({
       toast.success("Data diperbarui.");
     } else {
       toast.error("Gagal memuat ulang data.");
-    }
-  }
-
-  async function handleExport(): Promise<void> {
-    setIsExporting(true);
-    try {
-      // Same active filters as the table listing — minus page/pageSize, since
-      // export always pulls every row matching the current filter.
-      const { page: _page, pageSize: _pageSize, ...exportFilter } = params;
-      const exportParams = new URLSearchParams();
-      for (const [key, value] of Object.entries(exportFilter)) {
-        if (value) exportParams.set(key, String(value));
-      }
-
-      const res = await fetch(`/api/daily-activities/export?${exportParams.toString()}`);
-      if (!res.ok) {
-        const msg =
-          res.status === 429
-            ? "Terlalu banyak permintaan, coba lagi sebentar."
-            : "Gagal mengekspor data daily activity.";
-        toast.error(msg);
-        return;
-      }
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `daily-activity-${toIsoDay(new Date())}.xlsx`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
-      toast.success("Export berhasil diunduh.");
-    } catch {
-      toast.error("Gagal mengekspor data daily activity.");
-    } finally {
-      setIsExporting(false);
     }
   }
 
@@ -328,16 +290,6 @@ export function DailyActivityTable({
                   aria-label="Refresh"
                 >
                   <Refresh weight="BoldDuotone" className={cn("w-4", "h-4", query.isFetching && "animate-spin")} />
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => { void handleExport(); }}
-                  disabled={isExporting}
-                  className={cn("h-9", "cursor-pointer", "rounded-xl", "gap-1.5")}
-                >
-                  <Download weight="BoldDuotone" className="w-4 h-4" />
-                  {isExporting ? "Mengekspor..." : "Export"}
                 </Button>
                 {(can("daily-activity", "create") || isAdmin) && (
                   <Button onClick={handleOpenAdd} className={cn("cursor-pointer", "rounded-xl")}>

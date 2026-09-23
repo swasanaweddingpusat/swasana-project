@@ -3,18 +3,10 @@ import { db } from "@/lib/db";
 
 const packageInclude = {
   venue: { select: { id: true, name: true, address: true, brandId: true } },
-  paymentMethod: { select: { id: true, bankName: true, bankAccountNumber: true, bankRecipient: true } },
-  eventType: { select: { id: true, name: true } },
-  createdBy: { select: { id: true, fullName: true } },
-  updatedBy: { select: { id: true, fullName: true } },
   vendorItems: { orderBy: { sortOrder: "asc" as const } },
   internalItems: { orderBy: { sortOrder: "asc" as const } },
   miceItems: { orderBy: { sortOrder: "asc" as const } },
-  micePrices: { orderBy: { sortOrder: "asc" as const } },
-  taxDeposits: { orderBy: { sortOrder: "asc" as const } },
   categoryPrices: { orderBy: { sortOrder: "asc" as const } },
-  complimentaries: { orderBy: { sortOrder: "asc" as const }, include: { complimentary: true } },
-  bonuses: { orderBy: { sortOrder: "asc" as const }, include: { bonus: true } },
 } as const;
 
 export interface GetPackagesParams {
@@ -89,11 +81,11 @@ export async function getPackagesForBooking(venueId?: string, category: "WEDDING
 /**
  * MICE packages consumable by the quotation drawer. Deliberately NOT reusing
  * getPackagesForBooking: that filters on Σ categoryPrices.basePrice > 0, but MICE
- * packages use micePrices instead of Wedding categoryPrices. New MICE packages
- * are required to have at least one miceItem; the final filter remains as a
- * compatibility guard for legacy rows created before that invariant existed.
+ * packages carry their price on miceItems.itemPrice (categoryPrices is often empty),
+ * so valid MICE packages would be filtered out. Here we filter on having miceItems
+ * instead, and only include the minimal shape the quotation explode needs.
  */
-export async function getMicePackagesForQuotation(venueId?: string, eventTypeId?: string) {
+export async function getMicePackagesForQuotation(venueId?: string) {
   "use cache";
   cacheTag("packages");
   cacheLife("hours");
@@ -102,19 +94,13 @@ export async function getMicePackagesForQuotation(venueId?: string, eventTypeId?
     where: {
       category: "MICE",
       available: true,
+      approvalStatus: "approved",
       ...(venueId ? { venueId } : {}),
-      ...(eventTypeId ? { eventTypeId } : {}),
     },
     orderBy: { createdAt: "desc" },
     include: {
       venue: { select: { id: true, name: true } },
-      eventType: { select: { id: true, name: true } },
-      paymentMethod: { select: { id: true, bankName: true, bankAccountNumber: true, bankRecipient: true } },
       miceItems: { orderBy: { sortOrder: "asc" as const } },
-      micePrices: { orderBy: { sortOrder: "asc" as const } },
-      taxDeposits: { orderBy: { sortOrder: "asc" as const } },
-      complimentaries: { orderBy: { sortOrder: "asc" as const }, include: { complimentary: true } },
-      bonuses: { orderBy: { sortOrder: "asc" as const }, include: { bonus: true } },
     },
   });
 

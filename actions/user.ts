@@ -33,7 +33,6 @@ export async function inviteUser(formData: FormData) {
     fullName: formData.get("fullName") as string,
     roleId: formData.get("roleId") as string,
     managerId: (formData.get("managerId") as string) || undefined,
-    homebaseVenueId: (formData.get("homebaseVenueId") as string) || undefined,
     dataScope: (formData.get("dataScope") as string) || "own",
     groupIds: rawGroupIds.length > 0 ? rawGroupIds : undefined,
   };
@@ -43,7 +42,7 @@ export async function inviteUser(formData: FormData) {
     return { success: false, error: parsed.error.issues[0].message };
   }
 
-  const { email, fullName, roleId, managerId, homebaseVenueId, dataScope, groupIds } = parsed.data;
+  const { email, fullName, roleId, managerId, dataScope, groupIds } = parsed.data;
 
   try {
     // Temp password — never sent plain text. User sets own password via token link.
@@ -66,7 +65,6 @@ export async function inviteUser(formData: FormData) {
             fullName,
             roleId,
             managerId: managerId ?? null,
-            homebaseVenueId: homebaseVenueId ?? null,
             dataScope,
             isEmailVerified: false,
             mustChangePassword: true,
@@ -183,7 +181,7 @@ export async function updateUser(data: Record<string, unknown>) {
   }
 
   const {
-    userId, fullName, nickName, phoneNumber, roleId, managerId, homebaseVenueId, status, dataScope,
+    userId, fullName, nickName, phoneNumber, roleId, managerId, status, dataScope,
     placeOfBirth, dateOfBirth, ktpAddress, currentAddress, motherName,
     maritalStatus, numberOfChildren, lastEducation,
     emergencyContactName, emergencyContactRel, emergencyContactPhone,
@@ -202,7 +200,6 @@ export async function updateUser(data: Record<string, unknown>) {
           ...(phoneNumber !== undefined && { phoneNumber }),
           ...(roleId !== undefined && { roleId }),
           ...(managerId !== undefined && { managerId: managerId || null }),
-          ...(homebaseVenueId !== undefined && { homebaseVenueId: homebaseVenueId || null }),
           ...(status !== undefined && { status }),
           ...(dataScope !== undefined && { dataScope }),
           ...(placeOfBirth !== undefined && { placeOfBirth }),
@@ -232,7 +229,7 @@ export async function updateUser(data: Record<string, unknown>) {
       entityType: "profile",
       entityId: userId,
       description: "Data pengguna diperbarui",
-      changes: { after: { fullName, roleId, homebaseVenueId, status, dataScope } },
+      changes: { after: { fullName, roleId, status, dataScope } },
       ipAddress: h.get("x-forwarded-for") ?? h.get("x-real-ip") ?? undefined,
       userAgent: h.get("user-agent") ?? undefined,
     });

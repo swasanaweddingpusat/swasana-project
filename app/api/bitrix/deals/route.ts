@@ -13,9 +13,7 @@ import {
 // specific to this Bitrix portal — discovered from crm.deal.fields.
 const UF_ISSUE = "UF_CRM_1768930533046"; // enum: Leads / No Response / Spam / Komplain …
 const UF_SUB_ISSUE = "UF_CRM_1774952346733"; // enum: Lokasi Terlalu Jauh / Pernikahan Batal / Catering …
-// Exported so other routes (e.g. guestbook's ads-url lookup) reference the same
-// portal-specific field id instead of redeclaring the magic string.
-export const UF_ADS_URL = "UF_CRM_1770698079121"; // ad source URL (IG/FB post link)
+const UF_ADS_URL = "UF_CRM_1770698079121"; // ad source URL (IG/FB post link)
 const UF_ADS_HEADLINE = "UF_CRM_1770698102639"; // ad headline
 const UF_ADS_BODY = "UF_CRM_1770698208232"; // ad body / caption
 const UF_DB_DATE = "UF_CRM_1786680629702"; // date: "Tanggal Database" — when the lead entered the database
