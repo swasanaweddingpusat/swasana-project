@@ -42,9 +42,6 @@ import {
   UserCircle,
   ChartSquare,
   Buildings2,
-  VolumeLoud,
-  Leaf,
-  Link as LinkIcon,
 } from "@solar-icons/react";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
@@ -53,43 +50,44 @@ import { computeFullPrice } from "@/lib/package-prices";
 import { useGuestbookEntries, useDeleteGuestbookEntry } from "@/hooks/use-guestbook";
 import { useVenues } from "@/hooks/use-venues";
 import { useSalesUsers } from "@/hooks/use-sales-users";
-import type {
-  GuestbookEntryItem,
-  GuestbookCategoryFilter,
-  GuestbookOverview,
-  GuestbookOverviewBucket,
-} from "@/lib/queries/guestbookEntries";
-import type { GuestInteractionType } from "@prisma/client";
+import type { GuestbookEntryItem, GuestbookCategoryFilter, GuestbookOverview } from "@/lib/queries/guestbookEntries";
+import type { GuestInteractionType, GuestVisitStatus } from "@prisma/client";
 import type { ProofFiles } from "@/lib/validations/guestbook";
+import { GUEST_VISIT_STATUS_LABELS } from "@/lib/guestbook-status";
 import { GuestbookDrawer } from "./GuestbookDrawer";
 import { GuestbookDetailDrawer } from "./GuestbookDetailDrawer";
 import { GuestbookFilterDrawer } from "./GuestbookFilterDrawer";
 import { resolveGuestbookProofThumb } from "./photo-url";
 import { PaginationBar } from "@/components/shared/pagination-bar";
 
-const STATUS_LABELS: Record<string, { label: string; className: string }> = {
-  cold: { label: "Cold", className: "bg-sky-100 text-sky-700 border-0" },
-  warm: { label: "Warm", className: "bg-amber-100 text-amber-700 border-0" },
-  hot: { label: "Hot", className: "bg-orange-100 text-orange-700 border-0" },
-  done_visit: { label: "Done Visit", className: "bg-emerald-100 text-emerald-700 border-0" },
-  to_be_discuss: { label: "To Be Discuss", className: "bg-yellow-100 text-yellow-700 border-0" },
-  deal: { label: "Deal", className: "bg-green-100 text-green-700 border-0" },
-  lost: { label: "Lost", className: "bg-red-100 text-red-700 border-0" },
+const STATUS_BADGE_CLASSNAMES: Record<GuestVisitStatus, string> = {
+  cold: "bg-sky-100 text-sky-700 border-0",
+  warm: "bg-amber-100 text-amber-700 border-0",
+  hot: "bg-orange-100 text-orange-700 border-0",
+  done_visit: "bg-emerald-100 text-emerald-700 border-0",
+  to_be_discuss: "bg-yellow-100 text-yellow-700 border-0",
+  deal: "bg-green-100 text-green-700 border-0",
+  lost: "bg-red-100 text-red-700 border-0",
 };
+
+// Label bersumber dari GUEST_VISIT_STATUS_LABELS (single source) — className badge tetap lokal.
+const STATUS_LABELS: Record<string, { label: string; className: string }> = Object.fromEntries(
+  (Object.keys(GUEST_VISIT_STATUS_LABELS) as GuestVisitStatus[]).map((status) => [
+    status,
+    { label: GUEST_VISIT_STATUS_LABELS[status], className: STATUS_BADGE_CLASSNAMES[status] },
+  ])
+);
 
 const EVENT_CATEGORY_LABELS: Record<string, string> = {
   WEDDINGS: "Wedding",
   MICE: "MICE",
 };
 
-// checkInAt/checkOutAt are stored as naive local wall-clock values anchored to UTC on the
-// server — display must read them back with timeZone: "UTC" to avoid double-converting.
 function formatDate(dateStr: string | Date): string {
   return new Date(dateStr).toLocaleDateString("id-ID", {
     day: "2-digit",
     month: "short",
     year: "numeric",
-    timeZone: "UTC",
   });
 }
 
@@ -97,7 +95,6 @@ function formatTime(dateStr: string | Date): string {
   return new Date(dateStr).toLocaleTimeString("id-ID", {
     hour: "2-digit",
     minute: "2-digit",
-    timeZone: "UTC",
   });
 }
 
@@ -110,100 +107,6 @@ function getPackagePrice(pkg: NonNullable<GuestbookEntryItem["package"]>): numbe
   if (pkg.sellingPrice > 0) return pkg.sellingPrice;
   const base = (pkg.categoryPrices ?? []).reduce((sum, c) => sum + c.basePrice, 0);
   return computeFullPrice([{ basePrice: base }], pkg.margin ?? 0);
-}
-
-// Shorten an ad URL for display (drop protocol + trailing slash).
-function shortUrl(url: string): string {
-  return url.replace(/^https?:\/\//i, "").replace(/\/$/, "");
-}
-
-// Progress-bar row used by the "Sumber Iklan" card — label + count + percentage.
-function AdsSourceBarRow({
-  label,
-  count,
-  total,
-}: {
-  label: React.ReactNode;
-  count: number;
-  total: number;
-}) {
-  const pct = total > 0 ? Math.round((count / total) * 100) : 0;
-  return (
-    <div className="space-y-1">
-      <div className="flex items-center justify-between gap-3 text-xs">
-        <span className="min-w-0 truncate">{label}</span>
-        <span className="shrink-0 font-medium tabular-nums text-foreground">
-          {count.toLocaleString("id-ID")}
-          <span className="ml-1 text-muted-foreground">({pct}%)</span>
-        </span>
-      </div>
-      <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
-        <div className="h-full rounded-full bg-primary" style={{ width: `${pct}%` }} />
-      </div>
-    </div>
-  );
-}
-
-// Dedicated card for the ad-source breakdown — needs clickable URLs + an
-// "Organik" fallback row, which the generic `lists` item renderer below
-// doesn't support.
-function GuestbookAdsSourceCard({
-  buckets,
-  organik,
-  total,
-}: {
-  buckets: GuestbookOverviewBucket[];
-  organik: number;
-  total: number;
-}) {
-  const isEmpty = buckets.length === 0 && organik === 0;
-  return (
-    <Card className="rounded-2xl shadow-sm">
-      <CardContent className="p-4">
-        <div className="mb-3 flex items-center gap-2">
-          <VolumeLoud weight="BoldDuotone" className="h-4 w-4 text-muted-foreground" />
-          <p className="text-sm font-semibold text-foreground">Sumber Iklan</p>
-        </div>
-        {isEmpty ? (
-          <p className="text-xs text-muted-foreground">Tidak ada data.</p>
-        ) : (
-          <div className="space-y-3">
-            {buckets.map((b) => (
-              <AdsSourceBarRow
-                key={b.key}
-                total={total}
-                count={b.count}
-                label={
-                  <a
-                    href={b.label}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1.5 text-primary hover:underline"
-                  >
-                    <LinkIcon weight="BoldDuotone" className="h-3.5 w-3.5 shrink-0" />
-                    <span className="truncate">{shortUrl(b.label)}</span>
-                  </a>
-                }
-              />
-            ))}
-            {organik > 0 && (
-              <AdsSourceBarRow
-                key="__organik__"
-                total={total}
-                count={organik}
-                label={
-                  <span className="inline-flex items-center gap-1.5 text-muted-foreground">
-                    <Leaf weight="BoldDuotone" className="h-3.5 w-3.5 shrink-0" />
-                    Organik (tanpa iklan)
-                  </span>
-                }
-              />
-            )}
-          </div>
-        )}
-      </CardContent>
-    </Card>
-  );
 }
 
 function GuestbookOverview({
@@ -265,11 +168,6 @@ function GuestbookOverview({
           </Card>
         ))}
       </div>
-      <GuestbookAdsSourceCard
-        buckets={overview.adsUrlBuckets}
-        organik={overview.adsUrlOrganik}
-        total={overview.total}
-      />
     </div>
   );
 }
@@ -436,6 +334,7 @@ function GuestbookClientInner() {
   const [filterHostId, setFilterHostId] = useState<string>("all");
   const [filterCategory, setFilterCategory] = useState<"all" | GuestbookCategoryFilter>("all");
   const [filterInteractionType, setFilterInteractionType] = useState<"all" | GuestInteractionType>("all");
+  const [filterStatus, setFilterStatus] = useState<"all" | GuestVisitStatus>("all");
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
@@ -467,7 +366,7 @@ function GuestbookClientInner() {
   // Any other filter change also resets page to 1.
   useEffect(() => {
     setCurrentPage(1);
-  }, [dateRange, filterVenueId, filterHostId, filterCategory, filterInteractionType]);
+  }, [dateRange, filterVenueId, filterHostId, filterCategory, filterInteractionType, filterStatus]);
 
   const queryClient = useQueryClient();
   const { data: guestbookData, isLoading } = useGuestbookEntries({
@@ -480,6 +379,7 @@ function GuestbookClientInner() {
     dateTo: dateRange?.to ? format(dateRange.to, "yyyy-MM-dd") : undefined,
     category: filterCategory !== "all" ? filterCategory : undefined,
     interactionType: filterInteractionType !== "all" ? filterInteractionType : undefined,
+    visitStatus: filterStatus !== "all" ? filterStatus : undefined,
   });
   const entries = guestbookData?.data ?? [];
   const totalPages = Math.max(1, Math.ceil((guestbookData?.total ?? 0) / 50));
@@ -520,6 +420,7 @@ function GuestbookClientInner() {
       if (filterHostId !== "all") params.set("hostId", filterHostId);
       if (filterCategory !== "all") params.set("category", filterCategory);
       if (filterInteractionType !== "all") params.set("interactionType", filterInteractionType);
+      if (filterStatus !== "all") params.set("visitStatus", filterStatus);
 
       const res = await fetch(`/api/guestbook/export?${params.toString()}`);
       if (!res.ok) {
@@ -553,14 +454,16 @@ function GuestbookClientInner() {
     (filterHostId !== "all" ? 1 : 0) +
     (search.trim() !== "" ? 1 : 0) +
     (filterCategory !== "all" ? 1 : 0) +
-    (filterInteractionType !== "all" ? 1 : 0);
+    (filterInteractionType !== "all" ? 1 : 0) +
+    (filterStatus !== "all" ? 1 : 0);
 
   function resetFilters() {
-    setDateRange(todayRange());
+    setDateRange(undefined);
     setFilterVenueId("all");
     setFilterHostId("all");
     setFilterCategory("all");
     setFilterInteractionType("all");
+    setFilterStatus("all");
     setSearch("");
     setCurrentPage(1);
   }
@@ -579,8 +482,6 @@ function GuestbookClientInner() {
           bySource: [],
           byVenue: [],
           byHost: [],
-          adsUrlBuckets: [],
-          adsUrlOrganik: 0,
         }}
       />
       {/* Table — desktop */}
@@ -588,7 +489,7 @@ function GuestbookClientInner() {
         <CardContent className="p-0">
           <div className="flex flex-wrap items-center justify-between gap-3 px-6 py-4 border-b">
             <div className="flex items-center gap-2">
-              <h2 className="text-sm font-bold text-foreground">Buku Tamu</h2>
+              <h2 className="text-sm font-bold text-foreground">Guestbook</h2>
               <span className="text-xs font-medium bg-secondary text-secondary-foreground px-3 py-1 rounded-full">
                 {guestbookData?.total ?? 0} tamu
               </span>
@@ -986,6 +887,8 @@ function GuestbookClientInner() {
         onCategoryChange={setFilterCategory}
         interactionType={filterInteractionType}
         onInteractionTypeChange={setFilterInteractionType}
+        status={filterStatus}
+        onStatusChange={setFilterStatus}
         venues={venues}
         salesOptions={salesOptions}
         onReset={resetFilters}

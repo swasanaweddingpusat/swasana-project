@@ -6,10 +6,7 @@ export const submitLeaveRequestSchema = z.object({
   endDate: z.coerce.date(),
   reason: z.string().optional(),
   documentKey: z.string().max(500).optional(),
-  photoBase64: z
-    .string()
-    .min(1, "Bukti wajib diupload")
-    .regex(/^data:image\/(png|jpe?g|webp|gif);base64,[A-Za-z0-9+/]+=*$/, "Format bukti tidak valid"),
+  photoBase64: z.string().min(1, "Bukti wajib diupload"),
   publicHolidayId: z.string().optional(),
 });
 

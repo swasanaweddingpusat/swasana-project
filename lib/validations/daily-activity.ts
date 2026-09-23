@@ -59,17 +59,9 @@ export const dailyActivityFilterSchema = z.object({
   pageSize: z.coerce.number().int().min(1).max(100).default(10),
 });
 
-// Export uses the same filter fields as the listing but never paginates —
-// it always pulls every row matching the active filter.
-export const dailyActivityExportFilterSchema = dailyActivityFilterSchema.omit({
-  page: true,
-  pageSize: true,
-});
-
 // ─── Inferred Types ───────────────────────────────────────────────────────────
 
 export type ProgressStatus = z.infer<typeof progressStatusSchema>;
 export type CreateDailyActivityInput = z.infer<typeof createDailyActivitySchema>;
 export type UpdateDailyActivityInput = z.infer<typeof updateDailyActivitySchema>;
 export type DailyActivityFilterInput = z.infer<typeof dailyActivityFilterSchema>;
-export type DailyActivityExportFilterInput = z.infer<typeof dailyActivityExportFilterSchema>;

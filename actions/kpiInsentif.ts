@@ -861,6 +861,61 @@ export async function finalizeResult(resultId: string) {
         missingDataReasons: true,
         profileId: true,
         period: true,
+        // We need to trace back the assignment to get the master + schema + target
+        profile: {
+          select: {
+            kpiAssignments: {
+              where: { isDraft: false },
+              orderBy: { period: "desc" },
+              take: 1,
+              select: {
+                id: true,
+                kpiMaster: {
+                  select: {
+                    id: true,
+                    name: true,
+                    achievementSchema: {
+                      select: {
+                        id: true,
+                        name: true,
+                        businessRole: true,
+                        gatingMinIndicators: true,
+                        tiers: {
+                          select: {
+                            id: true,
+                            sortOrder: true,
+                            label: true,
+                            lowerBound: true,
+                            upperBound: true,
+                            lowerInclusive: true,
+                            upperInclusive: true,
+                            actionType: true,
+                            dealingBonus: true,
+                            omsetBonus: true,
+                            homebaseBonus: true,
+                            deductionPct: true,
+                            isWarningFlag: true,
+                          },
+                          orderBy: { sortOrder: "asc" },
+                        },
+                      },
+                    },
+                    targetItem: {
+                      select: {
+                        id: true,
+                        name: true,
+                        indicatorType: true,
+                        type: true,
+                        qty: true,
+                        price: true,
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
       },
     });
 
@@ -872,76 +927,6 @@ export async function finalizeResult(resultId: string) {
       return {
         success: false,
         error: `Tidak dapat finalisasi: data belum lengkap (${result.missingDataReasons.join(", ")}).`,
-      };
-    }
-
-    // Trace back the assignment to get the master + schema + target. Must
-    // match the result's own period exactly — NOT just the profile's most
-    // recent assignment — otherwise the finalized snapshot can capture the
-    // wrong period's policy when a profile has assignments spanning
-    // multiple periods (mirrors the period filter runAutoCalculation uses).
-    const matchingAssignment = await db.kpiAssignment.findFirst({
-      where: { profileId: result.profileId, period: result.period, isDraft: false },
-      select: {
-        id: true,
-        kpiMaster: {
-          select: {
-            id: true,
-            name: true,
-            achievementSchema: {
-              select: {
-                id: true,
-                name: true,
-                businessRole: true,
-                isDraft: true,
-                gatingMinIndicators: true,
-                tiers: {
-                  select: {
-                    id: true,
-                    sortOrder: true,
-                    label: true,
-                    lowerBound: true,
-                    upperBound: true,
-                    lowerInclusive: true,
-                    upperInclusive: true,
-                    isDraftBounds: true,
-                    actionType: true,
-                    dealingBonus: true,
-                    omsetBonus: true,
-                    homebaseBonus: true,
-                    deductionPct: true,
-                    isWarningFlag: true,
-                  },
-                  orderBy: { sortOrder: "asc" },
-                },
-              },
-            },
-            targetItem: {
-              select: {
-                id: true,
-                name: true,
-                indicatorType: true,
-                type: true,
-                qty: true,
-                price: true,
-              },
-            },
-          },
-        },
-      },
-    });
-
-    const kpiMaster = matchingAssignment?.kpiMaster ?? null;
-    if (kpiMaster?.achievementSchema?.isDraft) {
-      return {
-        success: false,
-        error: "Skema KPI masih berstatus draft dan belum dapat difinalisasi.",
-      };
-    }
-    if (kpiMaster?.achievementSchema?.tiers.some((tier) => tier.isDraftBounds)) {
-      return {
-        success: false,
-        error: "Batas tier KPI masih menunggu keputusan kebijakan.",
       };
     }
 
@@ -976,6 +961,7 @@ export async function finalizeResult(resultId: string) {
     });
 
     // Build snapshot payload
+    const kpiMaster = result.profile.kpiAssignments[0]?.kpiMaster ?? null;
     const snapshotData = {
       capturedAt: new Date().toISOString(),
       resultId: result.id,

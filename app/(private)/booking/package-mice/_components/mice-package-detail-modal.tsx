@@ -7,6 +7,24 @@ import { Box, CloseCircle, Pen, ClipboardList, MapPoint, FileText } from "@solar
 import { cn } from "@/lib/utils";
 import type { PackageQueryItem } from "@/lib/queries/packages";
 
+const formatCurrency = (amount: number): string =>
+  new Intl.NumberFormat("id-ID", {
+    style: "currency",
+    currency: "IDR",
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(amount);
+
+function getMiceBasePrice(pkg: PackageQueryItem): number {
+  return (pkg.categoryPrices ?? []).reduce((s, c) => s + Number(c.basePrice), 0);
+}
+
+function getMiceSellingPrice(pkg: PackageQueryItem): number {
+  if (pkg.sellingPrice > 0) return pkg.sellingPrice;
+  const base = getMiceBasePrice(pkg);
+  return base + Math.round(base * ((pkg.margin ?? 0) / 100));
+}
+
 interface MicePackageDetailModalProps {
   open: boolean;
   onClose: () => void;
@@ -18,6 +36,9 @@ export function MicePackageDetailModal({ open, onClose, pkg, onEdit }: MicePacka
   if (!pkg) return null;
 
   const miceItems = (pkg.miceItems ?? []).filter((i) => i.itemName.trim());
+  const basePrice = getMiceBasePrice(pkg);
+  const sellingPrice = getMiceSellingPrice(pkg);
+  const hasPrice = sellingPrice > 0;
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
@@ -51,6 +72,19 @@ export function MicePackageDetailModal({ open, onClose, pkg, onEdit }: MicePacka
             </div>
           </div>
         </DialogHeader>
+
+        {/* Harga Jual */}
+        <div className="px-6 py-3 border-b flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-xs text-muted-foreground">Harga Jual</p>
+            <p className="text-xs text-muted-foreground/80">
+              {hasPrice ? `Harga pokok ${formatCurrency(basePrice)}` : "Harga belum diset"}
+            </p>
+          </div>
+          <p className="text-lg font-heading font-semibold text-foreground tabular-nums shrink-0">
+            {hasPrice ? formatCurrency(sellingPrice) : "—"}
+          </p>
+        </div>
 
         {/* Notes (if any) */}
         {pkg.notes && (
@@ -97,12 +131,17 @@ export function MicePackageDetailModal({ open, onClose, pkg, onEdit }: MicePacka
                     <div className="min-w-0 flex-1 space-y-0.5">
                       <p className="text-sm font-medium text-foreground">{item.itemName}</p>
                       {item.itemDescription.trim() && (
-                        <div
-                          className="text-xs text-muted-foreground leading-relaxed [&_ul]:list-disc [&_ul]:pl-4 [&_ol]:list-decimal [&_ol]:pl-4 [&_li]:my-0.5"
-                          dangerouslySetInnerHTML={{ __html: item.itemDescription }}
-                        />
+                        <p className="text-xs text-muted-foreground leading-relaxed whitespace-pre-wrap">{item.itemDescription}</p>
                       )}
                     </div>
+                    {item.itemPrice > 0 && (
+                      <div className="shrink-0 text-right">
+                        <p className="text-sm font-semibold text-foreground tabular-nums">{formatCurrency(item.itemPrice)}</p>
+                        <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                          {item.itemType === "PAX" ? "/ pax" : "nominal"}
+                        </p>
+                      </div>
+                    )}
                   </div>
                 </div>
               ))}

@@ -32,7 +32,6 @@ export const createGuestbookEntrySchema = z
     bitrixContactId: z.string().optional().nullable(),
     bitrixName: z.string().optional().nullable(),
     bitrixSourceInfo: z.string().optional().nullable(),
-    bitrixAdsUrl: z.string().optional().nullable(),
     interactionType: z.enum(['client_visit', 'online_meeting', 'jemput_bola']),
     onlineMedium: z.enum(['zoom', 'google_meet', 'whatsapp_call', 'microsoft_teams', 'other']).optional().nullable(),
     meetingUrl: z.string().optional().nullable(),
@@ -51,11 +50,11 @@ export const createGuestbookEntrySchema = z
     commitPayDate: z.string().optional().nullable(),
   })
   .superRefine((val, ctx) => {
-    if (val.eventCategory === 'MICE' && !val.segmentId?.trim()) {
+    if (!val.proofFiles?.photo) {
       ctx.addIssue({
-        path: ['segmentId'],
+        path: ['proofFiles', 'photo'],
         code: z.ZodIssueCode.custom,
-        message: 'Segmen wajib dipilih',
+        message: 'Bukti Foto Visit wajib diupload',
       });
     }
 
@@ -113,7 +112,6 @@ export const updateGuestbookEntrySchema = z.object({
   bitrixContactId: z.string().optional().nullable(),
   bitrixName: z.string().optional().nullable(),
   bitrixSourceInfo: z.string().optional().nullable(),
-  bitrixAdsUrl: z.string().optional().nullable(),
   interactionType: z.enum(['client_visit', 'online_meeting', 'jemput_bola']).optional(),
   onlineMedium: z.enum(['zoom', 'google_meet', 'whatsapp_call', 'microsoft_teams', 'other']).optional().nullable(),
   meetingUrl: z.string().optional().nullable(),
@@ -126,14 +124,6 @@ export const updateGuestbookEntrySchema = z.object({
   proofFiles: proofFilesSchema,
   commitVisitDate: z.string().optional().nullable(),
   commitPayDate: z.string().optional().nullable(),
-}).superRefine((val, ctx) => {
-  if (val.eventCategory === 'MICE' && !val.segmentId?.trim()) {
-    ctx.addIssue({
-      path: ['segmentId'],
-      code: z.ZodIssueCode.custom,
-      message: 'Segmen wajib dipilih',
-    });
-  }
 });
 
 export type UpdateGuestbookEntryInput = z.infer<typeof updateGuestbookEntrySchema>;

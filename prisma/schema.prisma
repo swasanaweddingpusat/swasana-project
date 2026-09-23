@@ -128,7 +128,6 @@ model Profile {
   // Access control
   roleId    String?
   managerId String?
-  homebaseVenueId String?
   dataScope DataScope     @default(own)
   status    ProfileStatus @default(active)
 
@@ -149,7 +148,6 @@ model Profile {
   user                         User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
   manager                      Profile?                   @relation("ProfileManager", fields: [managerId], references: [id], onDelete: SetNull)
   subordinates                 Profile[]                  @relation("ProfileManager")
-  homebaseVenue                Venue?                     @relation("ProfileHomebase", fields: [homebaseVenueId], references: [id], onDelete: SetNull)
   dataGroupMemberships         UserGroupMember[]
   ledGroups                    UserGroup[]                @relation("GroupLeader")
   dailyReportsSubmitted        DailyReport[]              @relation("DailyReportSubmitter")
@@ -163,8 +161,6 @@ model Profile {
   commentReactions             BookingCommentReaction[]
   approvalRecordsCreated       ApprovalRecord[]           @relation("ApprovalRecordCreator")
   approvalRecordsUpdated       ApprovalRecord[]           @relation("ApprovalRecordUpdater")
-  packagesCreated              Package[]                  @relation("PackageCreator")
-  packagesUpdated              Package[]                  @relation("PackageUpdater")
   approvalStepApprovals        ApprovalRecordStep[]       @relation("ApprovalRecordStepApprover")
   approvalStepDecisions        ApprovalRecordStep[]       @relation("ApprovalRecordStepDecider")
   bookingRevisions             BookingRevision[]
@@ -200,10 +196,6 @@ model Profile {
   leaveManagerApprovals        LeaveRequest[]             @relation("LeaveManagerApprover")
   leaveHrApprovals             LeaveRequest[]             @relation("LeaveHrApprover")
   leaveRejections              LeaveRequest[]             @relation("LeaveRejector")
-  attendanceCorrections        AttendanceCorrection[]
-  correctionManagerApprovals   AttendanceCorrection[]     @relation("CorrectionManagerApprover")
-  correctionHrApprovals        AttendanceCorrection[]     @relation("CorrectionHrApprover")
-  correctionRejections         AttendanceCorrection[]     @relation("CorrectionRejector")
   employeeSalaries             EmployeeSalary[]
   payslips                     Payslip[]
   payrollsGenerated            PayrollPeriod[]            @relation("PayrollGenerator")
@@ -257,7 +249,6 @@ model Profile {
   @@index([dataScope])
   @@index([departmentId])
   @@index([positionId])
-  @@index([homebaseVenueId])
   @@map("profiles")
 }
 
@@ -418,8 +409,7 @@ model Venue {
   bookings                  Booking[]
   leads                     Lead[]            @relation("LeadPrimaryVenue")
   leadsSecondary            Lead[]            @relation("LeadSecondaryVenue")
-  // No `quotations` back-relation: Quotation.venueId is an FK-less provenance
-  // pointer so an issued quotation never changes when this venue does.
+  quotations                Quotation[]
   quotationTemplates        QuotationTemplate[]
   maintenanceTickets        MaintenanceTicket[]
   workLocations             WorkLocation[]
@@ -433,7 +423,6 @@ model Venue {
   announcements             Announcement[]
   onboardingFormSubmissions OnboardingFormSubmission[]
   groupAssignments          UserGroupVenue[]
-  profileHomebases          Profile[]                  @relation("ProfileHomebase")
   kpiAssignments            KpiAssignment[]            @relation("KpiAssignmentVenue")
   kpiResults                KpiCalculationResult[]     @relation("KpiResultVenue")
   homebases                 UserGroupHomebase[]         @relation("GroupHomebases")
@@ -571,11 +560,10 @@ model PaymentMethod {
   venue              Venue?                     @relation(fields: [venueId], references: [id], onDelete: Cascade)
   bookings           Booking[]
   settlements        BookingPaymentSettlement[]
-  // No `quotations` back-relation — see Quotation.paymentMethodId.
+  quotations         Quotation[]
   quotationTemplates QuotationTemplate[]
   ledgers            Ledger[]
   payables           BookingPayable[]
-  packages           Package[]
 
   @@index([vendorId])
   @@index([venueId])
@@ -588,37 +576,23 @@ model Package {
   id                     String                 @id @default(uuid())
   packageName            String
   category               EventCategory          @default(WEDDINGS)
-  eventTypeId            String?
   available              Boolean                @default(true)
   approvalStatus         String                 @default("draft")
   venueId                String?
   packageTypeCategoryId  String?
-  paymentMethodId        String?
   notes                  String?
   pax                    Int                    @default(0)
   margin                 Float                  @default(0)
   sellingPrice           Int                    @default(0)
   termAndCondition       String?
-  cancellationRefundPolicy String?
-  closingNote            String?
   createdAt              DateTime               @default(now())
   updatedAt              DateTime               @updatedAt
-  createdById            String?
-  updatedById            String?
   venue                  Venue?                 @relation(fields: [venueId], references: [id], onDelete: SetNull)
   packageTypeCategory    PackageTypeCategory?   @relation(fields: [packageTypeCategoryId], references: [id], onDelete: SetNull)
-  paymentMethod          PaymentMethod?         @relation(fields: [paymentMethodId], references: [id], onDelete: SetNull)
-  eventType              EventType?             @relation(fields: [eventTypeId], references: [id], onDelete: SetNull)
-  createdBy              Profile?               @relation("PackageCreator", fields: [createdById], references: [id], onDelete: SetNull)
-  updatedBy              Profile?               @relation("PackageUpdater", fields: [updatedById], references: [id], onDelete: SetNull)
   vendorItems            PackageVendorItem[]
   internalItems          PackageInternalItem[]
   miceItems              PackageMiceItem[]
-  micePrices             PackageMicePrice[]
-  taxDeposits            PackageMiceTaxDeposit[]
   categoryPrices         PackageCategoryPrice[]
-  complimentaries        PackageComplimentary[]
-  bonuses                PackageBonus[]
   bookings               Booking[]
   leads                  Lead[]
   guestbookEntries       GuestbookEntry[]
@@ -626,10 +600,6 @@ model Package {
   @@index([venueId])
   @@index([category])
   @@index([packageTypeCategoryId])
-  @@index([paymentMethodId])
-  @@index([eventTypeId])
-  @@index([createdById])
-  @@index([updatedById])
   @@map("packages")
 }
 
@@ -714,104 +684,19 @@ model PackageInternalItem {
 }
 
 model PackageMiceItem {
-  id              String   @id @default(uuid())
+  id              String            @id @default(uuid())
   packageId       String
   itemName        String
-  itemDescription String   @default("")
-  sortOrder       Int      @default(0)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  package         Package  @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  itemDescription String            @default("")
+  itemType        MiceItemPriceType @default(PAX)
+  itemPrice       Int               @default(0)
+  sortOrder       Int               @default(0)
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  package         Package           @relation(fields: [packageId], references: [id], onDelete: Cascade)
 
   @@index([packageId])
   @@map("package_mice_items")
-}
-
-// Separate collection from PackageMiceItem (which is deliberately plain
-// name+description, no pricing). This is a standalone "Harga" step for MICE
-// packages: QTY rows carry qty+price and derive total = qty*price on the client;
-// NOMINAL rows carry only a directly-editable total (qty/price stay null).
-model PackageMicePrice {
-  id          String        @id @default(uuid())
-  packageId   String
-  name        String
-  description String?
-  priceType   MicePriceType @default(QTY)
-  qty         Int?
-  price       Int?
-  total       Int           @default(0)
-  sortOrder   Int           @default(0)
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
-  package     Package       @relation(fields: [packageId], references: [id], onDelete: Cascade)
-
-  @@index([packageId])
-  @@map("package_mice_prices")
-}
-
-enum MicePriceType {
-  QTY
-  NOMINAL
-}
-
-// Step 2 "Tax & Deposit" sub-collection for Package MICE — mirrors PackageMiceItem's
-// shape/conventions exactly (plain name + a single numeric column, sortOrder-driven).
-model PackageMiceTaxDeposit {
-  id        String   @id @default(uuid())
-  packageId String
-  name      String
-  nominal   Int      @default(0)
-  sortOrder Int      @default(0)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  package   Package  @relation(fields: [packageId], references: [id], onDelete: Cascade)
-
-  @@index([packageId])
-  @@map("package_mice_tax_deposits")
-}
-
-// Package-level Complimentary/Bonus, mirroring QuotationComplimentary/QuotationBonus
-// field-for-field (packageId instead of quotationId). Lets a MICE Package carry its
-// own Complimentary & Bonus lineup, copied into the quotation/booking snapshot later.
-model PackageComplimentary {
-  id              String         @id @default(uuid())
-  packageId       String
-  complimentaryId String?
-  name            String
-  price           Int            @default(0)
-  isShowPrice     Boolean        @default(false)
-  description     String?
-  qty             Int            @default(1)
-  sortOrder       Int            @default(0)
-  createdAt       DateTime       @default(now())
-  updatedAt       DateTime       @updatedAt
-  package         Package        @relation(fields: [packageId], references: [id], onDelete: Cascade)
-  complimentary   Complimentary? @relation(fields: [complimentaryId], references: [id], onDelete: SetNull)
-
-  @@index([packageId])
-  @@index([complimentaryId])
-  @@map("package_complimentaries")
-}
-
-// No isShowPrice column: unlike Complimentary, Bonus has no show/hide-price concept
-// (matches Bonus/QuotationBonus master schema).
-model PackageBonus {
-  id          String   @id @default(uuid())
-  packageId   String
-  bonusId     String?
-  name        String
-  price       Int      @default(0)
-  description String?
-  qty         Int      @default(1)
-  sortOrder   Int      @default(0)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  package     Package  @relation(fields: [packageId], references: [id], onDelete: Cascade)
-  bonus       Bonus?   @relation(fields: [bonusId], references: [id], onDelete: SetNull)
-
-  @@index([packageId])
-  @@index([bonusId])
-  @@map("package_bonuses")
 }
 
 // ─── Customers ───────────────────────────────────────────────────────────────
@@ -1135,7 +1020,7 @@ model Booking {
   poSeq                     Int?
   dealingDate               DateTime? // tanggal dealing booking; user-editable, default hari ini saat create, backfilled dari createdAt untuk data lama
   eventDate                 DateTime? // required for saved bookings; null only during MICE draft steps
-  quotationId               String?             @unique
+  quotationId               String?
   salesSignature            String?
   rejectionNotes            String?
   lostReason                String?
@@ -1185,7 +1070,6 @@ model Booking {
   currentRevision     BookingRevision?     @relation("BookingCurrentRevision", fields: [currentRevisionId], references: [id], onDelete: SetNull)
   lead                Lead?       @relation("BookingFromLead", fields: [leadId], references: [id], onDelete: SetNull)
   recognizedBy        Profile?             @relation("BookingRecognizer", fields: [recognizedById], references: [id], onDelete: SetNull)
-  quotation          Quotation?           @relation(fields: [quotationId], references: [id], onDelete: Restrict)
 
   // Snapshot relations (1:1)
   snapCustomer       SnapCustomer?
@@ -1442,7 +1326,6 @@ model Complimentary {
   updatedAt                DateTime                 @updatedAt
   snapComplimentaries      SnapComplimentary[]
   quotationComplimentaries QuotationComplimentary[]
-  packageComplimentaries   PackageComplimentary[]
 
   @@map("complimentaries")
 }
@@ -1478,8 +1361,6 @@ model Bonus {
   createdAt          DateTime           @default(now())
   updatedAt          DateTime           @updatedAt
   snapBookingBonuses SnapBookingBonus[]
-  quotationBonuses   QuotationBonus[]
-  packageBonuses     PackageBonus[]
 
   @@map("bonuses")
 }
@@ -1521,125 +1402,6 @@ model QuotationComplimentary {
   @@index([quotationId])
   @@index([complimentaryId])
   @@map("quotation_complimentaries")
-}
-
-model QuotationBonus {
-  id          String    @id @default(uuid())
-  quotationId String
-  bonusId     String?
-  name        String
-  price       Int       @default(0)
-  description String?
-  qty         Int       @default(1)
-  sortOrder   Int       @default(0)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  quotation   Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
-  bonus       Bonus?    @relation(fields: [bonusId], references: [id], onDelete: SetNull)
-
-  @@index([quotationId])
-  @@index([bonusId])
-  @@map("quotation_bonuses")
-}
-
-// ── Quotation MICE package snapshot ─────────────────────────────────────────────
-// Freezes the selected MICE package at the moment it's applied to a quotation.
-// Mix of normalized (FK: packageId/venueId/eventTypeId) + denormalized (name
-// strings) so the quotation document stays stable even if the master package
-// changes later. Child tables hold the frozen item/price/tax/… rows.
-model SnapQuotationPackage {
-  id              String   @id @default(uuid())
-  quotationId     String   @unique
-  packageId       String?
-  packageName     String
-  pax             Int      @default(0)
-  venueId         String?
-  venueName       String?
-  eventTypeId     String?
-  eventTypeName   String?
-  paymentMethodId String?
-  createdAt       DateTime @default(now())
-
-  quotation       Quotation                         @relation(fields: [quotationId], references: [id], onDelete: Cascade)
-  items           SnapQuotationPackageItem[]
-  prices          SnapQuotationPackagePrice[]
-  taxDeposits     SnapQuotationPackageTaxDeposit[]
-  complimentaries SnapQuotationPackageComplimentary[]
-  bonuses         SnapQuotationPackageBonus[]
-
-  @@index([quotationId])
-  @@map("snap_quotation_packages")
-}
-
-model SnapQuotationPackageItem {
-  id              String   @id @default(uuid())
-  snapPackageId   String
-  itemName        String
-  itemDescription String   @default("")
-  sortOrder       Int      @default(0)
-  snapPackage     SnapQuotationPackage @relation(fields: [snapPackageId], references: [id], onDelete: Cascade)
-
-  @@index([snapPackageId])
-  @@map("snap_quotation_package_items")
-}
-
-model SnapQuotationPackagePrice {
-  id            String        @id @default(uuid())
-  snapPackageId String
-  name          String
-  description   String?
-  priceType     MicePriceType @default(QTY)
-  qty           Int?
-  price         Int?
-  total         Int           @default(0)
-  sortOrder     Int           @default(0)
-  snapPackage   SnapQuotationPackage @relation(fields: [snapPackageId], references: [id], onDelete: Cascade)
-
-  @@index([snapPackageId])
-  @@map("snap_quotation_package_prices")
-}
-
-model SnapQuotationPackageTaxDeposit {
-  id            String   @id @default(uuid())
-  snapPackageId String
-  name          String
-  nominal       Int      @default(0)
-  sortOrder     Int      @default(0)
-  snapPackage   SnapQuotationPackage @relation(fields: [snapPackageId], references: [id], onDelete: Cascade)
-
-  @@index([snapPackageId])
-  @@map("snap_quotation_package_tax_deposits")
-}
-
-model SnapQuotationPackageComplimentary {
-  id              String   @id @default(uuid())
-  snapPackageId   String
-  complimentaryId String?
-  name            String
-  price           Int      @default(0)
-  isShowPrice     Boolean  @default(false)
-  description     String?
-  qty             Int      @default(1)
-  sortOrder       Int      @default(0)
-  snapPackage     SnapQuotationPackage @relation(fields: [snapPackageId], references: [id], onDelete: Cascade)
-
-  @@index([snapPackageId])
-  @@map("snap_quotation_package_complimentaries")
-}
-
-model SnapQuotationPackageBonus {
-  id            String   @id @default(uuid())
-  snapPackageId String
-  bonusId       String?
-  name          String
-  price         Int      @default(0)
-  description   String?
-  qty           Int      @default(1)
-  sortOrder     Int      @default(0)
-  snapPackage   SnapQuotationPackage @relation(fields: [snapPackageId], references: [id], onDelete: Cascade)
-
-  @@index([snapPackageId])
-  @@map("snap_quotation_package_bonuses")
 }
 
 model SnapVendorItem {
@@ -2227,8 +1989,7 @@ model EventType {
   createdAt  DateTime        @default(now())
   updatedAt  DateTime        @updatedAt
   leads      Lead[]
-  // No `quotations` back-relation — see Quotation.eventTypeId.
-  packages   Package[]
+  quotations Quotation[]
 
   @@index([category])
   @@map("event_types")
@@ -2246,6 +2007,11 @@ model Counter {
 enum EventCategory {
   WEDDINGS
   MICE
+}
+
+enum MiceItemPriceType {
+  PAX
+  NOMINAL
 }
 
 model LeadStatus {
@@ -2444,6 +2210,7 @@ enum QuotationStatus {
 model Quotation {
   id          String          @id @default(uuid())
   quotationNo String?
+  category    EventCategory   @default(WEDDINGS)
   status      QuotationStatus @default(draft)
 
   // Client info
@@ -2453,52 +2220,28 @@ model Quotation {
 
   // Relations
   salesId         String
-  // Master-data pointers WITHOUT foreign keys. A quotation looks master data up
-  // once, at create/edit time, then freezes everything it renders into the *Name
-  // columns below and into SnapQuotationPackage. These IDs are kept purely as
-  // provenance for analytics and are allowed to dangle if the master row is later
-  // renamed or deleted — an issued document must never change underneath the client.
   venueId         String?
   eventTypeId     String?
   paymentMethodId String?
-  // Frozen display names — the source of truth for rendering (no JOIN required).
+  // Snapshot of names at creation time (for display/PDF without JOIN)
   eventTypeName   String?
   venueName       String?
-  // Frozen bank details for the Term & Payment block. Copied from the selected
-  // PaymentMethod at create/edit time so editing a venue's bank account never
-  // rewrites an already-issued quotation.
-  bankName          String?
-  bankAccountNumber String?
-  bankRecipient     String?
-
-  // Selected MICE package reference — full data is frozen into SnapQuotationPackage
-  // and copied into the editable tables below (items/prices/taxDeposits/…).
-  packageId   String?
-  packageName String?
-  pax         Int     @default(0)
-  packageSource String? // "meeting-package" | "custom"
 
   // Event
-  eventDate    DateTime?
-  eventEndDate DateTime?
-  time         String?
-  place        String? // Area/ruang venue (mis. Ballroom, Outdoor, Gazebo)
-  details      String?
+  weddingSession WeddingSession?
+  eventDate      DateTime?
+  eventEndDate   DateTime?
+  time           String?
+  place          String? // Area/ruang venue (mis. Ballroom, Outdoor, Gazebo)
+  details        String?
 
   // Pricing (server-computed)
-  subtotal     Int     @default(0)
-  discount     Int     @default(0)
-  discountName String? // editable label (e.g. "Discount" / "Cashback")
-  totalPrice   Int     @default(0)
+  subtotal   Int  @default(0)
+  discount   Int  @default(0)
+  totalPrice Int  @default(0)
   // Booking fee required to confirm the reservation (shown in the Term & Payment
   // boilerplate: "Booking Fee of Rp X is required to confirm the reservation").
   bookingFee Int?
-  // Editable document clauses — each falls back to a hardcoded default string
-  // in quotation-preview.tsx when null (legacy rows / not yet customized).
-  termAndCondition   String? // full "Term & Payment" paragraph (rich text); overrides the bookingFee/paymentNote boilerplate when set
-  paymentNote        String? // sub-note under Term & Payment, e.g. remaining payment schedule
-  cancellationPolicy String? // Cancellation & Refund Policy paragraph
-  closingNote        String? // Closing paragraph before the signature block
 
   // Meta
   validUntil      DateTime?
@@ -2509,18 +2252,14 @@ model Quotation {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  // salesId keeps its FK: that is the person accountable for the document, not
-  // master data, so the audit trail must stay referentially intact.
   sales         Profile        @relation(fields: [salesId], references: [id], onDelete: Restrict)
+  venue         Venue?         @relation(fields: [venueId], references: [id], onDelete: SetNull)
+  eventType     EventType?     @relation(fields: [eventTypeId], references: [id], onDelete: SetNull)
+  paymentMethod PaymentMethod? @relation(fields: [paymentMethodId], references: [id], onDelete: SetNull)
 
   items           QuotationItem[]
   terms           QuotationTerm[]
   complimentaries QuotationComplimentary[]
-  bonuses         QuotationBonus[]
-  prices          QuotationPrice[]
-  taxDeposits     QuotationTaxDeposit[]
-  packageSnapshot SnapQuotationPackage?
-  booking         Booking?
 
   @@index([salesId])
   @@index([venueId])
@@ -2528,31 +2267,27 @@ model Quotation {
   @@index([paymentMethodId])
   @@index([status])
   @@index([createdAt])
+  // Composite index buat listing quotations: filter category + status, urut createdAt
+  @@index([category, status, createdAt])
   @@map("quotations")
 }
 
 model QuotationItem {
-  id          String            @id @default(uuid())
+  id          String   @id @default(uuid())
   quotationId String
-  type        QuotationItemType @default(ITEM)
   title       String
   description String? // rich HTML from TipTap
-  qty         Int               @default(0)
-  price       Int               @default(0)
-  total       Int               @default(0)
-  manualTotal Boolean           @default(false)
-  sortOrder   Int               @default(0)
-  createdAt   DateTime          @default(now())
+  qty         Int      @default(0)
+  price       Int      @default(0)
+  total       Int      @default(0)
+  manualTotal Boolean  @default(false)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
 
   quotation Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
 
   @@index([quotationId])
   @@map("quotation_items")
-}
-
-enum QuotationItemType {
-  ITEM
-  ADDITIONAL
 }
 
 model QuotationTerm {
@@ -2570,43 +2305,6 @@ model QuotationTerm {
 
   @@index([quotationId])
   @@map("quotation_terms")
-}
-
-// Step 2 "Harga" — editable copy of PackageMicePrice when a package is applied,
-// or manually added per quotation. Same QTY/NOMINAL convention.
-model QuotationPrice {
-  id          String        @id @default(uuid())
-  quotationId String
-  name        String
-  description String?
-  priceType   MicePriceType @default(QTY)
-  qty         Int?
-  price       Int?
-  total       Int           @default(0)
-  sortOrder   Int           @default(0)
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
-
-  quotation Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
-
-  @@index([quotationId])
-  @@map("quotation_prices")
-}
-
-// Step 4 "Tax & Deposit" — editable copy of PackageMiceTaxDeposit.
-model QuotationTaxDeposit {
-  id          String    @id @default(uuid())
-  quotationId String
-  name        String
-  nominal     Int       @default(0)
-  sortOrder   Int       @default(0)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-
-  quotation Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
-
-  @@index([quotationId])
-  @@map("quotation_tax_deposits")
 }
 
 // ── Quotation Template (per venue) ──────────────────────────────────────────────
@@ -3085,47 +2783,6 @@ model LeaveRequest {
   @@index([endDate])
   @@index([publicHolidayId])
   @@map("leave_requests")
-}
-
-model AttendanceCorrection {
-  id        String   @id @default(uuid())
-  profileId String
-  date      DateTime
-
-  requestedClockInAt  DateTime?
-  requestedClockOutAt DateTime?
-  reason              String
-  evidence            Json?
-
-  status LeaveRequestStatus @default(pending)
-
-  managerApprovedBy String?
-  managerApprovedAt DateTime?
-  managerNote       String?
-
-  hrApprovedBy String?
-  hrApprovedAt DateTime?
-  hrNote       String?
-
-  rejectedBy      String?
-  rejectedAt      DateTime?
-  rejectionReason String?
-
-  cancelledAt        DateTime?
-  cancellationReason String?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  profile         Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
-  managerApprover Profile? @relation("CorrectionManagerApprover", fields: [managerApprovedBy], references: [id], onDelete: SetNull)
-  hrApprover      Profile? @relation("CorrectionHrApprover", fields: [hrApprovedBy], references: [id], onDelete: SetNull)
-  rejector        Profile? @relation("CorrectionRejector", fields: [rejectedBy], references: [id], onDelete: SetNull)
-
-  @@index([profileId])
-  @@index([status])
-  @@index([date])
-  @@map("attendance_corrections")
 }
 
 // ─── Payroll Engine ──────────────────────────────────────────────────────────
@@ -3843,7 +3500,7 @@ model WeddingIndicator {
   allowanceNominal    Int?
 
   // Flexible JSONB for notes, PMs, wishes
-  questionnaireData Json @default("{}")
+  questionnaireData Json @default(dbgenerated("'{}'::jsonb"))
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -4140,7 +3797,6 @@ model GuestbookEntry {
   commitVisitDate       DateTime?
   commitPayDate         DateTime?
   bitrixSourceInfo      String?
-  bitrixAdsUrl          String?
   sourceOfInformationId String?
   packageId             String?
   segmentId             String?

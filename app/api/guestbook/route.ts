@@ -1,11 +1,13 @@
 import { requirePermissionForRoute } from "@/lib/permissions";
 import { apiLimiter, rateLimitResponse } from "@/lib/rate-limit";
 import { getGuestbookEntries, type GuestbookCategoryFilter } from "@/lib/queries/guestbookEntries";
+import { GUEST_VISIT_STATUS_VALUES } from "@/lib/guestbook-status";
 import type { DataScope } from "@/types/user";
-import type { GuestInteractionType } from "@prisma/client";
+import type { GuestInteractionType, GuestVisitStatus } from "@prisma/client";
 
 const ALLOWED_CATEGORY = new Set<GuestbookCategoryFilter>(["WEDDINGS", "MICE", "no_package"]);
 const ALLOWED_INTERACTION = new Set<GuestInteractionType>(["client_visit", "online_meeting", "jemput_bola"]);
+const ALLOWED_VISIT_STATUS = new Set<GuestVisitStatus>(GUEST_VISIT_STATUS_VALUES);
 
 export async function GET(request: Request): Promise<Response> {
   const { session, response } = await requirePermissionForRoute({
@@ -38,6 +40,12 @@ export async function GET(request: Request): Promise<Response> {
       ? (rawInteractionType as GuestInteractionType)
       : undefined;
 
+  const rawVisitStatus = searchParams.get("visitStatus");
+  const visitStatus: GuestVisitStatus | undefined =
+    rawVisitStatus && ALLOWED_VISIT_STATUS.has(rawVisitStatus as GuestVisitStatus)
+      ? (rawVisitStatus as GuestVisitStatus)
+      : undefined;
+
   const profileId = session.user.profileId ?? undefined;
   // dataScope is already carried on the JWT/session (refreshed from DB every 10
   // min in lib/auth.ts), so read it straight from the session instead of an extra
@@ -55,6 +63,7 @@ export async function GET(request: Request): Promise<Response> {
       dateTo,
       category,
       interactionType,
+      visitStatus,
     });
     return Response.json(result);
   } catch (error) {

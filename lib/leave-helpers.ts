@@ -16,9 +16,7 @@ export function calculateProrate(joinDate: Date, year: number, defaultQuota: num
   if (joinYear < year) return defaultQuota;
   if (joinYear > year) return 0;
   const joinMonth = joinDate.getMonth() + 1;
-  // Joining after the 15th of the month forfeits quota credit for that partial month.
-  const effectiveJoinMonth = joinDate.getDate() > 15 ? joinMonth + 1 : joinMonth;
-  const remainingMonths = Math.max(0, 12 - effectiveJoinMonth + 1);
+  const remainingMonths = 12 - joinMonth + 1;
   return Math.ceil((remainingMonths / 12) * defaultQuota);
 }
 

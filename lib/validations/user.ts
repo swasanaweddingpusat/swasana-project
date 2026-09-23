@@ -7,7 +7,6 @@ export const inviteUserSchema = z.object({
   fullName: z.string().min(2, "Nama minimal 2 karakter"),
   roleId: z.string().min(1, "Role wajib dipilih"),
   managerId: z.string().optional(),
-  homebaseVenueId: z.string().optional(),
   dataScope: z.enum(["own", "group", "all"]).default("own"),
   groupIds: z.array(z.string().min(1)).optional(),
 });
@@ -21,7 +20,6 @@ export const updateUserSchema = z.object({
   phoneNumber: z.string().optional(),
   roleId: z.string().optional(),
   managerId: z.string().optional(),
-  homebaseVenueId: z.string().optional(),
   status: z.enum(["active", "inactive", "suspended"]).optional(),
   dataScope: z.enum(["own", "group", "all"]).optional(),
 

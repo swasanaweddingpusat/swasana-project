@@ -1,23 +1,18 @@
 import { cacheTag } from "next/cache";
 import { db } from "@/lib/db";
-import type { QuotationStatus } from "@prisma/client";
+import type { QuotationStatus, EventCategory } from "@prisma/client";
 
 const quotationListSelect = {
   id: true,
   quotationNo: true,
+  category: true,
   status: true,
   clientName: true,
   clientPhone: true,
   instansi: true,
-  salesId: true,
-  venueId: true,
   venueName: true,
-  eventTypeId: true,
   eventTypeName: true,
-  packageId: true,
-  packageName: true,
-  pax: true,
-  packageSource: true,
+  weddingSession: true,
   eventDate: true,
   eventEndDate: true,
   time: true,
@@ -25,39 +20,23 @@ const quotationListSelect = {
   details: true,
   subtotal: true,
   discount: true,
-  discountName: true,
   totalPrice: true,
   bookingFee: true,
-  termAndCondition: true,
-  paymentNote: true,
-  cancellationPolicy: true,
-  closingNote: true,
   validUntil: true,
   notes: true,
   signingLocation: true,
   signatureSales: true,
   paymentMethodId: true,
-  // Frozen bank details — rendered directly, never re-resolved from PaymentMethod.
-  bankName: true,
-  bankAccountNumber: true,
-  bankRecipient: true,
   createdAt: true,
   updatedAt: true,
   sales: { select: { id: true, fullName: true, phoneNumber: true } },
-  // No venue / eventType / paymentMethod joins: those pointers are FK-less and the
-  // document renders from its own frozen columns instead.
-  booking: { select: { id: true, poNumber: true } },
-  items: { orderBy: { sortOrder: "asc" as const }, select: { id: true, type: true, title: true, description: true, qty: true, price: true, total: true, manualTotal: true, sortOrder: true } },
-  prices: { orderBy: { sortOrder: "asc" as const }, select: { id: true, name: true, description: true, priceType: true, qty: true, price: true, total: true, sortOrder: true } },
-  taxDeposits: { orderBy: { sortOrder: "asc" as const }, select: { id: true, name: true, nominal: true, sortOrder: true } },
-  terms: { orderBy: { sortOrder: "asc" as const }, select: { id: true, name: true, amount: true, dueDate: true, sortOrder: true } },
+  venue: { select: { id: true, name: true } },
+  paymentMethod: { select: { id: true, bankName: true, bankAccountNumber: true, bankRecipient: true } },
+  eventType: { select: { id: true, name: true } },
+  items: { orderBy: { sortOrder: "asc" as const }, select: { id: true, title: true, description: true, qty: true, price: true, total: true, manualTotal: true, sortOrder: true } },
   complimentaries: {
     orderBy: { sortOrder: "asc" as const },
     select: { id: true, complimentaryId: true, name: true, price: true, isShowPrice: true, description: true, qty: true, sortOrder: true },
-  },
-  bonuses: {
-    orderBy: { sortOrder: "asc" as const },
-    select: { id: true, bonusId: true, name: true, price: true, description: true, qty: true, sortOrder: true },
   },
 } as const;
 
@@ -75,6 +54,7 @@ interface GetQuotationsParams {
   pageSize?: number;
   search?: string;
   status?: QuotationStatus | "";
+  category?: EventCategory | "";
   salesId?: string;
 }
 
@@ -98,6 +78,7 @@ export async function getQuotations(params: GetQuotationsParams = {}): Promise<Q
         }
       : {}),
     ...(params.status ? { status: params.status } : {}),
+    ...(params.category ? { category: params.category } : {}),
     ...(params.salesId ? { salesId: params.salesId } : {}),
   };
 

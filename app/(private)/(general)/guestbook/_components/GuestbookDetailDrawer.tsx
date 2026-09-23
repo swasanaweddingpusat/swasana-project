@@ -4,10 +4,8 @@ import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import Image from "next/image";
 import QRCode from "qrcode";
-import { toast } from "sonner";
 import { Drawer } from "@/components/shared/drawer";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import {
   Buildings,
@@ -25,13 +23,10 @@ import {
   Gift,
   QrCode,
   CheckCircle,
-  ShareCircle,
-  Link as LinkIcon,
 } from "@solar-icons/react";
 import type { GuestbookEntryItem } from "@/lib/queries/guestbookEntries";
 import type { ProofFiles } from "@/lib/validations/guestbook";
 import { resolveGuestbookPhotoUrl } from "./photo-url";
-import { generateGuestbookTicketBlob } from "./guestbook-ticket";
 
 interface GuestbookDetailDrawerProps {
   open: boolean;
@@ -69,7 +64,6 @@ const ONLINE_MEDIUM_LABELS: Record<string, string> = {
   other: "Lainnya",
 };
 
-// Used for true instants (attendanceConfirmedAt, createdAt) — browser-local display is correct here.
 function formatDateTime(date: Date | string | null | undefined): string {
   if (!date) return "—";
   const d = new Date(date);
@@ -82,22 +76,6 @@ function formatDateTime(date: Date | string | null | undefined): string {
   });
 }
 
-// checkInAt in visit history is a naive local wall-clock value anchored to UTC on the server —
-// must read back with timeZone: "UTC" to avoid double-converting (unlike formatDateTime above).
-function formatVisitDateTime(date: Date | string | null | undefined): string {
-  if (!date) return "—";
-  const d = new Date(date);
-  return d.toLocaleDateString("id-ID", {
-    day: "2-digit",
-    month: "long",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    timeZone: "UTC",
-  });
-}
-
-// commitVisitDate/commitPayDate are naive local dates anchored to UTC on the server.
 function formatDate(date: Date | string | null | undefined): string {
   if (!date) return "—";
   const d = new Date(date);
@@ -105,7 +83,6 @@ function formatDate(date: Date | string | null | undefined): string {
     day: "2-digit",
     month: "long",
     year: "numeric",
-    timeZone: "UTC",
   });
 }
 
@@ -140,7 +117,6 @@ export function GuestbookDetailDrawer({
 }: GuestbookDetailDrawerProps): ReactNode {
   const [overlayImage, setOverlayImage] = useState<string | null>(null);
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
-  const [isSharing, setIsSharing] = useState(false);
 
   useEffect(() => {
     if (!entry?.guestCode) {
@@ -154,48 +130,6 @@ export function GuestbookDetailDrawer({
   }, [entry?.guestCode]);
 
   if (!entry) return null;
-
-  async function handleShareTicket(): Promise<void> {
-    if (!entry) return;
-    setIsSharing(true);
-    try {
-      const blob = await generateGuestbookTicketBlob(entry);
-      if (!blob) {
-        toast.error("Gagal membuat gambar tiket.");
-        return;
-      }
-      const file = new File([blob], `tiket-${entry.guestCode}.png`, { type: "image/png" });
-      const canShareFile =
-        typeof navigator !== "undefined" &&
-        typeof navigator.share === "function" &&
-        typeof navigator.canShare === "function" &&
-        navigator.canShare({ files: [file] });
-
-      if (canShareFile) {
-        await navigator.share({
-          files: [file],
-          title: "Tiket Kehadiran Expo",
-          text: `Tiket kehadiran expo untuk ${entry.visitorName}. Mohon konfirmasi kehadiran Anda beserta jumlah tamu yang akan hadir ya.`,
-        });
-      } else {
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = `tiket-${entry.guestCode}.png`;
-        a.click();
-        URL.revokeObjectURL(url);
-        toast.info("Gambar tiket diunduh. Kirim manual lewat WhatsApp ya.");
-      }
-    } catch (err) {
-      const isAbort = err instanceof Error && err.name === "AbortError";
-      if (!isAbort) {
-        console.error("[handleShareTicket]", err);
-        toast.error("Gagal membagikan tiket.");
-      }
-    } finally {
-      setIsSharing(false);
-    }
-  }
 
   const matchingEntries = allEntries.filter(
     (e) =>
@@ -282,17 +216,6 @@ export function GuestbookDetailDrawer({
                   Belum Konfirmasi Kehadiran
                 </Badge>
               )}
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                className="rounded-full gap-1.5 mt-1"
-                onClick={handleShareTicket}
-                disabled={isSharing}
-              >
-                <ShareCircle weight="BoldDuotone" className="h-4 w-4" />
-                {isSharing ? "Menyiapkan..." : "Bagikan ke WhatsApp"}
-              </Button>
             </div>
           </div>
         )}
@@ -399,25 +322,10 @@ export function GuestbookDetailDrawer({
             />
           )}
           <InfoRow icon={<MapPoint weight="BoldDuotone" className="h-4 w-4 text-muted-foreground" />} label="Lokasi" value={entry.meetingLocation} />
+          <InfoRow icon={<Calendar weight="BoldDuotone" className="h-4 w-4 text-muted-foreground" />} label="Jadwal" value={entry.scheduledAt ? formatDateTime(entry.scheduledAt) : null} />
           <InfoRow icon={<User weight="BoldDuotone" className="h-4 w-4 text-muted-foreground" />} label="Bertemu" value={entry.host?.fullName} />
           {entry.bitrixSourceInfo && (
             <InfoRow icon={<Database weight="BoldDuotone" className="h-4 w-4 text-muted-foreground" />} label="Sumber Bitrix" value={entry.bitrixSourceInfo} />
-          )}
-          {entry.bitrixAdsUrl && (
-            <InfoRow
-              icon={<LinkIcon weight="BoldDuotone" className="h-4 w-4 text-muted-foreground" />}
-              label="URL Iklan"
-              value={
-                <a
-                  href={entry.bitrixAdsUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-primary underline break-all"
-                >
-                  {entry.bitrixAdsUrl}
-                </a>
-              }
-            />
           )}
         </div>
 
@@ -487,7 +395,7 @@ export function GuestbookDetailDrawer({
                   return (
                     <div key={past.id} className="flex items-center justify-between gap-2 text-sm border-b border-border/50 pb-2 last:border-0 last:pb-0">
                       <div className="space-y-0.5">
-                        <p className="text-foreground font-medium">{formatVisitDateTime(past.checkInAt)}</p>
+                        <p className="text-foreground font-medium">{formatDateTime(past.checkInAt)}</p>
                         <p className="text-xs text-muted-foreground">{past.venue?.name ?? "—"}</p>
                       </div>
                       {pastStatus && (

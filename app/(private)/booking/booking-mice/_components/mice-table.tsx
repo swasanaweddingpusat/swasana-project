@@ -481,6 +481,7 @@ export function MiceTable() {
                           )}
                         </TableCell>
 
+                        {/* Quotation — always deferred */}
                         <TableCell className="px-4 whitespace-nowrap">
                           <span className="text-xs text-muted-foreground flex items-center gap-1">
                             <FileText
@@ -488,7 +489,7 @@ export function MiceTable() {
                               aria-hidden="true"
                               className="w-3 h-3 opacity-40"
                             />
-                            {item.quotation?.quotationNo ?? "—"}
+                            —
                           </span>
                         </TableCell>
 

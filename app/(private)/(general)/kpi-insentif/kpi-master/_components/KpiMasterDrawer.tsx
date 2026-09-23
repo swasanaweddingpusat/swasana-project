@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
 import { useForm, Controller } from "react-hook-form";
 import { toast } from "sonner";
 import {
@@ -175,14 +175,12 @@ export function KpiMasterDrawer({ isOpen, onClose, editMaster }: KpiMasterDrawer
     watch,
     control,
     reset,
-    setValue,
     formState: { errors },
   } = useForm<FormValues>({
     defaultValues: DEFAULT_VALUES,
   });
 
   const businessRole = watch("businessRole");
-  const previousBusinessRoleRef = useRef<FormValues["businessRole"] | null>(null);
   const targetItemId = watch("targetItemId");
   const achievementSchemaId = watch("achievementSchemaId");
   const isDraft = watch("isDraft");
@@ -210,24 +208,10 @@ export function KpiMasterDrawer({ isOpen, onClose, editMaster }: KpiMasterDrawer
         targetItemId: editMaster.targetItemId,
         achievementSchemaId: editMaster.achievementSchemaId,
       });
-      previousBusinessRoleRef.current = editMaster.businessRole as "sales" | "manager";
     } else {
       reset(DEFAULT_VALUES);
-      previousBusinessRoleRef.current = DEFAULT_VALUES.businessRole;
     }
   }, [isOpen, isEditMode, editMaster, reset]);
-
-  // Achievement schemas are scoped to businessRole (useAchievementSchemas(businessRole)).
-  // If the user switches business role after picking a schema, the previously selected
-  // achievementSchemaId may belong to a schema from the old role and is no longer valid —
-  // clear it so a mismatched schema can't be silently submitted.
-  useEffect(() => {
-    if (!isOpen) return;
-    if (previousBusinessRoleRef.current !== null && previousBusinessRoleRef.current !== businessRole) {
-      setValue("achievementSchemaId", "", { shouldValidate: false });
-    }
-    previousBusinessRoleRef.current = businessRole;
-  }, [businessRole, isOpen, setValue]);
 
   function handleClose() {
     reset(DEFAULT_VALUES);

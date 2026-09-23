@@ -1,7 +1,6 @@
 import type { Metadata, Viewport } from "next";
 
-import { Fraunces, Plus_Jakarta_Sans, Geist_Mono } from "next/font/google";
-import localFont from "next/font/local";
+import { Fraunces, Plus_Jakarta_Sans, Quicksand, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { QueryProvider } from "@/components/providers/query-provider";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -20,17 +19,10 @@ const fraunces = Fraunces({
   display: "swap",
 });
 
-// Self-hosted (not next/font/google): Turbopack's build-time Google Fonts
-// fetch for Quicksand intermittently fails in the Docker builder with
-// "next/font/google queries have exactly one entry", failing the whole build.
-// Local files sidestep the network fetch entirely.
-const quicksand = localFont({
-  src: [
-    { path: "./fonts/quicksand/quicksand-500.woff2", weight: "500", style: "normal" },
-    { path: "./fonts/quicksand/quicksand-600.woff2", weight: "600", style: "normal" },
-    { path: "./fonts/quicksand/quicksand-700.woff2", weight: "700", style: "normal" },
-  ],
+const quicksand = Quicksand({
   variable: "--font-quicksand",
+  subsets: ["latin"],
+  weight: ["500", "600", "700"],
   display: "swap",
 });
 

@@ -15,12 +15,6 @@ export interface SalesPackageTypeBreakdown {
   hadjatan: { count: number; pct: number };
 }
 
-export interface SalesHomebaseBreakdown {
-  venueId: string;
-  venueName: string;
-  count: number;
-}
-
 export interface SalesPerformanceCardItem {
   profileId: string;
   name: string;
@@ -33,7 +27,6 @@ export interface SalesPerformanceCardItem {
   achievementPct: number;
   breakdown: SalesCategoryBreakdown;
   packageTypeBreakdown: SalesPackageTypeBreakdown;
-  homebaseBreakdown: SalesHomebaseBreakdown[];
 }
 
 // ─── Helper: compute category breakdown in-memory ─────────────────────────────
@@ -128,7 +121,6 @@ async function _queryTopSales(
         salesId: true,
         bookingStatus: true,
         category: true,
-        venue: { select: { id: true, name: true } },
         snapPackagePricing: { select: { price: true } },
         snapPackage: { select: { packageTypeCategoryCode: true } },
       },
@@ -177,7 +169,6 @@ async function _queryTopSales(
     {
       bookingStatus: BookingStatus;
       category: EventCategory;
-      venue: { id: string; name: string };
       price: number;
       packageTypeCategoryCode: string | null;
     }[]
@@ -190,7 +181,6 @@ async function _queryTopSales(
     list.push({
       bookingStatus: b.bookingStatus,
       category: b.category,
-      venue: b.venue,
       price: b.snapPackagePricing?.price ?? 0,
       packageTypeCategoryCode: b.snapPackage?.packageTypeCategoryCode ?? null,
     });
@@ -212,16 +202,6 @@ async function _queryTopSales(
       hasTarget && target > 0 ? Math.round((revenue / target) * 100) : 0;
     const breakdown = computeBreakdown(bookings);
     const packageTypeBreakdown = computePackageTypeBreakdown(bookings);
-    const homebaseMap = new Map<string, SalesHomebaseBreakdown>();
-    for (const booking of bookings) {
-      const current = homebaseMap.get(booking.venue.id);
-      homebaseMap.set(booking.venue.id, {
-        venueId: booking.venue.id,
-        venueName: booking.venue.name,
-        count: (current?.count ?? 0) + 1,
-      });
-    }
-    const homebaseBreakdown = [...homebaseMap.values()].sort((a, b) => b.count - a.count);
 
     return {
       profileId,
@@ -235,7 +215,6 @@ async function _queryTopSales(
       achievementPct,
       breakdown,
       packageTypeBreakdown,
-      homebaseBreakdown,
     };
   });
 
