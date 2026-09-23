@@ -404,6 +404,19 @@ function formatEventDateRange(eventDate: string, eventEndDate?: string): string 
   return formatDate(eventDate);
 }
 
+/**
+ * True when the offer's validity window has closed. Compared date-only (the
+ * quotation is still valid for the whole of its last day), and only for
+ * quotations that have not been converted — once a booking exists the validity
+ * date is history and flagging it as expired would be misleading.
+ */
+function isQuotationExpired(q: QuotationItem): boolean {
+  if (!q.validUntil || q.booking) return false;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return new Date(q.validUntil) < today;
+}
+
 export function QuotationsTable() {
   const [search, setSearch] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
@@ -678,16 +691,21 @@ export function QuotationsTable() {
                 <Table className="w-full table-fixed">
                   <TableHeader>
                     <TableRow>
-                      {/* # — 4% */}
-                      <TableHead className="w-[4%] text-center">#</TableHead>
-                      {/* Customer — 22% */}
-                      <TableHead className="w-[22%]">Customer</TableHead>
-                      {/* Venue + Event Date — 21% */}
-                      <TableHead className="w-[21%]">Venue</TableHead>
-                      {/* Sales + Submit Date — 21% — hidden xs */}
-                      <TableHead className="w-[21%] hidden sm:table-cell">Sales</TableHead>
-                      {/* Total — 27% — right-aligned */}
-                      <TableHead className="w-[27%] text-right">Total</TableHead>
+                      {/* # — 3% */}
+                      <TableHead className="w-[3%] text-center">#</TableHead>
+                      {/* Quotation no + client + instansi — 21% */}
+                      <TableHead className="w-[21%]">Customer</TableHead>
+                      {/* Event type + pax — 14%, hidden below lg to protect the
+                          columns a salesperson scans first on narrow screens */}
+                      <TableHead className="w-[14%] hidden lg:table-cell">Event</TableHead>
+                      {/* Venue + event date — 18% */}
+                      <TableHead className="w-[18%]">Venue</TableHead>
+                      {/* Sales + created date — 15% */}
+                      <TableHead className="w-[15%] hidden sm:table-cell">Sales</TableHead>
+                      {/* Total + validity — 15% */}
+                      <TableHead className="w-[15%] text-right">Total</TableHead>
+                      {/* Approval + conversion — 14% */}
+                      <TableHead className="w-[14%]">Status</TableHead>
                       {/* Actions — 5% */}
                       <TableHead className="w-[5%]" />
                     </TableRow>
@@ -695,7 +713,7 @@ export function QuotationsTable() {
                   <TableBody>
                     {isFetching ? (
                       <TableRow>
-                        <TableCell colSpan={6} className="py-10 text-center text-muted-foreground">
+                        <TableCell colSpan={8} className="py-10 text-center text-muted-foreground">
                           <Refresh weight="BoldDuotone" aria-hidden="true" className="h-6 w-6 opacity-40 animate-spin mx-auto" />
                         </TableCell>
                       </TableRow>
@@ -729,7 +747,9 @@ export function QuotationsTable() {
                           <TableCell className="text-center text-sm text-muted-foreground tabular-nums">
                             {(currentPage - 1) * ROWS_PER_PAGE + idx + 1}
                           </TableCell>
-                          {/* Customer */}
+                          {/* Customer — document no, PIC, and the company the offer
+                              is addressed to (MICE sells to organisations, so the
+                              instansi is often what people search by) */}
                           <TableCell className="min-w-0">
                             <div className="min-w-0">
                               <span className="block truncate font-mono text-[11px] text-muted-foreground">
@@ -741,18 +761,28 @@ export function QuotationsTable() {
                               >
                                 {q.leadName}
                               </span>
-                              <span className="block truncate text-xs text-muted-foreground">
-                                {q.leadPhone}
+                              {q.instansi ? (
+                                <span title={q.instansi} className="block truncate text-xs text-muted-foreground">
+                                  {q.instansi}
+                                </span>
+                              ) : (
+                                <span className="block truncate text-xs text-muted-foreground">
+                                  {q.leadPhone}
+                                </span>
+                              )}
+                            </div>
+                          </TableCell>
+
+                          {/* Event type + pax — the two figures that separate an
+                              otherwise identical Halfday and Fullday quotation */}
+                          <TableCell className="min-w-0 hidden lg:table-cell">
+                            <div className="min-w-0">
+                              <span title={q.eventType} className="block truncate text-sm text-foreground">
+                                {q.eventType || "—"}
                               </span>
-                              {(() => {
-                                const badge = getApprovalBadge(q.id);
-                                if (!badge) return null;
-                                return (
-                                  <Badge variant={badge.variant} className="text-[10px] mt-0.5">
-                                    {badge.label}
-                                  </Badge>
-                                );
-                              })()}
+                              <span className="block truncate text-xs text-muted-foreground tabular-nums">
+                                {q.pax > 0 ? `${q.pax} pax` : "—"}
+                              </span>
                             </div>
                           </TableCell>
 
@@ -760,7 +790,7 @@ export function QuotationsTable() {
                           <TableCell className="min-w-0">
                             <div className="min-w-0">
                               <span title={q.venue} className="block truncate text-sm text-foreground">
-                                {q.venue}
+                                {q.venue || "—"}
                               </span>
                               <span className="block truncate text-xs text-muted-foreground tabular-nums">
                                 {q.eventDate ? formatEventDateRange(q.eventDate, q.eventEndDate) : "—"}
@@ -783,9 +813,57 @@ export function QuotationsTable() {
                             </div>
                           </TableCell>
 
-                          {/* Total */}
-                          <TableCell className="text-right tabular-nums font-semibold text-sm">
-                            {formatRupiah(q.totalPrice)}
+                          {/* Total + validity — an expired offer is called out in
+                              red so it is not quoted to a client by accident */}
+                          <TableCell className="text-right">
+                            <div className="min-w-0">
+                              <span className="block truncate tabular-nums font-semibold text-sm text-foreground">
+                                {formatRupiah(q.totalPrice)}
+                              </span>
+                              {q.validUntil && (
+                                <span
+                                  className={cn(
+                                    "block truncate text-xs tabular-nums",
+                                    isQuotationExpired(q) ? "text-destructive font-medium" : "text-muted-foreground",
+                                  )}
+                                >
+                                  {isQuotationExpired(q) ? "Expired " : "s/d "}
+                                  {formatDate(q.validUntil)}
+                                </span>
+                              )}
+                            </div>
+                          </TableCell>
+
+                          {/* Status — approval stage, plus the booking it became.
+                              Previously the conversion state was only discoverable
+                              by opening the row's action menu. */}
+                          <TableCell className="min-w-0">
+                            <div className="min-w-0 space-y-1">
+                              {(() => {
+                                const badge = getApprovalBadge(q.id);
+                                if (!badge) return null;
+                                return (
+                                  <Badge variant={badge.variant} className="text-[10px]">
+                                    {badge.label}
+                                  </Badge>
+                                );
+                              })()}
+                              {q.booking && (
+                                <span
+                                  title={q.booking.poNumber ?? undefined}
+                                  className="flex items-center gap-1 min-w-0 text-[11px] text-muted-foreground"
+                                >
+                                  <CalendarMark
+                                    weight="BoldDuotone"
+                                    aria-hidden="true"
+                                    className="h-3 w-3 shrink-0 text-primary"
+                                  />
+                                  <span className="truncate font-mono">
+                                    {q.booking.poNumber ?? "Booking"}
+                                  </span>
+                                </span>
+                              )}
+                            </div>
                           </TableCell>
 
                           {/* Actions */}
@@ -889,15 +967,33 @@ export function QuotationsTable() {
                             >
                               {q.leadName}
                             </span>
-                            {(() => {
-                              const badge = getApprovalBadge(q.id);
-                              if (!badge) return null;
-                              return (
-                                <Badge variant={badge.variant} className="text-[10px] mt-0.5">
-                                  {badge.label}
-                                </Badge>
-                              );
-                            })()}
+                            {q.instansi && (
+                              <span title={q.instansi} className="block text-xs text-muted-foreground truncate">
+                                {q.instansi}
+                              </span>
+                            )}
+                            <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
+                              {(() => {
+                                const badge = getApprovalBadge(q.id);
+                                if (!badge) return null;
+                                return (
+                                  <Badge variant={badge.variant} className="text-[10px]">
+                                    {badge.label}
+                                  </Badge>
+                                );
+                              })()}
+                              {q.booking && (
+                                <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground min-w-0">
+                                  <CalendarMark weight="BoldDuotone" aria-hidden="true" className="h-3 w-3 shrink-0 text-primary" />
+                                  <span className="truncate font-mono">{q.booking.poNumber ?? "Booking"}</span>
+                                </span>
+                              )}
+                              {isQuotationExpired(q) && (
+                                <span className="text-[10px] font-medium text-destructive">
+                                  Expired {formatDate(q.validUntil)}
+                                </span>
+                              )}
+                            </div>
                           </div>
                         </div>
 
@@ -908,6 +1004,12 @@ export function QuotationsTable() {
                             <>
                               <span aria-hidden="true">·</span>
                               <span className="truncate">{q.eventType}</span>
+                            </>
+                          )}
+                          {q.pax > 0 && (
+                            <>
+                              <span aria-hidden="true">·</span>
+                              <span className="truncate tabular-nums">{q.pax} pax</span>
                             </>
                           )}
                           {q.eventDate && (
