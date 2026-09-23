@@ -26,6 +26,7 @@ import {
   QrCode,
   CheckCircle,
   ShareCircle,
+  Link as LinkIcon,
 } from "@solar-icons/react";
 import type { GuestbookEntryItem } from "@/lib/queries/guestbookEntries";
 import type { ProofFiles } from "@/lib/validations/guestbook";
@@ -401,6 +402,22 @@ export function GuestbookDetailDrawer({
           <InfoRow icon={<User weight="BoldDuotone" className="h-4 w-4 text-muted-foreground" />} label="Bertemu" value={entry.host?.fullName} />
           {entry.bitrixSourceInfo && (
             <InfoRow icon={<Database weight="BoldDuotone" className="h-4 w-4 text-muted-foreground" />} label="Sumber Bitrix" value={entry.bitrixSourceInfo} />
+          )}
+          {entry.bitrixAdsUrl && (
+            <InfoRow
+              icon={<LinkIcon weight="BoldDuotone" className="h-4 w-4 text-muted-foreground" />}
+              label="URL Iklan"
+              value={
+                <a
+                  href={entry.bitrixAdsUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-primary underline break-all"
+                >
+                  {entry.bitrixAdsUrl}
+                </a>
+              }
+            />
           )}
         </div>
 

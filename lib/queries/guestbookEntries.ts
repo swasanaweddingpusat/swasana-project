@@ -87,6 +87,8 @@ export interface GuestbookOverview {
   bySource: GuestbookOverviewBucket[];
   byVenue: GuestbookOverviewBucket[];
   byHost: GuestbookOverviewBucket[];
+  adsUrlBuckets: GuestbookOverviewBucket[];
+  adsUrlOrganik: number;
 }
 
 const guestbookEntrySelect = {
@@ -109,6 +111,7 @@ const guestbookEntrySelect = {
   bitrixContactId: true,
   bitrixName: true,
   bitrixSourceInfo: true,
+  bitrixAdsUrl: true,
   visitStatus: true,
   proofFiles: true,
   commitVisitDate: true,
@@ -170,13 +173,14 @@ export async function getGuestbookEntries(
     .slice(0, 10)
     .map((row) => ({ key: row.key as string, label: labels.get(row.key as string) ?? fallback, count: row.count }));
 
-  const [statusGroups, categoryGroups, sourceGroups, venueGroups, hostGroups, interactionGroups, checkedOut, activeVisits] = await Promise.all([
+  const [statusGroups, categoryGroups, sourceGroups, venueGroups, hostGroups, interactionGroups, adsUrlGroups, checkedOut, activeVisits] = await Promise.all([
     db.guestbookEntry.groupBy({ by: ["visitStatus"], where, _count: { _all: true } }),
     db.guestbookEntry.groupBy({ by: ["eventCategory"], where, _count: { _all: true } }),
     db.guestbookEntry.groupBy({ by: ["sourceOfInformationId"], where, _count: { _all: true } }),
     db.guestbookEntry.groupBy({ by: ["venueId"], where, _count: { _all: true } }),
     db.guestbookEntry.groupBy({ by: ["hostId"], where, _count: { _all: true } }),
     db.guestbookEntry.groupBy({ by: ["interactionType"], where, _count: { _all: true } }),
+    db.guestbookEntry.groupBy({ by: ["bitrixAdsUrl"], where, _count: { _all: true } }),
     db.guestbookEntry.count({ where: { ...where, checkOutAt: { not: null } } }),
     db.guestbookEntry.count({ where: { ...where, checkOutAt: null } }),
   ]);
@@ -207,6 +211,12 @@ export async function getGuestbookEntries(
     bySource: buildBuckets(sourceGroups.map((row) => ({ key: row.sourceOfInformationId, count: row._count._all })), sourceLabels, "Tanpa sumber"),
     byVenue: buildBuckets(venueGroups.map((row) => ({ key: row.venueId, count: row._count._all })), venueLabels, "Tanpa venue"),
     byHost: buildBuckets(hostGroups.map((row) => ({ key: row.hostId, count: row._count._all })), hostLabels, "Tanpa PIC"),
+    adsUrlBuckets: adsUrlGroups
+      .filter((row) => !!row.bitrixAdsUrl)
+      .sort((a, b) => b._count._all - a._count._all)
+      .slice(0, 10)
+      .map((row) => ({ key: row.bitrixAdsUrl as string, label: row.bitrixAdsUrl as string, count: row._count._all })),
+    adsUrlOrganik: adsUrlGroups.find((row) => row.bitrixAdsUrl === null)?._count._all ?? 0,
   };
 
   const [data, total, weddingCount, miceCount] = await Promise.all([

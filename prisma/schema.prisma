@@ -3845,6 +3845,7 @@ model GuestbookEntry {
   commitVisitDate       DateTime?
   commitPayDate         DateTime?
   bitrixSourceInfo      String?
+  bitrixAdsUrl          String?
   sourceOfInformationId String?
   packageId             String?
   segmentId             String?
