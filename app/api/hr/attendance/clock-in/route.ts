@@ -49,34 +49,15 @@ export async function POST(req: Request) {
   const ip = req.headers.get("x-forwarded-for") ?? "unknown";
   const { attendanceStatus } = parsed.data;
 
-  // --- Off flow: employee self-reports a day off, and picks the jenis libur (Libur Biasa
-  // vs Public Holiday). Selfie required as proof of presence, but no venue/GPS (not tied to
-  // a work location). ---
+  // --- Off flow: employee self-reports a plain day off. Selfie required as proof of
+  // presence, but no venue/GPS (not tied to a work location). Public Holiday is never
+  // set here — it's a tag on the WORKDAY flow below (employee still comes to work on a
+  // tanggal merah). ---
   if (attendanceStatus !== "WORKDAY") {
-    const { photoBase64, dayOffType, publicHolidayId } = parsed.data;
-    if (!dayOffType) {
-      return Response.json({ error: "Jenis libur wajib dipilih" }, { status: 422 });
-    }
+    const { photoBase64 } = parsed.data;
     if (!photoBase64) {
       return Response.json({ error: "Foto wajib disertakan" }, { status: 422 });
     }
-
-    // Karyawan memilih apakah hari ini Public Holiday (tanggal merah) atau libur biasa.
-    // Identitas "hari besar" (nama) ditentukan HRD lewat master PublicHoliday: server
-    // mencocokkan tanggal absen dengan master by-date lalu meng-snapshot namanya supaya
-    // absensi tetap tampil benar bila master di-rename/hapus. Karyawan tak memilih nama.
-    const isPublicHoliday = dayOffType === "PUBLIC_HOLIDAY";
-    const holiday = isPublicHoliday
-      ? await db.publicHoliday.findFirst({
-          where: { id: publicHolidayId, date: { lte: today }, isActive: true },
-          select: { id: true, name: true },
-        })
-      : null;
-    if (isPublicHoliday && !holiday) {
-      return Response.json({ error: "Public holiday tidak tersedia untuk tanggal hari ini" }, { status: 422 });
-    }
-    const resolvedHolidayId: string | null = holiday?.id ?? null;
-    const resolvedHolidayName: string | null = holiday?.name ?? null;
 
     // SOP upload: random-id filename, webp, 50% quality, JSON descriptor
     const dateStr = today.toISOString().slice(0, 10);
@@ -103,17 +84,17 @@ export async function POST(req: Request) {
           date: today,
           clockInAt: now,
           attendantType: "DAY_OFF",
-          isPublicHoliday,
-          publicHolidayId: resolvedHolidayId,
-          publicHolidayName: resolvedHolidayName,
+          isPublicHoliday: false,
+          publicHolidayId: null,
+          publicHolidayName: null,
           clockInEvidence: clockInEvidence as Prisma.InputJsonValue,
         },
         update: {
           clockInAt: now,
           attendantType: "DAY_OFF",
-          isPublicHoliday,
-          publicHolidayId: resolvedHolidayId,
-          publicHolidayName: resolvedHolidayName,
+          isPublicHoliday: false,
+          publicHolidayId: null,
+          publicHolidayName: null,
           clockInEvidence: clockInEvidence as Prisma.InputJsonValue,
         },
       });
@@ -134,8 +115,9 @@ export async function POST(req: Request) {
     }
   }
 
-  // --- Normal flow: employee self-selects shift + work type (+ venue for WFO) ---
-  const { workShiftId, workLocationId, workType, photoBase64, lat, lng } = parsed.data;
+  // --- Normal flow: employee self-selects shift + work type (+ venue for WFO). Public
+  // Holiday is an optional tag here — employee still comes to work on a tanggal merah. ---
+  const { workShiftId, workLocationId, workType, photoBase64, lat, lng, isPublicHoliday: wantsPublicHoliday, publicHolidayId } = parsed.data;
   if (!workShiftId || !workType || !photoBase64 || lat === undefined || lng === undefined) {
     return Response.json({ error: "Data absensi tidak lengkap" }, { status: 422 });
   }
@@ -172,7 +154,22 @@ export async function POST(req: Request) {
     resolvedLocationId = gpsResult.nearestLocationId;
   }
 
-  // 5. Upload photo — SOP: random-id filename, webp, 50% quality, JSON descriptor
+  // 5. Public Holiday tag. Identitas "hari besar" (nama) ditentukan HRD lewat master
+  // PublicHoliday: server mencocokkan tanggal absen dengan master by-date lalu
+  // meng-snapshot namanya supaya absensi tetap tampil benar bila master di-rename/hapus.
+  const holiday = wantsPublicHoliday
+    ? await db.publicHoliday.findFirst({
+        where: { id: publicHolidayId, date: { lte: today }, isActive: true },
+        select: { id: true, name: true },
+      })
+    : null;
+  if (wantsPublicHoliday && !holiday) {
+    return Response.json({ error: "Public holiday tidak tersedia untuk tanggal hari ini" }, { status: 422 });
+  }
+  const resolvedHolidayId: string | null = holiday?.id ?? null;
+  const resolvedHolidayName: string | null = holiday?.name ?? null;
+
+  // 6. Upload photo — SOP: random-id filename, webp, 50% quality, JSON descriptor
   const dateStr = today.toISOString().slice(0, 10);
   const base64Data = photoBase64.replace(/^data:image\/\w+;base64,/, "");
   const rawBuffer = Buffer.from(base64Data, "base64");
@@ -189,11 +186,10 @@ export async function POST(req: Request) {
     return Response.json({ error: "Gagal mengupload foto" }, { status: 500 });
   }
 
-  // 6. Determine status. Public Holiday is a jenis libur chosen on the off flow, never a
-  // workday marker — a WORKDAY attendance is never flagged as tanggal merah.
+  // 7. Determine status
   const status = determineStatus(now, workShift.startTime, workShift.lateToleranceMinutes, workShift.isOvernight);
 
-  // 7. Upsert attendance with the employee's self-selected shift + location
+  // 8. Upsert attendance with the employee's self-selected shift + location
   try {
     const attendance = await db.attendance.upsert({
       where: { profileId_date: { profileId, date: today } },
@@ -209,9 +205,9 @@ export async function POST(req: Request) {
         workShiftId: workShift.id,
         workType,
         attendantType: "WORKDAY",
-        isPublicHoliday: false,
-        publicHolidayId: null,
-        publicHolidayName: null,
+        isPublicHoliday: !!resolvedHolidayId,
+        publicHolidayId: resolvedHolidayId,
+        publicHolidayName: resolvedHolidayName,
       },
       update: {
         clockInAt: now,
@@ -223,9 +219,9 @@ export async function POST(req: Request) {
         workShiftId: workShift.id,
         workType,
         attendantType: "WORKDAY",
-        isPublicHoliday: false,
-        publicHolidayId: null,
-        publicHolidayName: null,
+        isPublicHoliday: !!resolvedHolidayId,
+        publicHolidayId: resolvedHolidayId,
+        publicHolidayName: resolvedHolidayName,
       },
     });
 
