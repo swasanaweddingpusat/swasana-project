@@ -20,6 +20,7 @@ import {
   Target,
   ChartSquare,
   WalletMoney,
+  MoneyBag,
   Buildings2,
   InfoCircle,
   MedalStar,
@@ -198,7 +199,7 @@ function ResultSection({ result, month, year }: { result: KpiCalculationResultIt
   return (
     <div className="space-y-4">
       {/* Summary cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
         <div className="rounded-2xl border bg-card p-5 shadow-sm space-y-1">
           <p className="text-xs text-muted-foreground flex items-center gap-1">
             <MedalStar weight="BoldDuotone" className="h-3.5 w-3.5" />
@@ -208,6 +209,17 @@ function ResultSection({ result, month, year }: { result: KpiCalculationResultIt
             {gradeLabel}
           </p>
           <p className="text-xs text-muted-foreground">{MONTHS[month - 1]} {year}</p>
+        </div>
+
+        <div className="rounded-2xl border bg-card p-5 shadow-sm space-y-1">
+          <p className="text-xs text-muted-foreground flex items-center gap-1">
+            <MoneyBag weight="BoldDuotone" className="h-3.5 w-3.5" />
+            Saldo Bonus
+          </p>
+          <p className="font-heading text-xl font-bold text-foreground tabular-nums">
+            {formatRupiah(result.totalBonus)}
+          </p>
+          <p className="text-xs text-muted-foreground">Bonus bulan ini</p>
         </div>
 
         <div className="rounded-2xl border bg-card p-5 shadow-sm space-y-1">
@@ -386,8 +398,8 @@ export function KpiSayaClient() {
       {/* Loading skeleton */}
       {isLoading && (
         <div className="space-y-4">
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            {Array.from({ length: 4 }).map((_, i) => <SummaryCardSkeleton key={i} />)}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+            {Array.from({ length: 5 }).map((_, i) => <SummaryCardSkeleton key={i} />)}
           </div>
           <div className="rounded-2xl border bg-card p-5 shadow-sm space-y-4">
             <Skeleton className="h-4 w-40" />

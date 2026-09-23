@@ -1,11 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Box, UsersGroupRounded, Settings, CloseCircle, Pen, FileText, Calendar, MapPoint, Tag } from "@solar-icons/react";
-import { getPackageCreatedBy } from "@/actions/package";
 import { cn } from "@/lib/utils";
 import type { PackageQueryItem } from "@/lib/queries/packages";
 
@@ -35,14 +33,6 @@ interface DetailModalProps {
 }
 
 export function DetailModal({ open, onClose, pkg, onEdit }: DetailModalProps) {
-  const [createdByName, setCreatedByName] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!open || !pkg) return;
-    getPackageCreatedBy(pkg.id).then(setCreatedByName).catch(() => setCreatedByName(null));
-    return () => { setCreatedByName(null); };
-  }, [open, pkg]);
-
   if (!pkg) return null;
 
   const sellingPrice = getSellingPrice(pkg);
@@ -67,9 +57,9 @@ export function DetailModal({ open, onClose, pkg, onEdit }: DetailModalProps) {
                 <span className="inline-flex items-center gap-1">
                   <Calendar weight="BoldDuotone" className="h-3 w-3" />Updated {formatDate(pkg.updatedAt)}
                 </span>
-                {createdByName && (
+                {pkg.createdBy?.fullName && (
                   <span className="inline-flex items-center gap-1">
-                    by <span className="font-medium text-foreground">{createdByName}</span>
+                    by <span className="font-medium text-foreground">{pkg.createdBy.fullName}</span>
                   </span>
                 )}
               </div>

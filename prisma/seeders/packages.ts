@@ -43,6 +43,9 @@ export async function seedPackages() {
   const salesProfile = salesUser ? await prisma.profile.findUnique({ where: { userId: salesUser.id } }) : null;
 
   const adminUser = await prisma.user.findUnique({ where: { email: "admin@swasana.com" } });
+
+
+
   const adminProfile = adminUser ? await prisma.profile.findUnique({ where: { userId: adminUser.id } }) : null;
 
   // Get hardcoded approval flow for package (Manager → Finance)

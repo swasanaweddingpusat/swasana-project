@@ -13,7 +13,6 @@ export async function fetchGuestbookEntries(
   if (params?.dateTo) searchParams.set("dateTo", params.dateTo);
   if (params?.category) searchParams.set("category", params.category);
   if (params?.interactionType) searchParams.set("interactionType", params.interactionType);
-  if (params?.visitStatus) searchParams.set("visitStatus", params.visitStatus);
   const qs = searchParams.toString();
 
   const res = await fetch(`/api/guestbook${qs ? `?${qs}` : ""}`);

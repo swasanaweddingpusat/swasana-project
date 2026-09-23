@@ -1,9 +1,9 @@
-// Seeder: KPI Insentif draft data
+// Seeder: KPI Insentif demo data
 // Run: npx tsx prisma/seeders/kpiInsentif.ts
 //
-// Seeds draft configs for Sales Oktober 2026 targets and achievement schemas.
-// All records seeded with isDraft=true — no production payment amounts are activated.
-// Business decisions still pending (tier bounds, commission base, deduction basis).
+// Seeds target items, achievement schemas, KPI masters, commission policies,
+// assignments, and simulated calculation results for September 2026.
+// Draft policy flags remain intact; seeded financial values are for UI preview only.
 
 import type { Prisma } from "@prisma/client";
 import { prisma } from "./_client";
@@ -237,6 +237,24 @@ export async function seedKpiInsentif() {
     take: 4,
     select: { id: true, fullName: true },
   });
+  const adminUser = await prisma.user.findUnique({
+    where: { email: "admin@swasana.com" },
+    select: { profile: { select: { id: true, fullName: true } } },
+  });
+  const managerProfile = await prisma.profile.findFirst({
+    where: {
+      status: "active",
+      role: { name: { contains: "manager", mode: "insensitive" } },
+    },
+    select: { id: true, fullName: true },
+  });
+  const demoProfiles = Array.from(
+    new Map(
+      [adminUser?.profile, ...salesProfiles, managerProfile]
+        .filter((profile): profile is { id: string; fullName: string | null } => Boolean(profile))
+        .map((profile) => [profile.id, profile]),
+    ).values(),
+  );
 
   const venues = await prisma.venue.findMany({
     take: 3,
@@ -246,7 +264,7 @@ export async function seedKpiInsentif() {
 
   const period = new Date("2026-09-01");
 
-  for (const profile of salesProfiles) {
+  for (const profile of demoProfiles) {
     for (const m of [master, omsetMaster, homebaseMaster]) {
       await findOrCreate(
         () =>
@@ -295,10 +313,26 @@ export async function seedKpiInsentif() {
       tierIndex: 1,
       status: "SIMULATED" as const,
     },
+    {
+      profileIndex: 2,
+      realDealing: 9, realDealingReg: 4, realDealingHadj: 5,
+      realOmset: "1340000000", realOmsetReg: "600000000", realOmsetHadj: "740000000",
+      realHomebase: 4,
+      tierIndex: 4,
+      status: "PENDING_REVIEW" as const,
+    },
+    {
+      profileIndex: 3,
+      realDealing: 5, realDealingReg: 2, realDealingHadj: 3,
+      realOmset: "720000000", realOmsetReg: "320000000", realOmsetHadj: "400000000",
+      realHomebase: 2,
+      tierIndex: 2,
+      status: "DRAFT" as const,
+    },
   ];
 
   for (const sample of sampleResults) {
-    const profile = salesProfiles[sample.profileIndex];
+    const profile = demoProfiles[sample.profileIndex];
     if (!profile) continue;
 
     const tier = salesTiers[sample.tierIndex];

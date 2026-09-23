@@ -4,7 +4,6 @@ import { db } from "@/lib/db";
 import { auth } from "@/lib/auth";
 import { isSuperAdmin as isSuperAdminFn } from "@/lib/permissions";
 import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
-import { logAudit } from "@/lib/audit";
 import { revalidateTag } from "next/cache";
 import { Prisma } from "@prisma/client";
 import { isSequentialFlow } from "@/lib/approval-flows";
@@ -55,7 +54,7 @@ export async function approveStep(stepId: string, signature?: string | null) {
     const now = new Date();
     const stepUpdates: Prisma.PrismaPromise<unknown>[] = stepsToApprove.map((s) =>
       db.approvalRecordStep.update({
-        where: { id: s.id },
+        where: { id: s.id, status: "pending" },
         data: { status: "approved", decidedById: session.user.profileId, decidedAt: now, signature: signature ?? null },
       })
     );
@@ -70,24 +69,56 @@ export async function approveStep(stepId: string, signature?: string | null) {
         ? [db.booking.update({ where: { id: step.record.entityId }, data: { bookingStatus: "Confirmed" } })]
         : [];
 
-    await db.$transaction([...stepUpdates, ...recordUpdate, ...entityUpdate]);
-
+    const notificationOps: Prisma.PrismaPromise<unknown>[] = [];
     if (!allApprovedAfter) {
-      const nextStep = allSteps.find((s) => s.status === "pending" && !stepsToApprove.some((a) => a.id === s.id));
+      const nextStep = allSteps.find((candidate) =>
+        candidate.status === "pending" && !stepsToApprove.some((approved) => approved.id === candidate.id),
+      );
       if (nextStep) {
-        await notifyApprover(nextStep, step.record.module, step.record.entityId);
+        const recipientIds = await getApproverProfileIds(nextStep);
+        notificationOps.push(...recipientIds.map((userId) => db.notification.create({
+          data: {
+            userId,
+            title: `Approval ${step.record.module} Menunggu`,
+            message: `Ada ${step.record.module} baru yang membutuhkan persetujuan Anda`,
+            type: "approval_pending",
+            entityType: step.record.module,
+            entityId: step.record.entityId,
+          },
+        })));
       }
     }
-    await notifyCreator(step.record, isSuperAdmin ? `Semua step disetujui oleh ${session.user.name ?? "super-admin"}` : `Step ${step.stepOrder} disetujui oleh ${session.user.name ?? "approver"}`, allApprovedAfter ? "approved" : undefined);
 
-    await logAudit({
-      userId: session.user.profileId,
-      action: "approval.approved",
-      entityType: step.record.module,
-      entityId: step.record.entityId,
-      description: `Step ${step.stepOrder} disetujui oleh ${session.user.name ?? "approver"}${allApprovedAfter ? " — semua step approved" : ""}`,
-      changes: { stepId, stepOrder: step.stepOrder, allApproved: allApprovedAfter },
-    });
+    const creatorMessage = isSuperAdmin
+      ? `Semua step disetujui oleh ${session.user.name ?? "super-admin"}`
+      : `Step ${step.stepOrder} disetujui oleh ${session.user.name ?? "approver"}`;
+
+    await db.$transaction([
+      ...stepUpdates,
+      ...recordUpdate,
+      ...entityUpdate,
+      ...notificationOps,
+      db.notification.create({
+        data: {
+          userId: step.record.createdById,
+          title: allApprovedAfter ? `${step.record.module} Disetujui` : `Approval ${step.record.module}`,
+          message: creatorMessage,
+          type: allApprovedAfter ? "approval_approved" : "approval_update",
+          entityType: step.record.module,
+          entityId: step.record.entityId,
+        },
+      }),
+      db.activityLog.create({
+        data: {
+          userId: session.user.profileId,
+          action: "approval.approved",
+          entityType: step.record.module,
+          entityId: step.record.entityId,
+          description: `Step ${step.stepOrder} disetujui oleh ${session.user.name ?? "approver"}${allApprovedAfter ? " — semua step approved" : ""}`,
+          changes: { stepId, stepOrder: step.stepOrder, allApproved: allApprovedAfter },
+        },
+      }),
+    ]);
 
     revalidateTag("approvals", "max");
     revalidateTag("packages", "max");
@@ -125,25 +156,35 @@ export async function rejectStep(stepId: string, notes: string) {
         ? [db.booking.update({ where: { id: step.record.entityId }, data: { bookingStatus: "Rejected" } })]
         : [];
 
+    const rejectionMessage = `Ditolak oleh ${session.user.name ?? "approver"}: ${notes.trim()}`;
     await db.$transaction([
       db.approvalRecordStep.update({
-        where: { id: stepId },
+        where: { id: stepId, status: "pending" },
         data: { status: "rejected", decidedById: session.user.profileId, decidedAt: new Date(), notes: notes.trim() },
       }),
       db.approvalRecord.update({ where: { id: step.recordId }, data: { status: "rejected" } }),
       ...entityRejectUpdate,
+      db.notification.create({
+        data: {
+          userId: step.record.createdById,
+          title: `Approval ${step.record.module}`,
+          message: rejectionMessage,
+          type: "approval_update",
+          entityType: step.record.module,
+          entityId: step.record.entityId,
+        },
+      }),
+      db.activityLog.create({
+        data: {
+          userId: session.user.profileId,
+          action: "approval.rejected",
+          entityType: step.record.module,
+          entityId: step.record.entityId,
+          description: `Step ${step.stepOrder} ditolak oleh ${session.user.name ?? "approver"}: ${notes.trim()}`,
+          changes: { stepId, stepOrder: step.stepOrder, notes: notes.trim() },
+        },
+      }),
     ]);
-
-    await notifyCreator(step.record, `Ditolak oleh ${session.user.name ?? "approver"}: ${notes.trim()}`);
-
-    await logAudit({
-      userId: session.user.profileId,
-      action: "approval.rejected",
-      entityType: step.record.module,
-      entityId: step.record.entityId,
-      description: `Step ${step.stepOrder} ditolak oleh ${session.user.name ?? "approver"}: ${notes.trim()}`,
-      changes: { stepId, stepOrder: step.stepOrder, notes: notes.trim() },
-    });
 
     revalidateTag("approvals", "max");
     revalidateTag("packages", "max");
@@ -173,31 +214,9 @@ async function checkApprover(
   return false;
 }
 
-async function notifyCreator(
-  record: { createdById: string; module: string; entityId: string },
-  message: string,
-  status?: string
-) {
-  let title = `Approval ${record.module}`;
-  if (status === "approved") title = `${record.module} Disetujui`;
-
-  await db.notification.create({
-    data: {
-      userId: record.createdById,
-      title,
-      message,
-      type: status === "approved" ? "approval_approved" : "approval_update",
-      entityType: record.module,
-      entityId: record.entityId,
-    },
-  });
-}
-
-async function notifyApprover(
+async function getApproverProfileIds(
   step: { approverType: string; approverRoleId: string | null; approverUserId: string | null },
-  module: string,
-  entityId: string
-) {
+): Promise<string[]> {
   const userIds: string[] = [];
   if (step.approverType === "user" && step.approverUserId) {
     userIds.push(step.approverUserId);
@@ -209,16 +228,5 @@ async function notifyApprover(
     userIds.push(...profiles.map((p) => p.id));
   }
 
-  for (const userId of userIds) {
-    await db.notification.create({
-      data: {
-        userId,
-        title: `Approval ${module} Menunggu`,
-        message: `Ada ${module} baru yang membutuhkan persetujuan Anda`,
-        type: "approval_pending",
-        entityType: module,
-        entityId,
-      },
-    });
-  }
+  return userIds;
 }

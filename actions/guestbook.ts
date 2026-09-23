@@ -11,6 +11,9 @@ import { canAccessGuestbookEntry } from "@/lib/access-control";
 import { createGuestbookEntrySchema, updateGuestbookEntrySchema, isBitrixSourceName } from "@/lib/validations/guestbook";
 import { normalizePhoneId } from "@/lib/phone";
 
+// Anchored to UTC (not server-local time) so the typed wall-clock numbers survive the
+// round-trip unchanged regardless of the server process's timezone — paired with the
+// UTC getters in GuestbookDrawer's formatDateTimeForInput/formatDateForInput on the client.
 function parseLocalDateTime(value: string | null | undefined): Date | undefined {
   if (!value) return undefined;
 
@@ -20,7 +23,7 @@ function parseLocalDateTime(value: string | null | undefined): Date | undefined 
   const [datePart, timePart] = value.split("T");
   const [year, month, day] = datePart.split("-").map(Number);
   const [hours, minutes] = timePart.split(":").map(Number);
-  return new Date(year, month - 1, day, hours, minutes, 0, 0);
+  return new Date(Date.UTC(year, month - 1, day, hours, minutes, 0, 0));
 }
 
 function parseLocalDateOnly(value: string | null | undefined): Date | undefined {
@@ -30,7 +33,7 @@ function parseLocalDateOnly(value: string | null | undefined): Date | undefined 
   if (!match) return new Date(value);
 
   const [year, month, day] = value.split("-").map(Number);
-  return new Date(year, month - 1, day, 0, 0, 0, 0);
+  return new Date(Date.UTC(year, month - 1, day, 0, 0, 0, 0));
 }
 
 function generateGuestCode(): string {

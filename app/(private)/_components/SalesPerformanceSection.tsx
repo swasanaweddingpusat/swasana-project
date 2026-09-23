@@ -409,11 +409,20 @@ export function SalesPerformanceSection({
                 {item.bookingCount > 0 && (
                   <div className="mt-1 flex flex-wrap items-center gap-1">
                     <Badge variant="outline" className="text-[10px]">
-                      Reguler {item.packageTypeBreakdown.reguler.pct}%
+                      Reguler {item.packageTypeBreakdown.reguler.count}
                     </Badge>
                     <Badge variant="outline" className="text-[10px]">
-                      Hadjatan {item.packageTypeBreakdown.hadjatan.pct}%
+                      Hadjatan {item.packageTypeBreakdown.hadjatan.count}
                     </Badge>
+                  </div>
+                )}
+                {item.homebaseBreakdown.length > 0 && (
+                  <div className="mt-1 flex flex-wrap items-center gap-1">
+                    {item.homebaseBreakdown.map((homebase) => (
+                      <Badge key={homebase.venueId} variant="secondary" className="text-[10px]">
+                        {homebase.venueName}: {homebase.count} dealing
+                      </Badge>
+                    ))}
                   </div>
                 )}
               </div>

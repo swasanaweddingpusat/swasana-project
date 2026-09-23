@@ -272,17 +272,21 @@ export function MiceDetailContent({
         </div>
       </div>
 
-      {/* Quotation — deferred */}
       <div className="space-y-1">
         <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
           Quotation
         </p>
-        <div className="rounded-lg border border-border px-4">
-          <div className="py-2.5">
-            <span className="text-sm text-muted-foreground italic">
-              Modul Quotation menyusul
-            </span>
-          </div>
+        <div className="rounded-lg border border-border px-4 divide-y divide-border">
+          <InfoRow
+            label="Nomor"
+            value={booking.quotation?.quotationNo ?? "Booking manual"}
+          />
+          {booking.quotation && (
+            <InfoRow
+              label="Nilai"
+              value={fmtRp(booking.quotation.totalPrice)}
+            />
+          )}
         </div>
       </div>
 
