@@ -5,7 +5,7 @@ import { Drawer } from "@/components/shared/drawer";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { SimpleEditor } from "@/components/ui/simple-editor";
+import { SimpleEditor } from "@/components/shared/SimpleEditor";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -398,16 +398,15 @@ export function DrawerPackage({ isOpen, onClose, editingPackage, packageType = "
 
               <div>
                 <Label className={cn("text-sm font-medium text-gray-700")}>Venue</Label>
-                <Select value={venueId} onValueChange={setVenueId}>
-                  <SelectTrigger className={cn("mt-1 w-full border-[#CCCCCC] bg-[#F9F9F9]")}>
-                    <SelectValue placeholder="Pilih venue" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {venues.map((v) => (
-                      <SelectItem key={v.id} value={v.id}>{v.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <SearchableSelect
+                  options={venues.map((v) => ({ id: v.id, name: v.name }))}
+                  value={venueId}
+                  onChange={setVenueId}
+                  placeholder="Pilih venue"
+                  searchPlaceholder="Cari venue..."
+                  emptyText="Venue tidak ditemukan"
+                  className={cn("mt-1 w-full")}
+                />
               </div>
 
               <div>

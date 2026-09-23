@@ -5,7 +5,6 @@ import { headers } from "next/headers";
 import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/permissions";
-import { logAudit } from "@/lib/audit";
 import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
 import { getNextSequence } from "@/lib/counter";
 import { resolveManagerId } from "@/lib/resolve-manager";
@@ -196,6 +195,7 @@ export async function createMiceBooking(
       );
     }
 
+    const hdrs = await headers();
     ops.push(
       db.clientAgreement.create({
         data: {
@@ -203,22 +203,22 @@ export async function createMiceBooking(
           token: crypto.randomUUID(),
           accessCode: generateAccessCode(),
         },
-      })
+      }),
+      db.activityLog.create({
+        data: {
+          userId: session!.user.profileId!,
+          action: "booking_mice.created",
+          entityType: "booking",
+          entityId: bookingId,
+          result: "success",
+          description: `Created MICE booking for ${input.clientName}`,
+          ipAddress: hdrs.get("x-forwarded-for") ?? undefined,
+          userAgent: hdrs.get("user-agent") ?? undefined,
+        },
+      }),
     );
 
     await db.$transaction(ops);
-
-    const hdrs = await headers();
-    await logAudit({
-      userId: session!.user.id,
-      action: "booking_mice.created",
-      entityType: "booking",
-      entityId: bookingId,
-      result: "success",
-      description: `Created MICE booking for ${input.clientName}`,
-      ipAddress: hdrs.get("x-forwarded-for") ?? undefined,
-      userAgent: hdrs.get("user-agent") ?? undefined,
-    });
 
     revalidateTag("bookings", "max");
     revalidateTag("customers", "max");
@@ -304,20 +304,23 @@ export async function updateMiceBooking(
     }
 
     if (ops.length > 0) {
+      const hdrs = await headers();
+      ops.push(
+        db.activityLog.create({
+          data: {
+            userId: session!.user.profileId!,
+            action: "booking_mice.updated",
+            entityType: "booking",
+            entityId: id,
+            result: "success",
+            description: "Updated MICE booking",
+            ipAddress: hdrs.get("x-forwarded-for") ?? undefined,
+            userAgent: hdrs.get("user-agent") ?? undefined,
+          },
+        }),
+      );
       await db.$transaction(ops);
     }
-
-    const hdrs = await headers();
-    await logAudit({
-      userId: session!.user.id,
-      action: "booking_mice.updated",
-      entityType: "booking",
-      entityId: id,
-      result: "success",
-      description: "Updated MICE booking",
-      ipAddress: hdrs.get("x-forwarded-for") ?? undefined,
-      userAgent: hdrs.get("user-agent") ?? undefined,
-    });
 
     revalidateTag("bookings", "max");
     revalidateTag("customers", "max");
@@ -347,31 +350,32 @@ export async function deleteMiceBooking(
   if (!existing) return { success: false, error: "Booking MICE tidak ditemukan." };
 
   try {
+    const hdrs = await headers();
     await db.$transaction([
       // Remove non-cascade relations first (module+entityId pattern, no FK)
       db.approvalRecord.deleteMany({
-        where: { module: "booking", entityId: id },
+        where: { module: { in: ["booking", "booking-mice"] }, entityId: id },
         // ApprovalRecordStep cascades from ApprovalRecord (onDelete: Cascade in schema)
       }),
       db.notification.deleteMany({
-        where: { entityType: "booking", entityId: id },
+        where: { entityType: { in: ["booking", "booking-mice"] }, entityId: id },
       }),
       // ActivityLog is the audit trail — intentionally preserved after entity deletion
       // Cascade handles TermOfPayment, BookingDocument, ClientAgreement, etc.
       db.booking.delete({ where: { id } }),
+      db.activityLog.create({
+        data: {
+          userId: session!.user.profileId!,
+          action: "booking_mice.deleted",
+          entityType: "booking",
+          entityId: id,
+          result: "success",
+          description: "Deleted MICE booking",
+          ipAddress: hdrs.get("x-forwarded-for") ?? undefined,
+          userAgent: hdrs.get("user-agent") ?? undefined,
+        },
+      }),
     ]);
-
-    const hdrs = await headers();
-    await logAudit({
-      userId: session!.user.id,
-      action: "booking_mice.deleted",
-      entityType: "booking",
-      entityId: id,
-      result: "success",
-      description: "Deleted MICE booking",
-      ipAddress: hdrs.get("x-forwarded-for") ?? undefined,
-      userAgent: hdrs.get("user-agent") ?? undefined,
-    });
 
     revalidateTag("bookings", "max");
 
@@ -404,6 +408,7 @@ export async function markMiceLost(
   if (!existing) return { success: false, error: "Booking MICE tidak ditemukan." };
 
   try {
+    const hdrs = await headers();
     await db.$transaction([
       db.booking.update({
         where: { id: input.id },
@@ -412,19 +417,19 @@ export async function markMiceLost(
           lostReason: input.lostReason ?? null,
         },
       }),
+      db.activityLog.create({
+        data: {
+          userId: session!.user.profileId!,
+          action: "booking_mice.lost",
+          entityType: "booking",
+          entityId: input.id,
+          result: "success",
+          description: `MICE booking marked as lost. Reason: ${input.lostReason ?? "—"}`,
+          ipAddress: hdrs.get("x-forwarded-for") ?? undefined,
+          userAgent: hdrs.get("user-agent") ?? undefined,
+        },
+      }),
     ]);
-
-    const hdrs = await headers();
-    await logAudit({
-      userId: session!.user.id,
-      action: "booking_mice.lost",
-      entityType: "booking",
-      entityId: input.id,
-      result: "success",
-      description: `MICE booking marked as lost. Reason: ${input.lostReason ?? "—"}`,
-      ipAddress: hdrs.get("x-forwarded-for") ?? undefined,
-      userAgent: hdrs.get("user-agent") ?? undefined,
-    });
 
     revalidateTag("bookings", "max");
 
@@ -459,6 +464,7 @@ export async function restoreMiceBooking(
   }
 
   try {
+    const hdrs = await headers();
     await db.$transaction([
       db.booking.update({
         where: { id },
@@ -487,19 +493,19 @@ export async function restoreMiceBooking(
         where: { bookingId: id },
         data: { status: "Pending", signedAt: null, viewedAt: null },
       }),
+      db.activityLog.create({
+        data: {
+          userId: session!.user.profileId!,
+          action: "booking_mice.restored",
+          entityType: "booking",
+          entityId: id,
+          result: "success",
+          description: `MICE booking restored from ${existing.bookingStatus}`,
+          ipAddress: hdrs.get("x-forwarded-for") ?? undefined,
+          userAgent: hdrs.get("user-agent") ?? undefined,
+        },
+      }),
     ]);
-
-    const hdrs = await headers();
-    await logAudit({
-      userId: session!.user.id,
-      action: "booking_mice.restored",
-      entityType: "booking",
-      entityId: id,
-      result: "success",
-      description: `MICE booking restored from ${existing.bookingStatus}`,
-      ipAddress: hdrs.get("x-forwarded-for") ?? undefined,
-      userAgent: hdrs.get("user-agent") ?? undefined,
-    });
 
     revalidateTag("bookings", "max");
     return { success: true };
@@ -534,6 +540,7 @@ export async function cancelMiceBooking(
   }
 
   try {
+    const hdrs = await headers();
     await db.$transaction([
       db.booking.update({
         where: { id: input.id },
@@ -542,19 +549,19 @@ export async function cancelMiceBooking(
           cancelReason: input.lostReason ?? null,
         },
       }),
+      db.activityLog.create({
+        data: {
+          userId: session!.user.profileId!,
+          action: "booking_mice.canceled",
+          entityType: "booking",
+          entityId: input.id,
+          result: "success",
+          description: `MICE booking canceled. Reason: ${input.lostReason ?? "—"}`,
+          ipAddress: hdrs.get("x-forwarded-for") ?? undefined,
+          userAgent: hdrs.get("user-agent") ?? undefined,
+        },
+      }),
     ]);
-
-    const hdrs = await headers();
-    await logAudit({
-      userId: session!.user.id,
-      action: "booking_mice.canceled",
-      entityType: "booking",
-      entityId: input.id,
-      result: "success",
-      description: `MICE booking canceled. Reason: ${input.lostReason ?? "—"}`,
-      ipAddress: hdrs.get("x-forwarded-for") ?? undefined,
-      userAgent: hdrs.get("user-agent") ?? undefined,
-    });
 
     revalidateTag("bookings", "max");
     return { success: true };
