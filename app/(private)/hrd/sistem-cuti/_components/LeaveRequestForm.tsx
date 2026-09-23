@@ -230,7 +230,7 @@ export function LeaveRequestForm({ inDialog = false, onSubmitted }: LeaveRequest
           {isHolidayToken ? (
             <>
               <div className="grid gap-2">
-                <Label htmlFor="holiday-token">Hari Besar (Token) *</Label>
+                <Label htmlFor="holiday-token">Hari Besar *</Label>
                 <Select
                   value={form.publicHolidayId}
                   onValueChange={(v) =>
