@@ -6,6 +6,7 @@ import { seedPackages } from "./seeders/packages";
 import { seedMicePackages } from "./seeders/packages-mice";
 import { seedVendors } from "./seeders/vendors";
 import { seedUsers } from "./seeders/users";
+import { seedKpiInsentif } from "./seeders/kpiInsentif";
 import { seedGroups } from "./seeders/groups";
 import { seedOrderStatuses } from "./seeders/order-statuses";
 import { seedEventTypes } from "./seeders/event-types";
@@ -22,6 +23,7 @@ async function main() {
   await seedMicePackages();
   await seedVendors();
   await seedUsers();
+  await seedKpiInsentif();
   await seedGroups();
   await seedOrderStatuses();
   await seedEventTypes();

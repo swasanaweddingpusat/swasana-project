@@ -1,7 +1,7 @@
 import { getQuotations } from "@/lib/queries/quotations";
 import { requirePermissionForRoute } from "@/lib/permissions";
 import { apiLimiter, rateLimitResponse } from "@/lib/rate-limit";
-import type { QuotationStatus, EventCategory } from "@prisma/client";
+import type { QuotationStatus } from "@prisma/client";
 
 export async function GET(request: Request): Promise<Response> {
   const { session, response } = await requirePermissionForRoute({
@@ -16,9 +16,8 @@ export async function GET(request: Request): Promise<Response> {
   const pageSize = Math.min(100, Math.max(1, Number(searchParams.get("pageSize")) || 10));
   const search = searchParams.get("search") ?? "";
   const status = (searchParams.get("status") ?? "") as QuotationStatus | "";
-  const category = (searchParams.get("category") ?? "") as EventCategory | "";
 
-  const result = await getQuotations({ page, pageSize, search, status, category });
+  const result = await getQuotations({ page, pageSize, search, status });
 
   return Response.json(result);
 }

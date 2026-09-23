@@ -27,25 +27,31 @@ const nonNegativeDecimalString = z
   .refine((v) => /^\d+(\.\d+)?$/.test(v), "Nilai harus berupa angka desimal positif")
   .refine((v) => parseFloat(v) >= 0, "Nilai tidak boleh negatif");
 
+const positiveDecimalString = z
+  .union([z.string(), z.number()])
+  .transform((v) => String(v))
+  .refine((v) => /^\d+(\.\d+)?$/.test(v), "Nilai harus berupa angka desimal")
+  .refine((v) => parseFloat(v) > 0, "Target harus lebih besar dari nol");
+
 // ─── KpiTargetItem ────────────────────────────────────────────────────────────
 
 const targetItemBaseSchema = z.object({
   name: z.string().min(1, "Nama target wajib diisi"),
   indicatorType: kpiIndicatorTypeEnum,
   type: kpiTargetTypeEnum,
-  qty: z.number().int().min(0).optional().nullable(),
-  price: nonNegativeDecimalString.optional().nullable(),
-  qtyReguler: z.number().int().min(0).optional().nullable(),
-  qtyHadjatan: z.number().int().min(0).optional().nullable(),
-  priceReguler: nonNegativeDecimalString.optional().nullable(),
-  priceHadjatan: nonNegativeDecimalString.optional().nullable(),
+  qty: z.number().int().positive().optional().nullable(),
+  price: positiveDecimalString.optional().nullable(),
+  qtyReguler: z.number().int().positive().optional().nullable(),
+  qtyHadjatan: z.number().int().positive().optional().nullable(),
+  priceReguler: positiveDecimalString.optional().nullable(),
+  priceHadjatan: positiveDecimalString.optional().nullable(),
   regulerCategory: z.enum(["WEDDINGS", "MICE"]).optional().nullable(),
   hadjatanCategory: z.enum(["WEDDINGS", "MICE"]).optional().nullable(),
 });
 
 export const createTargetItemSchema = targetItemBaseSchema.superRefine((data, ctx) => {
   if (data.type === "qty") {
-    const hasFlat = data.qty != null && data.qty >= 0;
+    const hasFlat = data.qty != null && data.qty > 0;
     const hasSplit = data.qtyReguler != null && data.qtyHadjatan != null;
     if (!hasFlat && !hasSplit) {
       ctx.addIssue({

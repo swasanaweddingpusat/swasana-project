@@ -4,7 +4,6 @@ import { revalidateTag } from "next/cache";
 import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/permissions";
-import { logAudit } from "@/lib/audit";
 import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
 import { isSlotConflictError, SLOT_TAKEN_MESSAGE } from "@/lib/booking-slot-error";
 import { getNextSequence } from "@/lib/counter";
@@ -183,21 +182,22 @@ export async function createDraftMiceBooking(data: unknown): Promise<MiceDraftRe
           ...(input.leadId ? { leadId: input.leadId } : {}),
         },
       }),
+      db.activityLog.create({
+        data: {
+          userId: session!.user.profileId!,
+          action: "booking.mice_draft_created",
+          entityType: "booking",
+          entityId: draftId,
+          changes: {
+            customerId,
+            venueId: input.venueId,
+            category: "MICE",
+            ...(input.leadId ? { leadId: input.leadId } : {}),
+          },
+          description: `Created MICE booking draft for ${input.clientName ?? customerId}`,
+        },
+      }),
     ]);
-
-    await logAudit({
-      userId: session!.user.id,
-      action: "booking.mice_draft_created",
-      entityType: "booking",
-      entityId: draftId,
-      changes: {
-        customerId,
-        venueId: input.venueId,
-        category: "MICE",
-        ...(input.leadId ? { leadId: input.leadId } : {}),
-      },
-      description: `Created MICE booking draft for ${input.clientName ?? customerId}`,
-    });
 
     return { success: true, draftId };
   } catch (e) {
@@ -369,6 +369,7 @@ export async function finalizeDraftMiceBooking(data: unknown): Promise<FinalizeM
     // Resolve approval steps: conditional Sales + Manager → Finance.
     // Auto-approve Sales only when the finalizer IS the assigned sales (and signed).
     const bookingApprovalSteps = await buildBookingApprovalSteps({
+      module: "booking-mice",
       salesId: draft.salesId,
       creatorProfileId: session!.user.profileId!,
       signatureSales: input.signatureSales ?? draft.salesSignature,
@@ -447,7 +448,7 @@ export async function finalizeDraftMiceBooking(data: unknown): Promise<FinalizeM
         db.approvalRecord.create({
           data: {
             id: approvalRecordId,
-            module: "booking",
+            module: "booking-mice",
             entityId: draftId,
             status: "pending",
             createdById: session!.user.profileId!,
@@ -500,21 +501,25 @@ export async function finalizeDraftMiceBooking(data: unknown): Promise<FinalizeM
       );
     }
 
-    await db.$transaction(ops);
+    ops.push(
+      db.activityLog.create({
+        data: {
+          userId: session!.user.profileId!,
+          action: "booking.mice_finalized",
+          entityType: "booking",
+          entityId: draftId,
+          changes: {
+            poNumber,
+            customerId: draft.customerId,
+            venueId: draft.venueId,
+            ...(input.leadId ? { leadId: input.leadId } : {}),
+          },
+          description: `Finalized MICE booking draft for ${draft.customer?.name ?? draft.customerId}`,
+        },
+      }),
+    );
 
-    await logAudit({
-      userId: session!.user.id,
-      action: "booking.mice_finalized",
-      entityType: "booking",
-      entityId: draftId,
-      changes: {
-        poNumber,
-        customerId: draft.customerId,
-        venueId: draft.venueId,
-        ...(input.leadId ? { leadId: input.leadId } : {}),
-      },
-      description: `Finalized MICE booking draft for ${draft.customer?.name ?? draft.customerId}`,
-    });
+    await db.$transaction(ops);
 
     revalidateTag("bookings", "max");
     revalidateTag("customers", "max");
