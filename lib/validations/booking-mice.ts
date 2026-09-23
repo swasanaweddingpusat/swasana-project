@@ -25,7 +25,9 @@ export const createMiceBookingSchema = z.object({
   venueId: z.string().min(1, "Venue wajib dipilih"),
   eventTypeId: z.string().min(1, "Tipe event wajib dipilih"),
   eventDate: z.string().min(1, "Tanggal event wajib diisi"),
+  eventEndDate: z.string().optional().nullable(),
   estimatedPax: z.coerce.number().int().min(1).optional().nullable(),
+  companyName: z.string().trim().max(200).optional().nullable(),
   sourceOfInformationId: z.string().optional().nullable(),
   quotationId: z.string().optional().nullable(),
   salesId: z.string().optional().nullable(),
@@ -35,9 +37,12 @@ export const createMiceBookingSchema = z.object({
   notes: z.string().trim().max(2000).optional(),
 });
 
-export const updateMiceBookingSchema = createMiceBookingSchema.partial().extend({
-  id: z.string().min(1),
-});
+// The source quotation is immutable after creation. It is intentionally omitted
+// from the update contract so editing a booking can never detach and reconvert it.
+export const updateMiceBookingSchema = createMiceBookingSchema
+  .omit({ quotationId: true, leadId: true, customerId: true })
+  .partial()
+  .extend({ id: z.string().min(1) });
 
 export const markMiceLostSchema = z.object({
   id: z.string().min(1),
