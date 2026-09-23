@@ -893,6 +893,7 @@ export async function finalizeResult(resultId: string) {
                 id: true,
                 name: true,
                 businessRole: true,
+                isDraft: true,
                 gatingMinIndicators: true,
                 tiers: {
                   select: {
@@ -903,6 +904,7 @@ export async function finalizeResult(resultId: string) {
                     upperBound: true,
                     lowerInclusive: true,
                     upperInclusive: true,
+                    isDraftBounds: true,
                     actionType: true,
                     dealingBonus: true,
                     omsetBonus: true,
@@ -928,6 +930,20 @@ export async function finalizeResult(resultId: string) {
         },
       },
     });
+
+    const kpiMaster = matchingAssignment?.kpiMaster ?? null;
+    if (kpiMaster?.achievementSchema?.isDraft) {
+      return {
+        success: false,
+        error: "Skema KPI masih berstatus draft dan belum dapat difinalisasi.",
+      };
+    }
+    if (kpiMaster?.achievementSchema?.tiers.some((tier) => tier.isDraftBounds)) {
+      return {
+        success: false,
+        error: "Batas tier KPI masih menunggu keputusan kebijakan.",
+      };
+    }
 
     // Fetch active commission policy for the period
     const activeCommissionPolicy = await db.kpiCommissionPolicy.findFirst({
@@ -960,7 +976,6 @@ export async function finalizeResult(resultId: string) {
     });
 
     // Build snapshot payload
-    const kpiMaster = matchingAssignment?.kpiMaster ?? null;
     const snapshotData = {
       capturedAt: new Date().toISOString(),
       resultId: result.id,
