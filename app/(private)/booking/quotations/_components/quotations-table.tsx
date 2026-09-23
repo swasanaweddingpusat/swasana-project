@@ -39,7 +39,11 @@ import {
 } from "@solar-icons/react";
 import { cn } from "@/lib/utils";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useQuotations } from "@/hooks/use-quotations";
+import {
+  useConvertQuotationToMiceBooking,
+  useDuplicateQuotationRevision,
+  useQuotations,
+} from "@/hooks/use-quotations";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { usePermissions } from "@/hooks/use-permissions";
 import type { QuotationListRow } from "@/lib/queries/quotations";
@@ -63,6 +67,7 @@ interface QApprovalStep {
 
 interface QApprovalRecord {
   id: string;
+  entityId: string;
   status: string;
   steps: QApprovalStep[];
   createdBy: { id: string; fullName: string | null };
@@ -199,6 +204,7 @@ export interface QuotationItem {
   notes: string;
   signingLocation?: string;
   signatureSales?: string;
+  booking?: { id: string; poNumber: string | null } | null;
 }
 
 // ── DB row → display type mapper ─────────────────────────────────────────────
@@ -213,9 +219,9 @@ function mapRowToQuotationItem(row: QuotationListRow): QuotationItem {
     salesName: row.sales.fullName ?? "",
     salesPhone: row.sales.phoneNumber ?? undefined,
     salesId: row.salesId,
-    venue: row.venueName ?? row.venue?.name ?? "",
+    venue: row.venueName ?? "",
     venueId: row.venueId ?? undefined,
-    eventType: row.eventTypeName ?? row.eventType?.name ?? "",
+    eventType: row.eventTypeName ?? "",
     eventTypeId: row.eventTypeId ?? undefined,
     eventDate: row.eventDate ? format(new Date(row.eventDate), "yyyy-MM-dd") : "",
     eventEndDate: row.eventEndDate ? format(new Date(row.eventEndDate), "yyyy-MM-dd") : "",
@@ -296,9 +302,9 @@ function mapRowToQuotationItem(row: QuotationListRow): QuotationItem {
     closingNote: row.closingNote ?? undefined,
     status: row.status as QuotationItem["status"],
     paymentMethodId: row.paymentMethodId ?? undefined,
-    bankName: row.paymentMethod?.bankName,
-    bankAccountNo: row.paymentMethod?.bankAccountNumber,
-    bankAccountName: row.paymentMethod?.bankRecipient,
+    bankName: row.bankName ?? undefined,
+    bankAccountNo: row.bankAccountNumber ?? undefined,
+    bankAccountName: row.bankRecipient ?? undefined,
     validUntil: row.validUntil ? format(new Date(row.validUntil), "yyyy-MM-dd") : "",
     createdAt: format(new Date(row.createdAt), "yyyy-MM-dd"),
     notes: row.notes ?? "",
@@ -309,6 +315,7 @@ function mapRowToQuotationItem(row: QuotationListRow): QuotationItem {
     packageName: row.packageName ?? "",
     variantName: "",
     pax: row.pax,
+    booking: row.booking,
   };
 }
 
@@ -411,6 +418,8 @@ export function QuotationsTable() {
   const qc = useQueryClient();
   const { user } = useCurrentUser();
   const { isAdmin } = usePermissions();
+  const convertMutation = useConvertQuotationToMiceBooking();
+  const revisionMutation = useDuplicateQuotationRevision();
 
   // ── Server-side data ──────────────────────────────────────────────────────
   const { data: quotationsResult, isLoading, isError, isFetching, refetch } = useQuotations({
@@ -430,19 +439,14 @@ export function QuotationsTable() {
     queryKey: ["quotation-approvals", quotationIds],
     queryFn: async () => {
       if (quotationIds.length === 0) return {} as Record<string, QApprovalRecord>;
-      const results: Record<string, QApprovalRecord> = {};
-      await Promise.all(
-        quotationIds.map(async (id) => {
-          try {
-            const res = await fetch(`/api/approval-records?module=quotations&entityId=${id}`);
-            if (res.ok) {
-              const data: QApprovalRecord = await res.json();
-              if (data) results[id] = data;
-            }
-          } catch { /* ignore */ }
-        })
-      );
-      return results;
+      const params = new URLSearchParams({
+        module: "quotations",
+        entityIds: quotationIds.join(","),
+      });
+      const response = await fetch(`/api/approval-records?${params}`);
+      if (!response.ok) throw new Error("Gagal memuat approval quotation");
+      const records: QApprovalRecord[] = await response.json();
+      return Object.fromEntries(records.map((record) => [record.entityId, record]));
     },
     enabled: quotationIds.length > 0,
     staleTime: 15_000,
@@ -490,8 +494,43 @@ export function QuotationsTable() {
     setPreviewOpen(true);
   }, []);
 
-  function handleConvertToBooking(q: QuotationItem) {
-    toast.info(`Convert ke Booking untuk ${q.leadName} — coming soon.`);
+  function isFullyApproved(qId: string): boolean {
+    return approvalMap?.[qId]?.status === "approved";
+  }
+
+  async function handleConvertToBooking(q: QuotationItem): Promise<void> {
+    if (q.booking) {
+      toast.info(`Quotation sudah menjadi booking ${q.booking.poNumber ?? q.booking.id}.`);
+      return;
+    }
+    if (!isFullyApproved(q.id)) {
+      toast.error("Quotation harus fully approved sebelum dikonversi.");
+      return;
+    }
+
+    const result = await convertMutation.mutateAsync(q.id);
+    if (!result.success) {
+      toast.error(result.error);
+      return;
+    }
+    toast.success("Quotation berhasil dikonversi ke Booking MICE.");
+    refetch();
+  }
+
+  async function handleCreateRevision(q: QuotationItem): Promise<void> {
+    if (!isFullyApproved(q.id)) {
+      toast.error("Hanya quotation approved yang dapat direvisi.");
+      return;
+    }
+
+    const result = await revisionMutation.mutateAsync(q.id);
+    if (!result.success) {
+      toast.error(result.error);
+      return;
+    }
+    toast.success(`Revisi ${result.data.quotationNo} berhasil dibuat.`);
+    setCurrentPage(1);
+    refetch();
   }
 
   return (
@@ -664,16 +703,26 @@ export function QuotationsTable() {
                       paginated.map((q, idx) => (
                         <TableRow
                           key={q.id}
-                          onClick={() => handleEdit(q)}
+                          onClick={() => {
+                            if (isFullyApproved(q.id) || q.booking) {
+                              handlePreview(q);
+                            } else {
+                              handleEdit(q);
+                            }
+                          }}
                           onKeyDown={(e) => {
                             if (e.key === "Enter" || e.key === " ") {
                               e.preventDefault();
-                              handleEdit(q);
+                              if (isFullyApproved(q.id) || q.booking) {
+                                handlePreview(q);
+                              } else {
+                                handleEdit(q);
+                              }
                             }
                           }}
                           tabIndex={0}
                           role="button"
-                          aria-label={`Edit quotation ${q.leadName}`}
+                          aria-label={`${isFullyApproved(q.id) || q.booking ? "Lihat" : "Edit"} quotation ${q.leadName}`}
                           className="cursor-pointer hover:bg-accent/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
                         >
                           {/* # */}
@@ -763,10 +812,21 @@ export function QuotationsTable() {
                                   <Eye weight="BoldDuotone" aria-hidden="true" className="h-4 w-4 mr-2 text-primary" />
                                   Lihat / Cetak
                                 </DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => handleEdit(q)}>
-                                  <Pen weight="BoldDuotone" aria-hidden="true" className="h-4 w-4 mr-2 text-primary" />
-                                  Edit
-                                </DropdownMenuItem>
+                                {!isFullyApproved(q.id) && !q.booking && (
+                                  <DropdownMenuItem onClick={() => handleEdit(q)}>
+                                    <Pen weight="BoldDuotone" aria-hidden="true" className="h-4 w-4 mr-2 text-primary" />
+                                    Edit
+                                  </DropdownMenuItem>
+                                )}
+                                {isFullyApproved(q.id) && (
+                                  <DropdownMenuItem
+                                    onClick={() => handleCreateRevision(q)}
+                                    disabled={revisionMutation.isPending}
+                                  >
+                                    <Refresh weight="BoldDuotone" aria-hidden="true" className="h-4 w-4 mr-2 text-primary" />
+                                    Buat Revisi
+                                  </DropdownMenuItem>
+                                )}
                                 {getActionableSteps(q.id).map((step) => (
                                   <DropdownMenuItem
                                     key={step.id}
@@ -785,9 +845,12 @@ export function QuotationsTable() {
                                   Lihat Approval
                                 </DropdownMenuItem>
                                 <DropdownMenuSeparator />
-                                <DropdownMenuItem onClick={() => handleConvertToBooking(q)}>
+                                <DropdownMenuItem
+                                  onClick={() => handleConvertToBooking(q)}
+                                  disabled={!isFullyApproved(q.id) || !!q.booking || convertMutation.isPending}
+                                >
                                   <CalendarMark weight="BoldDuotone" aria-hidden="true" className="h-4 w-4 mr-2 text-primary" />
-                                  Convert ke Booking
+                                  {q.booking ? "Sudah Dikonversi" : "Convert ke Booking"}
                                 </DropdownMenuItem>
                               </DropdownMenuContent>
                             </DropdownMenu>
@@ -876,19 +939,36 @@ export function QuotationsTable() {
                             />
                             Lihat/Cetak
                           </Button>
-                          <Button
-                            variant="outline"
-                            className="h-9 flex-1 text-xs"
-                            onClick={() => handleEdit(q)}
-                            aria-label={`Edit ${deriveQuotationNo(q)}`}
-                          >
-                            <Pen
-                              weight="BoldDuotone"
-                              aria-hidden="true"
-                              className="h-3.5 w-3.5 mr-1 text-muted-foreground"
-                            />
-                            Edit
-                          </Button>
+                          {isFullyApproved(q.id) ? (
+                            <Button
+                              variant="outline"
+                              className="h-9 flex-1 text-xs"
+                              onClick={() => handleCreateRevision(q)}
+                              disabled={revisionMutation.isPending}
+                              aria-label={`Buat revisi ${deriveQuotationNo(q)}`}
+                            >
+                              <Refresh
+                                weight="BoldDuotone"
+                                aria-hidden="true"
+                                className="h-3.5 w-3.5 mr-1 text-muted-foreground"
+                              />
+                              Revisi
+                            </Button>
+                          ) : (
+                            <Button
+                              variant="outline"
+                              className="h-9 flex-1 text-xs"
+                              onClick={() => handleEdit(q)}
+                              aria-label={`Edit ${deriveQuotationNo(q)}`}
+                            >
+                              <Pen
+                                weight="BoldDuotone"
+                                aria-hidden="true"
+                                className="h-3.5 w-3.5 mr-1 text-muted-foreground"
+                              />
+                              Edit
+                            </Button>
+                          )}
                           {(() => {
                             const steps = getActionableSteps(q.id);
                             if (steps.length === 0) return null;
@@ -912,6 +992,7 @@ export function QuotationsTable() {
                             variant="outline"
                             className="h-9 flex-1 text-xs"
                             onClick={() => handleConvertToBooking(q)}
+                            disabled={!isFullyApproved(q.id) || !!q.booking || convertMutation.isPending}
                             aria-label={`Convert ke booking ${deriveQuotationNo(q)}`}
                           >
                             <CalendarMark
@@ -919,7 +1000,7 @@ export function QuotationsTable() {
                               aria-hidden="true"
                               className="h-3.5 w-3.5 mr-1 text-muted-foreground"
                             />
-                            Convert
+                            {q.booking ? "Converted" : "Convert"}
                           </Button>
                         </div>
                       </div>

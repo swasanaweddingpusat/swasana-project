@@ -26,7 +26,12 @@ export interface MiceBookingItem {
   sales: { id: string; fullName: string | null } | null;
   sourceOfInformation: { id: string; name: string } | null;
   terms: MiceTerm[];
-  quotation: null; // deferred — Quotation module not built yet
+  quotation: {
+    id: string;
+    quotationNo: string | null;
+    status: "draft" | "sent" | "revised" | "accepted" | "rejected";
+    totalPrice: number;
+  } | null;
 }
 
 export interface MiceBookingsResponse {
