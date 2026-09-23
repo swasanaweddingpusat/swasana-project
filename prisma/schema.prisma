@@ -257,6 +257,7 @@ model Profile {
   @@index([dataScope])
   @@index([departmentId])
   @@index([positionId])
+  @@index([homebaseVenueId])
   @@map("profiles")
 }
 
@@ -417,7 +418,8 @@ model Venue {
   bookings                  Booking[]
   leads                     Lead[]            @relation("LeadPrimaryVenue")
   leadsSecondary            Lead[]            @relation("LeadSecondaryVenue")
-  quotations                Quotation[]
+  // No `quotations` back-relation: Quotation.venueId is an FK-less provenance
+  // pointer so an issued quotation never changes when this venue does.
   quotationTemplates        QuotationTemplate[]
   maintenanceTickets        MaintenanceTicket[]
   workLocations             WorkLocation[]
@@ -569,7 +571,7 @@ model PaymentMethod {
   venue              Venue?                     @relation(fields: [venueId], references: [id], onDelete: Cascade)
   bookings           Booking[]
   settlements        BookingPaymentSettlement[]
-  quotations         Quotation[]
+  // No `quotations` back-relation — see Quotation.paymentMethodId.
   quotationTemplates QuotationTemplate[]
   ledgers            Ledger[]
   payables           BookingPayable[]
@@ -1133,7 +1135,7 @@ model Booking {
   poSeq                     Int?
   dealingDate               DateTime? // tanggal dealing booking; user-editable, default hari ini saat create, backfilled dari createdAt untuk data lama
   eventDate                 DateTime? // required for saved bookings; null only during MICE draft steps
-  quotationId               String?
+  quotationId               String?             @unique
   salesSignature            String?
   rejectionNotes            String?
   lostReason                String?
@@ -1183,6 +1185,7 @@ model Booking {
   currentRevision     BookingRevision?     @relation("BookingCurrentRevision", fields: [currentRevisionId], references: [id], onDelete: SetNull)
   lead                Lead?       @relation("BookingFromLead", fields: [leadId], references: [id], onDelete: SetNull)
   recognizedBy        Profile?             @relation("BookingRecognizer", fields: [recognizedById], references: [id], onDelete: SetNull)
+  quotation          Quotation?           @relation(fields: [quotationId], references: [id], onDelete: Restrict)
 
   // Snapshot relations (1:1)
   snapCustomer       SnapCustomer?
@@ -2224,7 +2227,7 @@ model EventType {
   createdAt  DateTime        @default(now())
   updatedAt  DateTime        @updatedAt
   leads      Lead[]
-  quotations Quotation[]
+  // No `quotations` back-relation — see Quotation.eventTypeId.
   packages   Package[]
 
   @@index([category])
@@ -2450,12 +2453,23 @@ model Quotation {
 
   // Relations
   salesId         String
+  // Master-data pointers WITHOUT foreign keys. A quotation looks master data up
+  // once, at create/edit time, then freezes everything it renders into the *Name
+  // columns below and into SnapQuotationPackage. These IDs are kept purely as
+  // provenance for analytics and are allowed to dangle if the master row is later
+  // renamed or deleted — an issued document must never change underneath the client.
   venueId         String?
   eventTypeId     String?
   paymentMethodId String?
-  // Snapshot of names at creation time (for display/PDF without JOIN)
+  // Frozen display names — the source of truth for rendering (no JOIN required).
   eventTypeName   String?
   venueName       String?
+  // Frozen bank details for the Term & Payment block. Copied from the selected
+  // PaymentMethod at create/edit time so editing a venue's bank account never
+  // rewrites an already-issued quotation.
+  bankName          String?
+  bankAccountNumber String?
+  bankRecipient     String?
 
   // Selected MICE package reference — full data is frozen into SnapQuotationPackage
   // and copied into the editable tables below (items/prices/taxDeposits/…).
@@ -2495,10 +2509,9 @@ model Quotation {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  // salesId keeps its FK: that is the person accountable for the document, not
+  // master data, so the audit trail must stay referentially intact.
   sales         Profile        @relation(fields: [salesId], references: [id], onDelete: Restrict)
-  venue         Venue?         @relation(fields: [venueId], references: [id], onDelete: SetNull)
-  eventType     EventType?     @relation(fields: [eventTypeId], references: [id], onDelete: SetNull)
-  paymentMethod PaymentMethod? @relation(fields: [paymentMethodId], references: [id], onDelete: SetNull)
 
   items           QuotationItem[]
   terms           QuotationTerm[]
@@ -2507,6 +2520,7 @@ model Quotation {
   prices          QuotationPrice[]
   taxDeposits     QuotationTaxDeposit[]
   packageSnapshot SnapQuotationPackage?
+  booking         Booking?
 
   @@index([salesId])
   @@index([venueId])
@@ -3829,7 +3843,7 @@ model WeddingIndicator {
   allowanceNominal    Int?
 
   // Flexible JSONB for notes, PMs, wishes
-  questionnaireData Json @default(dbgenerated("'{}'::jsonb"))
+  questionnaireData Json @default("{}")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

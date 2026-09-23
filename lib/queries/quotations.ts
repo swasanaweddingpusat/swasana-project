@@ -37,12 +37,16 @@ const quotationListSelect = {
   signingLocation: true,
   signatureSales: true,
   paymentMethodId: true,
+  // Frozen bank details — rendered directly, never re-resolved from PaymentMethod.
+  bankName: true,
+  bankAccountNumber: true,
+  bankRecipient: true,
   createdAt: true,
   updatedAt: true,
   sales: { select: { id: true, fullName: true, phoneNumber: true } },
-  venue: { select: { id: true, name: true } },
-  paymentMethod: { select: { id: true, bankName: true, bankAccountNumber: true, bankRecipient: true } },
-  eventType: { select: { id: true, name: true } },
+  // No venue / eventType / paymentMethod joins: those pointers are FK-less and the
+  // document renders from its own frozen columns instead.
+  booking: { select: { id: true, poNumber: true } },
   items: { orderBy: { sortOrder: "asc" as const }, select: { id: true, type: true, title: true, description: true, qty: true, price: true, total: true, manualTotal: true, sortOrder: true } },
   prices: { orderBy: { sortOrder: "asc" as const }, select: { id: true, name: true, description: true, priceType: true, qty: true, price: true, total: true, sortOrder: true } },
   taxDeposits: { orderBy: { sortOrder: "asc" as const }, select: { id: true, name: true, nominal: true, sortOrder: true } },

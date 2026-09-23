@@ -1579,11 +1579,15 @@ export function QuotationDrawer({
     bankAccountNumber: string;
     bankRecipient: string;
   }
+  // Accounts are listed across ALL venues, not just the quotation's venue: MICE
+  // settlement accounts are shared (the same CV Cita Tenun Bangsa account collects
+  // for Samisara, Grand Slipi and Lippo), while PaymentMethod.venueId pins each row
+  // to a single venue. Filtering by venue would therefore hide the very account the
+  // document is supposed to quote.
   const { data: paymentMethodsData } = useQuery<PaymentMethodDetail[]>({
-    queryKey: ["payment-methods", watchedVenueId || "all"],
+    queryKey: ["payment-methods", "cross-venue"],
     queryFn: async () => {
-      const params = new URLSearchParams({ limit: "100" });
-      if (watchedVenueId) params.set("venueId", watchedVenueId);
+      const params = new URLSearchParams({ limit: "100", crossVenue: "true" });
       const r = await fetch(`/api/payment-methods?${params}`);
       if (!r.ok) return [];
       const d = await r.json();
@@ -3474,10 +3478,13 @@ export function QuotationDrawer({
                   render={({ field }) => (
                     <FormItem className="w-full">
                       <FormLabel className={LABEL_CLASS}>Payment Method</FormLabel>
+                      {/* crossVenue: MICE settlement accounts are shared between
+                          venues, so the list must not be narrowed to this
+                          quotation's venue — see the payment-methods query above. */}
                       <BankAccountSelect
                         value={field.value ?? ""}
                         onChange={field.onChange}
-                        venueId={watchedVenueId || undefined}
+                        crossVenue
                         placeholder="Select payment method..."
                         disableAdd
                       />
