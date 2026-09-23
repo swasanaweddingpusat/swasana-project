@@ -3,9 +3,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import jsQR from "jsqr";
+import { toast } from "sonner";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useConfirmGuestbookAttendance } from "@/hooks/use-guestbook";
+import type { ConfirmAttendanceResult } from "@/actions/guestbook";
 import { ArrowLeft, CheckCircle, CloseCircle, QrCode, Restart } from "@solar-icons/react";
 
 function formatDateTime(date: string | null | undefined): string {
@@ -31,6 +33,32 @@ export function GuestbookScanClient(): React.ReactElement {
 
   const { mutate: confirmAttendance, data: result, isPending, isError, reset } =
     useConfirmGuestbookAttendance();
+
+  // Dedupe: react-query only hands back a new `result` object reference when a
+  // mutation actually resolves, so comparing against the last-seen reference
+  // guarantees the toast fires exactly once per scan (not once per re-render).
+  const lastToastedResultRef = useRef<ConfirmAttendanceResult | null>(null);
+  useEffect(() => {
+    if (!result || result === lastToastedResultRef.current) return;
+    lastToastedResultRef.current = result;
+
+    if (!result.success) {
+      toast.error(result.error ?? "Gagal konfirmasi kehadiran.");
+      return;
+    }
+
+    if (result.alreadyConfirmed) {
+      const confirmedAt = formatDateTime(result.confirmedAt);
+      toast.warning(
+        `${result.visitorName ?? "Tamu"} sudah hadir sebelumnya, tidak bisa check-in lagi.${
+          confirmedAt !== "—" ? ` (${confirmedAt})` : ""
+        }`
+      );
+      return;
+    }
+
+    toast.success(`${result.visitorName ?? "Tamu"} berhasil check-in.`);
+  }, [result]);
 
   // Kept in a ref so the mount-once effect below never needs to re-run
   // when the mutation object identity changes across renders.

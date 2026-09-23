@@ -71,9 +71,12 @@ function formatDateForInput(value: string | Date | null | undefined): string {
   if (Number.isNaN(date.getTime())) return "";
 
   const pad = (n: number) => String(n).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+  return `${date.getUTCFullYear()}-${pad(date.getUTCMonth() + 1)}-${pad(date.getUTCDate())}`;
 }
 
+// checkInAt/checkOutAt/commit dates are stored as naive local wall-clock values anchored to
+// UTC on the server (see parseLocalDateTime in actions/guestbook.ts) — reading them back with
+// UTC getters here keeps the typed numbers stable across server/browser timezone, avoiding drift.
 function formatDateTimeForInput(value: string | Date | null | undefined): string {
   if (!value) return "";
 
@@ -81,7 +84,7 @@ function formatDateTimeForInput(value: string | Date | null | undefined): string
   if (Number.isNaN(date.getTime())) return "";
 
   const pad = (n: number) => String(n).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  return `${date.getUTCFullYear()}-${pad(date.getUTCMonth() + 1)}-${pad(date.getUTCDate())}T${pad(date.getUTCHours())}:${pad(date.getUTCMinutes())}`;
 }
 
 async function fetchJson<T>(url: string): Promise<T> {
@@ -697,6 +700,10 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
       toast.error("Sales PIC wajib dipilih");
       return false;
     }
+    if (form.eventCategory === "MICE" && !form.segmentId) {
+      toast.error("Segmen wajib dipilih");
+      return false;
+    }
     if (isBitrixSource && !form.bitrixContactId.trim()) {
       toast.error("Bitrix ID wajib dipilih");
       return false;
@@ -870,6 +877,7 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
                         onClick={() => {
                           setField("eventCategory", opt.value);
                           setField("packageId", "");
+                          if (opt.value !== "MICE") setField("segmentId", "");
                         }}
                         className={cn(
                           "flex items-center justify-center gap-2 min-h-11 rounded-full px-3 py-2.5 text-xs font-semibold leading-tight text-center transition-colors",
@@ -927,29 +935,31 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
               />
             </div>
 
-            <div className="space-y-1.5">
-              <Label className="text-sm font-medium">Segmen / Kategori</Label>
-              <SearchableSelect
-                options={segmentOptions.map((o) => ({ id: o.id, name: o.name }))}
-                value={form.segmentId}
-                onChange={(v) => {
-                  setField("segmentId", v);
-                }}
-                onAdd={async (name) => {
-                  const res = await createDailyActivitySegment(name);
-                  if (!res.success) {
-                    toast.error(res.error ?? "Gagal menambah segmen");
-                    return;
-                  }
-                  await queryClient.invalidateQueries({ queryKey: ["daily-activity-segments"] });
-                  if (res.item) setField("segmentId", res.item.id);
-                  toast.success(`Segmen "${name}" berhasil ditambahkan`);
-                }}
-                placeholder="Pilih segmen / kategori"
-                searchPlaceholder="Cari segmen..."
-                emptyText="Segmen tidak ditemukan"
-              />
-            </div>
+            {form.eventCategory === "MICE" && (
+              <div className="space-y-1.5">
+                <Label className="text-sm font-medium">
+                  Segmen / Kategori <span className="text-destructive">*</span>
+                </Label>
+                <SearchableSelect
+                  options={segmentOptions.map((o) => ({ id: o.id, name: o.name }))}
+                  value={form.segmentId}
+                  onChange={(v) => setField("segmentId", v)}
+                  onAdd={async (name) => {
+                    const res = await createDailyActivitySegment(name);
+                    if (!res.success) {
+                      toast.error(res.error ?? "Gagal menambah segmen");
+                      return;
+                    }
+                    await queryClient.invalidateQueries({ queryKey: ["daily-activity-segments"] });
+                    if (res.item) setField("segmentId", res.item.id);
+                    toast.success(`Segmen "${name}" berhasil ditambahkan`);
+                  }}
+                  placeholder="Pilih segmen / kategori"
+                  searchPlaceholder="Cari segmen..."
+                  emptyText="Segmen tidak ditemukan"
+                />
+              </div>
+            )}
 
             <div className="space-y-1.5">
               <Label className="text-sm font-medium">
@@ -1167,10 +1177,6 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
                       className="rounded-xl"
                     />
                   </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="gb-scheduledAt-online" className="text-sm font-medium">Jadwal</Label>
-                    <Input id="gb-scheduledAt-online" type="datetime-local" value={form.scheduledAt} onChange={(e) => setField("scheduledAt", e.target.value)} className="rounded-xl" />
-                  </div>
                 </>
               )}
 
@@ -1181,10 +1187,6 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
                       Lokasi <span className="text-destructive">*</span>
                     </Label>
                     <Input id="gb-meetingLocation-jemput" placeholder="Lokasi kunjungan" value={form.meetingLocation} onChange={(e) => setField("meetingLocation", e.target.value)} className="rounded-xl" />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="gb-scheduledAt-jemput" className="text-sm font-medium">Jadwal</Label>
-                    <Input id="gb-scheduledAt-jemput" type="datetime-local" value={form.scheduledAt} onChange={(e) => setField("scheduledAt", e.target.value)} className="rounded-xl" />
                   </div>
                 </>
               )}

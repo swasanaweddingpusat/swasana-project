@@ -74,11 +74,14 @@ const EVENT_CATEGORY_LABELS: Record<string, string> = {
   MICE: "MICE",
 };
 
+// checkInAt/checkOutAt are stored as naive local wall-clock values anchored to UTC on the
+// server — display must read them back with timeZone: "UTC" to avoid double-converting.
 function formatDate(dateStr: string | Date): string {
   return new Date(dateStr).toLocaleDateString("id-ID", {
     day: "2-digit",
     month: "short",
     year: "numeric",
+    timeZone: "UTC",
   });
 }
 
@@ -86,6 +89,7 @@ function formatTime(dateStr: string | Date): string {
   return new Date(dateStr).toLocaleTimeString("id-ID", {
     hour: "2-digit",
     minute: "2-digit",
+    timeZone: "UTC",
   });
 }
 

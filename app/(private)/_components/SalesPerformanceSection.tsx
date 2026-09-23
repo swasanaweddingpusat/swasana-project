@@ -416,6 +416,15 @@ export function SalesPerformanceSection({
                     </Badge>
                   </div>
                 )}
+                {item.homebaseBreakdown.length > 0 && (
+                  <div className="mt-1 flex flex-wrap items-center gap-1">
+                    {item.homebaseBreakdown.map((homebase) => (
+                      <Badge key={homebase.venueId} variant="secondary" className="text-[10px]">
+                        {homebase.venueName}: {homebase.count} dealing
+                      </Badge>
+                    ))}
+                  </div>
+                )}
               </div>
               <p className="shrink-0 text-sm font-semibold text-foreground tabular-nums">
                 {formatCurrency(item.revenue)}

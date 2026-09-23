@@ -209,8 +209,16 @@ export const GENERAL_NAV: NavItem[] = [
     subtitle: "Kelola KPI, komisi, dan bonus Sales & Manager",
     permission: { module: "kpi-insentif", action: "view" },
     submenu: [
+      { name: "Dashboard KPI", href: "/kpi-insentif", icon: PieChart, subtitle: "Ringkasan penilaian, kelengkapan, dan review", permission: { module: "kpi-insentif", action: "view" } },
+      { name: "KPI Saya", href: "/kpi-insentif/kpi-saya", icon: UserHands, subtitle: "Lihat target dan hasil penilaian pribadi", permission: { module: "kpi-insentif", action: "view" } },
+      { name: "Master & Template", href: "/kpi-insentif/konfigurasi", icon: ClipboardList, subtitle: "Kelola indikator, skema, dan versi KPI", permission: { module: "kpi-master", action: "view" }, submenu: [
+        { name: "Target Item", href: "/kpi-insentif/target-item", permission: { module: "kpi-master", action: "view" } },
+        { name: "Skema Achievement", href: "/kpi-insentif/achievement", permission: { module: "kpi-master", action: "view" } },
+        { name: "Master KPI", href: "/kpi-insentif/kpi-master", permission: { module: "kpi-master", action: "view" } },
+      ] },
       { name: "Penugasan Target", href: "/kpi-insentif/penugasan", icon: UserHands, subtitle: "Tugaskan KPI ke Sales atau Manager", permission: { module: "kpi-assignment", action: "view" } },
-      { name: "Kalkulasi & Laporan", href: "/kpi-insentif/kalkulasi", icon: ChartSquare, subtitle: "Simulasi kalkulasi dan laporan final insentif", permission: { module: "kpi-simulation", action: "view" } },
+      { name: "Review & Simulasi", href: "/kpi-insentif/simulasi", icon: ChartSquare, subtitle: "Tinjau hasil sementara dan jalankan kalkulasi", permission: { module: "kpi-simulation", action: "view" } },
+      { name: "Laporan & Riwayat", href: "/kpi-insentif/laporan", icon: GraphNew, subtitle: "Lihat hasil final dan riwayat penilaian", permission: { module: "kpi-report", action: "view" } },
     ],
   },
 ];

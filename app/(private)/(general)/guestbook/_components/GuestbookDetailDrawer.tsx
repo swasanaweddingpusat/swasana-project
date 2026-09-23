@@ -68,6 +68,7 @@ const ONLINE_MEDIUM_LABELS: Record<string, string> = {
   other: "Lainnya",
 };
 
+// Used for true instants (attendanceConfirmedAt, createdAt) — browser-local display is correct here.
 function formatDateTime(date: Date | string | null | undefined): string {
   if (!date) return "—";
   const d = new Date(date);
@@ -80,6 +81,22 @@ function formatDateTime(date: Date | string | null | undefined): string {
   });
 }
 
+// checkInAt in visit history is a naive local wall-clock value anchored to UTC on the server —
+// must read back with timeZone: "UTC" to avoid double-converting (unlike formatDateTime above).
+function formatVisitDateTime(date: Date | string | null | undefined): string {
+  if (!date) return "—";
+  const d = new Date(date);
+  return d.toLocaleDateString("id-ID", {
+    day: "2-digit",
+    month: "long",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "UTC",
+  });
+}
+
+// commitVisitDate/commitPayDate are naive local dates anchored to UTC on the server.
 function formatDate(date: Date | string | null | undefined): string {
   if (!date) return "—";
   const d = new Date(date);
@@ -87,6 +104,7 @@ function formatDate(date: Date | string | null | undefined): string {
     day: "2-digit",
     month: "long",
     year: "numeric",
+    timeZone: "UTC",
   });
 }
 
@@ -156,7 +174,7 @@ export function GuestbookDetailDrawer({
         await navigator.share({
           files: [file],
           title: "Tiket Kehadiran Expo",
-          text: `Tiket kehadiran expo untuk ${entry.visitorName}`,
+          text: `Tiket kehadiran expo untuk ${entry.visitorName}. Mohon konfirmasi kehadiran Anda beserta jumlah tamu yang akan hadir ya.`,
         });
       } else {
         const url = URL.createObjectURL(blob);
@@ -380,7 +398,6 @@ export function GuestbookDetailDrawer({
             />
           )}
           <InfoRow icon={<MapPoint weight="BoldDuotone" className="h-4 w-4 text-muted-foreground" />} label="Lokasi" value={entry.meetingLocation} />
-          <InfoRow icon={<Calendar weight="BoldDuotone" className="h-4 w-4 text-muted-foreground" />} label="Jadwal" value={entry.scheduledAt ? formatDateTime(entry.scheduledAt) : null} />
           <InfoRow icon={<User weight="BoldDuotone" className="h-4 w-4 text-muted-foreground" />} label="Bertemu" value={entry.host?.fullName} />
           {entry.bitrixSourceInfo && (
             <InfoRow icon={<Database weight="BoldDuotone" className="h-4 w-4 text-muted-foreground" />} label="Sumber Bitrix" value={entry.bitrixSourceInfo} />
@@ -453,7 +470,7 @@ export function GuestbookDetailDrawer({
                   return (
                     <div key={past.id} className="flex items-center justify-between gap-2 text-sm border-b border-border/50 pb-2 last:border-0 last:pb-0">
                       <div className="space-y-0.5">
-                        <p className="text-foreground font-medium">{formatDateTime(past.checkInAt)}</p>
+                        <p className="text-foreground font-medium">{formatVisitDateTime(past.checkInAt)}</p>
                         <p className="text-xs text-muted-foreground">{past.venue?.name ?? "—"}</p>
                       </div>
                       {pastStatus && (
