@@ -54,7 +54,14 @@ export async function GET(request: Request): Promise<Response> {
         amount: t.amount,
         dueDate: t.dueDate.toISOString(),
       })),
-      quotation: null,
+      quotation: b.quotation
+        ? {
+            id: b.quotation.id,
+            quotationNo: b.quotation.quotationNo,
+            status: b.quotation.status,
+            totalPrice: b.quotation.totalPrice,
+          }
+        : null,
     };
   });
 

@@ -5,6 +5,8 @@ import {
   createQuotation,
   updateQuotation,
   deleteQuotation,
+  duplicateQuotationAsRevision,
+  convertQuotationToMiceBooking,
 } from "@/actions/quotation";
 import type { QuotationsResult } from "@/lib/queries/quotations";
 import type { CreateQuotationInput, UpdateQuotationInput } from "@/lib/validations/quotation";
@@ -67,6 +69,28 @@ export function useDeleteQuotation() {
     mutationFn: (id: string) => deleteQuotation(id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["quotations"] });
+    },
+  });
+}
+
+export function useDuplicateQuotationRevision() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => duplicateQuotationAsRevision(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["quotations"] });
+      qc.invalidateQueries({ queryKey: ["quotation-approvals"] });
+    },
+  });
+}
+
+export function useConvertQuotationToMiceBooking() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => convertQuotationToMiceBooking(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["quotations"] });
+      qc.invalidateQueries({ queryKey: ["mice-bookings"] });
     },
   });
 }

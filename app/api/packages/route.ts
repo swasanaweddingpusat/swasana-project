@@ -5,6 +5,7 @@ import { z } from "zod";
 
 const packagesQuerySchema = z.object({
   venueId: z.string().optional(),
+  eventTypeId: z.string().optional(),
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(10),
   search: z.string().optional(),
@@ -22,7 +23,7 @@ export async function GET(request: Request): Promise<Response> {
     return Response.json({ error: "Invalid query parameters" }, { status: 400 });
   }
 
-  const { venueId, page, pageSize, search, forBooking, forQuotation, category } = parsed.data;
+  const { venueId, eventTypeId, page, pageSize, search, forBooking, forQuotation, category } = parsed.data;
   const isForBooking = forBooking === "true";
   const isForQuotation = forQuotation === "true";
 
@@ -46,7 +47,7 @@ export async function GET(request: Request): Promise<Response> {
 
   try {
     if (isForQuotation) {
-      const result = await getMicePackagesForQuotation(venueId);
+      const result = await getMicePackagesForQuotation(venueId, eventTypeId);
       return Response.json(result);
     }
     if (isForBooking) {

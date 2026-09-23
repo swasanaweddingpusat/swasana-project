@@ -4,11 +4,13 @@ import { useState, useEffect, useCallback } from "react";
 import { useAttendanceToday, useAttendanceSettings, useClockIn, useClockOut } from "@/hooks/use-attendance";
 import { useWorkShifts } from "@/hooks/use-work-shifts";
 import { useWorkLocations } from "@/hooks/use-work-locations";
-import type { AttendanceStatusValue, DayOffTypeValue } from "@/lib/validations/attendance";
+import type { AttendanceStatusValue } from "@/lib/validations/attendance";
 import { CameraModal } from "./CameraModal";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import { ClockCircle, Login3, Logout3, MapPoint } from "@solar-icons/react";
@@ -18,11 +20,6 @@ type ClockAction = "in" | "out";
 const STATUS_OPTIONS: { value: AttendanceStatusValue; label: string }[] = [
   { value: "WORKDAY", label: "Work Day" },
   { value: "DAY_OFF", label: "Day Off" },
-];
-
-const DAY_OFF_TYPE_OPTIONS: { value: DayOffTypeValue; label: string }[] = [
-  { value: "REGULAR", label: "Libur Biasa" },
-  { value: "PUBLIC_HOLIDAY", label: "Public Holiday (Tanggal Merah)" },
 ];
 
 const WORK_TYPE_OPTIONS = [
@@ -53,13 +50,16 @@ function formatDuration(start: Date | string | null, end: Date | string | null):
 }
 
 export function AttendanceClock() {
-  const [currentTime, setCurrentTime] = useState(new Date());
+  // null on first (server + pre-hydration client) render so the clock text matches
+  // exactly, then filled in client-side after mount — avoids a hydration mismatch
+  // since server render time and client hydration time are never the same instant.
+  const [currentTime, setCurrentTime] = useState<Date | null>(null);
   const [cameraOpen, setCameraOpen] = useState(false);
   const [pendingAction, setPendingAction] = useState<ClockAction | null>(null);
   const [gpsCoords, setGpsCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [gpsLoading, setGpsLoading] = useState(false);
   const [selectedStatus, setSelectedStatus] = useState<AttendanceStatusValue | "">("");
-  const [selectedDayOffType, setSelectedDayOffType] = useState<DayOffTypeValue | "">("");
+  const [selectedIsPublicHoliday, setSelectedIsPublicHoliday] = useState(false);
   const [selectedPublicHolidayId, setSelectedPublicHolidayId] = useState<string>("");
   const [selectedShiftId, setSelectedShiftId] = useState<string>("");
   const [selectedWorkType, setSelectedWorkType] = useState<string>("");
@@ -77,6 +77,8 @@ export function AttendanceClock() {
   const shift = todayData?.shift ?? null;
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- hydration-safe clock: must set once on mount
+    setCurrentTime(new Date());
     const interval = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(interval);
   }, []);
@@ -97,25 +99,25 @@ export function AttendanceClock() {
   const handleStatusChange = useCallback((value: string) => {
     setSelectedStatus(value as AttendanceStatusValue);
     if (value === "WORKDAY") {
-      // Leaving the off flow — clear jenis libur.
-      setSelectedDayOffType("");
-      setSelectedPublicHolidayId("");
+      // Entering the workday flow — nothing off-flow to clear.
     } else {
-      // Entering the off flow — clear workday-only selections.
+      // Entering the off flow — clear workday-only selections, including the public
+      // holiday tag (Day Off is always libur biasa; Public Holiday only applies to WORKDAY).
       setSelectedShiftId("");
       setSelectedWorkType("");
       setSelectedLocationId("");
+      setSelectedIsPublicHoliday(false);
+      setSelectedPublicHolidayId("");
     }
   }, []);
 
-  const handleDayOffTypeChange = useCallback((value: string) => {
-    setSelectedDayOffType(value as DayOffTypeValue);
-    setSelectedPublicHolidayId(value === "PUBLIC_HOLIDAY" ? (context?.publicHolidayOptions[0]?.id ?? "") : "");
+  const handlePublicHolidayToggle = useCallback((checked: boolean) => {
+    setSelectedIsPublicHoliday(checked);
+    setSelectedPublicHolidayId(checked ? (context?.publicHolidayOptions[0]?.id ?? "") : "");
   }, [context?.publicHolidayOptions]);
 
   const isMutating = clockInMutation.isPending || clockOutMutation.isPending;
   const isWorkday = selectedStatus === "WORKDAY";
-  const isDayOff = selectedStatus === "DAY_OFF";
 
   const getStatusBadge = useCallback(() => {
     if (todayLoading) return <Badge variant="secondary">Memuat...</Badge>;
@@ -163,16 +165,7 @@ export function AttendanceClock() {
     }
 
     if (!isWorkday) {
-      // Off flow: pick jenis libur first. Nama hari besar tetap ditentukan HRD (master by-date).
-      if (!selectedDayOffType) {
-        toast.error("Pilih jenis libur terlebih dahulu");
-        return;
-      }
-      if (selectedDayOffType === "PUBLIC_HOLIDAY" && !selectedPublicHolidayId) {
-        toast.error("Pilih public holiday terlebih dahulu");
-        return;
-      }
-      // Selfie required, but no GPS/location.
+      // Off flow: plain day off. Selfie required, but no GPS/location.
       setPendingAction("in");
       setCameraOpen(true);
       return;
@@ -193,22 +186,24 @@ export function AttendanceClock() {
       return;
     }
 
+    if (selectedIsPublicHoliday && !selectedPublicHolidayId) {
+      toast.error("Pilih public holiday terlebih dahulu");
+      return;
+    }
+
     handleAction("in");
-  }, [selectedStatus, isWorkday, selectedDayOffType, selectedPublicHolidayId, selectedShiftId, selectedWorkType, selectedLocationId, handleAction]);
+  }, [selectedStatus, isWorkday, selectedIsPublicHoliday, selectedPublicHolidayId, selectedShiftId, selectedWorkType, selectedLocationId, handleAction]);
 
   const handleCapture = useCallback((photoBase64: string) => {
     setCameraOpen(false);
     if (!pendingAction) return;
 
     if (pendingAction === "in") {
-      // Off flow: selfie only, no GPS. Karyawan pilih jenis libur; nama hari besar diisi
-      // server dari master by-date.
+      // Off flow: selfie only, no GPS. Always a plain day off.
       if (!isWorkday) {
         clockInMutation.mutate(
           {
             attendanceStatus: "DAY_OFF",
-            dayOffType: (selectedDayOffType || "REGULAR") as DayOffTypeValue,
-            publicHolidayId: selectedPublicHolidayId || undefined,
             photoBase64,
           },
           {
@@ -235,6 +230,9 @@ export function AttendanceClock() {
           workShiftId: selectedShiftId,
           workType: selectedWorkType as "WFO" | "WFH" | "WFA",
           workLocationId: selectedWorkType === "WFO" ? selectedLocationId : undefined,
+          // Nama hari besar tetap ditentukan HRD (master by-date); karyawan cuma menandai.
+          isPublicHoliday: selectedIsPublicHoliday,
+          publicHolidayId: selectedIsPublicHoliday ? (selectedPublicHolidayId || undefined) : undefined,
         },
         {
           onSuccess: () => {
@@ -268,7 +266,7 @@ export function AttendanceClock() {
         },
       },
     );
-  }, [gpsCoords, pendingAction, isWorkday, selectedDayOffType, selectedPublicHolidayId, clockInMutation, clockOutMutation, selectedShiftId, selectedWorkType, selectedLocationId]);
+  }, [gpsCoords, pendingAction, isWorkday, selectedIsPublicHoliday, selectedPublicHolidayId, clockInMutation, clockOutMutation, selectedShiftId, selectedWorkType, selectedLocationId]);
 
   const handleCameraClose = useCallback(() => {
     setCameraOpen(false);
@@ -284,11 +282,10 @@ export function AttendanceClock() {
     isMutating ||
     gpsLoading ||
     !selectedStatus ||
-    (isDayOff && !selectedDayOffType) ||
-    (isDayOff && selectedDayOffType === "PUBLIC_HOLIDAY" && !selectedPublicHolidayId) ||
     (isWorkday && !selectedShiftId) ||
     (isWorkday && !selectedWorkType) ||
-    (isWorkday && selectedWorkType === "WFO" && !selectedLocationId);
+    (isWorkday && selectedWorkType === "WFO" && !selectedLocationId) ||
+    (isWorkday && selectedIsPublicHoliday && !selectedPublicHolidayId);
 
   return (
     <>
@@ -302,9 +299,9 @@ export function AttendanceClock() {
         <CardContent className="space-y-5">
           <div className="text-center space-y-1">
             <p className="text-2xl sm:text-3xl font-heading font-bold tabular-nums tracking-tight">
-              {formatTime(currentTime)}
+              {currentTime ? formatTime(currentTime) : "--:--:--"}
             </p>
-            <p className="text-sm text-muted-foreground">{formatDate(currentTime)}</p>
+            <p className="text-sm text-muted-foreground">{currentTime ? formatDate(currentTime) : " "}</p>
           </div>
 
           <div className="flex items-center justify-center gap-3">
@@ -381,45 +378,6 @@ export function AttendanceClock() {
                   </Select>
                 </div>
 
-                {isDayOff && (
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-medium text-muted-foreground">Jenis Libur</label>
-                    <Select value={selectedDayOffType} onValueChange={handleDayOffTypeChange}>
-                      <SelectTrigger className="w-full rounded-xl">
-                        <SelectValue placeholder="Pilih jenis libur" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {DAY_OFF_TYPE_OPTIONS.map((o) => (
-                          <SelectItem key={o.value} value={o.value}>
-                            {o.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
-
-                {isDayOff && selectedDayOffType === "PUBLIC_HOLIDAY" && (
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-medium text-muted-foreground">Public Holiday</label>
-                    <Select value={selectedPublicHolidayId} onValueChange={setSelectedPublicHolidayId} disabled={!context?.publicHolidayOptions.length}>
-                      <SelectTrigger className="w-full rounded-xl">
-                        <SelectValue placeholder="Pilih public holiday" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {context?.publicHolidayOptions.map((holiday) => (
-                          <SelectItem key={holiday.id} value={holiday.id}>
-                            {holiday.name} ({new Date(holiday.date).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })})
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    {!context?.publicHolidayOptions.length && (
-                      <p className="text-xs text-destructive">Saldo public holiday belum tersedia.</p>
-                    )}
-                  </div>
-                )}
-
                 {isWorkday && (
                   <div className="space-y-1.5">
                     <label className="text-xs font-medium text-muted-foreground">Shift</label>
@@ -473,14 +431,48 @@ export function AttendanceClock() {
                     </Select>
                   </div>
                 )}
+
+                {isWorkday && (
+                  <div className="flex items-center gap-2 sm:col-span-2">
+                    <Checkbox
+                      id="public-holiday-toggle"
+                      checked={selectedIsPublicHoliday}
+                      onCheckedChange={handlePublicHolidayToggle}
+                    />
+                    <Label htmlFor="public-holiday-toggle" className="text-xs font-medium text-muted-foreground cursor-pointer">
+                      Tandai sebagai Public Holiday (kerja di tanggal merah)
+                    </Label>
+                  </div>
+                )}
+
+                {isWorkday && selectedIsPublicHoliday && (
+                  <div className="space-y-1.5 sm:col-span-2">
+                    <label className="text-xs font-medium text-muted-foreground">Public Holiday</label>
+                    <Select value={selectedPublicHolidayId} onValueChange={setSelectedPublicHolidayId} disabled={!context?.publicHolidayOptions.length}>
+                      <SelectTrigger className="w-full rounded-xl">
+                        <SelectValue placeholder="Pilih public holiday" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {context?.publicHolidayOptions.map((holiday) => (
+                          <SelectItem key={holiday.id} value={holiday.id}>
+                            {holiday.name} ({new Date(holiday.date).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {!context?.publicHolidayOptions.length && (
+                      <p className="text-xs text-destructive">Saldo public holiday belum tersedia.</p>
+                    )}
+                  </div>
+                )}
               </div>
 
-              {isDayOff && context?.isPublicHoliday && (
+              {isWorkday && context?.isPublicHoliday && (
                 <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
                   <span className="font-medium">Hari besar hari ini</span>
                   {context.publicHolidayName ? ` — ${context.publicHolidayName}` : ""}
                   <span className="block text-xs text-destructive/80 mt-0.5">
-                    Ditandai HRD di kalender hari besar. Pilih &quot;Public Holiday&quot; agar tercatat sebagai tanggal merah.
+                    Ditandai HRD di kalender hari besar. Centang &quot;Tandai sebagai Public Holiday&quot; agar tercatat sebagai tanggal merah.
                   </span>
                 </div>
               )}

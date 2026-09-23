@@ -448,6 +448,10 @@ export function computeKpiResult(input: {
   if (isDraftScheme) {
     missingDataReasons.push("scheme_is_draft");
   }
+  if (schema.tiers.some((tier) => tier.isDraftBounds)) {
+    missingDataReasons.push("tier_bounds_draft");
+    status = "pending_decision";
+  }
 
   // ── 2. Convert targets to Decimal ───────────────────────────────────────────
   const dealingTarget =
@@ -460,6 +464,13 @@ export function computeKpiResult(input: {
   const dealingReal = new Decimal(realization.dealingTotal);
   const omsetReal = realization.omsetTotal;
   const homebaseReal = new Decimal(realization.homebase);
+  if (
+    dealingReal.isNegative() ||
+    omsetReal.isNegative() ||
+    homebaseReal.isNegative()
+  ) {
+    missingDataReasons.push("realization_negative");
+  }
 
   // ── 4. First pass: evaluate indicators without gating (to determine gating) ─
   const tiers = schema.tiers;
@@ -545,8 +556,10 @@ export function computeKpiResult(input: {
   if (dealing.actionType === "deduction" && dealing.deductionPct !== null) {
     deductionTriggerIndicator = "dealing";
     deductionPct = dealing.deductionPct;
-    // Apply deduction to baseCommissionTotal (provisional → set ambiguous flag)
+    // The PRD requires the deduction basis to be an approved policy decision.
     deductionBasisAmbiguous = true;
+    missingDataReasons.push("deduction_basis_unresolved");
+    status = "pending_decision";
     if (commission.total !== null) {
       deductionAmount = commission.total.mul(deductionPct).div(new Decimal(100));
     }

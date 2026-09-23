@@ -3,12 +3,23 @@ import { apiLimiter, rateLimitResponse } from "@/lib/rate-limit";
 import { db } from "@/lib/db";
 import { buildOwnerScopeWhere } from "@/lib/access-control";
 import { buildGuestbookWhere, type GuestbookCategoryFilter } from "@/lib/queries/guestbookEntries";
-import { GUEST_VISIT_STATUS_LABELS, GUEST_VISIT_STATUS_VALUES } from "@/lib/guestbook-status";
-import type { Prisma, GuestInteractionType, GuestVisitStatus } from "@prisma/client";
+import { resolveGuestbookPhotoUrl } from "@/app/(private)/(general)/guestbook/_components/photo-url";
+import type { ProofFiles } from "@/lib/validations/guestbook";
+import type { Prisma, GuestInteractionType } from "@prisma/client";
 
 const ALLOWED_CATEGORY = new Set<GuestbookCategoryFilter>(["WEDDINGS", "MICE", "no_package"]);
 const ALLOWED_INTERACTION = new Set<GuestInteractionType>(["client_visit", "online_meeting", "jemput_bola"]);
-const ALLOWED_VISIT_STATUS = new Set<GuestVisitStatus>(GUEST_VISIT_STATUS_VALUES);
+
+// Mirrors GuestbookClient.tsx / GuestbookDetailDrawer.tsx — keep labels in sync.
+const VISIT_STATUS_LABELS: Record<string, string> = {
+  cold: "Cold",
+  warm: "Warm",
+  hot: "Hot",
+  done_visit: "Done Visit",
+  to_be_discuss: "To Be Discuss",
+  deal: "Deal",
+  lost: "Lost",
+};
 
 const INTERACTION_TYPE_LABELS: Record<string, string> = {
   client_visit: "Kunjungan Client",
@@ -63,6 +74,7 @@ const guestbookExportSelect = {
   package: { select: { packageName: true, category: true } },
   segment: { select: { name: true } },
   createdBy: { select: { fullName: true } },
+  proofFiles: true,
 } satisfies Prisma.GuestbookEntrySelect;
 
 // ─── GET /api/guestbook/export — Excel export of guestbook entries ────────────
@@ -94,12 +106,6 @@ export async function GET(req: Request): Promise<Response> {
       ? (rawInteractionType as GuestInteractionType)
       : undefined;
 
-  const rawVisitStatus = searchParams.get("visitStatus");
-  const visitStatus: GuestVisitStatus | undefined =
-    rawVisitStatus && ALLOWED_VISIT_STATUS.has(rawVisitStatus as GuestVisitStatus)
-      ? (rawVisitStatus as GuestVisitStatus)
-      : undefined;
-
   try {
     const scopeWhere = (await buildOwnerScopeWhere(
       session.user.profileId,
@@ -109,7 +115,7 @@ export async function GET(req: Request): Promise<Response> {
 
     const where: Prisma.GuestbookEntryWhereInput = {
       ...scopeWhere,
-      ...buildGuestbookWhere({ search, venueId, hostId, dateFrom, dateTo, category, interactionType, visitStatus }),
+      ...buildGuestbookWhere({ search, venueId, hostId, dateFrom, dateTo, category, interactionType }),
     };
 
     const rows = await db.guestbookEntry.findMany({
@@ -139,6 +145,7 @@ export async function GET(req: Request): Promise<Response> {
       "Tanggal Commit Bayar",
       "Dicatat oleh",
       "Tanggal Dibuat",
+      "Link Bukti",
     ];
 
     const ExcelJS = await import("exceljs");
@@ -155,6 +162,8 @@ export async function GET(req: Request): Promise<Response> {
 
     rows.forEach((r) => {
       const cat = r.eventCategory ?? r.package?.category ?? null;
+      const proofFiles = (r.proofFiles ?? null) as ProofFiles | null;
+      const buktiUrl = resolveGuestbookPhotoUrl(proofFiles?.photo?.path ?? proofFiles?.chat?.path);
       sheet.addRow([
         r.visitorName,
         r.companyName ?? "",
@@ -168,13 +177,14 @@ export async function GET(req: Request): Promise<Response> {
         r.host?.fullName ?? "",
         r.sourceOfInformation?.name ?? "",
         r.package?.packageName ?? "",
-        r.visitStatus ? GUEST_VISIT_STATUS_LABELS[r.visitStatus] ?? r.visitStatus : "",
+        r.visitStatus ? VISIT_STATUS_LABELS[r.visitStatus] ?? r.visitStatus : "",
         fmtDateTime(r.checkInAt),
         fmtDateTime(r.checkOutAt),
         fmtDate(r.commitVisitDate),
         fmtDate(r.commitPayDate),
         r.createdBy?.fullName ?? "",
         fmtDateTime(r.createdAt),
+        buktiUrl ?? "",
       ]);
     });
 

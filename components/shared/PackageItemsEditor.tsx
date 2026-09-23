@@ -19,7 +19,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { SimpleEditor } from "@/components/ui/simple-editor";
+import { SimpleEditor } from "@/components/shared/SimpleEditor";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
   AddCircle,

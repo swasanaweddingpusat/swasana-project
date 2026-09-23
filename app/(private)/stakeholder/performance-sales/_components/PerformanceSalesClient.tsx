@@ -3,6 +3,7 @@
 import { usePathname, useRouter } from "next/navigation";
 import {
   Wallet2,
+  MoneyBag,
   TagPrice,
   GraphUp,
   CardReceive,
@@ -96,6 +97,7 @@ export function PerformanceSalesClient({ groups, summary, year }: Props): React.
 
   const kpis: Kpi[] = [
     { label: "Revenue (Confirmed)", value: formatRupiah(summary.totalSales), icon: Wallet2 },
+    { label: "Total Revenue", value: formatRupiah(summary.totalRevenue), icon: MoneyBag },
     { label: "Total Target", value: formatRupiah(summary.totalTarget), icon: TagPrice },
     { label: "Avg Achievement", value: `${summary.avgAchievement}%`, icon: GraphUp },
     { label: "Total Piutang", value: formatRupiah(summary.totalPiutang), icon: CardReceive },
@@ -117,7 +119,7 @@ export function PerformanceSalesClient({ groups, summary, year }: Props): React.
       </div>
 
       {/* KPI cards */}
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7">
         {kpis.map((k) => (
           <Card key={k.label} className="rounded-2xl shadow-sm transition-shadow hover:shadow-md">
             <CardContent className="p-5">
