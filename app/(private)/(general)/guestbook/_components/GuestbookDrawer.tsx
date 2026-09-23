@@ -154,6 +154,7 @@ type GuestbookForm = {
   bitrixContactId: string;
   bitrixName: string;
   bitrixSourceInfo: string;
+  bitrixAdsUrl: string;
 };
 
 const EMPTY_FORM: GuestbookForm = {
@@ -189,6 +190,7 @@ const EMPTY_FORM: GuestbookForm = {
   bitrixContactId: "",
   bitrixName: "",
   bitrixSourceInfo: "",
+  bitrixAdsUrl: "",
 };
 
 const INTERACTION_TYPE_OPTIONS = [
@@ -606,6 +608,7 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
         bitrixContactId: editEntry.bitrixContactId ?? "",
         bitrixName: editEntry.bitrixName ?? "",
         bitrixSourceInfo: editEntry.bitrixSourceInfo ?? "",
+        bitrixAdsUrl: editEntry.bitrixAdsUrl ?? "",
       });
     });
   }, [isOpen, isEditMode, editEntry, canWedding]);
@@ -789,6 +792,7 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
       bitrixContactId: form.bitrixContactId || null,
       bitrixName: form.bitrixName || null,
       bitrixSourceInfo: form.bitrixSourceInfo || null,
+      bitrixAdsUrl: form.bitrixAdsUrl || null,
     };
 
     if (isEditMode) {
@@ -1003,6 +1007,16 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
                         if (deal?.phone) {
                           const norm = normalizePhoneId(deal.phone);
                           if (norm) setField("phoneNumber", norm);
+                        }
+                        // Ambil URL iklan dari deal Bitrix terkait; kalau ID dikosongkan,
+                        // reset field-nya.
+                        if (v) {
+                          void fetch(`/api/guestbook/bitrix-ads-url?dealId=${encodeURIComponent(v)}`)
+                            .then((res) => res.json())
+                            .then((data) => setField("bitrixAdsUrl", data.adsUrl ?? ""))
+                            .catch(() => {});
+                        } else {
+                          setField("bitrixAdsUrl", "");
                         }
                       }}
                     />

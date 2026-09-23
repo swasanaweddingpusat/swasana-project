@@ -42,6 +42,9 @@ import {
   UserCircle,
   ChartSquare,
   Buildings2,
+  VolumeLoud,
+  Leaf,
+  Link as LinkIcon,
 } from "@solar-icons/react";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
@@ -50,7 +53,12 @@ import { computeFullPrice } from "@/lib/package-prices";
 import { useGuestbookEntries, useDeleteGuestbookEntry } from "@/hooks/use-guestbook";
 import { useVenues } from "@/hooks/use-venues";
 import { useSalesUsers } from "@/hooks/use-sales-users";
-import type { GuestbookEntryItem, GuestbookCategoryFilter, GuestbookOverview } from "@/lib/queries/guestbookEntries";
+import type {
+  GuestbookEntryItem,
+  GuestbookCategoryFilter,
+  GuestbookOverview,
+  GuestbookOverviewBucket,
+} from "@/lib/queries/guestbookEntries";
 import type { GuestInteractionType } from "@prisma/client";
 import type { ProofFiles } from "@/lib/validations/guestbook";
 import { GuestbookDrawer } from "./GuestbookDrawer";
@@ -102,6 +110,100 @@ function getPackagePrice(pkg: NonNullable<GuestbookEntryItem["package"]>): numbe
   if (pkg.sellingPrice > 0) return pkg.sellingPrice;
   const base = (pkg.categoryPrices ?? []).reduce((sum, c) => sum + c.basePrice, 0);
   return computeFullPrice([{ basePrice: base }], pkg.margin ?? 0);
+}
+
+// Shorten an ad URL for display (drop protocol + trailing slash).
+function shortUrl(url: string): string {
+  return url.replace(/^https?:\/\//i, "").replace(/\/$/, "");
+}
+
+// Progress-bar row used by the "Sumber Iklan" card — label + count + percentage.
+function AdsSourceBarRow({
+  label,
+  count,
+  total,
+}: {
+  label: React.ReactNode;
+  count: number;
+  total: number;
+}) {
+  const pct = total > 0 ? Math.round((count / total) * 100) : 0;
+  return (
+    <div className="space-y-1">
+      <div className="flex items-center justify-between gap-3 text-xs">
+        <span className="min-w-0 truncate">{label}</span>
+        <span className="shrink-0 font-medium tabular-nums text-foreground">
+          {count.toLocaleString("id-ID")}
+          <span className="ml-1 text-muted-foreground">({pct}%)</span>
+        </span>
+      </div>
+      <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+        <div className="h-full rounded-full bg-primary" style={{ width: `${pct}%` }} />
+      </div>
+    </div>
+  );
+}
+
+// Dedicated card for the ad-source breakdown — needs clickable URLs + an
+// "Organik" fallback row, which the generic `lists` item renderer below
+// doesn't support.
+function GuestbookAdsSourceCard({
+  buckets,
+  organik,
+  total,
+}: {
+  buckets: GuestbookOverviewBucket[];
+  organik: number;
+  total: number;
+}) {
+  const isEmpty = buckets.length === 0 && organik === 0;
+  return (
+    <Card className="rounded-2xl shadow-sm">
+      <CardContent className="p-4">
+        <div className="mb-3 flex items-center gap-2">
+          <VolumeLoud weight="BoldDuotone" className="h-4 w-4 text-muted-foreground" />
+          <p className="text-sm font-semibold text-foreground">Sumber Iklan</p>
+        </div>
+        {isEmpty ? (
+          <p className="text-xs text-muted-foreground">Tidak ada data.</p>
+        ) : (
+          <div className="space-y-3">
+            {buckets.map((b) => (
+              <AdsSourceBarRow
+                key={b.key}
+                total={total}
+                count={b.count}
+                label={
+                  <a
+                    href={b.label}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 text-primary hover:underline"
+                  >
+                    <LinkIcon weight="BoldDuotone" className="h-3.5 w-3.5 shrink-0" />
+                    <span className="truncate">{shortUrl(b.label)}</span>
+                  </a>
+                }
+              />
+            ))}
+            {organik > 0 && (
+              <AdsSourceBarRow
+                key="__organik__"
+                total={total}
+                count={organik}
+                label={
+                  <span className="inline-flex items-center gap-1.5 text-muted-foreground">
+                    <Leaf weight="BoldDuotone" className="h-3.5 w-3.5 shrink-0" />
+                    Organik (tanpa iklan)
+                  </span>
+                }
+              />
+            )}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
 }
 
 function GuestbookOverview({
@@ -163,6 +265,11 @@ function GuestbookOverview({
           </Card>
         ))}
       </div>
+      <GuestbookAdsSourceCard
+        buckets={overview.adsUrlBuckets}
+        organik={overview.adsUrlOrganik}
+        total={overview.total}
+      />
     </div>
   );
 }
@@ -472,6 +579,8 @@ function GuestbookClientInner() {
           bySource: [],
           byVenue: [],
           byHost: [],
+          adsUrlBuckets: [],
+          adsUrlOrganik: 0,
         }}
       />
       {/* Table — desktop */}
