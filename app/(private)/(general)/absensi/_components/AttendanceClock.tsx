@@ -50,7 +50,10 @@ function formatDuration(start: Date | string | null, end: Date | string | null):
 }
 
 export function AttendanceClock() {
-  const [currentTime, setCurrentTime] = useState(new Date());
+  // null on first (server + pre-hydration client) render so the clock text matches
+  // exactly, then filled in client-side after mount — avoids a hydration mismatch
+  // since server render time and client hydration time are never the same instant.
+  const [currentTime, setCurrentTime] = useState<Date | null>(null);
   const [cameraOpen, setCameraOpen] = useState(false);
   const [pendingAction, setPendingAction] = useState<ClockAction | null>(null);
   const [gpsCoords, setGpsCoords] = useState<{ lat: number; lng: number } | null>(null);
@@ -74,6 +77,8 @@ export function AttendanceClock() {
   const shift = todayData?.shift ?? null;
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- hydration-safe clock: must set once on mount
+    setCurrentTime(new Date());
     const interval = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(interval);
   }, []);
@@ -294,9 +299,9 @@ export function AttendanceClock() {
         <CardContent className="space-y-5">
           <div className="text-center space-y-1">
             <p className="text-2xl sm:text-3xl font-heading font-bold tabular-nums tracking-tight">
-              {formatTime(currentTime)}
+              {currentTime ? formatTime(currentTime) : "--:--:--"}
             </p>
-            <p className="text-sm text-muted-foreground">{formatDate(currentTime)}</p>
+            <p className="text-sm text-muted-foreground">{currentTime ? formatDate(currentTime) : " "}</p>
           </div>
 
           <div className="flex items-center justify-center gap-3">
