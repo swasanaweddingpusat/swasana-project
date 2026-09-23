@@ -476,14 +476,23 @@ export async function duplicatePackage(id: string): Promise<
         category: true,
         venueId: true,
         packageTypeCategoryId: true,
+        eventTypeId: true,
+        paymentMethodId: true,
         notes: true,
         pax: true,
         margin: true,
         sellingPrice: true,
         termAndCondition: true,
+        cancellationRefundPolicy: true,
+        closingNote: true,
         categoryPrices: { select: { categoryId: true, categoryName: true, basePrice: true, sortOrder: true, isShow: true } },
         vendorItems: { select: { categoryId: true, categoryName: true, itemText: true, sortOrder: true } },
         internalItems: { select: { itemName: true, itemDescription: true, sortOrder: true } },
+        miceItems: { select: { itemName: true, itemDescription: true, sortOrder: true } },
+        micePrices: { select: { name: true, description: true, priceType: true, qty: true, price: true, total: true, sortOrder: true } },
+        taxDeposits: { select: { name: true, nominal: true, sortOrder: true } },
+        complimentaries: { select: { complimentaryId: true, name: true, price: true, isShowPrice: true, description: true, qty: true, sortOrder: true } },
+        bonuses: { select: { bonusId: true, name: true, price: true, description: true, qty: true, sortOrder: true } },
       },
     });
     if (!source) return { success: false, error: "Package tidak ditemukan." };
@@ -511,7 +520,8 @@ export async function duplicatePackage(id: string): Promise<
     const safeCategoryId = (cid: string | null): string | null => (cid && liveCategoryIds.has(cid) ? cid : null);
 
     // Copy as a fresh draft — no ApprovalRecord created, so approvers aren't
-    // notified until the user reviews & submits the duplicate. Unavailable until approved.
+    // notified until the user reviews & submits the duplicate. MICE packages have
+    // no approval flow, but every duplicate starts unavailable for explicit review.
     const ops: Prisma.PrismaPromise<unknown>[] = [
       db.package.create({
         data: {
@@ -520,11 +530,15 @@ export async function duplicatePackage(id: string): Promise<
           category: source.category,
           venueId: source.venueId,
           packageTypeCategoryId: source.packageTypeCategoryId,
+          eventTypeId: source.eventTypeId,
+          paymentMethodId: source.paymentMethodId,
           notes: source.notes,
           pax: source.pax,
           margin: source.margin,
           sellingPrice: source.sellingPrice,
           termAndCondition: source.termAndCondition,
+          cancellationRefundPolicy: source.cancellationRefundPolicy,
+          closingNote: source.closingNote,
           approvalStatus: source.category === "MICE" ? "approved" : "draft",
           available: false,
           createdById: session!.user.profileId!,
@@ -544,6 +558,31 @@ export async function duplicatePackage(id: string): Promise<
       ...source.internalItems.map((it) =>
         db.packageInternalItem.create({
           data: { packageId: newId, itemName: it.itemName, itemDescription: it.itemDescription, sortOrder: it.sortOrder },
+        })
+      ),
+      ...source.miceItems.map((it) =>
+        db.packageMiceItem.create({
+          data: { packageId: newId, itemName: it.itemName, itemDescription: it.itemDescription, sortOrder: it.sortOrder },
+        })
+      ),
+      ...source.micePrices.map((price) =>
+        db.packageMicePrice.create({
+          data: { packageId: newId, name: price.name, description: price.description, priceType: price.priceType, qty: price.qty, price: price.price, total: price.total, sortOrder: price.sortOrder },
+        })
+      ),
+      ...source.taxDeposits.map((taxDeposit) =>
+        db.packageMiceTaxDeposit.create({
+          data: { packageId: newId, name: taxDeposit.name, nominal: taxDeposit.nominal, sortOrder: taxDeposit.sortOrder },
+        })
+      ),
+      ...source.complimentaries.map((complimentary) =>
+        db.packageComplimentary.create({
+          data: { packageId: newId, complimentaryId: complimentary.complimentaryId, name: complimentary.name, price: complimentary.price, isShowPrice: complimentary.isShowPrice, description: complimentary.description, qty: complimentary.qty, sortOrder: complimentary.sortOrder },
+        })
+      ),
+      ...source.bonuses.map((bonus) =>
+        db.packageBonus.create({
+          data: { packageId: newId, bonusId: bonus.bonusId, name: bonus.name, price: bonus.price, description: bonus.description, qty: bonus.qty, sortOrder: bonus.sortOrder },
         })
       ),
     ];

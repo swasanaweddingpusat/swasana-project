@@ -89,9 +89,9 @@ export async function getPackagesForBooking(venueId?: string, category: "WEDDING
 /**
  * MICE packages consumable by the quotation drawer. Deliberately NOT reusing
  * getPackagesForBooking: that filters on Σ categoryPrices.basePrice > 0, but MICE
- * packages often have empty categoryPrices (pricing is set later via "Set Harga",
- * or filled in manually per quotation). Here we filter on having miceItems
- * instead, and only include the minimal shape the quotation explode needs.
+ * packages use micePrices instead of Wedding categoryPrices. New MICE packages
+ * are required to have at least one miceItem; the final filter remains as a
+ * compatibility guard for legacy rows created before that invariant existed.
  */
 export async function getMicePackagesForQuotation(venueId?: string, eventTypeId?: string) {
   "use cache";

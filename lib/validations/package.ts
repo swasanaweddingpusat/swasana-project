@@ -122,7 +122,7 @@ export const saveMicePackageSchema = z.object({
   termAndCondition: z.string().nullable().optional(),
   cancellationRefundPolicy: z.string().nullable().optional(),
   closingNote: z.string().nullable().optional(),
-  items: z.array(miceItemSchema),
+  items: z.array(miceItemSchema).min(1, "Minimal 1 item fasilitas"),
   taxDeposits: z.array(packageTaxDepositSchema),
   prices: z.array(micePriceSchema).min(1, "Minimal 1 item harga"),
   complimentaries: z.array(packageComplimentarySchema),
