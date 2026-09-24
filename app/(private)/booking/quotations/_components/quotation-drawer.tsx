@@ -115,7 +115,7 @@ interface QuotationFormValues {
   packageId: string;
   packageName: string;
   pax: number;
-  packageSource: string;
+  packageSource: "meeting-package" | "custom";
   details: string;
   time: string;
   place: string;
@@ -201,10 +201,7 @@ function makeDefaultTerms(): TermRow[] {
 }
 
 function makeDefaultTaxDeposits(): TaxDepositRow[] {
-  return [
-    { id: crypto.randomUUID(), name: "Tax 10%", nominal: 2000000 },
-    { id: crypto.randomUUID(), name: "Deposite", nominal: 5000000 },
-  ];
+  return [];
 }
 
 // Tab order per step — "Next" walks through these tabs before moving to the next
@@ -1197,8 +1194,6 @@ export function QuotationDrawer({
   // Signature dataURL pending repaint onto the canvas once it mounts (step 4 only).
   const pendingSignatureRestoreRef = useRef<string | null>(null);
 
-  // Package MICE picker (Step 2 — explode into line items, filtered by venue)
-  const [selectedPackageId, setSelectedPackageId] = useState("");
   // Editable discount label (e.g. "Discount" / "Cashback") — toggled by pen icon.
   const [discountEditing, setDiscountEditing] = useState(false);
 
@@ -1566,6 +1561,8 @@ export function QuotationDrawer({
   const watchedDiscount = form.watch("discount");
   const watchedDiscountName = form.watch("discountName");
   const watchedPackageSource = form.watch("packageSource");
+  const watchedPackageId = form.watch("packageId");
+  const watchedPackageName = form.watch("packageName");
   const watchedEventTypeId = form.watch("eventTypeId");
   const watchedEventDate = form.watch("eventDate");
   const watchedPaymentMethodId = form.watch("paymentMethodId");
@@ -1651,38 +1648,77 @@ export function QuotationDrawer({
       sortOrder: number;
     }>;
   }
-  const { data: micePackagesData } = useQuery({
+  const {
+    data: micePackagesData,
+    isPending: micePackagesLoading,
+    error: micePackagesError,
+  } = useQuery({
     queryKey: ["mice-packages-quotation", watchedVenueId, watchedEventTypeId],
     queryFn: async () => {
       const params = new URLSearchParams({ forQuotation: "true", category: "MICE" });
       if (watchedVenueId) params.set("venueId", watchedVenueId);
       if (watchedEventTypeId) params.set("eventTypeId", watchedEventTypeId);
       const res = await fetch(`/api/packages?${params.toString()}`);
-      if (!res.ok) return [] as MicePackageQuotationOption[];
+      if (!res.ok) throw new Error("Failed to load MICE packages");
       return (await res.json()) as MicePackageQuotationOption[];
     },
     enabled: open && !!watchedVenueId,
     staleTime: 30_000,
   });
   const micePackages: MicePackageQuotationOption[] = micePackagesData ?? [];
+  const packageSelectOptions = micePackages.map((pkg) => {
+    const total = pkg.micePrices.reduce((sum, price) => sum + price.total, 0);
+    return { id: pkg.id, name: `${pkg.packageName} — ${formatRupiah(total)}` };
+  });
+  if (watchedPackageId && !packageSelectOptions.some((option) => option.id === watchedPackageId)) {
+    const currentTotal = prices.reduce((sum, price) => sum + price.total, 0);
+    packageSelectOptions.push({
+      id: watchedPackageId,
+      name: `${watchedPackageName || "Meeting Package"} — ${formatRupiah(currentTotal)}`,
+    });
+  }
+
+  function clearAppliedPackage(restoreVenueId?: string): void {
+    form.setValue("packageId", "");
+    form.setValue("packageName", "");
+    form.setValue("pax", 0);
+    form.setValue("paymentMethodId", "");
+    form.setValue("termAndCondition", "");
+    form.setValue("cancellationPolicy", "");
+    form.setValue("closingNote", "");
+    replaceItems([]);
+    setPrices([]);
+    setTaxDeposits([]);
+    setComplimentaries([]);
+    setBonuses([]);
+    if (restoreVenueId) void loadVenueTemplate(restoreVenueId);
+  }
 
   /**
    * Apply a MICE package: freeze its identity on the form + auto-fill every step
    * (items, harga, tax & deposit, complimentary, bonus, T&C, payment method).
    * Values stay editable afterward.
    */
-  function handleApplyPackage(packageId: string) {
+  function handleApplyPackage(packageId: string): void {
     const pkg = micePackages.find((p) => p.id === packageId);
-    if (!pkg) return;
+    if (!pkg) {
+      toast.error("Meeting Package tidak ditemukan. Muat ulang lalu coba lagi.");
+      return;
+    }
     if (pkg.miceItems.length === 0) {
-      toast.error("This package doesn't have any items yet.");
+      toast.error("Meeting Package belum memiliki items.");
+      return;
+    }
+    if (!pkg.micePrices.some((price) => price.total > 0)) {
+      toast.error("Meeting Package belum memiliki harga.");
       return;
     }
 
+    form.setValue("packageSource", "meeting-package");
     form.setValue("packageId", pkg.id);
     form.setValue("packageName", pkg.packageName);
     form.setValue("pax", pkg.pax);
-    if (pkg.paymentMethodId) form.setValue("paymentMethodId", pkg.paymentMethodId);
+    form.setValue("paymentMethodId", pkg.paymentMethodId ?? "");
     form.setValue("termAndCondition", pkg.termAndCondition ?? "");
     form.setValue("cancellationPolicy", pkg.cancellationRefundPolicy ?? "");
     form.setValue("closingNote", pkg.closingNote ?? "");
@@ -1744,16 +1780,13 @@ export function QuotationDrawer({
     toast.success(`Package "${pkg.packageName}" applied — all steps auto-filled.`);
   }
 
-  // TEMP — testing UI Step 1: skip required-field gate so "Lanjut" can be clicked even with
-  // incomplete fields. Set to false / remove once Step 1's data logic is finalized.
-  const TEMP_SKIP_STEP1_REQUIRED_GATE = true;
-
   const isStep1Incomplete =
-    !TEMP_SKIP_STEP1_REQUIRED_GATE &&
-    (!watchedClientName?.trim() ||
-      !watchedSalesId ||
-      !watchedEventTypeId ||
-      !watchedEventDate);
+    !watchedClientName?.trim() ||
+    !watchedSalesId ||
+    !watchedVenueId ||
+    !watchedEventTypeId ||
+    !watchedEventDate ||
+    (watchedPackageSource === "meeting-package" && !watchedPackageId);
 
   // Step 6 (signature) requires a signature + signing location.
   const isSignatureComplete = !!signatureSales && !!signingLocation.trim();
@@ -1866,8 +1899,6 @@ export function QuotationDrawer({
     setInstansiSearch("");
     setDebouncedInstansi("");
     setInstansiDropdownOpen(false);
-    // Reset Package MICE picker state
-    setSelectedPackageId("");
     // Reset discount label edit mode
     setDiscountEditing(false);
     // Reset Complimentary state
@@ -1885,7 +1916,7 @@ export function QuotationDrawer({
     // Reset Price state (UI-only, never restored from editQuotation)
     setPrices([]);
     setCollapsedPrices(new Set());
-    // Reset Tax & Deposit state — default 2 items (Tax 10% & Deposite)
+    // Reset Tax & Deposit state — package/custom rows are explicit, never monetary defaults.
     setTaxDeposits(makeDefaultTaxDeposits());
     setCollapsedTaxDeposits(new Set());
     // Reset Term of Payment (TOP) state — default 2 terms (Down Payment & Other)
@@ -1906,8 +1937,13 @@ export function QuotationDrawer({
               manualTotal: !!it.manualTotal,
             }))
           : [{ ...EMPTY_ITEM }];
-      // Restore signature fields
+      // Restore signature fields. The canvas mounts only on Step 5, so retain the
+      // data URL until that step becomes visible.
       if (editQuotation.signingLocation) setSigningLocation(editQuotation.signingLocation);
+      if (editQuotation.signatureSales) {
+        setSignatureSales(editQuotation.signatureSales);
+        pendingSignatureRestoreRef.current = editQuotation.signatureSales;
+      }
       form.reset({
         clientName: editQuotation.leadName,
         clientPhone: editQuotation.leadPhone?.trim() ?? "",
@@ -1920,7 +1956,8 @@ export function QuotationDrawer({
         packageId: editQuotation.packageId ?? "",
         packageName: editQuotation.packageName ?? "",
         pax: editQuotation.pax ?? 0,
-        packageSource: editQuotation.packageSource ?? "custom",
+        packageSource:
+          editQuotation.packageSource === "meeting-package" ? "meeting-package" : "custom",
         details: editQuotation.details ?? "",
         time: editQuotation.time ?? "",
         place: editQuotation.place ?? "",
@@ -2046,7 +2083,7 @@ export function QuotationDrawer({
         setBonuses(draft.bonuses ?? []);
         // Restore prices dari draft (UI-only)
         setPrices(draft.prices ?? []);
-        // Restore tax & deposit dari draft (UI-only); fallback ke default 2 items
+        // Restore tax & deposit from the draft; new quotations start empty.
         setTaxDeposits(draft.taxDeposits ?? makeDefaultTaxDeposits());
         // Restore term of payment (TOP) dari draft (UI-only); fallback ke default 2 terms
         setTerms(draft.terms ?? makeDefaultTerms());
@@ -2093,9 +2130,8 @@ export function QuotationDrawer({
   // ── Navigation ───────────────────────────────────────────────────────────
   async function handleNext() {
     if (step === 1) {
-      if (TEMP_SKIP_STEP1_REQUIRED_GATE) {
-        setStep(2);
-        setActiveTab("harga");
+      if (watchedPackageSource === "meeting-package" && !watchedPackageId) {
+        toast.error("Pilih Meeting Package sebelum melanjutkan.");
         return;
       }
       const step1Fields = [
@@ -2130,6 +2166,14 @@ export function QuotationDrawer({
       setStep(4);
       setActiveTab("payment");
     } else if (step === 4) {
+      if (
+        terms.length === 0 ||
+        terms.some((term) => !term.name.trim() || term.amount <= 0 || !term.dueDate)
+      ) {
+        setActiveTab("payment");
+        toast.error("Semua TOP wajib memiliki nama, nominal, dan tanggal jatuh tempo.");
+        return;
+      }
       const step4Fields = [
         "termAndCondition",
         "cancellationPolicy",
@@ -2160,15 +2204,25 @@ export function QuotationDrawer({
       setStep(3);
       setActiveTab("complimentary");
     } else if (step === 5) {
-      // Clear signature saat kembali dari step terakhir (summary + TTD)
-      sigSalesRef.current?.clear();
-      setSignatureSales("");
+      // Preserve the signature while the user goes back to review another step.
+      // The canvas is repainted when Step 5 mounts again.
+      pendingSignatureRestoreRef.current = signatureSales || null;
       setStep(4);
       setActiveTab("term");
     }
   }
 
   async function onSubmit(values: QuotationFormValues) {
+    if (
+      terms.length === 0 ||
+      terms.some((term) => !term.name.trim() || term.amount <= 0 || !term.dueDate)
+    ) {
+      setStep(4);
+      setActiveTab("payment");
+      toast.error("Semua TOP wajib memiliki nama, nominal, dan tanggal jatuh tempo.");
+      return;
+    }
+
     // Parse items — form stores qty/price/total as display strings ("1.000.000") → parse to int
     const items = values.items.map((it, idx) => ({
       title: it.title,
@@ -2215,7 +2269,7 @@ export function QuotationDrawer({
       .map((t, idx) => ({
         name: t.name.trim(),
         amount: t.amount,
-        dueDate: t.dueDate || null,
+        dueDate: t.dueDate,
         sortOrder: idx,
       }));
 
@@ -2229,7 +2283,7 @@ export function QuotationDrawer({
       salesId: values.salesId,
       venueId: values.venueId,
       venueName: values.venue || null,
-      eventTypeId: values.eventTypeId || null,
+      eventTypeId: values.eventTypeId,
       eventTypeName: values.eventTypeName || null,
       packageId: values.packageId || null,
       packageName: values.packageName || null,
@@ -2252,7 +2306,7 @@ export function QuotationDrawer({
         qty: b.qty,
         sortOrder: i,
       })),
-      eventDate: values.eventDate || null,
+      eventDate: values.eventDate,
       eventEndDate: values.eventEndDate || null,
       time: values.time || null,
       place: values.place || null,
@@ -2269,8 +2323,8 @@ export function QuotationDrawer({
       cancellationPolicy: values.cancellationPolicy || null,
       closingNote: values.closingNote || null,
       paymentMethodId: values.paymentMethodId || null,
-      signingLocation: signingLocation || null,
-      signatureSales: signatureSales || null,
+      signingLocation,
+      signatureSales,
       ...(isEdit && { status: values.status }),
     };
 
@@ -2525,6 +2579,7 @@ export function QuotationDrawer({
                   <FormField
                     control={form.control}
                     name="venueId"
+                    rules={{ required: "Venue must be selected" }}
                     render={({ field }) => (
                       <FormItem className="w-full">
                         <FormLabel className={LABEL_CLASS}>Venue</FormLabel>
@@ -2533,9 +2588,12 @@ export function QuotationDrawer({
                             options={venues.map((v) => ({ id: v.id, name: v.name }))}
                             value={field.value}
                             onChange={(id) => {
+                              clearAppliedPackage();
                               field.onChange(id);
                               const matched = venues.find((v) => v.id === id);
                               form.setValue("venue", matched?.name ?? "");
+                              form.setValue("eventTypeId", "");
+                              form.setValue("eventTypeName", "");
                               form.setValue("eventDate", "");
                               form.setValue("eventEndDate", "");
                               void loadVenueTemplate(id);
@@ -2565,6 +2623,7 @@ export function QuotationDrawer({
                             options={filteredEventTypes.map((et) => ({ id: et.id, name: et.name }))}
                             value={field.value}
                             onChange={(v) => {
+                              clearAppliedPackage(watchedVenueId);
                               field.onChange(v);
                               const matched = filteredEventTypes.find((et) => et.id === v);
                               form.setValue("eventTypeName", matched?.name ?? "");
@@ -2599,7 +2658,10 @@ export function QuotationDrawer({
                       </button>
                       <button
                         type="button"
-                        onClick={() => form.setValue("packageSource", "custom")}
+                        onClick={() => {
+                          form.setValue("packageSource", "custom");
+                          clearAppliedPackage(watchedVenueId);
+                        }}
                         className={cn(
                           "rounded-xl border px-3 py-2 text-sm font-medium transition-colors cursor-pointer",
                           watchedPackageSource === "custom"
@@ -2617,20 +2679,25 @@ export function QuotationDrawer({
                     <div className="w-full space-y-1.5">
                       <p className={LABEL_CLASS}>Meeting Package</p>
                       <SearchableSelect
-                        options={micePackages.map((p) => ({ id: p.id, name: p.packageName }))}
-                        value={selectedPackageId}
-                        onChange={(id) => {
-                          setSelectedPackageId(id);
-                          handleApplyPackage(id);
-                        }}
+                        options={packageSelectOptions}
+                        value={watchedPackageId}
+                        onChange={handleApplyPackage}
                         placeholder="Search & select a MICE package for this venue..."
                         searchPlaceholder="Search package..."
                         emptyText="No MICE packages"
+                        loading={micePackagesLoading}
+                        loadingText="Loading MICE packages..."
+                        disabled={micePackagesLoading}
                       />
-                      <p className="text-xs text-muted-foreground">
-                        {micePackages.length === 0
-                          ? "No approved MICE packages for this venue yet."
-                          : "Select a package — its items will REPLACE the item list below (can be edited afterward)."}
+                      <p className={cn(
+                        "text-xs",
+                        micePackagesError ? "text-destructive" : "text-muted-foreground",
+                      )}>
+                        {micePackagesError
+                          ? "Failed to load MICE packages. Try selecting the venue again."
+                          : micePackages.length === 0 && !micePackagesLoading
+                            ? "No approved MICE packages for this venue and event type."
+                            : "Select a package — its prices and contents will replace the current package data."}
                       </p>
                     </div>
                   )}

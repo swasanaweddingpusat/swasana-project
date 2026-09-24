@@ -7,13 +7,14 @@ import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/permissions";
 import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
 import { getNextSequence } from "@/lib/counter";
-import { buildBookingApprovalSteps, resolveApprovalSteps } from "@/lib/approval-flows";
+import { buildBookingApprovalSteps } from "@/lib/approval-flows";
 import { resolveManagerId } from "@/lib/resolve-manager";
 import { generateAccessCode } from "@/lib/access-code";
+import { calculateQuotationTotals } from "@/lib/quotationPricing";
+import { getQuotationConversionReadinessError } from "@/lib/quotationReadiness";
 import {
   createQuotationSchema,
   updateQuotationSchema,
-  type CreateQuotationInput,
   type UpdateQuotationInput,
 } from "@/lib/validations/quotation";
 
@@ -25,23 +26,6 @@ async function getRequestMeta(): Promise<{ ipAddress: string; userAgent: string 
     ipAddress: hdrs.get("x-forwarded-for") ?? "unknown",
     userAgent: hdrs.get("user-agent") ?? "unknown",
   };
-}
-
-function computePricing(
-  items: CreateQuotationInput["items"],
-  additionals: CreateQuotationInput["additionals"],
-  prices: CreateQuotationInput["prices"],
-  discount: number,
-): {
-  subtotal: number;
-  totalPrice: number;
-} {
-  const itemsTotal = items.reduce((sum, item) => sum + item.total, 0);
-  const additionalsTotal = additionals.reduce((sum, item) => sum + item.total, 0);
-  const pricesTotal = prices.reduce((sum, p) => sum + p.total, 0);
-  const subtotal = itemsTotal + additionalsTotal + pricesTotal;
-  const totalPrice = Math.max(0, subtotal - discount);
-  return { subtotal, totalPrice };
 }
 
 /**
@@ -163,13 +147,12 @@ export async function createQuotation(
     const quotationId = crypto.randomUUID();
     const quotationNo = await generateQuotationNo();
     const bankDetails = await resolveFrozenBankDetails(input.paymentMethodId);
-    const { subtotal, totalPrice } = computePricing(input.items, input.additionals, input.prices, input.discount);
-
-    // A quotation without an approval flow could never be converted safely.
-    const approvalSteps = await resolveApprovalSteps("quotations");
-    if (!approvalSteps || approvalSteps.length === 0) {
-      return { success: false, error: "Alur approval quotation belum dikonfigurasi." };
-    }
+    const { subtotal, totalPrice } = calculateQuotationTotals({
+      items: input.items,
+      additionals: input.additionals,
+      prices: input.prices,
+      discount: input.discount,
+    });
 
     const ops: Prisma.PrismaPromise<unknown>[] = [
       // 1. Create quotation row first (items/terms FK depend on it)
@@ -333,39 +316,7 @@ export async function createQuotation(
       ops.push(...snapOps);
     }
 
-    // 3. Create approval record + steps.
-    const approvalRecordId = crypto.randomUUID();
-    const creatorRoleId = session!.user.roleId;
-    const creatorStepIdx = approvalSteps.findIndex(
-      (step) => step.approverType === "role" && step.approverRoleId === creatorRoleId,
-    );
-
     ops.push(
-      db.approvalRecord.create({
-        data: {
-          id: approvalRecordId,
-          module: "quotations",
-          entityId: quotationId,
-          status: "pending",
-          createdById: session!.user.profileId!,
-        },
-      }),
-      ...approvalSteps.map((step, index) => {
-        const shouldAutoApprove = creatorStepIdx >= 0 && index === creatorStepIdx;
-        return db.approvalRecordStep.create({
-          data: {
-            recordId: approvalRecordId,
-            stepOrder: step.sortOrder,
-            approverType: step.approverType,
-            approverRoleId: step.approverRoleId,
-            approverUserId: null,
-            status: shouldAutoApprove ? "approved" : "pending",
-            decidedById: shouldAutoApprove ? session!.user.profileId! : null,
-            decidedAt: shouldAutoApprove ? new Date() : null,
-            signature: null,
-          },
-        });
-      }),
       db.activityLog.create({
         data: {
           userId: session!.user.profileId!,
@@ -407,20 +358,11 @@ export async function updateQuotation(
   const meta = await getRequestMeta();
 
   try {
-    const [existing, approvalRecord] = await Promise.all([
-      db.quotation.findUnique({
-        where: { id: input.id },
-        select: { id: true, booking: { select: { id: true } } },
-      }),
-      db.approvalRecord.findUnique({
-        where: { module_entityId: { module: "quotations", entityId: input.id } },
-        select: { id: true, status: true },
-      }),
-    ]);
+    const existing = await db.quotation.findUnique({
+      where: { id: input.id },
+      select: { id: true, booking: { select: { id: true } } },
+    });
     if (!existing) return { success: false, error: "Quotation tidak ditemukan." };
-    if (approvalRecord?.status === "approved") {
-      return { success: false, error: "Quotation yang sudah approved tidak dapat diedit. Buat revisi baru." };
-    }
     if (existing.booking) {
       return { success: false, error: "Quotation yang sudah dikonversi tidak dapat diedit." };
     }
@@ -431,7 +373,12 @@ export async function updateQuotation(
       input.items !== undefined
         ? (() => {
             const discount = input.discount ?? 0;
-            const { subtotal, totalPrice } = computePricing(input.items, input.additionals ?? [], input.prices ?? [], discount);
+            const { subtotal, totalPrice } = calculateQuotationTotals({
+              items: input.items,
+              additionals: input.additionals ?? [],
+              prices: input.prices ?? [],
+              discount,
+            });
             return { subtotal, discount, totalPrice };
           })()
         : undefined;
@@ -635,25 +582,6 @@ export async function updateQuotation(
       }
     }
 
-    if (approvalRecord) {
-      ops.push(
-        db.approvalRecord.update({
-          where: { id: approvalRecord.id },
-          data: { status: "pending" },
-        }),
-        db.approvalRecordStep.updateMany({
-          where: { recordId: approvalRecord.id },
-          data: {
-            status: "pending",
-            decidedById: null,
-            decidedAt: null,
-            signature: null,
-            notes: null,
-          },
-        }),
-      );
-    }
-
     ops.push(
       db.activityLog.create({
         data: {
@@ -661,7 +589,7 @@ export async function updateQuotation(
           action: "quotation.updated",
           entityType: "quotation",
           entityId: input.id,
-          description: `Quotation ${input.id} diperbarui; approval direset`,
+          description: `Quotation ${input.id} diperbarui`,
           ipAddress: meta.ipAddress,
           userAgent: meta.userAgent,
         },
@@ -694,8 +622,7 @@ export async function duplicateQuotationAsRevision(
   const meta = await getRequestMeta();
 
   try {
-    const [source, sourceApproval, approvalSteps] = await Promise.all([
-      db.quotation.findUnique({
+    const source = await db.quotation.findUnique({
         where: { id },
         include: {
           items: { orderBy: { sortOrder: "asc" } },
@@ -714,28 +641,12 @@ export async function duplicateQuotationAsRevision(
             },
           },
         },
-      }),
-      db.approvalRecord.findUnique({
-        where: { module_entityId: { module: "quotations", entityId: id } },
-        select: { status: true },
-      }),
-      resolveApprovalSteps("quotations"),
-    ]);
+      });
 
     if (!source) return { success: false, error: "Quotation tidak ditemukan." };
-    if (sourceApproval?.status !== "approved") {
-      return { success: false, error: "Hanya quotation approved yang dapat direvisi." };
-    }
-    if (!approvalSteps || approvalSteps.length === 0) {
-      return { success: false, error: "Alur approval quotation belum dikonfigurasi." };
-    }
 
     const quotationId = crypto.randomUUID();
     const quotationNo = await generateQuotationNo();
-    const approvalRecordId = crypto.randomUUID();
-    const creatorStepIndex = approvalSteps.findIndex(
-      (step) => step.approverRoleId === session!.user.roleId,
-    );
 
     const ops: Prisma.PrismaPromise<unknown>[] = [
       db.quotation.create({
@@ -750,8 +661,8 @@ export async function duplicateQuotationAsRevision(
           venueId: source.venueId,
           eventTypeId: source.eventTypeId,
           paymentMethodId: source.paymentMethodId,
-          // Carry the frozen values across verbatim: a revision must start from
-          // exactly what the approved document showed, not from current master data.
+          // Carry frozen values across verbatim: a revision must start from
+          // exactly what the source document showed, not current master data.
           bankName: source.bankName,
           bankAccountNumber: source.bankAccountNumber,
           bankRecipient: source.bankRecipient,
@@ -885,29 +796,6 @@ export async function duplicateQuotationAsRevision(
     }
 
     ops.push(
-      db.approvalRecord.create({
-        data: {
-          id: approvalRecordId,
-          module: "quotations",
-          entityId: quotationId,
-          status: "pending",
-          createdById: session!.user.profileId!,
-        },
-      }),
-      ...approvalSteps.map((step, index) => {
-        const autoApprove = creatorStepIndex >= 0 && index === creatorStepIndex;
-        return db.approvalRecordStep.create({
-          data: {
-            recordId: approvalRecordId,
-            stepOrder: step.sortOrder,
-            approverType: step.approverType,
-            approverRoleId: step.approverRoleId,
-            status: autoApprove ? "approved" : "pending",
-            decidedById: autoApprove ? session!.user.profileId! : null,
-            decidedAt: autoApprove ? new Date() : null,
-          },
-        });
-      }),
       db.activityLog.create({
         data: {
           userId: session!.user.profileId!,
@@ -946,8 +834,7 @@ export async function convertQuotationToMiceBooking(
   const meta = await getRequestMeta();
 
   try {
-    const [quotation, approvalRecord] = await Promise.all([
-      db.quotation.findUnique({
+    const quotation = await db.quotation.findUnique({
         where: { id },
         include: {
           booking: { select: { id: true } },
@@ -956,25 +843,16 @@ export async function convertQuotationToMiceBooking(
           complimentaries: { orderBy: { sortOrder: "asc" } },
           bonuses: { orderBy: { sortOrder: "asc" } },
         },
-      }),
-      db.approvalRecord.findUnique({
-        where: { module_entityId: { module: "quotations", entityId: id } },
-        select: { status: true },
-      }),
-    ]);
+      });
 
     if (!quotation) return { success: false, error: "Quotation tidak ditemukan." };
-    if (approvalRecord?.status !== "approved") {
-      return { success: false, error: "Quotation harus fully approved sebelum dikonversi." };
-    }
     if (quotation.booking) {
       return { success: false, error: "Quotation ini sudah dikonversi menjadi booking." };
     }
+    const readinessError = getQuotationConversionReadinessError(quotation);
+    if (readinessError) return { success: false, error: readinessError };
     if (!quotation.venueId || !quotation.eventTypeId || !quotation.eventDate) {
-      return { success: false, error: "Venue, tipe event, dan tanggal event wajib lengkap sebelum konversi." };
-    }
-    if (quotation.terms.length === 0 || quotation.terms.some((term) => !term.dueDate)) {
-      return { success: false, error: "Minimal satu TOP dengan tanggal jatuh tempo wajib diisi sebelum konversi." };
+      return { success: false, error: "Data event quotation belum lengkap." };
     }
 
     // Master data is resolved explicitly here rather than through a relation:
@@ -1212,20 +1090,11 @@ export async function deleteQuotation(
   const meta = await getRequestMeta();
 
   try {
-    const [existing, approvalRecord] = await Promise.all([
-      db.quotation.findUnique({
-        where: { id },
-        select: { id: true, quotationNo: true, booking: { select: { id: true } } },
-      }),
-      db.approvalRecord.findUnique({
-        where: { module_entityId: { module: "quotations", entityId: id } },
-        select: { status: true },
-      }),
-    ]);
+    const existing = await db.quotation.findUnique({
+      where: { id },
+      select: { id: true, quotationNo: true, booking: { select: { id: true } } },
+    });
     if (!existing) return { success: false, error: "Quotation tidak ditemukan." };
-    if (approvalRecord?.status === "approved") {
-      return { success: false, error: "Quotation yang sudah approved tidak dapat dihapus." };
-    }
     if (existing.booking) {
       return { success: false, error: "Quotation yang sudah dikonversi tidak dapat dihapus." };
     }

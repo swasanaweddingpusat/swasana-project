@@ -54,4 +54,9 @@ VALUES
     NOW(),
     NOW()
   )
-ON CONFLICT (code) DO NOTHING;
+-- Use an unqualified ON CONFLICT DO NOTHING so this migration is safe to
+-- replay even if a row with a matching "code" OR "name" already exists
+-- (both columns are unique). A column-scoped ON CONFLICT (code) only
+-- guards against duplicate codes and can fail with a duplicate "name"
+-- violation instead.
+ON CONFLICT DO NOTHING;

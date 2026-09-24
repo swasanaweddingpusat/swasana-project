@@ -10,6 +10,8 @@ import { getNextSequence } from "@/lib/counter";
 import { resolveManagerId } from "@/lib/resolve-manager";
 import { buildBookingApprovalSteps } from "@/lib/approval-flows";
 import { generateAccessCode } from "@/lib/access-code";
+import { canAccessBooking } from "@/lib/access-control";
+import { getUnconvertedQuotation, hasMiceSlotConflict, isQuotationApproved } from "@/lib/miceBookingIntegrity";
 import {
   createMiceBookingSchema,
   updateMiceBookingSchema,
@@ -39,8 +41,23 @@ export async function createMiceBooking(
   try {
     const [venue, eventType] = await Promise.all([
       db.venue.findUniqueOrThrow({ where: { id: input.venueId }, include: { brand: true } }),
-      db.eventType.findUniqueOrThrow({ where: { id: input.eventTypeId }, select: { code: true } }),
+      db.eventType.findUniqueOrThrow({ where: { id: input.eventTypeId }, select: { code: true, name: true } }),
     ]);
+
+    if (input.quotationId) {
+      const quotationGate = await getUnconvertedQuotation(input.quotationId);
+      if (!quotationGate.valid) return { success: false, error: quotationGate.error };
+      if (!(await isQuotationApproved(input.quotationId))) {
+        return { success: false, error: "Quotation harus fully approved sebelum dijadikan booking." };
+      }
+    }
+    const eventDate = new Date(`${input.eventDate}T00:00:00.000Z`);
+    const eventEndDate = input.eventEndDate
+      ? new Date(`${input.eventEndDate}T00:00:00.000Z`)
+      : null;
+    if (await hasMiceSlotConflict({ venueId: input.venueId, eventDate, eventEndDate })) {
+      return { success: false, error: "Slot venue pada tanggal tersebut sudah dibooking." };
+    }
 
     const now = new Date();
     const year = now.getFullYear();
@@ -129,7 +146,13 @@ export async function createMiceBooking(
         data: {
           id: bookingId,
           category: "MICE",
-          eventDate: new Date(`${input.eventDate}T00:00:00.000Z`),
+          eventDate,
+          eventEndDate,
+          eventTypeId: input.eventTypeId,
+          eventTypeName: eventType.name,
+          estimatedPax: input.estimatedPax ?? null,
+          companyName: input.companyName ?? null,
+          notes: input.notes ?? null,
           salesId,
           managerId,
           customerId,
@@ -165,7 +188,10 @@ export async function createMiceBooking(
       includeClientStep: false, // MICE has no client TTD step
     });
 
-    if (bookingApprovalSteps && bookingApprovalSteps.length > 0) {
+    if (!bookingApprovalSteps || bookingApprovalSteps.length === 0) {
+      return { success: false, error: "Alur approval Booking MICE belum dikonfigurasi." };
+    }
+    {
       const approvalRecordId = crypto.randomUUID();
       ops.push(
         db.approvalRecord.create({
@@ -231,6 +257,276 @@ export async function createMiceBooking(
   }
 }
 
+export async function convertApprovedQuotationToMiceBooking(
+  quotationId: string,
+): Promise<{ success: true; data: { id: string } } | { success: false; error: string }> {
+  const { session, error } = await requirePermission({ module: "booking-mice", action: "create" });
+  if (error) return { success: false, error };
+  if (!mutationLimiter.check(`mice-convert-quotation:${session!.user.id}`)) {
+    return { success: false, ...rateLimitError() };
+  }
+  if (!quotationId) return { success: false, error: "ID quotation wajib ada." };
+
+  try {
+    const quotationGate = await getUnconvertedQuotation(quotationId);
+    if (!quotationGate.valid) return { success: false, error: quotationGate.error };
+    if (!(await isQuotationApproved(quotationId))) {
+      return { success: false, error: "Quotation harus fully approved sebelum dijadikan booking." };
+    }
+
+    const quotation = await db.quotation.findUnique({
+      where: { id: quotationId },
+      include: {
+        terms: { orderBy: { sortOrder: "asc" } },
+        items: { orderBy: { sortOrder: "asc" } },
+        complimentaries: { orderBy: { sortOrder: "asc" } },
+        bonuses: { orderBy: { sortOrder: "asc" } },
+      },
+    });
+    if (!quotation) return { success: false, error: "Quotation tidak ditemukan." };
+    if (!quotation.venueId || !quotation.eventTypeId || !quotation.eventDate) {
+      return { success: false, error: "Venue, tipe event, dan tanggal quotation wajib lengkap." };
+    }
+    if (quotation.terms.length === 0 || quotation.terms.some((term) => term.amount <= 0 || !term.dueDate)) {
+      return { success: false, error: "Semua TOP wajib memiliki nominal dan tanggal jatuh tempo." };
+    }
+    if (await hasMiceSlotConflict({
+      venueId: quotation.venueId,
+      eventDate: quotation.eventDate,
+      eventEndDate: quotation.eventEndDate,
+    })) {
+      return { success: false, error: "Slot venue pada tanggal quotation sudah dibooking." };
+    }
+
+    const [managerId, livePackage, venue, eventType] = await Promise.all([
+      resolveManagerId(quotation.salesId),
+      quotation.packageId
+        ? db.package.findUnique({ where: { id: quotation.packageId }, select: { id: true } })
+        : Promise.resolve(null),
+      db.venue.findUnique({
+        where: { id: quotation.venueId },
+        select: {
+          id: true,
+          name: true,
+          code: true,
+          address: true,
+          description: true,
+          brand: { select: { name: true, code: true } },
+        },
+      }),
+      db.eventType.findUnique({
+        where: { id: quotation.eventTypeId },
+        select: { id: true, name: true, code: true },
+      }),
+    ]);
+    if (!venue || !eventType) {
+      return { success: false, error: "Venue atau tipe event quotation sudah tidak tersedia." };
+    }
+
+    const approvalSteps = await buildBookingApprovalSteps({
+      module: "booking-mice",
+      salesId: quotation.salesId,
+      creatorProfileId: session!.user.profileId!,
+      signatureSales: quotation.signatureSales,
+      decidedAt: new Date(),
+      includeClientStep: false,
+    });
+    if (!approvalSteps || approvalSteps.length === 0) {
+      return { success: false, error: "Alur approval Booking MICE belum dikonfigurasi." };
+    }
+
+    const now = new Date();
+    const year = now.getFullYear();
+    const poSeq = await getNextSequence(`po-${year}`);
+    const dd = now.getDate().toString().padStart(2, "0");
+    const mm = (now.getMonth() + 1).toString().padStart(2, "0");
+    const poNumber = `${poSeq.toString().padStart(3, "0")}/${venue.brand?.code ?? ""}/${venue.code}/${eventType.code}/${dd}-${mm}-${year}`;
+    const bookingId = crypto.randomUUID();
+    const customerId = crypto.randomUUID();
+    const approvalRecordId = crypto.randomUUID();
+    const hdrs = await headers();
+
+    const ops: Prisma.PrismaPromise<unknown>[] = [
+      db.customer.create({
+        data: {
+          id: customerId,
+          name: quotation.clientName,
+          mobileNumber: [{ number: quotation.clientPhone }],
+          type: "mice",
+          memberStatus: "Non-Member",
+          notes: quotation.instansi ? `Instansi: ${quotation.instansi}` : null,
+          updatedBy: session!.user.name ?? session!.user.email ?? null,
+        },
+      }),
+      db.booking.create({
+        data: {
+          id: bookingId,
+          category: "MICE",
+          recordStatus: "saved",
+          bookingStatus: "Pending",
+          eventDate: quotation.eventDate,
+          eventEndDate: quotation.eventEndDate,
+          eventTypeId: eventType.id,
+          eventTypeName: quotation.eventTypeName ?? eventType.name,
+          estimatedPax: quotation.pax || null,
+          companyName: quotation.instansi,
+          eventTime: quotation.time,
+          notes: quotation.notes,
+          dealingDate: now,
+          quotationId: quotation.id,
+          salesId: quotation.salesId,
+          managerId,
+          customerId,
+          venueId: venue.id,
+          packageId: livePackage?.id ?? null,
+          paymentMethodId: quotation.paymentMethodId,
+          salesSignature: quotation.signatureSales,
+          signingLocation: quotation.signingLocation,
+          discountName: quotation.discountName,
+          discountAmount: quotation.discount,
+          poNumber,
+          poYear: year,
+          poSeq,
+        },
+      }),
+      db.snapCustomer.create({
+        data: {
+          bookingId,
+          customerId,
+          name: quotation.clientName,
+          mobileNumber: quotation.clientPhone,
+        },
+      }),
+      db.snapVenue.create({
+        data: {
+          bookingId,
+          venueId: venue.id,
+          venueName: quotation.venueName ?? venue.name,
+          address: venue.address,
+          description: venue.description,
+          brandName: venue.brand?.name ?? null,
+          brandCode: venue.brand?.code ?? null,
+        },
+      }),
+      ...quotation.items.map((item) => db.snapPackageInternalItem.create({
+        data: {
+          bookingId,
+          itemName: item.title,
+          itemDescription: item.description ?? "",
+          sortOrder: item.sortOrder,
+        },
+      })),
+      ...quotation.complimentaries.map((item) => db.snapComplimentary.create({
+        data: {
+          bookingId,
+          complimentaryId: item.complimentaryId,
+          name: item.name,
+          price: item.price,
+          isShowPrice: item.isShowPrice,
+          description: item.description,
+          qty: item.qty,
+          sortOrder: item.sortOrder,
+        },
+      })),
+      ...quotation.bonuses.map((item) => db.snapBookingBonus.create({
+        data: {
+          bookingId,
+          bonusId: item.bonusId,
+          name: item.name,
+          price: item.price,
+          description: item.description,
+          qty: item.qty,
+          sortOrder: item.sortOrder,
+        },
+      })),
+      ...quotation.terms.map((term) => db.termOfPayment.create({
+        data: {
+          bookingId,
+          name: term.name,
+          amount: term.amount,
+          dueDate: term.dueDate!,
+          sortOrder: term.sortOrder,
+        },
+      })),
+      db.approvalRecord.create({
+        data: {
+          id: approvalRecordId,
+          module: "booking-mice",
+          entityId: bookingId,
+          status: "pending",
+          createdById: session!.user.profileId!,
+        },
+      }),
+      ...approvalSteps.map((step) => db.approvalRecordStep.create({
+        data: {
+          recordId: approvalRecordId,
+          stepOrder: step.stepOrder,
+          approverType: step.approverType,
+          approverRoleId: step.approverRoleId,
+          approverUserId: step.approverUserId,
+          status: step.status,
+          decidedById: step.decidedById,
+          decidedAt: step.decidedAt,
+          signature: step.signature,
+        },
+      })),
+      db.clientAgreement.create({
+        data: { bookingId, token: crypto.randomUUID(), accessCode: generateAccessCode() },
+      }),
+      db.activityLog.create({
+        data: {
+          userId: session!.user.profileId!,
+          action: "booking_mice.created_from_quotation",
+          entityType: "booking",
+          entityId: bookingId,
+          result: "success",
+          description: `${quotation.quotationNo ?? quotation.id} dikonversi ke ${poNumber}`,
+          changes: { quotationId: quotation.id },
+          ipAddress: hdrs.get("x-forwarded-for") ?? undefined,
+          userAgent: hdrs.get("user-agent") ?? undefined,
+        },
+      }),
+    ];
+
+    if (livePackage && quotation.packageName) {
+      ops.push(
+        db.snapPackage.create({
+          data: {
+            bookingId,
+            packageId: livePackage.id,
+            packageName: quotation.packageName,
+            notes: quotation.details,
+          },
+        }),
+        db.snapPackagePricing.create({
+          data: {
+            bookingId,
+            packageId: livePackage.id,
+            packageName: quotation.packageName,
+            pax: quotation.pax,
+            price: quotation.totalPrice,
+            fullPrice: quotation.subtotal,
+            termAndCondition: quotation.termAndCondition,
+          },
+        }),
+      );
+    }
+
+    await db.$transaction(ops);
+    revalidateTag("bookings", "max");
+    revalidateTag("customers", "max");
+    revalidateTag("quotations", "max");
+    return { success: true, data: { id: bookingId } };
+  } catch (caught) {
+    const code = caught && typeof caught === "object" && "code" in caught ? String(caught.code) : "";
+    if (code === "P2002" || code === "23505") {
+      return { success: false, error: "Quotation ini sudah terhubung ke booking lain." };
+    }
+    console.error("[convertApprovedQuotationToMiceBooking]", caught);
+    return { success: false, error: "Gagal mengonversi quotation menjadi Booking MICE." };
+  }
+}
+
 export async function updateMiceBooking(
   data: unknown
 ): Promise<{ success: boolean; error?: string }> {
@@ -248,11 +544,60 @@ export async function updateMiceBooking(
 
   const existing = await db.booking.findFirst({
     where: { id, category: "MICE", recordStatus: "saved" },
-    select: { id: true, customerId: true },
+    select: {
+      id: true,
+      customerId: true,
+      quotationId: true,
+      venueId: true,
+      eventDate: true,
+      eventEndDate: true,
+      eventTypeId: true,
+      estimatedPax: true,
+      salesId: true,
+    },
   });
   if (!existing) return { success: false, error: "Booking MICE tidak ditemukan." };
+  if (!session!.user.profileId || !(await canAccessBooking(
+    session!.user.profileId,
+    session!.user.dataScope ?? "own",
+    id,
+  ))) {
+    return { success: false, error: "Anda tidak memiliki akses ke booking ini." };
+  }
 
   try {
+    const nextVenueId = input.venueId ?? existing.venueId;
+    const nextEventDate = input.eventDate
+      ? new Date(`${input.eventDate}T00:00:00.000Z`)
+      : existing.eventDate;
+    const nextEventEndDate = input.eventEndDate !== undefined
+      ? (input.eventEndDate ? new Date(`${input.eventEndDate}T00:00:00.000Z`) : null)
+      : existing.eventEndDate;
+    if (nextEventDate && await hasMiceSlotConflict({
+      venueId: nextVenueId,
+      eventDate: nextEventDate,
+      eventEndDate: nextEventEndDate,
+      excludeBookingId: id,
+    })) {
+      return { success: false, error: "Slot venue pada tanggal tersebut sudah dibooking." };
+    }
+
+    const eventType = input.eventTypeId
+      ? await db.eventType.findUnique({ where: { id: input.eventTypeId }, select: { id: true, name: true } })
+      : null;
+    if (input.eventTypeId && !eventType) return { success: false, error: "Tipe event tidak ditemukan." };
+
+    const materialChanged =
+      input.clientName !== undefined ||
+      input.clientPhone !== undefined ||
+      input.companyName !== undefined ||
+      input.venueId !== undefined ||
+      input.eventDate !== undefined ||
+      input.eventEndDate !== undefined ||
+      input.eventTypeId !== undefined ||
+      input.estimatedPax !== undefined ||
+      input.salesId !== undefined ||
+      input.terms !== undefined;
     const ops: Prisma.PrismaPromise<unknown>[] = [];
 
     // Update customer fields
@@ -272,6 +617,14 @@ export async function updateMiceBooking(
     // Update booking fields
     const bookingUpdate: Record<string, unknown> = {};
     if (input.eventDate !== undefined) bookingUpdate.eventDate = new Date(`${input.eventDate}T00:00:00.000Z`);
+    if (input.eventEndDate !== undefined) bookingUpdate.eventEndDate = input.eventEndDate ? new Date(`${input.eventEndDate}T00:00:00.000Z`) : null;
+    if (input.eventTypeId !== undefined) {
+      bookingUpdate.eventTypeId = input.eventTypeId;
+      bookingUpdate.eventTypeName = eventType?.name ?? null;
+    }
+    if (input.estimatedPax !== undefined) bookingUpdate.estimatedPax = input.estimatedPax ?? null;
+    if (input.companyName !== undefined) bookingUpdate.companyName = input.companyName ?? null;
+    if (input.notes !== undefined) bookingUpdate.notes = input.notes || null;
     if (input.venueId !== undefined) bookingUpdate.venueId = input.venueId;
     if (input.sourceOfInformationId !== undefined)
       bookingUpdate.sourceOfInformationId = input.sourceOfInformationId ?? null;
@@ -280,7 +633,7 @@ export async function updateMiceBooking(
       bookingUpdate.salesSignature = input.salesSignature ?? null;
     if (input.signingLocation !== undefined)
       bookingUpdate.signingLocation = input.signingLocation ?? null;
-    if (input.quotationId !== undefined) bookingUpdate.quotationId = input.quotationId ?? null;
+    if (materialChanged) bookingUpdate.bookingStatus = "Pending";
     if (Object.keys(bookingUpdate).length > 0) {
       ops.push(db.booking.update({ where: { id }, data: bookingUpdate }));
     }
@@ -300,6 +653,25 @@ export async function updateMiceBooking(
             },
           })
         )
+      );
+    }
+
+    if (materialChanged) {
+      ops.push(
+        db.approvalRecord.updateMany({
+          where: { module: "booking-mice", entityId: id },
+          data: { status: "pending", updatedById: session!.user.profileId! },
+        }),
+        db.approvalRecordStep.updateMany({
+          where: { record: { module: "booking-mice", entityId: id } },
+          data: {
+            status: "pending",
+            decidedById: null,
+            decidedAt: null,
+            notes: null,
+            signature: null,
+          },
+        }),
       );
     }
 
@@ -348,6 +720,9 @@ export async function deleteMiceBooking(
     select: { id: true },
   });
   if (!existing) return { success: false, error: "Booking MICE tidak ditemukan." };
+  if (!session!.user.profileId || !(await canAccessBooking(session!.user.profileId, session!.user.dataScope ?? "own", id))) {
+    return { success: false, error: "Anda tidak memiliki akses ke booking ini." };
+  }
 
   try {
     const hdrs = await headers();
@@ -406,6 +781,9 @@ export async function markMiceLost(
     select: { id: true },
   });
   if (!existing) return { success: false, error: "Booking MICE tidak ditemukan." };
+  if (!session!.user.profileId || !(await canAccessBooking(session!.user.profileId, session!.user.dataScope ?? "own", input.id))) {
+    return { success: false, error: "Anda tidak memiliki akses ke booking ini." };
+  }
 
   try {
     const hdrs = await headers();
@@ -461,6 +839,9 @@ export async function restoreMiceBooking(
       success: false,
       error: "Hanya booking Canceled, Lost, atau Rejected yang bisa di-restore.",
     };
+  }
+  if (!session!.user.profileId || !(await canAccessBooking(session!.user.profileId, session!.user.dataScope ?? "own", id))) {
+    return { success: false, error: "Anda tidak memiliki akses ke booking ini." };
   }
 
   try {
@@ -537,6 +918,9 @@ export async function cancelMiceBooking(
   if (!existing) return { success: false, error: "Booking MICE tidak ditemukan." };
   if (existing.bookingStatus === "Canceled") {
     return { success: false, error: "Booking sudah di-cancel." };
+  }
+  if (!session!.user.profileId || !(await canAccessBooking(session!.user.profileId, session!.user.dataScope ?? "own", input.id))) {
+    return { success: false, error: "Anda tidak memiliki akses ke booking ini." };
   }
 
   try {

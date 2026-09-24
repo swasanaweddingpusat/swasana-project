@@ -9,7 +9,8 @@ import { isSlotConflictError, SLOT_TAKEN_MESSAGE } from "@/lib/booking-slot-erro
 import { getNextSequence } from "@/lib/counter";
 import { buildBookingApprovalSteps } from "@/lib/approval-flows";
 import { resolveManagerId } from "@/lib/resolve-manager";
-import { notifySuperAdmins } from "@/lib/notifications";
+import { generateAccessCode } from "@/lib/access-code";
+import { getUnconvertedQuotation, hasMiceSlotConflict, isQuotationApproved } from "@/lib/miceBookingIntegrity";
 import {
   createMiceDraftStep1Schema,
   updateMiceDraftStep2Schema,
@@ -49,6 +50,19 @@ export async function createDraftMiceBooking(data: unknown): Promise<MiceDraftRe
   if (!salesId) return { success: false, error: "Sales wajib dipilih." };
 
   try {
+    if (input.quotationId) {
+      const quotationGate = await getUnconvertedQuotation(input.quotationId);
+      if (!quotationGate.valid) return { success: false, error: quotationGate.error };
+      if (!(await isQuotationApproved(input.quotationId))) {
+        return { success: false, error: "Quotation harus fully approved sebelum dijadikan booking." };
+      }
+    }
+    const eventType = await db.eventType.findUnique({
+      where: { id: input.eventTypeId },
+      select: { id: true, name: true },
+    });
+    if (!eventType) return { success: false, error: "Tipe event tidak ditemukan." };
+
     // ── Resolve customer ──
     let customerId: string | null = null;
     let leadRecord: {
@@ -174,6 +188,11 @@ export async function createDraftMiceBooking(data: unknown): Promise<MiceDraftRe
           customerId,
           venueId: input.venueId,
           eventDate: new Date(input.eventDate),
+          eventEndDate: input.eventEndDate ? new Date(input.eventEndDate) : null,
+          eventTypeId: eventType.id,
+          eventTypeName: eventType.name,
+          estimatedPax: input.estimatedPax ?? null,
+          companyName: input.companyName ?? null,
           notes: input.notes ?? null,
           sourceOfInformationId: input.sourceOfInformationId ?? null,
           quotationId: input.quotationId ?? null,
@@ -312,6 +331,8 @@ export async function finalizeDraftMiceBooking(data: unknown): Promise<FinalizeM
       include: {
         customer: true,
         venue: { include: { brand: true } },
+        eventType: { select: { code: true } },
+        quotation: { select: { id: true } },
         termOfPayments: { orderBy: { sortOrder: "asc" } },
         sales: { select: { fullName: true } },
       },
@@ -324,38 +345,21 @@ export async function finalizeDraftMiceBooking(data: unknown): Promise<FinalizeM
     const customer = draft.customer;
     const venue = draft.venue;
 
-    // MICE slot conflict check: only if session is set (saved-only, same as wedding)
-    if (draft.weddingSession) {
-      const eventDateObj = new Date(draft.eventDate);
-      const sessionOrConditions =
-        draft.weddingSession === "fullday"
-          ? [
-              { weddingSession: "morning" as const },
-              { weddingSession: "evening" as const },
-              { weddingSession: "fullday" as const },
-            ]
-          : [
-              { weddingSession: draft.weddingSession as "morning" | "evening" | "fullday" },
-              { weddingSession: "fullday" as const },
-            ];
-
-      const conflictingBooking = await db.booking.findFirst({
-        where: {
-          id: { not: draftId },
-          venueId: draft.venueId,
-          eventDate: eventDateObj,
-          recordStatus: "saved",
-          bookingStatus: { notIn: ["Canceled", "Lost", "Rejected"] },
-          OR: sessionOrConditions,
-        },
-        select: { id: true },
-      });
-      if (conflictingBooking) {
-        return {
-          success: false,
-          error: "Slot venue di tanggal & sesi tersebut sudah dibooking.",
-        };
+    if (draft.quotationId) {
+      const quotationGate = await getUnconvertedQuotation(draft.quotationId, draftId);
+      if (!quotationGate.valid) return { success: false, error: quotationGate.error };
+      if (!(await isQuotationApproved(draft.quotationId))) {
+        return { success: false, error: "Quotation harus fully approved sebelum dijadikan booking." };
       }
+    }
+    if (await hasMiceSlotConflict({
+      venueId: draft.venueId,
+      eventDate: draft.eventDate,
+      eventEndDate: draft.eventEndDate,
+      session: draft.weddingSession,
+      excludeBookingId: draftId,
+    })) {
+      return { success: false, error: "Slot venue di tanggal tersebut sudah dibooking." };
     }
 
     // Generate PO Number for MICE
@@ -364,7 +368,7 @@ export async function finalizeDraftMiceBooking(data: unknown): Promise<FinalizeM
     const poSeq = await getNextSequence(`po-${year}`);
     const dd = now.getDate().toString().padStart(2, "0");
     const mm = (now.getMonth() + 1).toString().padStart(2, "0");
-    const poNumber = `${poSeq.toString().padStart(3, "0")}/${venue?.brand?.code ?? ""}/${venue?.code ?? ""}/MICE/${dd}-${mm}-${year}`;
+    const poNumber = `${poSeq.toString().padStart(3, "0")}/${venue?.brand?.code ?? ""}/${venue?.code ?? ""}/${draft.eventType?.code ?? "MICE"}/${dd}-${mm}-${year}`;
 
     // Resolve approval steps: conditional Sales + Manager → Finance.
     // Auto-approve Sales only when the finalizer IS the assigned sales (and signed).
@@ -441,7 +445,10 @@ export async function finalizeDraftMiceBooking(data: unknown): Promise<FinalizeM
     // FIX C Step 3: TOP.invoiceNumber sudah di-drop, tidak perlu update.
 
     // 5. ApprovalRecord + steps (Sales → Manager → Finance)
-    if (bookingApprovalSteps && bookingApprovalSteps.length > 0) {
+    if (!bookingApprovalSteps || bookingApprovalSteps.length === 0) {
+      return { success: false, error: "Alur approval Booking MICE belum dikonfigurasi." };
+    }
+    {
       const approvalRecordId = crypto.randomUUID();
 
       ops.push(
@@ -478,7 +485,7 @@ export async function finalizeDraftMiceBooking(data: unknown): Promise<FinalizeM
         data: {
           bookingId: draftId,
           token: crypto.randomUUID(),
-          accessCode: Math.random().toString(36).substring(2, 8).toUpperCase(),
+          accessCode: generateAccessCode(),
         },
       })
     );
@@ -501,7 +508,33 @@ export async function finalizeDraftMiceBooking(data: unknown): Promise<FinalizeM
       );
     }
 
+    const adminRole = await db.role.findFirst({
+      where: { isSystemRole: true },
+      select: { id: true },
+    });
+    const adminRecipients = adminRole
+      ? await db.profile.findMany({
+          where: {
+            roleId: adminRole.id,
+            status: "active",
+            id: { not: session!.user.profileId! },
+          },
+          select: { id: true },
+          take: 100,
+        })
+      : [];
+
     ops.push(
+      ...adminRecipients.map((recipient) => db.notification.create({
+        data: {
+          userId: recipient.id,
+          title: "Booking MICE Baru",
+          message: `${session!.user.name ?? "User"} membuat booking MICE untuk ${draft.customer?.name ?? "Unknown"}.`,
+          type: "booking_created",
+          entityType: "booking-mice",
+          entityId: draftId,
+        },
+      })),
       db.activityLog.create({
         data: {
           userId: session!.user.profileId!,
@@ -524,17 +557,6 @@ export async function finalizeDraftMiceBooking(data: unknown): Promise<FinalizeM
     revalidateTag("bookings", "max");
     revalidateTag("customers", "max");
     if (input.leadId) revalidateTag("daily-activity", "max");
-
-    notifySuperAdmins(
-      {
-        title: "Booking MICE Baru",
-        message: `${session!.user.name ?? "User"} membuat booking MICE untuk ${draft.customer?.name ?? "Unknown"}.`,
-        type: "booking_created",
-        entityType: "booking-mice",
-        entityId: draftId,
-      },
-      session!.user.profileId!
-    );
 
     const createdTerms = await db.termOfPayment.findMany({
       where: { bookingId: draftId },

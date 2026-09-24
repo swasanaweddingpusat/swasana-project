@@ -1,6 +1,7 @@
 import { requirePermissionForRoute } from "@/lib/permissions";
 import { apiLimiter, rateLimitResponse } from "@/lib/rate-limit";
 import { getMiceBookings } from "@/lib/queries/bookings";
+import type { DataScope } from "@/types/user";
 import type {
   MiceBookingItem,
   MiceBookingStatus,
@@ -18,7 +19,9 @@ export async function GET(request: Request): Promise<Response> {
   const search = searchParams.get("search") ?? undefined;
   const status = searchParams.get("status") ?? undefined;
 
-  const result = await getMiceBookings({ page, pageSize, search, status });
+  const profileId = session.user.profileId ?? undefined;
+  const dataScope: DataScope = session.user.dataScope ?? "own";
+  const result = await getMiceBookings(profileId, dataScope, { page, pageSize, search, status });
 
   const data: MiceBookingItem[] = result.data.map((b) => {
     // mobileNumber is Json: array of { number, label? } — extract first entry
@@ -34,6 +37,14 @@ export async function GET(request: Request): Promise<Response> {
       poNumber: b.poNumber ?? null,
       createdAt: b.createdAt.toISOString(),
       eventDate: b.eventDate ? b.eventDate.toISOString() : null,
+      eventEndDate: b.eventEndDate ? b.eventEndDate.toISOString() : null,
+      eventTime: b.eventTime,
+      eventType: b.eventType
+        ? { id: b.eventType.id, name: b.eventTypeName ?? b.eventType.name, code: b.eventType.code }
+        : null,
+      estimatedPax: b.estimatedPax,
+      companyName: b.companyName,
+      notes: b.notes,
       status: b.bookingStatus as MiceBookingStatus,
       customer: {
         id: b.customer?.id ?? "",
