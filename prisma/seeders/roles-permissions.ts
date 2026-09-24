@@ -54,7 +54,7 @@ export const moduleActions: Record<string, string[]> = {
   quotations: ["view", "create", "edit", "delete"],
   "booking-mice": ["view", "create", "edit", "delete", "print", "approve", "mark-lost", "restore", "transfer", "reject", "comment", "client-agreement"],
   // "term-&-condition" — FE label ditampilkan sebagai "Term & Payment" (bukan "Term & Condition") khusus MICE.
-  "package-mice": ["view", "create", "edit", "delete", "set-harga", "set-status", "term-&-condition"],
+  "package-mice": ["view", "create", "edit", "delete", "set-status", "term-&-condition"],
   // Maintenance modules
   maintenance: ["view", "create", "edit", "delete"],
   "settings-maintenance-category": ["view", "create", "edit", "delete"],
@@ -354,7 +354,7 @@ export const rolePermissionMap: Record<string, Record<string, string[]>> = {
     "settings-event-types": ["view", "create", "edit", "delete"],
     "settings-quotation-templates": ["view", "create", "edit", "delete"],
     "settings-package-category": ["view", "create", "edit", "delete"],
-    "package-mice": ["view", "create", "edit", "delete", "set-harga", "set-status", "term-&-condition"],
+    "package-mice": ["view", "create", "edit", "delete", "set-status", "term-&-condition"],
     complimentary: ["view", "create", "edit", "delete"],
     bonus: ["view", "create", "edit", "delete"],
     bitrix: ["view"],
@@ -507,6 +507,10 @@ export async function seedRolesPermissions(): Promise<void> {
     { module: "booking", action: "mark_lost" },
     { module: "package", action: "set_harga" },
     { module: "package", action: "term-and-condition" },
+    // "Set Harga" removed from MICE package UI/permission (pricing fields stay
+    // shared with Package Wedding at the schema level, just no longer exposed
+    // for MICE) — clean up the now-unused permission + its role grants.
+    { module: "package-mice", action: "set-harga" },
     // "package::set-status" removed from this list — it is a valid current permission in moduleActions.
     // Previously listed here by mistake (only "set_status" underscore variant was stale, not "set-status").
   ];

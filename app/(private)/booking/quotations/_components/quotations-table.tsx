@@ -39,7 +39,11 @@ import {
 } from "@solar-icons/react";
 import { cn } from "@/lib/utils";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useQuotations } from "@/hooks/use-quotations";
+import {
+  useConvertQuotationToMiceBooking,
+  useDuplicateQuotationRevision,
+  useQuotations,
+} from "@/hooks/use-quotations";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { usePermissions } from "@/hooks/use-permissions";
 import type { QuotationListRow } from "@/lib/queries/quotations";
@@ -63,6 +67,7 @@ interface QApprovalStep {
 
 interface QApprovalRecord {
   id: string;
+  entityId: string;
   status: string;
   steps: QApprovalStep[];
   createdBy: { id: string; fullName: string | null };
@@ -91,6 +96,41 @@ export interface QuotationComplimentaryItem {
   qty: number;
 }
 
+export interface QuotationBonusItem {
+  id: string;
+  bonusId: string | null;
+  name: string;
+  price: number;
+  description?: string;
+  qty: number;
+}
+
+export interface QuotationPriceItem {
+  id: string;
+  name: string;
+  description?: string;
+  priceType: "QTY" | "NOMINAL";
+  qty: number | null;
+  price: number | null;
+  total: number;
+  sortOrder: number;
+}
+
+export interface QuotationTaxDepositItem {
+  id: string;
+  name: string;
+  nominal: number;
+  sortOrder: number;
+}
+
+export interface QuotationTermItem {
+  id: string;
+  name: string;
+  amount: number;
+  dueDate: string | null;
+  sortOrder: number;
+}
+
 export interface QuotationItem {
   id: string;
   /** Nomor dokumen, mis. "#221-MICE". Optional — di-derive kalau kosong. */
@@ -104,10 +144,12 @@ export interface QuotationItem {
   // ── Sales ──────────────────────────────────────────────────────
   salesName: string;
   salesPhone?: string;
+  salesId?: string;
   // ── Event ──────────────────────────────────────────────────────
   venue: string;
-  category: "weddings" | "mice";
+  venueId?: string;
   eventType: string;
+  eventTypeId?: string;
   eventDate: string;
   /** Tanggal akhir event kalau berupa rentang; kosong = single-date. */
   eventEndDate?: string;
@@ -118,19 +160,35 @@ export interface QuotationItem {
   /** mis. "Ballroom" */
   place?: string;
   // ── Paket (ringkasan untuk list) ───────────────────────────────
+  packageId?: string;
+  packageSource?: string;
   packageName: string;
   variantName: string;
   pax: number;
   // ── Line items (detail penawaran) ──────────────────────────────
   items?: QuotationLineItem[];
+  additionals?: QuotationLineItem[];
+  // ── Harga (step 2) ─────────────────────────────────────────────
+  prices?: QuotationPriceItem[];
+  // ── Tax & Deposit (step 4) ─────────────────────────────────────
+  taxDeposits?: QuotationTaxDepositItem[];
+  // ── Term of Payment / TOP (step 4) ─────────────────────────────
+  terms?: QuotationTermItem[];
   // ── Complimentary (bonus gratis, tidak masuk pricing) ───────────
   complimentaries?: QuotationComplimentaryItem[];
+  // ── Bonus (tidak masuk pricing) ─────────────────────────────────
+  bonuses?: QuotationBonusItem[];
   // ── Pricing ────────────────────────────────────────────────────
   price: number;
   discount: number;
+  discountName?: string;
   totalPrice: number;
   // ── Term & Payment ─────────────────────────────────────────────
   bookingFee?: number;
+  termAndCondition?: string;
+  paymentNote?: string;
+  cancellationPolicy?: string;
+  closingNote?: string;
   bankName?: string;
   bankAccountNo?: string;
   bankAccountName?: string;
@@ -146,6 +204,7 @@ export interface QuotationItem {
   notes: string;
   signingLocation?: string;
   signatureSales?: string;
+  booking?: { id: string; poNumber: string | null } | null;
 }
 
 // ── DB row → display type mapper ─────────────────────────────────────────────
@@ -159,23 +218,61 @@ function mapRowToQuotationItem(row: QuotationListRow): QuotationItem {
     instansi: row.instansi ?? undefined,
     salesName: row.sales.fullName ?? "",
     salesPhone: row.sales.phoneNumber ?? undefined,
-    venue: row.venueName ?? row.venue?.name ?? "",
-    category: row.category.toLowerCase() as "weddings" | "mice",
-    eventType: row.eventTypeName ?? row.eventType?.name ?? "",
+    salesId: row.salesId,
+    venue: row.venueName ?? "",
+    venueId: row.venueId ?? undefined,
+    eventType: row.eventTypeName ?? "",
+    eventTypeId: row.eventTypeId ?? undefined,
     eventDate: row.eventDate ? format(new Date(row.eventDate), "yyyy-MM-dd") : "",
     eventEndDate: row.eventEndDate ? format(new Date(row.eventEndDate), "yyyy-MM-dd") : "",
     time: row.time ?? undefined,
     place: row.place ?? undefined,
     details: row.details ?? undefined,
-    // items from DB → QuotationLineItem[]
-    items: row.items.map((it) => ({
-      id: it.id,
-      description: it.title,
-      richDescription: it.description ?? undefined,
-      qty: it.qty,
-      price: it.price,
-      total: it.total,
-      manualTotal: it.manualTotal,
+    // items from DB → QuotationLineItem[] (split by type)
+    items: row.items
+      .filter((it) => it.type !== "ADDITIONAL")
+      .map((it) => ({
+        id: it.id,
+        description: it.title,
+        richDescription: it.description ?? undefined,
+        qty: it.qty,
+        price: it.price,
+        total: it.total,
+        manualTotal: it.manualTotal,
+      })),
+    additionals: row.items
+      .filter((it) => it.type === "ADDITIONAL")
+      .map((it) => ({
+        id: it.id,
+        description: it.title,
+        richDescription: it.description ?? undefined,
+        qty: it.qty,
+        price: it.price,
+        total: it.total,
+        manualTotal: it.manualTotal,
+      })),
+    prices: row.prices.map((p) => ({
+      id: p.id,
+      name: p.name,
+      description: p.description ?? undefined,
+      priceType: p.priceType as "QTY" | "NOMINAL",
+      qty: p.qty,
+      price: p.price,
+      total: p.total,
+      sortOrder: p.sortOrder,
+    })),
+    taxDeposits: row.taxDeposits.map((t) => ({
+      id: t.id,
+      name: t.name,
+      nominal: t.nominal,
+      sortOrder: t.sortOrder,
+    })),
+    terms: row.terms.map((t) => ({
+      id: t.id,
+      name: t.name,
+      amount: t.amount,
+      dueDate: t.dueDate ? format(new Date(t.dueDate), "yyyy-MM-dd") : null,
+      sortOrder: t.sortOrder,
     })),
     complimentaries: row.complimentaries.map((c) => ({
       id: c.id,
@@ -186,23 +283,39 @@ function mapRowToQuotationItem(row: QuotationListRow): QuotationItem {
       description: c.description ?? undefined,
       qty: c.qty,
     })),
+    bonuses: row.bonuses.map((b) => ({
+      id: b.id,
+      bonusId: b.bonusId,
+      name: b.name,
+      price: b.price,
+      description: b.description ?? undefined,
+      qty: b.qty,
+    })),
     price: row.subtotal,
     discount: row.discount,
+    discountName: row.discountName ?? undefined,
     totalPrice: row.totalPrice,
     bookingFee: row.bookingFee ?? undefined,
+    termAndCondition: row.termAndCondition ?? undefined,
+    paymentNote: row.paymentNote ?? undefined,
+    cancellationPolicy: row.cancellationPolicy ?? undefined,
+    closingNote: row.closingNote ?? undefined,
     status: row.status as QuotationItem["status"],
     paymentMethodId: row.paymentMethodId ?? undefined,
-    bankName: row.paymentMethod?.bankName,
-    bankAccountNo: row.paymentMethod?.bankAccountNumber,
-    bankAccountName: row.paymentMethod?.bankRecipient,
+    bankName: row.bankName ?? undefined,
+    bankAccountNo: row.bankAccountNumber ?? undefined,
+    bankAccountName: row.bankRecipient ?? undefined,
     validUntil: row.validUntil ? format(new Date(row.validUntil), "yyyy-MM-dd") : "",
     createdAt: format(new Date(row.createdAt), "yyyy-MM-dd"),
     notes: row.notes ?? "",
     signingLocation: row.signingLocation ?? undefined,
     signatureSales: row.signatureSales ?? undefined,
-    packageName: "",
+    packageId: row.packageId ?? undefined,
+    packageSource: row.packageSource ?? undefined,
+    packageName: row.packageName ?? "",
     variantName: "",
-    pax: 0,
+    pax: row.pax,
+    booking: row.booking,
   };
 }
 
@@ -305,6 +418,8 @@ export function QuotationsTable() {
   const qc = useQueryClient();
   const { user } = useCurrentUser();
   const { isAdmin } = usePermissions();
+  const convertMutation = useConvertQuotationToMiceBooking();
+  const revisionMutation = useDuplicateQuotationRevision();
 
   // ── Server-side data ──────────────────────────────────────────────────────
   const { data: quotationsResult, isLoading, isError, isFetching, refetch } = useQuotations({
@@ -324,19 +439,14 @@ export function QuotationsTable() {
     queryKey: ["quotation-approvals", quotationIds],
     queryFn: async () => {
       if (quotationIds.length === 0) return {} as Record<string, QApprovalRecord>;
-      const results: Record<string, QApprovalRecord> = {};
-      await Promise.all(
-        quotationIds.map(async (id) => {
-          try {
-            const res = await fetch(`/api/approval-records?module=quotations&entityId=${id}`);
-            if (res.ok) {
-              const data: QApprovalRecord = await res.json();
-              if (data) results[id] = data;
-            }
-          } catch { /* ignore */ }
-        })
-      );
-      return results;
+      const params = new URLSearchParams({
+        module: "quotations",
+        entityIds: quotationIds.join(","),
+      });
+      const response = await fetch(`/api/approval-records?${params}`);
+      if (!response.ok) throw new Error("Gagal memuat approval quotation");
+      const records: QApprovalRecord[] = await response.json();
+      return Object.fromEntries(records.map((record) => [record.entityId, record]));
     },
     enabled: quotationIds.length > 0,
     staleTime: 15_000,
@@ -384,8 +494,43 @@ export function QuotationsTable() {
     setPreviewOpen(true);
   }, []);
 
-  function handleConvertToBooking(q: QuotationItem) {
-    toast.info(`Convert ke Booking untuk ${q.leadName} — coming soon.`);
+  function isFullyApproved(qId: string): boolean {
+    return approvalMap?.[qId]?.status === "approved";
+  }
+
+  async function handleConvertToBooking(q: QuotationItem): Promise<void> {
+    if (q.booking) {
+      toast.info(`Quotation sudah menjadi booking ${q.booking.poNumber ?? q.booking.id}.`);
+      return;
+    }
+    if (!isFullyApproved(q.id)) {
+      toast.error("Quotation harus fully approved sebelum dikonversi.");
+      return;
+    }
+
+    const result = await convertMutation.mutateAsync(q.id);
+    if (!result.success) {
+      toast.error(result.error);
+      return;
+    }
+    toast.success("Quotation berhasil dikonversi ke Booking MICE.");
+    refetch();
+  }
+
+  async function handleCreateRevision(q: QuotationItem): Promise<void> {
+    if (!isFullyApproved(q.id)) {
+      toast.error("Hanya quotation approved yang dapat direvisi.");
+      return;
+    }
+
+    const result = await revisionMutation.mutateAsync(q.id);
+    if (!result.success) {
+      toast.error(result.error);
+      return;
+    }
+    toast.success(`Revisi ${result.data.quotationNo} berhasil dibuat.`);
+    setCurrentPage(1);
+    refetch();
   }
 
   return (
@@ -533,20 +678,16 @@ export function QuotationsTable() {
                 <Table className="w-full table-fixed">
                   <TableHeader>
                     <TableRow>
-                      {/* # — 3% */}
-                      <TableHead className="w-[3%] text-center">#</TableHead>
-                      {/* Customer — 18% */}
-                      <TableHead className="w-[18%]">Customer</TableHead>
-                      {/* Venue — 15% */}
-                      <TableHead className="w-[15%]">Venue</TableHead>
-                      {/* Sales — 14% — hidden xs */}
-                      <TableHead className="w-[14%] hidden sm:table-cell">Sales</TableHead>
-                      {/* Submit Date — 11% — hidden until md */}
-                      <TableHead className="w-[11%] hidden md:table-cell">Submit</TableHead>
-                      {/* Event Date — 11% — hidden until xl */}
-                      <TableHead className="w-[11%] hidden xl:table-cell">Event</TableHead>
-                      {/* Total — 23% — right-aligned */}
-                      <TableHead className="w-[23%] text-right">Total</TableHead>
+                      {/* # — 4% */}
+                      <TableHead className="w-[4%] text-center">#</TableHead>
+                      {/* Customer — 22% */}
+                      <TableHead className="w-[22%]">Customer</TableHead>
+                      {/* Venue + Event Date — 21% */}
+                      <TableHead className="w-[21%]">Venue</TableHead>
+                      {/* Sales + Submit Date — 21% — hidden xs */}
+                      <TableHead className="w-[21%] hidden sm:table-cell">Sales</TableHead>
+                      {/* Total — 27% — right-aligned */}
+                      <TableHead className="w-[27%] text-right">Total</TableHead>
                       {/* Actions — 5% */}
                       <TableHead className="w-[5%]" />
                     </TableRow>
@@ -554,7 +695,7 @@ export function QuotationsTable() {
                   <TableBody>
                     {isFetching ? (
                       <TableRow>
-                        <TableCell colSpan={7} className="py-10 text-center text-muted-foreground">
+                        <TableCell colSpan={6} className="py-10 text-center text-muted-foreground">
                           <Refresh weight="BoldDuotone" aria-hidden="true" className="h-6 w-6 opacity-40 animate-spin mx-auto" />
                         </TableCell>
                       </TableRow>
@@ -562,16 +703,26 @@ export function QuotationsTable() {
                       paginated.map((q, idx) => (
                         <TableRow
                           key={q.id}
-                          onClick={() => handleEdit(q)}
+                          onClick={() => {
+                            if (isFullyApproved(q.id) || q.booking) {
+                              handlePreview(q);
+                            } else {
+                              handleEdit(q);
+                            }
+                          }}
                           onKeyDown={(e) => {
                             if (e.key === "Enter" || e.key === " ") {
                               e.preventDefault();
-                              handleEdit(q);
+                              if (isFullyApproved(q.id) || q.booking) {
+                                handlePreview(q);
+                              } else {
+                                handleEdit(q);
+                              }
                             }
                           }}
                           tabIndex={0}
                           role="button"
-                          aria-label={`Edit quotation ${q.leadName}`}
+                          aria-label={`${isFullyApproved(q.id) || q.booking ? "Lihat" : "Edit"} quotation ${q.leadName}`}
                           className="cursor-pointer hover:bg-accent/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
                         >
                           {/* # */}
@@ -605,14 +756,19 @@ export function QuotationsTable() {
                             </div>
                           </TableCell>
 
-                          {/* Venue */}
+                          {/* Venue + Event Date */}
                           <TableCell className="min-w-0">
-                            <span title={q.venue} className="block truncate text-sm">
-                              {q.venue}
-                            </span>
+                            <div className="min-w-0">
+                              <span title={q.venue} className="block truncate text-sm text-foreground">
+                                {q.venue}
+                              </span>
+                              <span className="block truncate text-xs text-muted-foreground tabular-nums">
+                                {q.eventDate ? formatEventDateRange(q.eventDate, q.eventEndDate) : "—"}
+                              </span>
+                            </div>
                           </TableCell>
 
-                          {/* Sales — hidden xs */}
+                          {/* Sales + Submit Date — hidden xs */}
                           <TableCell className="min-w-0 hidden sm:table-cell">
                             <div className="min-w-0">
                               <span
@@ -621,26 +777,10 @@ export function QuotationsTable() {
                               >
                                 {q.salesName || "—"}
                               </span>
-                              {q.salesPhone && (
-                                <span className="block truncate text-xs text-muted-foreground">
-                                  {q.salesPhone}
-                                </span>
-                              )}
+                              <span className="block truncate text-xs text-muted-foreground tabular-nums">
+                                {q.createdAt ? formatDate(q.createdAt) : "—"}
+                              </span>
                             </div>
-                          </TableCell>
-
-                          {/* Submit Date — hidden until md */}
-                          <TableCell className="min-w-0 hidden md:table-cell">
-                            <span className="block text-sm tabular-nums text-muted-foreground">
-                              {q.createdAt ? formatDate(q.createdAt) : "—"}
-                            </span>
-                          </TableCell>
-
-                          {/* Event Date — hidden until xl */}
-                          <TableCell className="min-w-0 hidden xl:table-cell">
-                            <span className="block text-sm tabular-nums">
-                              {q.eventDate ? formatEventDateRange(q.eventDate, q.eventEndDate) : "—"}
-                            </span>
                           </TableCell>
 
                           {/* Total */}
@@ -672,10 +812,21 @@ export function QuotationsTable() {
                                   <Eye weight="BoldDuotone" aria-hidden="true" className="h-4 w-4 mr-2 text-primary" />
                                   Lihat / Cetak
                                 </DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => handleEdit(q)}>
-                                  <Pen weight="BoldDuotone" aria-hidden="true" className="h-4 w-4 mr-2 text-primary" />
-                                  Edit
-                                </DropdownMenuItem>
+                                {!isFullyApproved(q.id) && !q.booking && (
+                                  <DropdownMenuItem onClick={() => handleEdit(q)}>
+                                    <Pen weight="BoldDuotone" aria-hidden="true" className="h-4 w-4 mr-2 text-primary" />
+                                    Edit
+                                  </DropdownMenuItem>
+                                )}
+                                {isFullyApproved(q.id) && (
+                                  <DropdownMenuItem
+                                    onClick={() => handleCreateRevision(q)}
+                                    disabled={revisionMutation.isPending}
+                                  >
+                                    <Refresh weight="BoldDuotone" aria-hidden="true" className="h-4 w-4 mr-2 text-primary" />
+                                    Buat Revisi
+                                  </DropdownMenuItem>
+                                )}
                                 {getActionableSteps(q.id).map((step) => (
                                   <DropdownMenuItem
                                     key={step.id}
@@ -694,9 +845,12 @@ export function QuotationsTable() {
                                   Lihat Approval
                                 </DropdownMenuItem>
                                 <DropdownMenuSeparator />
-                                <DropdownMenuItem onClick={() => handleConvertToBooking(q)}>
+                                <DropdownMenuItem
+                                  onClick={() => handleConvertToBooking(q)}
+                                  disabled={!isFullyApproved(q.id) || !!q.booking || convertMutation.isPending}
+                                >
                                   <CalendarMark weight="BoldDuotone" aria-hidden="true" className="h-4 w-4 mr-2 text-primary" />
-                                  Convert ke Booking
+                                  {q.booking ? "Sudah Dikonversi" : "Convert ke Booking"}
                                 </DropdownMenuItem>
                               </DropdownMenuContent>
                             </DropdownMenu>
@@ -785,19 +939,36 @@ export function QuotationsTable() {
                             />
                             Lihat/Cetak
                           </Button>
-                          <Button
-                            variant="outline"
-                            className="h-9 flex-1 text-xs"
-                            onClick={() => handleEdit(q)}
-                            aria-label={`Edit ${deriveQuotationNo(q)}`}
-                          >
-                            <Pen
-                              weight="BoldDuotone"
-                              aria-hidden="true"
-                              className="h-3.5 w-3.5 mr-1 text-muted-foreground"
-                            />
-                            Edit
-                          </Button>
+                          {isFullyApproved(q.id) ? (
+                            <Button
+                              variant="outline"
+                              className="h-9 flex-1 text-xs"
+                              onClick={() => handleCreateRevision(q)}
+                              disabled={revisionMutation.isPending}
+                              aria-label={`Buat revisi ${deriveQuotationNo(q)}`}
+                            >
+                              <Refresh
+                                weight="BoldDuotone"
+                                aria-hidden="true"
+                                className="h-3.5 w-3.5 mr-1 text-muted-foreground"
+                              />
+                              Revisi
+                            </Button>
+                          ) : (
+                            <Button
+                              variant="outline"
+                              className="h-9 flex-1 text-xs"
+                              onClick={() => handleEdit(q)}
+                              aria-label={`Edit ${deriveQuotationNo(q)}`}
+                            >
+                              <Pen
+                                weight="BoldDuotone"
+                                aria-hidden="true"
+                                className="h-3.5 w-3.5 mr-1 text-muted-foreground"
+                              />
+                              Edit
+                            </Button>
+                          )}
                           {(() => {
                             const steps = getActionableSteps(q.id);
                             if (steps.length === 0) return null;
@@ -821,6 +992,7 @@ export function QuotationsTable() {
                             variant="outline"
                             className="h-9 flex-1 text-xs"
                             onClick={() => handleConvertToBooking(q)}
+                            disabled={!isFullyApproved(q.id) || !!q.booking || convertMutation.isPending}
                             aria-label={`Convert ke booking ${deriveQuotationNo(q)}`}
                           >
                             <CalendarMark
@@ -828,7 +1000,7 @@ export function QuotationsTable() {
                               aria-hidden="true"
                               className="h-3.5 w-3.5 mr-1 text-muted-foreground"
                             />
-                            Convert
+                            {q.booking ? "Converted" : "Convert"}
                           </Button>
                         </div>
                       </div>
