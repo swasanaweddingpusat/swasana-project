@@ -46,6 +46,7 @@ export const createGuestbookEntrySchema = z
     sourceOfInformationId: z.string().optional().nullable(),
     packageId: z.string().optional().nullable(),
     segmentId: z.string().optional().nullable(),
+    festivalId: z.string().optional().nullable(),
     proofFiles: proofFilesSchema,
     commitVisitDate: z.string().optional().nullable(),
     commitPayDate: z.string().optional().nullable(),
@@ -56,6 +57,14 @@ export const createGuestbookEntrySchema = z
         path: ['segmentId'],
         code: z.ZodIssueCode.custom,
         message: 'Segmen wajib dipilih',
+      });
+    }
+
+    if (val.eventCategory !== 'MICE' && !val.packageId?.trim()) {
+      ctx.addIssue({
+        path: ['packageId'],
+        code: z.ZodIssueCode.custom,
+        message: 'Paket wajib dipilih',
       });
     }
 
@@ -105,6 +114,7 @@ export const updateGuestbookEntrySchema = z.object({
   sourceOfInformationId: z.string().optional().nullable(),
   packageId: z.string().optional().nullable(),
   segmentId: z.string().optional().nullable(),
+  festivalId: z.string().optional().nullable(),
   visitorName: z.string().min(1).optional(),
   companyName: z.string().optional().nullable(),
   eventCategory: z.enum(['WEDDINGS', 'MICE']).optional().nullable(),
@@ -132,6 +142,14 @@ export const updateGuestbookEntrySchema = z.object({
       path: ['segmentId'],
       code: z.ZodIssueCode.custom,
       message: 'Segmen wajib dipilih',
+    });
+  }
+
+  if (val.eventCategory !== 'MICE' && !val.packageId?.trim()) {
+    ctx.addIssue({
+      path: ['packageId'],
+      code: z.ZodIssueCode.custom,
+      message: 'Paket wajib dipilih',
     });
   }
 });
