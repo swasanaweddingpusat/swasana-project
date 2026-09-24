@@ -5,7 +5,7 @@ const nextConfig: NextConfig = {
   // server needs into .next/standalone, so the runtime image stays small.
   output: "standalone",
   cacheComponents: true,
-  serverExternalPackages: ["sharp"],
+  serverExternalPackages: ["sharp", "@earendil-works/pi-coding-agent"],
   allowedDevOrigins: ["192.168.1.4", "100.108.85.60"],
   async headers() {
     // Client agreement is a public, status-sensitive flow (validate / sign /

@@ -4930,3 +4930,37 @@ model KpiAwardWinner {
   @@index([groupId])
   @@map("kpi_award_winners")
 }
+
+// ── AiProviderConfig — koneksi model AI (Anthropic langsung / gateway 9router) ─
+// Credential disimpan TERENKRIPSI (AES-256-GCM, lihat lib/crypto.ts) dan tidak
+// pernah dikirim balik ke client. Dipakai Settings > AI Model + Chat AI.
+
+enum AiProviderKind {
+  anthropic
+  router9
+}
+
+enum AiAuthScheme {
+  api_key
+  bearer
+}
+
+model AiProviderConfig {
+  id            String         @id @default(uuid())
+  name          String         @unique
+  kind          AiProviderKind @default(anthropic)
+  baseUrl       String?
+  authScheme    AiAuthScheme   @default(api_key)
+  credentialEnc String
+  modelId       String
+  isActive      Boolean        @default(true)
+  isDefault     Boolean        @default(false)
+  sortOrder     Int            @default(0)
+  lastTestedAt  DateTime?
+  lastTestOk    Boolean?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  @@index([isActive, sortOrder])
+  @@map("ai_provider_configs")
+}
