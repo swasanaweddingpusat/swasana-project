@@ -31,6 +31,7 @@ export function useGuestbookEntries(params?: GuestbookFilterOptions & { page?: n
       params?.interactionType,
       params?.status,
       params?.sourceOfInformationId,
+      params?.festivalId,
     ],
     queryFn: () => fetchGuestbookEntries({ page, pageSize, ...params }),
     placeholderData: keepPreviousData,

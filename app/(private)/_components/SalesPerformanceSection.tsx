@@ -416,13 +416,11 @@ export function SalesPerformanceSection({
                     </Badge>
                   </div>
                 )}
-                {item.homebaseBreakdown.length > 0 && (
+                {item.homebaseVenueName && (
                   <div className="mt-1 flex flex-wrap items-center gap-1">
-                    {item.homebaseBreakdown.map((homebase) => (
-                      <Badge key={homebase.venueId} variant="secondary" className="text-[10px]">
-                        {homebase.venueName}: {homebase.count} dealing
-                      </Badge>
-                    ))}
+                    <Badge variant="secondary" className="text-[10px]">
+                      Homebase: {item.homebaseVenueName}
+                    </Badge>
                   </div>
                 )}
               </div>

@@ -44,6 +44,7 @@ export const moduleActions: Record<string, string[]> = {
   "settings-source-of-information": ["view", "create", "edit", "delete"],
   "settings-tutorial": ["view", "create", "edit", "delete"],
   "settings-banner": ["view", "create", "edit", "delete"],
+  "settings-festival": ["view", "create", "edit", "delete"],
   // Read-only monitoring hub (Settings > Booking Log) — gabungan activity log
   // booking Wedding + MICE. View-only: tidak ada mutasi dari halaman ini.
   "settings-booking-log": ["view"],

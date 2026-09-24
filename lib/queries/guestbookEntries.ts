@@ -15,6 +15,7 @@ export interface GuestbookFilterOptions {
   interactionType?: GuestInteractionType;
   status?: GuestVisitStatus;
   sourceOfInformationId?: string;
+  festivalId?: string;
 }
 
 export interface GuestbookEntriesOptions extends GuestbookFilterOptions {
@@ -60,6 +61,7 @@ export function buildGuestbookWhere(filters: GuestbookFilterOptions): Prisma.Gue
   if (filters.interactionType) where.interactionType = filters.interactionType;
   if (filters.status) where.visitStatus = filters.status;
   if (filters.sourceOfInformationId) where.sourceOfInformationId = filters.sourceOfInformationId;
+  if (filters.festivalId) where.festivalId = filters.festivalId;
 
   return where;
 }
@@ -146,7 +148,7 @@ const guestbookEntrySelect = {
     },
   },
   segment: { select: { id: true, name: true } },
-  festival: { select: { id: true, name: true } },
+  festival: { select: { id: true, name: true, description: true, backgroundImageKey: true } },
 } satisfies Prisma.GuestbookEntrySelect;
 
 type GuestbookEntryRow = Prisma.GuestbookEntryGetPayload<{ select: typeof guestbookEntrySelect }>;

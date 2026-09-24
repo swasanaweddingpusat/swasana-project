@@ -21,6 +21,7 @@ import type { GuestbookCategoryFilter } from "@/lib/queries/guestbookEntries";
 import type { GuestInteractionType, GuestVisitStatus } from "@prisma/client";
 
 type SourceOption = { id: string; name: string };
+type FestivalOption = { id: string; name: string };
 
 async function fetchJson<T>(url: string): Promise<T> {
   const res = await fetch(url);
@@ -69,6 +70,8 @@ interface GuestbookFilterDrawerProps {
   onStatusChange: (value: "all" | GuestVisitStatus) => void;
   sourceOfInformationId: string;
   onSourceOfInformationIdChange: (value: string) => void;
+  festivalId: string;
+  onFestivalIdChange: (value: string) => void;
   venues: { id: string; name: string }[];
   salesOptions: { id: string; name: string }[];
   onReset: () => void;
@@ -93,6 +96,8 @@ export function GuestbookFilterDrawer({
   onStatusChange,
   sourceOfInformationId,
   onSourceOfInformationIdChange,
+  festivalId,
+  onFestivalIdChange,
   venues,
   salesOptions,
   onReset,
@@ -100,6 +105,10 @@ export function GuestbookFilterDrawer({
   const { data: sourceOptions = [] } = useQuery({
     queryKey: ["source-of-informations"],
     queryFn: () => fetchJson<SourceOption[]>("/api/source-of-informations"),
+  });
+  const { data: festivalOptions = [] } = useQuery({
+    queryKey: ["festivals"],
+    queryFn: () => fetchJson<FestivalOption[]>("/api/festivals"),
   });
 
   return (
@@ -226,6 +235,21 @@ export function GuestbookFilterDrawer({
               <SelectContent>
                 <SelectItem value="all">Semua Sumber</SelectItem>
                 {sourceOptions.map((opt) => (
+                  <SelectItem key={opt.id} value={opt.id}>{opt.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-sm font-medium">Festival</Label>
+            <Select value={festivalId} onValueChange={onFestivalIdChange}>
+              <SelectTrigger className="rounded-xl w-full">
+                <SelectValue placeholder="Semua Festival" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Semua Festival</SelectItem>
+                {festivalOptions.map((opt) => (
                   <SelectItem key={opt.id} value={opt.id}>{opt.name}</SelectItem>
                 ))}
               </SelectContent>

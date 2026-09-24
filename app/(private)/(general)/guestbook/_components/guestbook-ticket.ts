@@ -9,19 +9,57 @@ const GOLD = "#D4A547";
 const CREAM = "#FAF7F2";
 const MUTED = "#5B6B73";
 
+const S3_PUBLIC_URL = process.env.NEXT_PUBLIC_S3_PUBLIC_URL ?? "";
+
+function toFullUrl(key: string | null | undefined): string | null {
+  if (!key) return null;
+  if (key.startsWith("http")) return key;
+  return S3_PUBLIC_URL ? `${S3_PUBLIC_URL}/${key}` : key;
+}
+
 function resolveFontFamily(cssVar: string, fallback: string): string {
   if (typeof window === "undefined") return fallback;
   const value = getComputedStyle(document.documentElement).getPropertyValue(cssVar).trim();
   return value ? `${value}, ${fallback}` : fallback;
 }
 
-function loadImage(src: string): Promise<HTMLImageElement> {
+function loadImage(src: string, crossOrigin?: "anonymous"): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const img = new Image();
+    if (crossOrigin) img.crossOrigin = crossOrigin;
     img.onload = () => resolve(img);
     img.onerror = reject;
     img.src = src;
   });
+}
+
+/** Draw `img` into the (x, y, w, h) box, cropping to fill (like CSS `object-fit: cover`). */
+function drawImageCover(
+  ctx: CanvasRenderingContext2D,
+  img: HTMLImageElement,
+  x: number,
+  y: number,
+  w: number,
+  h: number
+): void {
+  const imgRatio = img.width / img.height;
+  const boxRatio = w / h;
+  let sx: number;
+  let sy: number;
+  let sw: number;
+  let sh: number;
+  if (imgRatio > boxRatio) {
+    sh = img.height;
+    sw = sh * boxRatio;
+    sx = (img.width - sw) / 2;
+    sy = 0;
+  } else {
+    sw = img.width;
+    sh = sw / boxRatio;
+    sx = 0;
+    sy = (img.height - sh) / 2;
+  }
+  ctx.drawImage(img, sx, sy, sw, sh, x, y, w, h);
 }
 
 function roundRect(
@@ -105,6 +143,19 @@ export async function generateGuestbookTicketBlob(
   });
   const qrImage = await loadImage(qrDataUrl);
 
+  // Festival background is CMS-uploaded — best-effort: a broken/unreachable
+  // image must never block ticket generation, just fall back to the plain header.
+  const bgUrl = toFullUrl(entry.festival?.backgroundImageKey);
+  let bgImage: HTMLImageElement | null = null;
+  if (bgUrl) {
+    try {
+      bgImage = await loadImage(bgUrl, "anonymous");
+    } catch (e) {
+      console.error("[generateGuestbookTicketBlob] failed to load festival background", e);
+    }
+  }
+  const hasBg = Boolean(bgImage);
+
   const canvas = document.createElement("canvas");
   const scale = 2;
   canvas.width = TICKET_WIDTH * scale;
@@ -123,12 +174,25 @@ export async function generateGuestbookTicketBlob(
   ctx.fillStyle = CREAM;
   ctx.fill();
 
-  // Header band (ink, clipped to the card's rounded top corners)
+  // Header band (clipped to the card's rounded top corners). Uses the
+  // festival's uploaded background image when available, cropped to fill and
+  // darkened with a gradient so the logo/name stay legible over any artwork —
+  // otherwise falls back to the original solid ink band.
+  const bandHeight = hasBg ? 260 : 160;
   ctx.save();
   roundRect(ctx, pad, pad, cardW, TICKET_HEIGHT - pad * 2, 32);
   ctx.clip();
-  ctx.fillStyle = INK;
-  ctx.fillRect(pad, pad, cardW, 160);
+  if (hasBg && bgImage) {
+    drawImageCover(ctx, bgImage, pad, pad, cardW, bandHeight);
+    const gradient = ctx.createLinearGradient(0, pad, 0, pad + bandHeight);
+    gradient.addColorStop(0, "rgba(15,65,89,0.25)");
+    gradient.addColorStop(1, "rgba(15,65,89,0.85)");
+    ctx.fillStyle = gradient;
+    ctx.fillRect(pad, pad, cardW, bandHeight);
+  } else {
+    ctx.fillStyle = INK;
+    ctx.fillRect(pad, pad, cardW, bandHeight);
+  }
   ctx.restore();
 
   ctx.fillStyle = GOLD;
@@ -137,9 +201,10 @@ export async function generateGuestbookTicketBlob(
 
   ctx.fillStyle = "#FFFFFF";
   ctx.font = `500 18px ${bodyFont}`;
-  ctx.fillText("Tiket Kehadiran Expo", TICKET_WIDTH / 2, pad + 102);
+  const subtitle = entry.festival?.name?.trim() || "Tiket Kehadiran Expo";
+  ctx.fillText(truncate(ctx, subtitle, cardW - 80), TICKET_WIDTH / 2, pad + 102);
 
-  let y = pad + 216;
+  let y = pad + bandHeight + 56;
   ctx.fillStyle = INK;
   ctx.font = `700 34px ${headingFont}`;
   ctx.fillText(truncate(ctx, entry.visitorName, cardW - 80), TICKET_WIDTH / 2, y);
@@ -149,6 +214,14 @@ export async function generateGuestbookTicketBlob(
     ctx.font = `400 18px ${bodyFont}`;
     ctx.fillStyle = MUTED;
     ctx.fillText(truncate(ctx, entry.companyName, cardW - 80), TICKET_WIDTH / 2, y);
+  }
+
+  // Festival "keterangan" — CMS-editable caption, replaceable per festival.
+  if (entry.festival?.description) {
+    y += 30;
+    ctx.font = `400 15px ${bodyFont}`;
+    ctx.fillStyle = MUTED;
+    ctx.fillText(truncate(ctx, entry.festival.description, cardW - 100), TICKET_WIDTH / 2, y);
   }
 
   y += 48;

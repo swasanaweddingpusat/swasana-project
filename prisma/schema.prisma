@@ -872,10 +872,14 @@ model SourceOfInformation {
 }
 
 model Festival {
-  id               String           @id @default(uuid())
-  name             String           @unique
-  createdAt        DateTime         @default(now())
-  guestbookEntries GuestbookEntry[]
+  id                 String           @id @default(uuid())
+  name               String           @unique
+  description        String?
+  backgroundImageKey String?
+  startDate          DateTime?
+  endDate            DateTime?
+  createdAt          DateTime         @default(now())
+  guestbookEntries   GuestbookEntry[]
 
   @@map("festivals")
 }
