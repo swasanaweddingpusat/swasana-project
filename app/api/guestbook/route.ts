@@ -44,6 +44,7 @@ export async function GET(request: Request): Promise<Response> {
     rawStatus && ALLOWED_STATUS.has(rawStatus as GuestVisitStatus) ? (rawStatus as GuestVisitStatus) : undefined;
 
   const sourceOfInformationId = searchParams.get("sourceOfInformationId")?.trim() || undefined;
+  const festivalId = searchParams.get("festivalId")?.trim() || undefined;
 
   const profileId = session.user.profileId ?? undefined;
   // dataScope is already carried on the JWT/session (refreshed from DB every 10
@@ -64,6 +65,7 @@ export async function GET(request: Request): Promise<Response> {
       interactionType,
       status,
       sourceOfInformationId,
+      festivalId,
     });
     return Response.json(result);
   } catch (error) {

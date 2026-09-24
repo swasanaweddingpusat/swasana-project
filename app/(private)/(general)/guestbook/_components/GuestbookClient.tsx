@@ -270,11 +270,10 @@ function GuestbookOverview({
   onHostClick: (key: string) => void;
 }) {
   const metrics = [
-    { label: "Rencana Kunjungan", value: overview.total, icon: UsersGroupRounded },
-    { label: "Sedang Berlangsung", value: overview.activeVisits, icon: ChartSquare },
-    { label: "Sudah Checkout", value: overview.checkedOut, icon: Buildings2 },
+    { label: "Rencana Visit", value: overview.plannedVisits, icon: CalendarMinimalistic },
+    { label: "Sudah Visit", value: overview.doneVisits, icon: Buildings2 },
+    { label: "Tidak Jadi Visit (Lost)", value: overview.lostVisits, icon: TrashBinTrash },
     { label: "Online Meeting", value: overview.onlineMeetings, icon: ChartSquare },
-    { label: "Kunjungan Fisik", value: overview.inPersonVisits, icon: UsersGroupRounded },
   ];
 
   const lists: {
@@ -292,7 +291,7 @@ function GuestbookOverview({
 
   return (
     <div className="space-y-3">
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
       {metrics.map(({ label, value, icon: Icon }) => (
         <Card key={label} className="rounded-2xl shadow-sm">
           <CardContent className="flex items-center gap-3 p-4">
@@ -566,6 +565,7 @@ function GuestbookClientInner() {
   const [filterInteractionType, setFilterInteractionType] = useState<"all" | GuestInteractionType>("all");
   const [filterStatus, setFilterStatus] = useState<"all" | GuestVisitStatus>("all");
   const [filterSourceId, setFilterSourceId] = useState<string>("all");
+  const [filterFestivalId, setFilterFestivalId] = useState<string>("all");
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
@@ -597,13 +597,13 @@ function GuestbookClientInner() {
   // Any other filter change also resets page to 1.
   useEffect(() => {
     setCurrentPage(1);
-  }, [dateRange, filterVenueId, filterHostId, filterCategory, filterInteractionType, filterStatus, filterSourceId]);
+  }, [dateRange, filterVenueId, filterHostId, filterCategory, filterInteractionType, filterStatus, filterSourceId, filterFestivalId]);
 
   // Clear selection whenever the visible page/filter set changes, so bulk
   // actions never act on rows the user can no longer see.
   useEffect(() => {
     setSelectedIds([]);
-  }, [currentPage, debouncedSearch, filterVenueId, filterHostId, filterCategory, filterInteractionType, filterStatus, filterSourceId]);
+  }, [currentPage, debouncedSearch, filterVenueId, filterHostId, filterCategory, filterInteractionType, filterStatus, filterSourceId, filterFestivalId]);
 
   const queryClient = useQueryClient();
   const { data: guestbookData, isLoading } = useGuestbookEntries({
@@ -618,6 +618,7 @@ function GuestbookClientInner() {
     interactionType: filterInteractionType !== "all" ? filterInteractionType : undefined,
     status: filterStatus !== "all" ? filterStatus : undefined,
     sourceOfInformationId: filterSourceId !== "all" ? filterSourceId : undefined,
+    festivalId: filterFestivalId !== "all" ? filterFestivalId : undefined,
   });
   const entries = guestbookData?.data ?? [];
   const totalPages = Math.max(1, Math.ceil((guestbookData?.total ?? 0) / 50));
@@ -757,7 +758,8 @@ function GuestbookClientInner() {
     (filterCategory !== "all" ? 1 : 0) +
     (filterInteractionType !== "all" ? 1 : 0) +
     (filterStatus !== "all" ? 1 : 0) +
-    (filterSourceId !== "all" ? 1 : 0);
+    (filterSourceId !== "all" ? 1 : 0) +
+    (filterFestivalId !== "all" ? 1 : 0);
 
   function resetFilters() {
     setDateRange(todayRange());
@@ -767,6 +769,7 @@ function GuestbookClientInner() {
     setFilterInteractionType("all");
     setFilterStatus("all");
     setFilterSourceId("all");
+    setFilterFestivalId("all");
     setSearch("");
     setCurrentPage(1);
   }
@@ -776,10 +779,10 @@ function GuestbookClientInner() {
       <GuestbookOverview
         overview={guestbookData?.overview ?? {
           total: 0,
-          checkedOut: 0,
-          activeVisits: 0,
+          plannedVisits: 0,
+          doneVisits: 0,
+          lostVisits: 0,
           onlineMeetings: 0,
-          inPersonVisits: 0,
           byStatus: [],
           byCategory: [],
           bySource: [],
@@ -1349,6 +1352,8 @@ function GuestbookClientInner() {
         onStatusChange={setFilterStatus}
         sourceOfInformationId={filterSourceId}
         onSourceOfInformationIdChange={setFilterSourceId}
+        festivalId={filterFestivalId}
+        onFestivalIdChange={setFilterFestivalId}
         venues={venues}
         salesOptions={salesOptions}
         onReset={resetFilters}

@@ -15,6 +15,7 @@ export interface GuestbookFilterOptions {
   interactionType?: GuestInteractionType;
   status?: GuestVisitStatus;
   sourceOfInformationId?: string;
+  festivalId?: string;
 }
 
 export interface GuestbookEntriesOptions extends GuestbookFilterOptions {
@@ -60,6 +61,7 @@ export function buildGuestbookWhere(filters: GuestbookFilterOptions): Prisma.Gue
   if (filters.interactionType) where.interactionType = filters.interactionType;
   if (filters.status) where.visitStatus = filters.status;
   if (filters.sourceOfInformationId) where.sourceOfInformationId = filters.sourceOfInformationId;
+  if (filters.festivalId) where.festivalId = filters.festivalId;
 
   return where;
 }
@@ -82,10 +84,10 @@ export interface GuestbookOverviewBucket {
 
 export interface GuestbookOverview {
   total: number;
-  checkedOut: number;
-  activeVisits: number;
+  plannedVisits: number;
+  doneVisits: number;
+  lostVisits: number;
   onlineMeetings: number;
-  inPersonVisits: number;
   byStatus: GuestbookOverviewBucket[];
   byCategory: GuestbookOverviewBucket[];
   bySource: GuestbookOverviewBucket[];
@@ -146,7 +148,7 @@ const guestbookEntrySelect = {
     },
   },
   segment: { select: { id: true, name: true } },
-  festival: { select: { id: true, name: true } },
+  festival: { select: { id: true, name: true, description: true, backgroundImageKey: true } },
 } satisfies Prisma.GuestbookEntrySelect;
 
 type GuestbookEntryRow = Prisma.GuestbookEntryGetPayload<{ select: typeof guestbookEntrySelect }>;
@@ -179,7 +181,7 @@ export async function getGuestbookEntries(
     .slice(0, 10)
     .map((row) => ({ key: row.key as string, label: labels.get(row.key as string) ?? fallback, count: row.count }));
 
-  const [statusGroups, categoryGroups, sourceGroups, venueGroups, hostGroups, interactionGroups, adsUrlGroups, checkedOut, activeVisits] = await Promise.all([
+  const [statusGroups, categoryGroups, sourceGroups, venueGroups, hostGroups, interactionGroups, adsUrlGroups, total] = await Promise.all([
     db.guestbookEntry.groupBy({ by: ["visitStatus"], where, _count: { _all: true } }),
     db.guestbookEntry.groupBy({ by: ["eventCategory"], where, _count: { _all: true } }),
     db.guestbookEntry.groupBy({ by: ["sourceOfInformationId"], where, _count: { _all: true } }),
@@ -187,8 +189,7 @@ export async function getGuestbookEntries(
     db.guestbookEntry.groupBy({ by: ["hostId"], where, _count: { _all: true } }),
     db.guestbookEntry.groupBy({ by: ["interactionType"], where, _count: { _all: true } }),
     db.guestbookEntry.groupBy({ by: ["bitrixAdsUrl"], where, _count: { _all: true } }),
-    db.guestbookEntry.count({ where: { ...where, checkOutAt: { not: null } } }),
-    db.guestbookEntry.count({ where: { ...where, checkOutAt: null } }),
+    db.guestbookEntry.count({ where }),
   ]);
 
   const sourceIds = sourceGroups.flatMap((row) => row.sourceOfInformationId ? [row.sourceOfInformationId] : []);
@@ -204,12 +205,22 @@ export async function getGuestbookEntries(
   const venueLabels = new Map(venues.map((row) => [row.id, row.name]));
   const hostLabels = new Map(hosts.map((row) => [row.id, row.fullName ?? "Tanpa nama"]));
   const interactionCounts = new Map(interactionGroups.map((row) => [row.interactionType, row._count._all]));
+  // Visit journey buckets, derived from visitStatus: "done_visit"/"deal"/"to_be_discuss" only
+  // get set once a visit actually happened (staff checkout or QR attendance confirm), "lost"
+  // means the visit fell through, and everything else (no status yet, or cold/warm/hot lead
+  // temperature) is still pending — i.e. planned.
+  const statusCounts = new Map(statusGroups.map((row) => [row.visitStatus, row._count._all]));
+  const lostVisits = statusCounts.get("lost") ?? 0;
+  const doneVisits =
+    (statusCounts.get("done_visit") ?? 0) +
+    (statusCounts.get("deal") ?? 0) +
+    (statusCounts.get("to_be_discuss") ?? 0);
   const overview: GuestbookOverview = {
-    total: await db.guestbookEntry.count({ where }),
-    checkedOut,
-    activeVisits,
+    total,
+    plannedVisits: Math.max(total - doneVisits - lostVisits, 0),
+    doneVisits,
+    lostVisits,
     onlineMeetings: interactionCounts.get("online_meeting") ?? 0,
-    inPersonVisits: (interactionCounts.get("client_visit") ?? 0) + (interactionCounts.get("jemput_bola") ?? 0),
     byStatus: buildBuckets(statusGroups.map((row) => ({ key: row.visitStatus, count: row._count._all })), new Map([
       ["cold", "Cold"], ["warm", "Warm"], ["hot", "Hot"], ["done_visit", "Done Visit"], ["to_be_discuss", "To Be Discuss"], ["deal", "Deal"], ["lost", "Lost"],
     ]), "Tanpa status"),
@@ -225,7 +236,7 @@ export async function getGuestbookEntries(
     adsUrlOrganik: adsUrlGroups.find((row) => row.bitrixAdsUrl === null)?._count._all ?? 0,
   };
 
-  const [data, total, weddingCount, miceCount] = await Promise.all([
+  const [data, weddingCount, miceCount] = await Promise.all([
     db.guestbookEntry.findMany({
       where,
       select: guestbookEntrySelect,
@@ -233,7 +244,6 @@ export async function getGuestbookEntries(
       skip: (page - 1) * pageSize,
       take: pageSize,
     }),
-    db.guestbookEntry.count({ where }),
     db.guestbookEntry.count({ where: categoryCountWhere("WEDDINGS") }),
     db.guestbookEntry.count({ where: categoryCountWhere("MICE") }),
   ]);

@@ -3,6 +3,8 @@
 import { useState, useEffect, useRef, type ForwardRefExoticComponent, type RefAttributes } from "react";
 import { createPortal } from "react-dom";
 import Image from "next/image";
+import type { DateRange } from "react-day-picker";
+import { id as idLocale } from "date-fns/locale";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Drawer } from "@/components/shared/drawer";
 import { Button } from "@/components/ui/button";
@@ -10,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Calendar } from "@/components/ui/calendar";
 import {
   Select,
   SelectContent,
@@ -506,6 +509,8 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
   const [doneVisitDialogOpen, setDoneVisitDialogOpen] = useState(false);
   const [checklistVisited, setChecklistVisited] = useState(false);
   const [checklistProofFilled, setChecklistProofFilled] = useState(false);
+  const [festivalDraft, setFestivalDraft] = useState<{ name: string; range: DateRange | undefined } | null>(null);
+  const [isCreatingFestival, setIsCreatingFestival] = useState(false);
   // Guard sinkron anti double-submit: setState nunggu re-render, ref langsung
   // ke-set — jadi klik kedua yang datang sebelum render berikutnya tetap ke-block.
   const submittingRef = useRef(false);
@@ -679,6 +684,28 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
     setDoneVisitDialogOpen(false);
     setChecklistVisited(false);
     setChecklistProofFilled(false);
+  }
+
+  async function handleCreateFestival() {
+    if (!festivalDraft?.range?.from || !festivalDraft.range.to) return;
+    setIsCreatingFestival(true);
+    try {
+      const res = await createFestival({
+        name: festivalDraft.name,
+        startDate: festivalDraft.range.from,
+        endDate: festivalDraft.range.to,
+      });
+      if (!res.success) {
+        toast.error(res.error ?? "Gagal menambah festival");
+        return;
+      }
+      await queryClient.invalidateQueries({ queryKey: ["festivals"] });
+      if (res.item) setField("festivalId", res.item.id);
+      toast.success(`Festival "${festivalDraft.name}" berhasil ditambahkan`);
+      setFestivalDraft(null);
+    } finally {
+      setIsCreatingFestival(false);
+    }
   }
 
   function setInteractionType(value: string) {
@@ -1062,15 +1089,8 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
                 onChange={(v) => {
                   setField("festivalId", v);
                 }}
-                onAdd={async (name) => {
-                  const res = await createFestival(name);
-                  if (!res.success) {
-                    toast.error(res.error ?? "Gagal menambah festival");
-                    return;
-                  }
-                  await queryClient.invalidateQueries({ queryKey: ["festivals"] });
-                  if (res.item) setField("festivalId", res.item.id);
-                  toast.success(`Festival "${name}" berhasil ditambahkan`);
+                onAdd={(name) => {
+                  setFestivalDraft({ name, range: undefined });
                 }}
                 placeholder="Pilih festival"
                 searchPlaceholder="Cari festival..."
@@ -1507,6 +1527,44 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
               disabled={!checklistVisited || !checklistProofFilled}
             >
               Konfirmasi
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={!!festivalDraft}
+        onOpenChange={(open) => {
+          if (!open) setFestivalDraft(null);
+        }}
+      >
+        <DialogContent className="rounded-2xl sm:max-w-xs">
+          <DialogHeader>
+            <DialogTitle>Tambah Festival</DialogTitle>
+            <DialogDescription>
+              Tentukan tanggal berlangsungnya festival &quot;{festivalDraft?.name}&quot;.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-center rounded-xl border border-border">
+            <Calendar
+              mode="range"
+              numberOfMonths={1}
+              selected={festivalDraft?.range}
+              onSelect={(range) => setFestivalDraft((prev) => (prev ? { ...prev, range } : prev))}
+              locale={idLocale}
+            />
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" className="rounded-full" onClick={() => setFestivalDraft(null)}>
+              Batal
+            </Button>
+            <Button
+              type="button"
+              className="rounded-full"
+              disabled={!festivalDraft?.range?.from || !festivalDraft?.range?.to || isCreatingFestival}
+              onClick={handleCreateFestival}
+            >
+              {isCreatingFestival ? "Menyimpan..." : "Simpan"}
             </Button>
           </DialogFooter>
         </DialogContent>
