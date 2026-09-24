@@ -77,7 +77,7 @@ import type {
   GuestbookOverviewBucket,
 } from "@/lib/queries/guestbookEntries";
 import type { GuestInteractionType, GuestVisitStatus } from "@prisma/client";
-import type { ProofFiles } from "@/lib/validations/guestbook";
+import { guestbookSourceLabel, type ProofFiles } from "@/lib/validations/guestbook";
 import { GuestbookDrawer } from "./GuestbookDrawer";
 import { GuestbookDetailDrawer } from "./GuestbookDetailDrawer";
 import { GuestbookFilterDrawer } from "./GuestbookFilterDrawer";
@@ -393,7 +393,7 @@ function MobileCard({
   onStatusClick?: (status: string) => void;
   onCheckoutSelect: (entry: GuestbookEntryItem, visitStatus: "deal" | "to_be_discuss" | "lost") => void;
 }) {
-  const sourceLabel = entry.sourceOfInformation?.name ?? null;
+  const sourceLabel = guestbookSourceLabel(entry.sourceOfInformation?.name, entry.bitrixAdsUrl);
   const statusInfo = entry.visitStatus ? STATUS_LABELS[entry.visitStatus] : null;
   const photoSrc = resolveGuestbookProofThumb((entry.proofFiles ?? null) as ProofFiles | null);
 
@@ -988,7 +988,7 @@ function GuestbookClientInner() {
                 </TableHeader>
                 <TableBody>
                   {entries.map((entry) => {
-                    const sourceLabel = entry.sourceOfInformation?.name ?? null;
+                    const sourceLabel = guestbookSourceLabel(entry.sourceOfInformation?.name, entry.bitrixAdsUrl);
                     const statusInfo = entry.visitStatus ? STATUS_LABELS[entry.visitStatus] : null;
                     const totalVisit = countVisitsOnPage(entry, entries);
                     const festivalLabel = entry.festival?.name ?? "-";
