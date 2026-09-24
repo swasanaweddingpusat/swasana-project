@@ -8,7 +8,14 @@ import { revalidateTag } from "next/cache";
 import { Prisma } from "@prisma/client";
 import { isSequentialFlow } from "@/lib/approval-flows";
 
-export async function approveStep(stepId: string, signature?: string | null) {
+type ApprovalActionResult =
+  | { success: true }
+  | { success: false; error: string };
+
+export async function approveStep(
+  stepId: string,
+  signature?: string | null,
+): Promise<ApprovalActionResult> {
   const session = await auth();
   if (!session?.user?.id) return { success: false as const, error: "Sesi tidak ditemukan. Silakan login kembali." };
   if (!mutationLimiter.check(`approval:${session.user.id}`)) return { success: false as const, ...rateLimitError() };
@@ -35,7 +42,7 @@ export async function approveStep(stepId: string, signature?: string | null) {
       : [step];
 
     // Enforce step order only for sequential flows (catering, decoration).
-    // For order-independent flows (booking, booking-mice, quotations, package),
+    // For order-independent flows (booking, booking-mice, package),
     // manager and finance can approve in any order — record becomes "approved"
     // only when ALL role steps are done.
     if (!isSuperAdmin && await isSequentialFlow(step.record.module)) {
@@ -132,7 +139,10 @@ export async function approveStep(stepId: string, signature?: string | null) {
   }
 }
 
-export async function rejectStep(stepId: string, notes: string) {
+export async function rejectStep(
+  stepId: string,
+  notes: string,
+): Promise<ApprovalActionResult> {
   const session = await auth();
   if (!session?.user?.id) return { success: false as const, error: "Sesi tidak ditemukan. Silakan login kembali." };
   if (!mutationLimiter.check(`approval:${session.user.id}`)) return { success: false as const, ...rateLimitError() };

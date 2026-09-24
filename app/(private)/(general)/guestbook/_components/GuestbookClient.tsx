@@ -270,10 +270,11 @@ function GuestbookOverview({
   onHostClick: (key: string) => void;
 }) {
   const metrics = [
-    { label: "Rencana Visit", value: overview.plannedVisits, icon: CalendarMinimalistic },
-    { label: "Sudah Visit", value: overview.doneVisits, icon: Buildings2 },
-    { label: "Tidak Jadi Visit (Lost)", value: overview.lostVisits, icon: TrashBinTrash },
+    { label: "Rencana Kunjungan", value: overview.total, icon: UsersGroupRounded },
+    { label: "Sedang Berlangsung", value: overview.activeVisits, icon: ChartSquare },
+    { label: "Sudah Checkout", value: overview.checkedOut, icon: Buildings2 },
     { label: "Online Meeting", value: overview.onlineMeetings, icon: ChartSquare },
+    { label: "Kunjungan Fisik", value: overview.inPersonVisits, icon: UsersGroupRounded },
   ];
 
   const lists: {
@@ -291,7 +292,7 @@ function GuestbookOverview({
 
   return (
     <div className="space-y-3">
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
       {metrics.map(({ label, value, icon: Icon }) => (
         <Card key={label} className="rounded-2xl shadow-sm">
           <CardContent className="flex items-center gap-3 p-4">
@@ -779,10 +780,10 @@ function GuestbookClientInner() {
       <GuestbookOverview
         overview={guestbookData?.overview ?? {
           total: 0,
-          plannedVisits: 0,
-          doneVisits: 0,
-          lostVisits: 0,
+          checkedOut: 0,
+          activeVisits: 0,
           onlineMeetings: 0,
+          inPersonVisits: 0,
           byStatus: [],
           byCategory: [],
           bySource: [],

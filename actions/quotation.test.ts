@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   quotationFindUnique: vi.fn(),
+  quotationCreate: vi.fn(),
   quotationUpdate: vi.fn(),
   quotationDelete: vi.fn(),
   approvalRecordFindUnique: vi.fn(),
@@ -16,6 +17,7 @@ const mocks = vi.hoisted(() => ({
   childDeleteMany: vi.fn(),
   childCreate: vi.fn(),
   customerCreate: vi.fn(),
+  bookingFindFirst: vi.fn(),
   bookingCreate: vi.fn(),
   snapCustomerCreate: vi.fn(),
   snapVenueCreate: vi.fn(),
@@ -43,6 +45,7 @@ vi.mock("@/lib/db", () => ({
   db: {
     quotation: {
       findUnique: mocks.quotationFindUnique,
+      create: mocks.quotationCreate,
       update: mocks.quotationUpdate,
       delete: mocks.quotationDelete,
     },
@@ -72,7 +75,7 @@ vi.mock("@/lib/db", () => ({
     snapQuotationPackageComplimentary: { create: mocks.childCreate },
     snapQuotationPackageBonus: { create: mocks.childCreate },
     customer: { create: mocks.customerCreate },
-    booking: { create: mocks.bookingCreate },
+    booking: { findFirst: mocks.bookingFindFirst, create: mocks.bookingCreate },
     snapCustomer: { create: mocks.snapCustomerCreate },
     snapVenue: { create: mocks.snapVenueCreate },
     snapPackage: { create: mocks.snapPackageCreate },
@@ -135,6 +138,8 @@ const approvedQuotation = {
   eventType: { code: "M8", name: "Meeting 8 Jam" },
   terms: [{ name: "Booking Fee", amount: 5_000_000, dueDate: new Date("2026-04-01T00:00:00.000Z"), sortOrder: 0 }],
   items: [{ type: "ITEM", title: "Ruang meeting", description: "<p>Full day</p>", qty: 1, price: 10_000_000, total: 10_000_000, manualTotal: false, sortOrder: 0 }],
+  prices: [],
+  taxDeposits: [],
   complimentaries: [{ complimentaryId: "comp-1", name: "Coffee break", price: 50_000, isShowPrice: true, description: null, qty: 10, sortOrder: 0 }],
   bonuses: [{ bonusId: "bonus-1", name: "Screen", price: 100_000, description: null, qty: 1, sortOrder: 0 }],
 };
@@ -164,6 +169,7 @@ describe("quotation lifecycle guards", () => {
     mocks.venueFindUnique.mockResolvedValue({ id: "venue-1", name: "Ballroom", code: "BLR", address: "Jl. Mawar", description: null, brand: { name: "Swasana", code: "SWS" } });
     mocks.eventTypeFindUnique.mockResolvedValue({ id: "event-type-1", code: "M8" });
     mocks.paymentMethodFindUnique.mockResolvedValue({ bankName: "BCA", bankAccountNumber: "8692428519", bankRecipient: "CV Cita Tenun Bangsa" });
+    mocks.bookingFindFirst.mockResolvedValue(null);
 
     for (const createMock of [
       mocks.customerCreate,
@@ -180,6 +186,7 @@ describe("quotation lifecycle guards", () => {
       mocks.activityLogCreate,
       mocks.approvalRecordCreate,
       mocks.approvalRecordStepCreate,
+      mocks.quotationCreate,
       mocks.quotationDelete,
       mocks.quotationUpdate,
       mocks.childDeleteMany,
@@ -208,33 +215,15 @@ describe("quotation lifecycle guards", () => {
     );
   });
 
-  it("blocks editing a fully approved quotation", async () => {
+  it("edits an unconverted quotation without reading or resetting approval", async () => {
     mocks.quotationFindUnique.mockResolvedValue({ id: "quotation-1", booking: null });
-    mocks.approvalRecordFindUnique.mockResolvedValue({ id: "approval-1", status: "approved" });
-
-    const result = await updateQuotation({ id: "quotation-1", clientName: "Ubah" });
-
-    expect(result).toEqual({
-      success: false,
-      error: "Quotation yang sudah approved tidak dapat diedit. Buat revisi baru.",
-    });
-    expect(mocks.transaction).not.toHaveBeenCalled();
-  });
-
-  it("resets approval when a pending quotation is edited", async () => {
-    mocks.quotationFindUnique.mockResolvedValue({ id: "quotation-1", booking: null });
-    mocks.approvalRecordFindUnique.mockResolvedValue({ id: "approval-1", status: "pending" });
 
     const result = await updateQuotation({ id: "quotation-1", clientName: "Ubah" });
 
     expect(result.success).toBe(true);
-    expect(mocks.approvalRecordUpdate).toHaveBeenCalledWith({
-      where: { id: "approval-1" },
-      data: { status: "pending" },
-    });
-    expect(mocks.approvalRecordStepUpdateMany).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { recordId: "approval-1" } }),
-    );
+    expect(mocks.approvalRecordFindUnique).not.toHaveBeenCalled();
+    expect(mocks.approvalRecordUpdate).not.toHaveBeenCalled();
+    expect(mocks.approvalRecordStepUpdateMany).not.toHaveBeenCalled();
     expect(mocks.activityLogCreate).toHaveBeenCalledWith({
       data: expect.objectContaining({ action: "quotation.updated" }),
     });
@@ -251,14 +240,15 @@ describe("quotation lifecycle guards", () => {
     expect(mocks.transaction).not.toHaveBeenCalled();
   });
 
-  it("only allows revisions of approved quotations", async () => {
+  it("creates a revision without an approval prerequisite", async () => {
     mocks.quotationFindUnique.mockResolvedValue({ ...approvedQuotation, packageSnapshot: null });
-    mocks.approvalRecordFindUnique.mockResolvedValue({ status: "pending" });
 
     const result = await duplicateQuotationAsRevision("quotation-1");
 
-    expect(result).toEqual({ success: false, error: "Hanya quotation approved yang dapat direvisi." });
-    expect(mocks.transaction).not.toHaveBeenCalled();
+    expect(result.success).toBe(true);
+    expect(mocks.approvalRecordFindUnique).not.toHaveBeenCalled();
+    expect(mocks.approvalRecordCreate).not.toHaveBeenCalled();
+    findTransactionOps();
   });
 });
 
@@ -276,6 +266,7 @@ describe("convertQuotationToMiceBooking", () => {
     mocks.venueFindUnique.mockResolvedValue({ id: "venue-1", name: "Ballroom", code: "BLR", address: "Jl. Mawar", description: null, brand: { name: "Swasana", code: "SWS" } });
     mocks.eventTypeFindUnique.mockResolvedValue({ id: "event-type-1", code: "M8" });
     mocks.paymentMethodFindUnique.mockResolvedValue({ bankName: "BCA", bankAccountNumber: "8692428519", bankRecipient: "CV Cita Tenun Bangsa" });
+    mocks.bookingFindFirst.mockResolvedValue(null);
     mocks.buildBookingApprovalSteps.mockResolvedValue([
       { stepOrder: 1, approverType: "role", approverRoleId: "role-manager", approverUserId: null, status: "pending", decidedById: null, decidedAt: null, signature: null },
     ]);
@@ -300,14 +291,13 @@ describe("convertQuotationToMiceBooking", () => {
     }
   });
 
-  it("rejects conversion when the quotation is not fully approved", async () => {
+  it("converts without reading a quotation approval record", async () => {
     mocks.quotationFindUnique.mockResolvedValue(approvedQuotation);
-    mocks.approvalRecordFindUnique.mockResolvedValue({ status: "pending" });
 
     const result = await convertQuotationToMiceBooking("quotation-1");
 
-    expect(result).toEqual({ success: false, error: "Quotation harus fully approved sebelum dikonversi." });
-    expect(mocks.transaction).not.toHaveBeenCalled();
+    expect(result.success).toBe(true);
+    expect(mocks.approvalRecordFindUnique).not.toHaveBeenCalled();
   });
 
   it("rejects a second conversion of the same quotation", async () => {
@@ -317,6 +307,22 @@ describe("convertQuotationToMiceBooking", () => {
     const result = await convertQuotationToMiceBooking("quotation-1");
 
     expect(result).toEqual({ success: false, error: "Quotation ini sudah dikonversi menjadi booking." });
+    expect(mocks.transaction).not.toHaveBeenCalled();
+  });
+
+  it("rejects conversion when a TOP has no positive amount or due date", async () => {
+    mocks.quotationFindUnique.mockResolvedValue({
+      ...approvedQuotation,
+      terms: [{ name: "Down Payment", amount: 0, dueDate: null, sortOrder: 0 }],
+    });
+    mocks.approvalRecordFindUnique.mockResolvedValue({ status: "approved" });
+
+    const result = await convertQuotationToMiceBooking("quotation-1");
+
+    expect(result).toEqual({
+      success: false,
+      error: "Semua TOP wajib memiliki nominal dan tanggal jatuh tempo sebelum konversi.",
+    });
     expect(mocks.transaction).not.toHaveBeenCalled();
   });
 

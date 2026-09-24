@@ -9,7 +9,6 @@ import { APPROVAL_FLOWS } from "@/lib/approval-flows";
 export const KNOWN_MODULES = [
   { module: "booking", label: "Booking Wedding" },
   { module: "package", label: "Package" },
-  { module: "quotations", label: "Quotation" },
   { module: "catering", label: "Catering" },
   { module: "decoration", label: "Decoration" },
   { module: "payment", label: "Payment Acknowledgment" },

@@ -20,6 +20,12 @@ export interface MiceBookingItem {
   poNumber: string | null;
   createdAt: string; // ISO — kapan booking dibuat/deal
   eventDate: string | null; // ISO — tanggal acara
+  eventEndDate: string | null;
+  eventTime: string | null;
+  eventType: { id: string; name: string; code: string } | null;
+  estimatedPax: number | null;
+  companyName: string | null;
+  notes: string | null;
   status: MiceBookingStatus;
   customer: { id: string; name: string; phone: string };
   venue: { id: string; name: string };
