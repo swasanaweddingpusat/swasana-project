@@ -871,6 +871,15 @@ model SourceOfInformation {
   @@map("source_of_informations")
 }
 
+model Festival {
+  id               String           @id @default(uuid())
+  name             String           @unique
+  createdAt        DateTime         @default(now())
+  guestbookEntries GuestbookEntry[]
+
+  @@map("festivals")
+}
+
 model EducationLevel {
   id        String   @id @default(uuid())
   name      String   @unique
@@ -4144,6 +4153,7 @@ model GuestbookEntry {
   sourceOfInformationId String?
   packageId             String?
   segmentId             String?
+  festivalId            String?
   attendanceConfirmedAt DateTime?
   attendanceConfirmedById String?
   createdAt             DateTime              @default(now())
@@ -4157,6 +4167,7 @@ model GuestbookEntry {
   sourceOfInformation SourceOfInformation?  @relation(fields: [sourceOfInformationId], references: [id], onDelete: SetNull)
   package             Package?              @relation(fields: [packageId], references: [id], onDelete: SetNull)
   segment             DailyActivitySegment? @relation(fields: [segmentId], references: [id], onDelete: SetNull)
+  festival            Festival?             @relation(fields: [festivalId], references: [id], onDelete: SetNull)
 
   @@index([checkInAt])
   @@index([hostId])
@@ -4167,6 +4178,7 @@ model GuestbookEntry {
   @@index([sourceOfInformationId])
   @@index([packageId])
   @@index([segmentId])
+  @@index([festivalId])
   @@map("guestbook_entries")
 }
 

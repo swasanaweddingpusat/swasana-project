@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import Image from "next/image";
 import { useAttendanceToday, useAttendanceSettings, useClockIn, useClockOut } from "@/hooks/use-attendance";
 import { useWorkShifts } from "@/hooks/use-work-shifts";
 import { useWorkLocations } from "@/hooks/use-work-locations";
@@ -13,7 +14,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { ClockCircle, Login3, Logout3, MapPoint } from "@solar-icons/react";
+import { ClockCircle, Login3, Logout3, MapPoint, Camera, Restart } from "@solar-icons/react";
 
 type ClockAction = "in" | "out";
 
@@ -56,6 +57,7 @@ export function AttendanceClock() {
   const [currentTime, setCurrentTime] = useState<Date | null>(null);
   const [cameraOpen, setCameraOpen] = useState(false);
   const [pendingAction, setPendingAction] = useState<ClockAction | null>(null);
+  const [capturedPhoto, setCapturedPhoto] = useState<string | null>(null);
   const [gpsCoords, setGpsCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [gpsLoading, setGpsLoading] = useState(false);
   const [selectedStatus, setSelectedStatus] = useState<AttendanceStatusValue | "">("");
@@ -127,14 +129,51 @@ export function AttendanceClock() {
     return <Badge variant="outline">Belum Absen</Badge>;
   }, [attendance, todayLoading]);
 
-  const handleAction = useCallback((action: ClockAction) => {
+  // GPS is fetched best-effort in the background so it never blocks the camera from
+  // opening — the workday/location fields (which need it) are only validated later,
+  // at submit time in the details step below.
+  const requestGps = useCallback(() => {
+    setGpsLoading(true);
+    if (!navigator.geolocation) {
+      setGpsLoading(false);
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setGpsCoords({ lat: position.coords.latitude, lng: position.coords.longitude });
+        setGpsLoading(false);
+      },
+      () => {
+        setGpsCoords(null);
+        setGpsLoading(false);
+      },
+      { enableHighAccuracy: true, timeout: 10000 },
+    );
+  }, []);
+
+  // Clock-in tap: open the camera immediately — no field is required beforehand.
+  // Status/shift/work-type/location are filled AFTER the photo, in the details step.
+  const handleClockInTap = useCallback(() => {
+    if (!settings) {
+      toast.error("Settings absensi belum dikonfigurasi. Hubungi admin.");
+      return;
+    }
+    setPendingAction("in");
+    setCapturedPhoto(null);
+    setGpsCoords(null);
+    requestGps();
+    setCameraOpen(true);
+  }, [settings, requestGps]);
+
+  // Clock-out has no fields to fill, so it keeps the original GPS-then-camera order.
+  const handleClockOutTap = useCallback(() => {
     if (!settings) {
       toast.error("Settings absensi belum dikonfigurasi. Hubungi admin.");
       return;
     }
 
     setGpsLoading(true);
-    setPendingAction(action);
+    setPendingAction("out");
 
     if (!navigator.geolocation) {
       toast.error("Browser Anda tidak mendukung geolocation");
@@ -158,95 +197,23 @@ export function AttendanceClock() {
     );
   }, [settings]);
 
-  const handleClockIn = useCallback(() => {
-    if (!selectedStatus) {
-      toast.error("Pilih status kehadiran terlebih dahulu");
-      return;
-    }
+  const handleRetakePhoto = useCallback(() => {
+    setCameraOpen(true);
+  }, []);
 
-    if (!isWorkday) {
-      // Off flow: plain day off. Selfie required, but no GPS/location.
-      setPendingAction("in");
-      setCameraOpen(true);
-      return;
-    }
-
-    if (!selectedShiftId) {
-      toast.error("Pilih shift terlebih dahulu");
-      return;
-    }
-
-    if (!selectedWorkType) {
-      toast.error("Pilih tipe kerja terlebih dahulu");
-      return;
-    }
-
-    if (selectedWorkType === "WFO" && !selectedLocationId) {
-      toast.error("Pilih lokasi kerja terlebih dahulu");
-      return;
-    }
-
-    if (selectedIsPublicHoliday && !selectedPublicHolidayId) {
-      toast.error("Pilih public holiday terlebih dahulu");
-      return;
-    }
-
-    handleAction("in");
-  }, [selectedStatus, isWorkday, selectedIsPublicHoliday, selectedPublicHolidayId, selectedShiftId, selectedWorkType, selectedLocationId, handleAction]);
+  const handleCancelClockIn = useCallback(() => {
+    setPendingAction(null);
+    setCapturedPhoto(null);
+    setGpsCoords(null);
+  }, []);
 
   const handleCapture = useCallback((photoBase64: string) => {
     setCameraOpen(false);
     if (!pendingAction) return;
 
     if (pendingAction === "in") {
-      // Off flow: selfie only, no GPS. Always a plain day off.
-      if (!isWorkday) {
-        clockInMutation.mutate(
-          {
-            attendanceStatus: "DAY_OFF",
-            photoBase64,
-          },
-          {
-            onSuccess: () => {
-              toast.success("Absensi berhasil disimpan!");
-              setPendingAction(null);
-            },
-            onError: (err) => {
-              toast.error(err.message);
-              setPendingAction(null);
-            },
-          },
-        );
-        return;
-      }
-
-      if (!gpsCoords) return;
-      clockInMutation.mutate(
-        {
-          attendanceStatus: "WORKDAY",
-          photoBase64,
-          lat: gpsCoords.lat,
-          lng: gpsCoords.lng,
-          workShiftId: selectedShiftId,
-          workType: selectedWorkType as "WFO" | "WFH" | "WFA",
-          workLocationId: selectedWorkType === "WFO" ? selectedLocationId : undefined,
-          // Nama hari besar tetap ditentukan HRD (master by-date); karyawan cuma menandai.
-          isPublicHoliday: selectedIsPublicHoliday,
-          publicHolidayId: selectedIsPublicHoliday ? (selectedPublicHolidayId || undefined) : undefined,
-        },
-        {
-          onSuccess: () => {
-            toast.success("Clock in berhasil!");
-            setPendingAction(null);
-            setGpsCoords(null);
-          },
-          onError: (err) => {
-            toast.error(err.message);
-            setPendingAction(null);
-            setGpsCoords(null);
-          },
-        },
-      );
+      // Photo captured — reveal the details step below instead of submitting right away.
+      setCapturedPhoto(photoBase64);
       return;
     }
 
@@ -266,26 +233,104 @@ export function AttendanceClock() {
         },
       },
     );
-  }, [gpsCoords, pendingAction, isWorkday, selectedIsPublicHoliday, selectedPublicHolidayId, clockInMutation, clockOutMutation, selectedShiftId, selectedWorkType, selectedLocationId]);
+  }, [gpsCoords, pendingAction, clockOutMutation]);
+
+  const handleSubmitClockIn = useCallback(() => {
+    if (!capturedPhoto) return;
+
+    if (!selectedStatus) {
+      toast.error("Pilih status kehadiran terlebih dahulu");
+      return;
+    }
+
+    if (!isWorkday) {
+      // Off flow: plain day off. Selfie only, no GPS/location needed.
+      clockInMutation.mutate(
+        { attendanceStatus: "DAY_OFF", photoBase64: capturedPhoto },
+        {
+          onSuccess: () => {
+            toast.success("Absensi berhasil disimpan!");
+            setPendingAction(null);
+            setCapturedPhoto(null);
+          },
+          onError: (err) => toast.error(err.message),
+        },
+      );
+      return;
+    }
+
+    if (!selectedShiftId) {
+      toast.error("Pilih shift terlebih dahulu");
+      return;
+    }
+    if (!selectedWorkType) {
+      toast.error("Pilih tipe kerja terlebih dahulu");
+      return;
+    }
+    if (selectedWorkType === "WFO" && !selectedLocationId) {
+      toast.error("Pilih lokasi kerja terlebih dahulu");
+      return;
+    }
+    if (selectedIsPublicHoliday && !selectedPublicHolidayId) {
+      toast.error("Pilih public holiday terlebih dahulu");
+      return;
+    }
+    if (gpsLoading) {
+      toast.error("Menunggu lokasi GPS, mohon tunggu sebentar");
+      return;
+    }
+    if (!gpsCoords) {
+      toast.error("Lokasi GPS tidak tersedia. Coba lagi.");
+      return;
+    }
+
+    clockInMutation.mutate(
+      {
+        attendanceStatus: "WORKDAY",
+        photoBase64: capturedPhoto,
+        lat: gpsCoords.lat,
+        lng: gpsCoords.lng,
+        workShiftId: selectedShiftId,
+        workType: selectedWorkType as "WFO" | "WFH" | "WFA",
+        workLocationId: selectedWorkType === "WFO" ? selectedLocationId : undefined,
+        // Nama hari besar tetap ditentukan HRD (master by-date); karyawan cuma menandai.
+        isPublicHoliday: selectedIsPublicHoliday,
+        publicHolidayId: selectedIsPublicHoliday ? (selectedPublicHolidayId || undefined) : undefined,
+      },
+      {
+        onSuccess: () => {
+          toast.success("Clock in berhasil!");
+          setPendingAction(null);
+          setCapturedPhoto(null);
+          setGpsCoords(null);
+        },
+        onError: (err) => toast.error(err.message),
+      },
+    );
+  }, [capturedPhoto, selectedStatus, isWorkday, selectedShiftId, selectedWorkType, selectedLocationId, selectedIsPublicHoliday, selectedPublicHolidayId, gpsLoading, gpsCoords, clockInMutation]);
 
   const handleCameraClose = useCallback(() => {
     setCameraOpen(false);
-    setPendingAction(null);
-    setGpsCoords(null);
-  }, []);
+    // Only reset the whole flow if there's no photo yet (first open, user backed out).
+    // If closing mid-retake, keep the previously captured photo and the details step.
+    if (!capturedPhoto) {
+      setPendingAction(null);
+      setGpsCoords(null);
+    }
+  }, [capturedPhoto]);
 
   const canClockIn = !attendance?.clockInAt;
   const canClockOut = !!attendance?.clockInAt && !attendance?.clockOutAt;
   const isDone = !!attendance?.clockOutAt;
-  const clockInDisabled =
-    !settings ||
+  const showClockInDetails = canClockIn && pendingAction === "in" && !!capturedPhoto;
+  const submitClockInDisabled =
     isMutating ||
-    gpsLoading ||
     !selectedStatus ||
     (isWorkday && !selectedShiftId) ||
     (isWorkday && !selectedWorkType) ||
     (isWorkday && selectedWorkType === "WFO" && !selectedLocationId) ||
-    (isWorkday && selectedIsPublicHoliday && !selectedPublicHolidayId);
+    (isWorkday && selectedIsPublicHoliday && !selectedPublicHolidayId) ||
+    (isWorkday && (gpsLoading || !gpsCoords));
 
   return (
     <>
@@ -359,8 +404,30 @@ export function AttendanceClock() {
             )
           )}
 
-          {canClockIn && (
+          {canClockIn && pendingAction !== "in" && (
+            <p className="text-center text-sm text-muted-foreground">
+              Ambil foto terlebih dahulu, lalu lengkapi detail kehadiran.
+            </p>
+          )}
+
+          {showClockInDetails && (
             <div className="space-y-3">
+              <div className="flex items-center gap-3 rounded-2xl border border-border bg-muted/30 p-3">
+                {capturedPhoto && (
+                  <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-xl">
+                    <Image src={capturedPhoto} alt="Foto absensi" fill unoptimized className="object-cover" />
+                  </div>
+                )}
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium">Foto absensi siap</p>
+                  <p className="text-xs text-muted-foreground">Lengkapi detail di bawah, lalu simpan.</p>
+                </div>
+                <Button type="button" variant="outline" size="sm" className="rounded-full shrink-0" onClick={handleRetakePhoto}>
+                  <Restart weight="BoldDuotone" className="h-4 w-4 mr-1.5" />
+                  Ambil Ulang
+                </Button>
+              </div>
+
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="space-y-1.5">
                   <label className="text-xs font-medium text-muted-foreground">Status Kehadiran</label>
@@ -467,6 +534,22 @@ export function AttendanceClock() {
                 )}
               </div>
 
+              {isWorkday && (
+                <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-muted/20 px-3 py-2 text-xs">
+                  <MapPoint weight="BoldDuotone" className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                  {gpsLoading && <span className="text-muted-foreground">Mencari lokasi GPS...</span>}
+                  {!gpsLoading && gpsCoords && <span className="text-muted-foreground">Lokasi GPS ditemukan.</span>}
+                  {!gpsLoading && !gpsCoords && (
+                    <>
+                      <span className="text-destructive">Lokasi GPS belum tersedia.</span>
+                      <Button type="button" variant="link" size="sm" className="h-auto p-0 text-xs" onClick={requestGps}>
+                        Coba lagi
+                      </Button>
+                    </>
+                  )}
+                </div>
+              )}
+
               {isWorkday && context?.isPublicHoliday && (
                 <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
                   <span className="font-medium">Hari besar hari ini</span>
@@ -518,16 +601,39 @@ export function AttendanceClock() {
           )}
 
           <div className="flex flex-col gap-2 sm:flex-row sm:gap-3 justify-center">
-            {canClockIn && (
+            {canClockIn && pendingAction !== "in" && (
               <Button
                 size="lg"
                 className="rounded-full px-8"
-                disabled={clockInDisabled}
-                onClick={handleClockIn}
+                disabled={!settings || isMutating}
+                onClick={handleClockInTap}
               >
-                <Login3 weight="BoldDuotone" className="h-5 w-5 mr-2" />
-                {gpsLoading && pendingAction === "in" ? "Mencari lokasi..." : isWorkday ? "Clock In" : "Catat Kehadiran"}
+                <Camera weight="BoldDuotone" className="h-5 w-5 mr-2" />
+                Ambil Foto & Absen
               </Button>
+            )}
+
+            {showClockInDetails && (
+              <>
+                <Button
+                  size="lg"
+                  variant="ghost"
+                  className="rounded-full px-6"
+                  disabled={isMutating}
+                  onClick={handleCancelClockIn}
+                >
+                  Batal
+                </Button>
+                <Button
+                  size="lg"
+                  className="rounded-full px-8"
+                  disabled={submitClockInDisabled}
+                  onClick={handleSubmitClockIn}
+                >
+                  <Login3 weight="BoldDuotone" className="h-5 w-5 mr-2" />
+                  {isMutating ? "Menyimpan..." : "Simpan Absensi"}
+                </Button>
+              </>
             )}
 
             {canClockOut && (
@@ -536,7 +642,7 @@ export function AttendanceClock() {
                 variant="secondary"
                 className="rounded-full px-8"
                 disabled={isMutating || gpsLoading}
-                onClick={() => handleAction("out")}
+                onClick={handleClockOutTap}
               >
                 <Logout3 weight="BoldDuotone" className="h-5 w-5 mr-2" />
                 {gpsLoading && pendingAction === "out" ? "Mencari lokasi..." : "Clock Out"}

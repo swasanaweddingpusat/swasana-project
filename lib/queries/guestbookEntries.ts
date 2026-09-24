@@ -1,7 +1,7 @@
 import { db } from "@/lib/db";
 import { buildOwnerScopeWhere } from "@/lib/access-control";
 import type { DataScope } from "@/types/user";
-import type { Prisma, GuestInteractionType } from "@prisma/client";
+import type { Prisma, GuestInteractionType, GuestVisitStatus } from "@prisma/client";
 
 export type GuestbookCategoryFilter = "WEDDINGS" | "MICE" | "no_package";
 
@@ -13,6 +13,8 @@ export interface GuestbookFilterOptions {
   dateTo?: string; // yyyy-MM-dd
   category?: GuestbookCategoryFilter;
   interactionType?: GuestInteractionType;
+  status?: GuestVisitStatus;
+  sourceOfInformationId?: string;
 }
 
 export interface GuestbookEntriesOptions extends GuestbookFilterOptions {
@@ -56,6 +58,8 @@ export function buildGuestbookWhere(filters: GuestbookFilterOptions): Prisma.Gue
   }
 
   if (filters.interactionType) where.interactionType = filters.interactionType;
+  if (filters.status) where.visitStatus = filters.status;
+  if (filters.sourceOfInformationId) where.sourceOfInformationId = filters.sourceOfInformationId;
 
   return where;
 }
@@ -119,6 +123,7 @@ const guestbookEntrySelect = {
   sourceOfInformationId: true,
   packageId: true,
   segmentId: true,
+  festivalId: true,
   venueId: true,
   salesId: true,
   attendanceConfirmedAt: true,
@@ -141,6 +146,7 @@ const guestbookEntrySelect = {
     },
   },
   segment: { select: { id: true, name: true } },
+  festival: { select: { id: true, name: true } },
 } satisfies Prisma.GuestbookEntrySelect;
 
 type GuestbookEntryRow = Prisma.GuestbookEntryGetPayload<{ select: typeof guestbookEntrySelect }>;
@@ -232,11 +238,9 @@ export async function getGuestbookEntries(
     db.guestbookEntry.count({ where: categoryCountWhere("MICE") }),
   ]);
 
-  const uncategorizedCount = Math.max(0, total - weddingCount - miceCount);
   overview.byCategory = [
     { key: "WEDDINGS", label: "Wedding", count: weddingCount },
     { key: "MICE", label: "MICE", count: miceCount },
-    ...(uncategorizedCount > 0 ? [{ key: "other", label: "Lainnya", count: uncategorizedCount }] : []),
   ].filter((bucket) => bucket.count > 0);
 
   return { data, total, weddingCount, miceCount, overview, page, pageSize };

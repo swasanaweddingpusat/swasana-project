@@ -7,9 +7,11 @@ import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/permissions";
 import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
 import { logAudit } from "@/lib/audit";
-import { canAccessGuestbookEntry } from "@/lib/access-control";
+import { canAccessGuestbookEntry, buildOwnerScopeWhere } from "@/lib/access-control";
 import { createGuestbookEntrySchema, updateGuestbookEntrySchema, isBitrixSourceName } from "@/lib/validations/guestbook";
 import { normalizePhoneId } from "@/lib/phone";
+import { bitrixCall } from "@/lib/bitrix";
+import { UF_ADS_URL } from "@/app/api/bitrix/deals/route";
 
 // Anchored to UTC (not server-local time) so the typed wall-clock numbers survive the
 // round-trip unchanged regardless of the server process's timezone — paired with the
@@ -119,10 +121,17 @@ export async function createGuestbookEntry(data: unknown): Promise<{ success: bo
   }
 }
 
-export async function checkOutGuestbookEntry(id: string): Promise<{ success: boolean; error?: string }> {
+const ALLOWED_CHECKOUT_STATUS = new Set(["deal", "to_be_discuss", "lost"]);
+
+export async function checkOutGuestbookEntry(
+  id: string,
+  visitStatus: "deal" | "to_be_discuss" | "lost"
+): Promise<{ success: boolean; error?: string }> {
   const { session, error } = await requirePermission({ module: "guestbook", action: "edit" });
   if (error) return { success: false, error };
   if (!mutationLimiter.check(`guestbook-checkout:${session!.user.id}`)) return { success: false, ...rateLimitError() };
+
+  if (!ALLOWED_CHECKOUT_STATUS.has(visitStatus)) return { success: false, error: "Status checkout tidak valid." };
 
   if (!session!.user.profileId) return { success: false, error: "Sesi tidak valid, silakan login ulang." };
   const scope = session!.user.dataScope ?? "own";
@@ -142,7 +151,7 @@ export async function checkOutGuestbookEntry(id: string): Promise<{ success: boo
     await db.$transaction([
       db.guestbookEntry.update({
         where: { id },
-        data: { checkOutAt: new Date(), visitStatus: "deal" },
+        data: { checkOutAt: new Date(), visitStatus },
       }),
     ]);
 
@@ -151,7 +160,7 @@ export async function checkOutGuestbookEntry(id: string): Promise<{ success: boo
       action: "guestbook_entry.checkout",
       entityType: "GuestbookEntry",
       entityId: id,
-      description: `Checked out guestbook entry for "${existing.visitorName}"`,
+      description: `Checked out guestbook entry for "${existing.visitorName}" as ${visitStatus}`,
     });
 
     revalidateTag("guestbook-entries", "max");
@@ -202,7 +211,7 @@ export async function confirmGuestbookAttendance(guestCode: string): Promise<Con
     await db.$transaction([
       db.guestbookEntry.update({
         where: { id: existing.id },
-        data: { attendanceConfirmedAt: now, attendanceConfirmedById: session!.user.profileId },
+        data: { attendanceConfirmedAt: now, attendanceConfirmedById: session!.user.profileId, visitStatus: "done_visit" },
       }),
     ]);
 
@@ -340,5 +349,141 @@ export async function deleteGuestbookEntry(id: string): Promise<{ success: boole
   } catch (e) {
     console.error("[deleteGuestbookEntry]", e);
     return { success: false, error: "Terjadi kesalahan." };
+  }
+}
+
+export async function deleteBulkGuestbookEntries(
+  ids: string[]
+): Promise<{ success: boolean; error?: string; count?: number }> {
+  const { session, error } = await requirePermission({ module: "guestbook", action: "delete" });
+  if (error) return { success: false, error };
+  if (!mutationLimiter.check(`guestbook-bulk-delete:${session!.user.id}`)) return { success: false, ...rateLimitError() };
+
+  const uniqueIds = Array.from(new Set(ids)).filter((id) => typeof id === "string" && id.trim().length > 0);
+  if (uniqueIds.length === 0) return { success: false, error: "Tidak ada data yang dipilih." };
+  if (uniqueIds.length > 100) return { success: false, error: "Maksimal 100 data sekaligus." };
+
+  if (!session!.user.profileId) return { success: false, error: "Sesi tidak valid, silakan login ulang." };
+  const scope = session!.user.dataScope ?? "own";
+  const scopeWhere = await buildOwnerScopeWhere(session!.user.profileId, scope, "salesId");
+
+  try {
+    const accessible = await db.guestbookEntry.findMany({
+      where: { id: { in: uniqueIds }, ...scopeWhere },
+      select: { id: true },
+    });
+    if (accessible.length === 0) return { success: false, error: "Tidak ada data yang bisa dihapus." };
+
+    const accessibleIds = accessible.map((e) => e.id);
+
+    await db.$transaction([db.guestbookEntry.deleteMany({ where: { id: { in: accessibleIds } } })]);
+
+    await logAudit({
+      userId: session!.user.profileId,
+      action: "guestbook_entry.bulk_delete",
+      entityType: "GuestbookEntry",
+      entityId: accessibleIds.join(","),
+      description: `Bulk deleted ${accessibleIds.length} guestbook entries`,
+    });
+
+    revalidateTag("guestbook-entries", "max");
+    return { success: true, count: accessibleIds.length };
+  } catch (e) {
+    console.error("[deleteBulkGuestbookEntries]", e);
+    return { success: false, error: "Terjadi kesalahan." };
+  }
+}
+
+export async function bulkCheckOutGuestbookEntries(
+  ids: string[],
+  visitStatus: "deal" | "to_be_discuss" | "lost"
+): Promise<{ success: boolean; error?: string; count?: number }> {
+  const { session, error } = await requirePermission({ module: "guestbook", action: "edit" });
+  if (error) return { success: false, error };
+  if (!mutationLimiter.check(`guestbook-bulk-checkout:${session!.user.id}`)) return { success: false, ...rateLimitError() };
+
+  if (!ALLOWED_CHECKOUT_STATUS.has(visitStatus)) return { success: false, error: "Status checkout tidak valid." };
+
+  const uniqueIds = Array.from(new Set(ids)).filter((id) => typeof id === "string" && id.trim().length > 0);
+  if (uniqueIds.length === 0) return { success: false, error: "Tidak ada data yang dipilih." };
+  if (uniqueIds.length > 100) return { success: false, error: "Maksimal 100 data sekaligus." };
+
+  if (!session!.user.profileId) return { success: false, error: "Sesi tidak valid, silakan login ulang." };
+  const scope = session!.user.dataScope ?? "own";
+  const scopeWhere = await buildOwnerScopeWhere(session!.user.profileId, scope, "salesId");
+
+  try {
+    const accessible = await db.guestbookEntry.findMany({
+      where: { id: { in: uniqueIds }, ...scopeWhere },
+      select: { id: true, checkOutAt: true },
+    });
+    if (accessible.length === 0) return { success: false, error: "Tidak ada data yang bisa di-checkout." };
+
+    const processableIds = accessible.filter((e) => !e.checkOutAt).map((e) => e.id);
+    if (processableIds.length === 0) return { success: false, error: "Tidak ada data yang bisa di-checkout." };
+
+    await db.$transaction([
+      db.guestbookEntry.updateMany({
+        where: { id: { in: processableIds } },
+        data: { checkOutAt: new Date(), visitStatus },
+      }),
+    ]);
+
+    await logAudit({
+      userId: session!.user.profileId,
+      action: "guestbook_entry.bulk_checkout",
+      entityType: "GuestbookEntry",
+      entityId: processableIds.join(","),
+      description: `Bulk checked out ${processableIds.length} guestbook entries as ${visitStatus}`,
+    });
+
+    revalidateTag("guestbook-entries", "max");
+    return { success: true, count: processableIds.length };
+  } catch (e) {
+    console.error("[bulkCheckOutGuestbookEntries]", e);
+    return { success: false, error: "Terjadi kesalahan." };
+  }
+}
+
+export async function refreshGuestbookAdsUrl(
+  id: string
+): Promise<{ success: boolean; error?: string; adsUrl?: string | null }> {
+  const { session, error } = await requirePermission({ module: "guestbook", action: "edit" });
+  if (error) return { success: false, error };
+  if (!mutationLimiter.check(`guestbook-refresh-ads-url:${session!.user.id}`)) {
+    return { success: false, ...rateLimitError() };
+  }
+
+  if (!session!.user.profileId) return { success: false, error: "Sesi tidak valid, silakan login ulang." };
+  const scope = session!.user.dataScope ?? "own";
+  if (!(await canAccessGuestbookEntry(session!.user.profileId, scope, id))) {
+    return { success: false, error: "Anda tidak memiliki akses ke data ini." };
+  }
+
+  try {
+    const existing = await db.guestbookEntry.findUnique({
+      where: { id },
+      select: { id: true, bitrixContactId: true, bitrixAdsUrl: true },
+    });
+    if (!existing) return { success: false, error: "Data tidak ditemukan." };
+    if (!existing.bitrixContactId?.trim() || existing.bitrixAdsUrl?.trim()) {
+      return { success: true, adsUrl: existing.bitrixAdsUrl };
+    }
+
+    const { result } = await bitrixCall<{ [key: string]: string | null | undefined }>("crm.deal.get", {
+      id: existing.bitrixContactId,
+    });
+    const adsUrl = result?.[UF_ADS_URL]?.trim() || null;
+    if (!adsUrl) return { success: true, adsUrl: null };
+
+    await db.$transaction([db.guestbookEntry.update({ where: { id }, data: { bitrixAdsUrl: adsUrl } })]);
+
+    // Silent background enrichment (fires on every qualifying drawer open) — no logAudit
+    // here to avoid flooding the audit log with a non user-initiated sync.
+    revalidateTag("guestbook-entries", "max");
+    return { success: true, adsUrl };
+  } catch (e) {
+    console.error("[refreshGuestbookAdsUrl]", e);
+    return { success: false, error: "Gagal memperbarui URL iklan Bitrix." };
   }
 }
