@@ -340,7 +340,7 @@ export function BitrixPercakapanManager() {
             <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Cari klien / sales…"
+              placeholder="Cari klien, sales, ID, telepon…"
               className="rounded-full pl-9"
             />
           </div>

@@ -215,7 +215,7 @@ export function ResponseSalesManager() {
             <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Cari sales…"
+              placeholder="Cari sales, klien, ID, telepon…"
               className="rounded-full pl-9"
             />
           </div>
