@@ -54,6 +54,46 @@ function formatRange(start: Date | string | null, end: Date | string | null): st
   return `${format(from, "d MMM yyyy", { locale: idLocale })} — ${format(to, "d MMM yyyy", { locale: idLocale })}`;
 }
 
+function clamp01(n: number): number {
+  return Math.min(1, Math.max(0, n));
+}
+
+interface ContainRect {
+  offsetX: number;
+  offsetY: number;
+  renderW: number;
+  renderH: number;
+}
+
+/**
+ * Computes the letterbox-aware "object-contain" rect of an image rendered
+ * inside a container, in container-relative pixel coordinates.
+ */
+function computeContainRect(
+  imgW: number,
+  imgH: number,
+  containerW: number,
+  containerH: number,
+): ContainRect {
+  const imgRatio = imgW / imgH;
+  const containerRatio = containerW / containerH;
+  let renderW: number;
+  let renderH: number;
+  if (imgRatio > containerRatio) {
+    renderW = containerW;
+    renderH = containerW / imgRatio;
+  } else {
+    renderH = containerH;
+    renderW = containerH * imgRatio;
+  }
+  return {
+    offsetX: (containerW - renderW) / 2,
+    offsetY: (containerH - renderH) / 2,
+    renderW,
+    renderH,
+  };
+}
+
 interface Props {
   initialData: FestivalsResult;
 }
@@ -84,10 +124,13 @@ export function FestivalManager({ initialData }: Props) {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const previewContainerRef = useRef<HTMLDivElement>(null);
+  const previewImgRef = useRef<HTMLImageElement>(null);
 
   const [box, setBox] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
   const [isDraggingBox, setIsDraggingBox] = useState(false);
   const dragAnchorRef = useRef<{ x: number; y: number } | null>(null);
+  const [naturalSize, setNaturalSize] = useState<{ width: number; height: number } | null>(null);
+  const [containerSize, setContainerSize] = useState<{ width: number; height: number } | null>(null);
 
   const [deleteTarget, setDeleteTarget] = useState<FestivalItem | null>(null);
 
@@ -95,15 +138,57 @@ export function FestivalManager({ initialData }: Props) {
   const canEdit = can("settings-festival", "edit") || isAdmin;
   const canDelete = can("settings-festival", "delete") || isAdmin;
 
+  const previewSrc = previewUrl ?? toFullUrl(form.backgroundImageKey);
+
   useEffect(() => {
     return () => {
       if (previewUrl) URL.revokeObjectURL(previewUrl);
     };
   }, [previewUrl]);
 
+  // Same delayed-mount problem as the preview <img> below: this container
+  // lives inside the Sheet/Drawer's portaled content, which mounts on its
+  // own tick relative to `drawerOpen` flipping true. A `useEffect` keyed on
+  // `drawerOpen` reads the ref before that mount happens, so it attaches to
+  // nothing and never re-runs — containerSize stays null forever for that
+  // dialog session. A callback ref (dis)connects the observer exactly when
+  // React actually attaches/detaches the node.
+  const containerResizeObserverRef = useRef<ResizeObserver | null>(null);
+  const setPreviewContainerNode = useCallback((node: HTMLDivElement | null) => {
+    previewContainerRef.current = node;
+    containerResizeObserverRef.current?.disconnect();
+    containerResizeObserverRef.current = null;
+    if (!node) return;
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (!entry) return;
+      const { width, height } = entry.contentRect;
+      setContainerSize({ width, height });
+    });
+    observer.observe(node);
+    containerResizeObserverRef.current = observer;
+  }, []);
+
+  // Next.js <Image>'s onLoad never fires when the browser already has the
+  // image cached (e.g. reopening Edit right after the same URL rendered as
+  // the table thumbnail) — naturalSize would stay null forever and every
+  // drag on the box editor would silently no-op. A `useEffect` keyed on
+  // `previewSrc` is too early here: the Sheet/Drawer this preview lives in
+  // mounts its portal content on its own delayed tick, so the ref is still
+  // null when that effect runs. A callback ref instead fires exactly when
+  // React actually attaches the <img> node, whenever that happens — so it
+  // reliably catches the cache-hit case via `.complete`.
+  const setPreviewImgNode = useCallback((node: HTMLImageElement | null) => {
+    previewImgRef.current = node;
+    if (node && node.complete && node.naturalWidth > 0) {
+      setNaturalSize({ width: node.naturalWidth, height: node.naturalHeight });
+    }
+  }, []);
+
   function resetFile() {
     setSelectedFile(null);
     setPreviewUrl(null);
+    setNaturalSize(null);
   }
 
   function handleOpenAdd() {
@@ -111,6 +196,7 @@ export function FestivalManager({ initialData }: Props) {
     setForm(EMPTY_FORM);
     resetFile();
     setBox(null);
+    setNaturalSize(null);
     setDrawerOpen(true);
   }
 
@@ -125,6 +211,7 @@ export function FestivalManager({ initialData }: Props) {
         : undefined,
     });
     resetFile();
+    setNaturalSize(null);
     if (
       item.barcodeBoxX != null &&
       item.barcodeBoxY != null &&
@@ -165,25 +252,30 @@ export function FestivalManager({ initialData }: Props) {
     setSelectedFile(file);
     setPreviewUrl(URL.createObjectURL(file));
     setBox(null);
+    setNaturalSize(null);
   }, []);
 
-  function clamp01(n: number): number {
-    return Math.min(1, Math.max(0, n));
-  }
-
-  function getRelativePoint(e: React.PointerEvent<HTMLDivElement>): { x: number; y: number } {
+  function getRelativePoint(e: React.PointerEvent<HTMLDivElement>): { x: number; y: number } | null {
     const rect = previewContainerRef.current?.getBoundingClientRect();
-    if (!rect || rect.width === 0 || rect.height === 0) return { x: 0, y: 0 };
+    if (!rect || rect.width === 0 || rect.height === 0 || !naturalSize) return null;
+    const { offsetX, offsetY, renderW, renderH } = computeContainRect(
+      naturalSize.width,
+      naturalSize.height,
+      rect.width,
+      rect.height,
+    );
+    if (renderW === 0 || renderH === 0) return null;
     return {
-      x: clamp01((e.clientX - rect.left) / rect.width),
-      y: clamp01((e.clientY - rect.top) / rect.height),
+      x: clamp01((e.clientX - rect.left - offsetX) / renderW),
+      y: clamp01((e.clientY - rect.top - offsetY) / renderH),
     };
   }
 
   function handlePreviewPointerDown(e: React.PointerEvent<HTMLDivElement>) {
     if (!previewSrc) return;
-    e.currentTarget.setPointerCapture(e.pointerId);
     const point = getRelativePoint(e);
+    if (!point) return;
+    e.currentTarget.setPointerCapture(e.pointerId);
     dragAnchorRef.current = point;
     setIsDraggingBox(true);
     setBox({ x: point.x, y: point.y, width: 0, height: 0 });
@@ -192,6 +284,7 @@ export function FestivalManager({ initialData }: Props) {
   function handlePreviewPointerMove(e: React.PointerEvent<HTMLDivElement>) {
     if (!isDraggingBox || !dragAnchorRef.current) return;
     const point = getRelativePoint(e);
+    if (!point) return;
     const anchor = dragAnchorRef.current;
     setBox({
       x: Math.min(anchor.x, point.x),
@@ -291,8 +384,6 @@ export function FestivalManager({ initialData }: Props) {
     toast.success("Berhasil dihapus.");
     setDeleteTarget(null);
   }
-
-  const previewSrc = previewUrl ?? toFullUrl(form.backgroundImageKey);
 
   return (
     <>
@@ -408,7 +499,7 @@ export function FestivalManager({ initialData }: Props) {
 
             <div className={cn("mx-auto", "w-full", "max-w-56", "space-y-2")}>
               <div
-                ref={previewContainerRef}
+                ref={setPreviewContainerNode}
                 className={cn(
                   "relative", "flex", "aspect-[3/4]", "w-full", "items-center", "justify-center",
                   "overflow-hidden", "rounded-xl", "border", "border-dashed", "border-border", "bg-muted",
@@ -422,31 +513,53 @@ export function FestivalManager({ initialData }: Props) {
               >
                 {previewSrc ? (
                   <>
-                    <Image src={previewSrc} alt="Preview" fill unoptimized sizes="224px" className="object-contain" />
-                    {box && (
-                      <div
-                        className={cn(
-                          "pointer-events-none", "absolute", "border-2", "border-dashed",
-                          "border-primary", "bg-primary/10",
-                        )}
-                        style={{
-                          left: `${box.x * 100}%`,
-                          top: `${box.y * 100}%`,
-                          width: `${box.width * 100}%`,
-                          height: `${box.height * 100}%`,
-                        }}
-                      >
-                        <span
+                    <Image
+                      ref={setPreviewImgNode}
+                      src={previewSrc}
+                      alt="Preview"
+                      fill
+                      unoptimized
+                      sizes="224px"
+                      className="object-contain"
+                      onLoad={(e) =>
+                        setNaturalSize({
+                          width: e.currentTarget.naturalWidth,
+                          height: e.currentTarget.naturalHeight,
+                        })
+                      }
+                    />
+                    {box && naturalSize && containerSize && (() => {
+                      const { offsetX, offsetY, renderW, renderH } = computeContainRect(
+                        naturalSize.width,
+                        naturalSize.height,
+                        containerSize.width,
+                        containerSize.height,
+                      );
+                      return (
+                        <div
                           className={cn(
-                            "absolute", "left-0", "top-0", "rounded-br-md", "bg-primary",
-                            "px-1.5", "py-0.5", "text-[10px]", "leading-none", "font-medium",
-                            "text-primary-foreground",
+                            "pointer-events-none", "absolute", "border-2", "border-dashed",
+                            "border-primary", "bg-primary/10",
                           )}
+                          style={{
+                            left: `${offsetX + box.x * renderW}px`,
+                            top: `${offsetY + box.y * renderH}px`,
+                            width: `${box.width * renderW}px`,
+                            height: `${box.height * renderH}px`,
+                          }}
                         >
-                          Barcode
-                        </span>
-                      </div>
-                    )}
+                          <span
+                            className={cn(
+                              "absolute", "left-0", "top-0", "rounded-br-md", "bg-primary",
+                              "px-1.5", "py-0.5", "text-[10px]", "leading-none", "font-medium",
+                              "text-primary-foreground",
+                            )}
+                          >
+                            Barcode
+                          </span>
+                        </div>
+                      );
+                    })()}
                     <button
                       type="button"
                       onClick={(e) => { e.stopPropagation(); fileInputRef.current?.click(); }}
