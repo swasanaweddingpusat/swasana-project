@@ -2,6 +2,7 @@
 
 import type { DateRange } from "react-day-picker";
 import { id as idLocale } from "date-fns/locale";
+import { useQuery } from "@tanstack/react-query";
 import { Drawer } from "@/components/shared/drawer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,7 +18,15 @@ import { Calendar } from "@/components/ui/calendar";
 import { ComplimentarySelect } from "@/components/shared/ComplimentarySelect";
 import { Magnifer } from "@solar-icons/react";
 import type { GuestbookCategoryFilter } from "@/lib/queries/guestbookEntries";
-import type { GuestInteractionType } from "@prisma/client";
+import type { GuestInteractionType, GuestVisitStatus } from "@prisma/client";
+
+type SourceOption = { id: string; name: string };
+
+async function fetchJson<T>(url: string): Promise<T> {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Fetch error ${res.status}`);
+  return res.json() as Promise<T>;
+}
 
 const EVENT_CATEGORY_OPTIONS = [
   { value: "WEDDINGS", label: "Wedding" },
@@ -29,6 +38,16 @@ const INTERACTION_TYPE_OPTIONS = [
   { value: "client_visit", label: "Kunjungan Client" },
   { value: "online_meeting", label: "Online Meeting" },
   { value: "jemput_bola", label: "Jemput Bola" },
+] as const;
+
+const STATUS_OPTIONS = [
+  { value: "cold", label: "Cold" },
+  { value: "warm", label: "Warm" },
+  { value: "hot", label: "Hot" },
+  { value: "done_visit", label: "Done Visit" },
+  { value: "to_be_discuss", label: "To Be Discuss" },
+  { value: "deal", label: "Deal" },
+  { value: "lost", label: "Lost" },
 ] as const;
 
 interface GuestbookFilterDrawerProps {
@@ -46,6 +65,10 @@ interface GuestbookFilterDrawerProps {
   onCategoryChange: (value: "all" | GuestbookCategoryFilter) => void;
   interactionType: "all" | GuestInteractionType;
   onInteractionTypeChange: (value: "all" | GuestInteractionType) => void;
+  status: "all" | GuestVisitStatus;
+  onStatusChange: (value: "all" | GuestVisitStatus) => void;
+  sourceOfInformationId: string;
+  onSourceOfInformationIdChange: (value: string) => void;
   venues: { id: string; name: string }[];
   salesOptions: { id: string; name: string }[];
   onReset: () => void;
@@ -66,10 +89,19 @@ export function GuestbookFilterDrawer({
   onCategoryChange,
   interactionType,
   onInteractionTypeChange,
+  status,
+  onStatusChange,
+  sourceOfInformationId,
+  onSourceOfInformationIdChange,
   venues,
   salesOptions,
   onReset,
 }: GuestbookFilterDrawerProps) {
+  const { data: sourceOptions = [] } = useQuery({
+    queryKey: ["source-of-informations"],
+    queryFn: () => fetchJson<SourceOption[]>("/api/source-of-informations"),
+  });
+
   return (
     <Drawer isOpen={open} onClose={onClose} title="Filter Guestbook" maxWidth="sm:max-w-sm">
       <div className="flex flex-col h-full">
@@ -162,6 +194,39 @@ export function GuestbookFilterDrawer({
                 <SelectItem value="all">Semua Interaksi</SelectItem>
                 {INTERACTION_TYPE_OPTIONS.map((opt) => (
                   <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-sm font-medium">Status</Label>
+            <Select
+              value={status}
+              onValueChange={(v) => onStatusChange(v as "all" | GuestVisitStatus)}
+            >
+              <SelectTrigger className="rounded-xl w-full">
+                <SelectValue placeholder="Semua Status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Semua Status</SelectItem>
+                {STATUS_OPTIONS.map((opt) => (
+                  <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-sm font-medium">Sumber Data</Label>
+            <Select value={sourceOfInformationId} onValueChange={onSourceOfInformationIdChange}>
+              <SelectTrigger className="rounded-xl w-full">
+                <SelectValue placeholder="Semua Sumber" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Semua Sumber</SelectItem>
+                {sourceOptions.map((opt) => (
+                  <SelectItem key={opt.id} value={opt.id}>{opt.name}</SelectItem>
                 ))}
               </SelectContent>
             </Select>

@@ -38,6 +38,7 @@ import { useEventTypes } from "@/hooks/use-event-types";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import {
   useSalesMice,
+  useConvertApprovedQuotationToMiceBooking,
   useUpdateMiceBooking,
 } from "@/hooks/use-mice-bookings";
 import {
@@ -98,12 +99,19 @@ interface QuotationOption {
   clientName: string;
   clientPhone: string;
   instansi: string | null;
-  venue: { id: string; name: string } | null;
-  eventType: { id: string; name: string } | null;
+  venueId: string | null;
+  venueName: string | null;
+  eventTypeId: string | null;
+  eventTypeName: string | null;
   eventDate: string | null;
+  eventEndDate: string | null;
   time: string | null;
   notes: string | null;
-  sales: { id: string; fullName: string | null } | null;
+  pax: number;
+  packageName: string | null;
+  totalPrice: number;
+  salesId: string;
+  salesName: string | null;
 }
 
 async function fetchJson<T>(url: string): Promise<T> {
@@ -270,7 +278,7 @@ export function MiceBookingDrawer({
 
   const { data: quotationsResult } = useQuery({
     queryKey: ["quotations-search", debouncedSearch],
-    queryFn: () => fetchJson<{ data: QuotationOption[] }>(`/api/quotations?search=${encodeURIComponent(debouncedSearch)}&category=MICE&pageSize=5`),
+    queryFn: () => fetchJson<{ data: QuotationOption[] }>(`/api/booking-mice/eligible-quotations?search=${encodeURIComponent(debouncedSearch)}`),
     enabled: open && debouncedSearch.trim().length > 0,
   });
   const quotationOptions = quotationsResult?.data ?? [];
@@ -286,7 +294,8 @@ export function MiceBookingDrawer({
   const { mutateAsync: updateMiceStep3, isPending: isUpdatingStep3 } = useUpdateMiceDraftStep3();
   const { mutateAsync: finalizeMiceDraft, isPending: isFinalizing } = useFinalizeDraftMiceBooking();
   const { mutateAsync: updateMiceBooking, isPending: isUpdating } = useUpdateMiceBooking();
-  const isPending = isCreatingDraft || isUpdatingStep2 || isUpdatingStep3 || isFinalizing || isUpdating;
+  const { mutateAsync: convertQuotation, isPending: isConverting } = useConvertApprovedQuotationToMiceBooking();
+  const isPending = isCreatingDraft || isUpdatingStep2 || isUpdatingStep3 || isFinalizing || isUpdating || isConverting;
 
   const venueOptions = useMemo<SearchableSelectOption[]>(
     () => venues.map((v) => ({ id: v.id, name: v.name })),
@@ -438,21 +447,19 @@ export function MiceBookingDrawer({
   useEffect(() => {
     if (open) {
       if (booking) {
-        // ── Edit mode: hydrate form from the existing booking ──
-        // Note: MiceBookingItem does NOT have `time` or `companyName` fields yet
-        // (backend columns pending). Both default to "" until schema is extended.
+        // ── Edit mode: hydrate form from the persisted booking ──
         form.reset({
           clientName: booking.customer.name,
-          companyName: "",
+          companyName: booking.companyName ?? "",
           clientPhone: booking.customer.phone,
           venueId: booking.venue.id,
-          eventTypeId: "",
+          eventTypeId: booking.eventType?.id ?? "",
           // eventDate is stored as UTC midnight — use UTC getters to recover the date string.
           eventDate: booking.eventDate ? (() => { const d = new Date(booking.eventDate!); return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`; })() : "",
-          time: "",
-          estimatedPax: "",
+          time: booking.eventTime ?? "",
+          estimatedPax: booking.estimatedPax ? String(booking.estimatedPax) : "",
           salesId: booking.sales?.id ?? "",
-          notes: "",
+          notes: booking.notes ?? "",
         });
         setTerms(bookingTerms ?? makeDefaultTerms());
         setSigningLocation("");
@@ -552,6 +559,20 @@ export function MiceBookingDrawer({
         "clientName", "clientPhone", "venueId", "eventTypeId", "eventDate",
       ]);
       if (!ok) return;
+
+      // Quotation conversion is a single canonical server flow. Do not create a
+      // second, incomplete draft representation of the same document.
+      if (!isEdit && selectedQuotationId) {
+        const result = await convertQuotation(selectedQuotationId);
+        if (!result.success) {
+          toast.error(result.error ?? "Gagal mengonversi quotation.");
+          return;
+        }
+        toast.success("Quotation berhasil dikonversi menjadi Booking MICE.");
+        onSuccess?.();
+        onOpenChange(false);
+        return;
+      }
 
       // Create draft on Step 1 continue (await — draftId doesn't exist yet)
       if (!isEdit) {
@@ -678,7 +699,7 @@ export function MiceBookingDrawer({
           sortOrder: i,
         })),
         notes: values.notes || undefined,
-        quotationId: null,
+        companyName: values.companyName || null,
         sourceOfInformationId: null,
       };
 
@@ -788,10 +809,11 @@ export function MiceBookingDrawer({
                                         form.setValue("clientName", q.clientName);
                                         form.setValue("companyName", q.instansi ?? "");
                                         if (q.clientPhone) form.setValue("clientPhone", q.clientPhone.replace(/\D/g, ""));
-                                        if (!currentUserIsSalesMice && q.sales?.id) form.setValue("salesId", q.sales.id);
-                                        // Auto-display field-field setelahnya dari data quotation
-                                        form.setValue("venueId", q.venue?.id ?? "");
-                                        form.setValue("eventTypeId", q.eventType?.id ?? "");
+                                        if (!currentUserIsSalesMice && q.salesId) form.setValue("salesId", q.salesId);
+                                        // Frozen quotation pointers are validated again by the converter.
+                                        form.setValue("venueId", q.venueId ?? "");
+                                        form.setValue("eventTypeId", q.eventTypeId ?? "");
+                                        form.setValue("estimatedPax", q.pax > 0 ? String(q.pax) : "");
                                         form.setValue("eventDate", q.eventDate ? toDateOnly(new Date(q.eventDate)) : "");
                                         form.setValue("time", q.time ?? "");
                                         form.setValue("notes", q.notes ?? "");
@@ -1286,7 +1308,11 @@ export function MiceBookingDrawer({
 
             {currentStep < 3 ? (
               <Button type="button" onClick={handleNext} className="flex-[60%] cursor-pointer" disabled={isPending && !hasPendingWriteError}>
-                {hasPendingWriteError ? "Coba Lagi" : "Lanjut"}
+                {hasPendingWriteError
+                  ? "Coba Lagi"
+                  : selectedQuotationId && currentStep === 1
+                    ? "Convert ke Booking"
+                    : "Lanjut"}
                 {!hasPendingWriteError && <ArrowRight weight="BoldDuotone" className="h-4 w-4 ml-1" />}
               </Button>
             ) : (

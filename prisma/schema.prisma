@@ -871,6 +871,15 @@ model SourceOfInformation {
   @@map("source_of_informations")
 }
 
+model Festival {
+  id               String           @id @default(uuid())
+  name             String           @unique
+  createdAt        DateTime         @default(now())
+  guestbookEntries GuestbookEntry[]
+
+  @@map("festivals")
+}
+
 model EducationLevel {
   id        String   @id @default(uuid())
   name      String   @unique
@@ -1135,6 +1144,11 @@ model Booking {
   poSeq                     Int?
   dealingDate               DateTime? // tanggal dealing booking; user-editable, default hari ini saat create, backfilled dari createdAt untuk data lama
   eventDate                 DateTime? // required for saved bookings; null only during MICE draft steps
+  eventEndDate              DateTime?
+  eventTypeId               String?
+  eventTypeName             String? // frozen display name; survives master rename
+  estimatedPax              Int?
+  companyName               String?
   quotationId               String?             @unique
   salesSignature            String?
   rejectionNotes            String?
@@ -1179,6 +1193,7 @@ model Booking {
   manager             Profile?             @relation("BookingManager", fields: [managerId], references: [id])
   customer            Customer             @relation(fields: [customerId], references: [id], onDelete: Restrict)
   venue               Venue                @relation(fields: [venueId], references: [id], onDelete: Restrict)
+  eventType           EventType?           @relation(fields: [eventTypeId], references: [id], onDelete: Restrict)
   package             Package?             @relation(fields: [packageId], references: [id], onDelete: Restrict)
   paymentMethod       PaymentMethod?       @relation(fields: [paymentMethodId], references: [id], onDelete: SetNull)
   sourceOfInformation SourceOfInformation? @relation(fields: [sourceOfInformationId], references: [id], onDelete: SetNull)
@@ -1223,6 +1238,7 @@ model Booking {
   @@index([managerId])
   @@index([customerId])
   @@index([venueId])
+  @@index([eventTypeId])
   @@index([packageId])
   @@index([paymentMethodId])
   @@index([sourceOfInformationId])
@@ -2229,6 +2245,7 @@ model EventType {
   leads      Lead[]
   // No `quotations` back-relation — see Quotation.eventTypeId.
   packages   Package[]
+  bookings   Booking[]
 
   @@index([category])
   @@map("event_types")
@@ -4144,6 +4161,7 @@ model GuestbookEntry {
   sourceOfInformationId String?
   packageId             String?
   segmentId             String?
+  festivalId            String?
   attendanceConfirmedAt DateTime?
   attendanceConfirmedById String?
   createdAt             DateTime              @default(now())
@@ -4157,6 +4175,7 @@ model GuestbookEntry {
   sourceOfInformation SourceOfInformation?  @relation(fields: [sourceOfInformationId], references: [id], onDelete: SetNull)
   package             Package?              @relation(fields: [packageId], references: [id], onDelete: SetNull)
   segment             DailyActivitySegment? @relation(fields: [segmentId], references: [id], onDelete: SetNull)
+  festival            Festival?             @relation(fields: [festivalId], references: [id], onDelete: SetNull)
 
   @@index([checkInAt])
   @@index([hostId])
@@ -4167,6 +4186,7 @@ model GuestbookEntry {
   @@index([sourceOfInformationId])
   @@index([packageId])
   @@index([segmentId])
+  @@index([festivalId])
   @@map("guestbook_entries")
 }
 
