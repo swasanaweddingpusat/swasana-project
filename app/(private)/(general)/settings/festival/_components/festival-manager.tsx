@@ -31,7 +31,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { AddCircle, CalendarMark, PenNewSquare, Ticket, TrashBinTrash, Upload } from "@solar-icons/react";
+import { AddCircle, CalendarMark, PenNewSquare, RefreshCircle, Ticket, TrashBinTrash, Upload } from "@solar-icons/react";
 import { createFestival, updateFestival, deleteFestival } from "@/actions/festival";
 import { usePermissions } from "@/hooks/use-permissions";
 import type { FestivalsResult, FestivalItem } from "@/lib/queries/festivals";
@@ -83,6 +83,11 @@ export function FestivalManager({ initialData }: Props) {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const previewContainerRef = useRef<HTMLDivElement>(null);
+
+  const [box, setBox] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
+  const [isDraggingBox, setIsDraggingBox] = useState(false);
+  const dragAnchorRef = useRef<{ x: number; y: number } | null>(null);
 
   const [deleteTarget, setDeleteTarget] = useState<FestivalItem | null>(null);
 
@@ -105,6 +110,7 @@ export function FestivalManager({ initialData }: Props) {
     setEditingItem(null);
     setForm(EMPTY_FORM);
     resetFile();
+    setBox(null);
     setDrawerOpen(true);
   }
 
@@ -119,6 +125,21 @@ export function FestivalManager({ initialData }: Props) {
         : undefined,
     });
     resetFile();
+    if (
+      item.barcodeBoxX != null &&
+      item.barcodeBoxY != null &&
+      item.barcodeBoxWidth != null &&
+      item.barcodeBoxHeight != null
+    ) {
+      setBox({
+        x: item.barcodeBoxX,
+        y: item.barcodeBoxY,
+        width: item.barcodeBoxWidth,
+        height: item.barcodeBoxHeight,
+      });
+    } else {
+      setBox(null);
+    }
     setDrawerOpen(true);
   }
 
@@ -143,7 +164,55 @@ export function FestivalManager({ initialData }: Props) {
 
     setSelectedFile(file);
     setPreviewUrl(URL.createObjectURL(file));
+    setBox(null);
   }, []);
+
+  function clamp01(n: number): number {
+    return Math.min(1, Math.max(0, n));
+  }
+
+  function getRelativePoint(e: React.PointerEvent<HTMLDivElement>): { x: number; y: number } {
+    const rect = previewContainerRef.current?.getBoundingClientRect();
+    if (!rect || rect.width === 0 || rect.height === 0) return { x: 0, y: 0 };
+    return {
+      x: clamp01((e.clientX - rect.left) / rect.width),
+      y: clamp01((e.clientY - rect.top) / rect.height),
+    };
+  }
+
+  function handlePreviewPointerDown(e: React.PointerEvent<HTMLDivElement>) {
+    if (!previewSrc) return;
+    e.currentTarget.setPointerCapture(e.pointerId);
+    const point = getRelativePoint(e);
+    dragAnchorRef.current = point;
+    setIsDraggingBox(true);
+    setBox({ x: point.x, y: point.y, width: 0, height: 0 });
+  }
+
+  function handlePreviewPointerMove(e: React.PointerEvent<HTMLDivElement>) {
+    if (!isDraggingBox || !dragAnchorRef.current) return;
+    const point = getRelativePoint(e);
+    const anchor = dragAnchorRef.current;
+    setBox({
+      x: Math.min(anchor.x, point.x),
+      y: Math.min(anchor.y, point.y),
+      width: Math.abs(point.x - anchor.x),
+      height: Math.abs(point.y - anchor.y),
+    });
+  }
+
+  function handlePreviewPointerUp(e: React.PointerEvent<HTMLDivElement>) {
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    }
+    setIsDraggingBox(false);
+    dragAnchorRef.current = null;
+    setBox((prev) => {
+      if (!prev) return prev;
+      if (prev.width < 0.01 || prev.height < 0.01) return null;
+      return prev;
+    });
+  }
 
   async function handleSave() {
     if (!form.name.trim()) {
@@ -181,6 +250,10 @@ export function FestivalManager({ initialData }: Props) {
       name: form.name.trim(),
       description: form.description.trim() || undefined,
       backgroundImageKey,
+      barcodeBoxX: box?.x,
+      barcodeBoxY: box?.y,
+      barcodeBoxWidth: box?.width,
+      barcodeBoxHeight: box?.height,
       startDate: form.range.from,
       endDate: form.range.to,
     };
@@ -333,20 +406,84 @@ export function FestivalManager({ initialData }: Props) {
               Background akan ditampilkan sebagai latar tiket QR guestbook selama periode festival berlangsung.
             </p>
 
-            <div
-              className={cn(
-                "relative", "flex", "aspect-[3/4]", "w-full", "max-w-56", "items-center", "justify-center",
-                "overflow-hidden", "rounded-xl", "border", "border-dashed", "border-border", "bg-muted",
-                "cursor-pointer", "mx-auto",
-              )}
-              onClick={() => fileInputRef.current?.click()}
-            >
-              {previewSrc ? (
-                <Image src={previewSrc} alt="Preview" fill unoptimized sizes="224px" className="object-cover" />
-              ) : (
-                <div className={cn("flex", "flex-col", "items-center", "gap-1", "text-muted-foreground")}>
-                  <Upload weight="BoldDuotone" className={cn("h-6", "w-6")} />
-                  <span className={cn("text-xs")}>Klik untuk upload background</span>
+            <div className={cn("mx-auto", "w-full", "max-w-56", "space-y-2")}>
+              <div
+                ref={previewContainerRef}
+                className={cn(
+                  "relative", "flex", "aspect-[3/4]", "w-full", "items-center", "justify-center",
+                  "overflow-hidden", "rounded-xl", "border", "border-dashed", "border-border", "bg-muted",
+                  "touch-none", "select-none",
+                  previewSrc ? "cursor-crosshair" : "cursor-pointer",
+                )}
+                onClick={() => { if (!previewSrc) fileInputRef.current?.click(); }}
+                onPointerDown={handlePreviewPointerDown}
+                onPointerMove={handlePreviewPointerMove}
+                onPointerUp={handlePreviewPointerUp}
+              >
+                {previewSrc ? (
+                  <>
+                    <Image src={previewSrc} alt="Preview" fill unoptimized sizes="224px" className="object-contain" />
+                    {box && (
+                      <div
+                        className={cn(
+                          "pointer-events-none", "absolute", "border-2", "border-dashed",
+                          "border-primary", "bg-primary/10",
+                        )}
+                        style={{
+                          left: `${box.x * 100}%`,
+                          top: `${box.y * 100}%`,
+                          width: `${box.width * 100}%`,
+                          height: `${box.height * 100}%`,
+                        }}
+                      >
+                        <span
+                          className={cn(
+                            "absolute", "left-0", "top-0", "rounded-br-md", "bg-primary",
+                            "px-1.5", "py-0.5", "text-[10px]", "leading-none", "font-medium",
+                            "text-primary-foreground",
+                          )}
+                        >
+                          Barcode
+                        </span>
+                      </div>
+                    )}
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); fileInputRef.current?.click(); }}
+                      onPointerDown={(e) => e.stopPropagation()}
+                      className={cn(
+                        "absolute", "bottom-2", "right-2", "z-10", "flex", "items-center", "gap-1",
+                        "rounded-full", "bg-background/90", "px-2.5", "py-1", "text-xs", "font-medium",
+                        "text-foreground", "shadow-sm", "hover:bg-background", "cursor-pointer",
+                      )}
+                    >
+                      <RefreshCircle weight="BoldDuotone" className={cn("h-3.5", "w-3.5")} />
+                      Ganti gambar
+                    </button>
+                  </>
+                ) : (
+                  <div className={cn("flex", "flex-col", "items-center", "gap-1", "text-muted-foreground")}>
+                    <Upload weight="BoldDuotone" className={cn("h-6", "w-6")} />
+                    <span className={cn("text-xs")}>Klik untuk upload background</span>
+                  </div>
+                )}
+              </div>
+              {previewSrc && (
+                <div className={cn("flex", "items-start", "justify-between", "gap-2")}>
+                  <p className={cn("text-[11px]", "leading-snug", "text-muted-foreground")}>
+                    Drag di atas gambar untuk menandai kotak posisi barcode.
+                  </p>
+                  {box && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setBox(null)}
+                      className={cn("rounded-full", "shrink-0", "cursor-pointer")}
+                    >
+                      Hapus kotak
+                    </Button>
+                  )}
                 </div>
               )}
             </div>
