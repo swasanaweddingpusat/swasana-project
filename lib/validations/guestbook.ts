@@ -160,3 +160,21 @@ export type UpdateGuestbookEntryInput = z.infer<typeof updateGuestbookEntrySchem
 export function isBitrixSourceName(name: string | null | undefined): boolean {
   return (name ?? "").toLowerCase().includes("bitrix");
 }
+
+/**
+ * Label sumber untuk tabel/kartu guestbook.
+ *
+ * Entry dari Bitrix bisa datang lewat iklan atau organik, dan bedanya cuma
+ * kelihatan dari ada/tidaknya ads URL. Tandai yang beriklan jadi
+ * "Bitrix (Iklan)" supaya keduanya bisa dibedakan langsung dari list tanpa
+ * membuka detail. Sumber non-Bitrix dikembalikan apa adanya.
+ */
+export function guestbookSourceLabel(
+  sourceName: string | null | undefined,
+  bitrixAdsUrl: string | null | undefined,
+): string | null {
+  const name = sourceName?.trim() || null;
+  if (!name) return null;
+  if (!isBitrixSourceName(name)) return name;
+  return bitrixAdsUrl?.trim() ? `${name} (Iklan)` : name;
+}

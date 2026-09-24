@@ -7,6 +7,7 @@
 
 import { withBitrixCache } from "@/lib/bitrix-cache";
 import { BITRIX_USER_NAME_OVERRIDES } from "@/lib/bitrix-accounts";
+import { normalizePhoneId } from "@/lib/phone";
 
 const BASE = process.env.BITRIX_WEBHOOK_BASE;
 
@@ -513,6 +514,84 @@ export async function findBitrixContactsByPhone(phone: string): Promise<BitrixCo
   if (ids.length === 0) return [];
   const info = await resolveBitrixContactInfo(ids);
   return ids.map((id) => ({ id, name: info[id]?.name ?? `#${id}`, phone: info[id]?.phone ?? null }));
+}
+
+/**
+ * Find CONTACT ids whose name partially matches `term`.
+ *
+ * Deal titles do not reliably carry the client's name, so searching a person by
+ * name needs the contact records themselves. NAME and LAST_NAME are stored
+ * separately and Bitrix has no cross-field partial match, so both are queried
+ * and merged. Capped at `limit` ids because the result feeds a CONTACT_ID `in`
+ * filter on the deal list.
+ */
+export async function findBitrixContactIdsByName(term: string, limit = 50): Promise<string[]> {
+  const trimmed = term.trim();
+  if (!trimmed) return [];
+
+  const select = ["ID"];
+  const order = { ID: "DESC" as const };
+
+  const [byFirst, byLast] = await Promise.all([
+    bitrixList<{ ID: string }>("crm.contact.list", { select, filter: { "%NAME": trimmed }, order }).catch(() => ({
+      items: [] as { ID: string }[],
+    })),
+    bitrixList<{ ID: string }>("crm.contact.list", { select, filter: { "%LAST_NAME": trimmed }, order }).catch(() => ({
+      items: [] as { ID: string }[],
+    })),
+  ]);
+
+  const ids = new Set<string>();
+  for (const c of [...byFirst.items, ...byLast.items]) {
+    if (c?.ID) ids.add(c.ID);
+    if (ids.size >= limit) break;
+  }
+  return [...ids];
+}
+
+/**
+ * Expand a free-text query into the set of deal filters it could match.
+ *
+ * The search box covers four different things a user might type, and they are
+ * alternatives rather than conditions to combine:
+ *   • a Bitrix deal id      → ID
+ *   • a deal title fragment → %TITLE
+ *   • a client name         → CONTACT_ID, resolved from the contact records
+ *                              because deal titles do not reliably carry it
+ *   • a phone number        → CONTACT_ID, resolved by duplicate-match so any
+ *                              input format normalizes to the same MSISDN
+ *
+ * A single Bitrix filter ANDs its keys, so each variant has to be issued as its
+ * own query and merged by the caller. Contact lookups are best-effort: failing
+ * to reach them must not sink a search that would still match on id or title.
+ */
+export async function buildDealSearchFilters(q: string): Promise<Record<string, string | string[]>[]> {
+  const term = q.trim();
+  if (!term) return [];
+
+  const filters: Record<string, string | string[]>[] = [{ "%TITLE": term }];
+
+  // Digits-only input is ambiguous — it reads as both a deal id and a phone
+  // number — so try both rather than guessing from the length.
+  if (/^\d+$/.test(term)) filters.push({ ID: term });
+
+  const contactIds = new Set<string>();
+
+  const phone = normalizePhoneId(term);
+  if (phone) {
+    const matches = await findBitrixContactsByPhone(phone).catch(() => []);
+    for (const c of matches) contactIds.add(c.id);
+  }
+
+  // Punctuation-and-digits input is never a person's name; skip that lookup.
+  if (!/^[\d+\s()-]+$/.test(term)) {
+    const byName = await findBitrixContactIdsByName(term).catch(() => []);
+    for (const id of byName) contactIds.add(id);
+  }
+
+  if (contactIds.size > 0) filters.push({ CONTACT_ID: [...contactIds] });
+
+  return filters;
 }
 
 /**

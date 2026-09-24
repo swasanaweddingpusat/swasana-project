@@ -29,6 +29,7 @@ import {
   Link as LinkIcon,
 } from "@solar-icons/react";
 import type { GuestbookEntryItem } from "@/lib/queries/guestbookEntries";
+import { BitrixDealDetail } from "@/components/shared/BitrixDealDetail";
 import type { ProofFiles } from "@/lib/validations/guestbook";
 import { resolveGuestbookPhotoUrl } from "./photo-url";
 import { generateGuestbookTicketBlob } from "./guestbook-ticket";
@@ -421,6 +422,17 @@ export function GuestbookDetailDrawer({
           )}
         </div>
 
+
+        {/* Bitrix deal — only when this entry was linked to one. bitrixContactId
+            stores the DEAL id (see refreshBitrixAdsUrl, which reads it via
+            crm.deal.get), so it feeds BitrixDealDetail directly, same as the
+            BITRIX tab on a wedding booking. */}
+        {entry.bitrixContactId?.trim() && (
+          <div className="bg-muted/30 rounded-2xl p-4 space-y-4">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Bitrix</p>
+            <BitrixDealDetail key={entry.bitrixContactId} dealId={entry.bitrixContactId} />
+          </div>
+        )}
 
         {/* Komitmen */}
         {(entry.commitVisitDate || entry.commitPayDate) && (

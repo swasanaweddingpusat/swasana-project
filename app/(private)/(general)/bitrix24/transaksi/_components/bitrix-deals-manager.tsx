@@ -360,7 +360,7 @@ export function BitrixDealsManager() {
             <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Cari judul transaksi…"
+              placeholder="Cari ID, transaksi, klien, telepon…"
               className="rounded-full pl-9"
             />
           </div>

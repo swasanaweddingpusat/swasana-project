@@ -1,6 +1,7 @@
 import { requirePermissionForRoute } from "@/lib/permissions";
 import { apiLimiter, rateLimitResponse } from "@/lib/rate-limit";
 import { bitrixList, bitrixListAll, searchBitrixUsers, resolveBitrixUsers, BitrixApiError } from "@/lib/bitrix";
+import { normalizePhoneId } from "@/lib/phone";
 import { avgSeconds } from "@/lib/bitrix-response";
 import { resolveSessionMetrics } from "@/lib/bitrix-session-metrics";
 import { parseSubject, channelFromSourceId } from "@/lib/bitrix-conversation";
@@ -130,28 +131,42 @@ export async function GET(request: Request) {
     let next: number | undefined;
 
     if (q) {
-      // Client OR sales: one query on SUBJECT, one on RESPONSIBLE_ID (only when
-      // "q" resolves to at least one Bitrix user), merged + deduped by ID.
-      const salesIds = (await searchBitrixUsers(q)).map((u) => u.id);
+      // Same union the Transaksi search uses, over the fields a conversation
+      // can be identified by. Bitrix filters are flat AND, so each alternative
+      // is its own query and the results are merged + deduped by activity ID.
+      const variants: Record<string, unknown>[] = [{ "%SUBJECT": q }];
 
-      const subjectMatches = await bitrixListAll<RawActivity>("crm.activity.list", {
-        select: ACTIVITY_SELECT,
-        filter: { ...base, "%SUBJECT": q },
-        order: { ID: "DESC" },
-      });
+      // Sales name → RESPONSIBLE_ID, only when "q" resolves to a Bitrix user.
+      const salesIds = (await searchBitrixUsers(q).catch(() => [])).map((u) => u.id);
+      if (salesIds.length > 0) variants.push({ RESPONSIBLE_ID: salesIds });
 
-      const responsibleMatches =
-        salesIds.length > 0
-          ? await bitrixListAll<RawActivity>("crm.activity.list", {
-              select: ACTIVITY_SELECT,
-              filter: { ...base, RESPONSIBLE_ID: salesIds },
-              order: { ID: "DESC" },
-            })
-          : { items: [] as RawActivity[] };
+      // Deal id → OWNER_ID. Conversations hang off a deal (OWNER_TYPE_ID "2"),
+      // so a deal id typed here should find its chats — the same id the
+      // Transaksi page searches by.
+      if (/^\d+$/.test(q)) variants.push({ OWNER_ID: q, OWNER_TYPE_ID: "2" });
+
+      // Phone — the subject embeds the handle unformatted (e.g. "628123..."),
+      // so a user typing 08123… or +628123… would miss on %SUBJECT alone.
+      // Retry on the normalised MSISDN and its local 0-prefixed form.
+      const phone = normalizePhoneId(q);
+      if (phone) {
+        for (const form of [phone, `0${phone.slice(2)}`]) {
+          if (form !== q) variants.push({ "%SUBJECT": form });
+        }
+      }
+
+      const results = await Promise.all(
+        variants.map((v) =>
+          bitrixListAll<RawActivity>("crm.activity.list", {
+            select: ACTIVITY_SELECT,
+            filter: { ...base, ...v },
+            order: { ID: "DESC" },
+          }).catch(() => ({ items: [] as RawActivity[] })),
+        ),
+      );
 
       const merged = new Map<string, RawActivity>();
-      for (const a of subjectMatches.items) merged.set(a.ID, a);
-      for (const a of responsibleMatches.items) merged.set(a.ID, a);
+      for (const r of results) for (const a of r.items) merged.set(a.ID, a);
       const mergedSorted = [...merged.values()].sort((a, b) => Number(b.ID) - Number(a.ID));
 
       total = mergedSorted.length;
