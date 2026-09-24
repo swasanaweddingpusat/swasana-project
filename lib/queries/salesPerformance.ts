@@ -15,12 +15,6 @@ export interface SalesPackageTypeBreakdown {
   hadjatan: { count: number; pct: number };
 }
 
-export interface SalesHomebaseBreakdown {
-  venueId: string;
-  venueName: string;
-  count: number;
-}
-
 export interface SalesPerformanceCardItem {
   profileId: string;
   name: string;
@@ -33,7 +27,7 @@ export interface SalesPerformanceCardItem {
   achievementPct: number;
   breakdown: SalesCategoryBreakdown;
   packageTypeBreakdown: SalesPackageTypeBreakdown;
-  homebaseBreakdown: SalesHomebaseBreakdown[];
+  homebaseVenueName: string | null;
 }
 
 // ─── Helper: compute category breakdown in-memory ─────────────────────────────
@@ -128,9 +122,12 @@ async function _queryTopSales(
         salesId: true,
         bookingStatus: true,
         category: true,
-        venue: { select: { id: true, name: true } },
         snapPackagePricing: { select: { price: true } },
+        // Frozen category code is only populated for bookings finalized after the
+        // packageTypeCategory feature shipped (2026-09-19); older bookings fall
+        // back to the live Package's category so historical counts aren't blank.
         snapPackage: { select: { packageTypeCategoryCode: true } },
+        package: { select: { packageTypeCategory: { select: { code: true } } } },
       },
       take: 5000,
     }),
@@ -141,6 +138,7 @@ async function _queryTopSales(
         id: true,
         fullName: true,
         avatarUrl: true,
+        homebaseVenue: { select: { name: true } },
         dataGroupMemberships: {
           select: { group: { select: { name: true } } },
           take: 1,
@@ -177,7 +175,6 @@ async function _queryTopSales(
     {
       bookingStatus: BookingStatus;
       category: EventCategory;
-      venue: { id: string; name: string };
       price: number;
       packageTypeCategoryCode: string | null;
     }[]
@@ -190,9 +187,9 @@ async function _queryTopSales(
     list.push({
       bookingStatus: b.bookingStatus,
       category: b.category,
-      venue: b.venue,
       price: b.snapPackagePricing?.price ?? 0,
-      packageTypeCategoryCode: b.snapPackage?.packageTypeCategoryCode ?? null,
+      packageTypeCategoryCode:
+        b.snapPackage?.packageTypeCategoryCode ?? b.package?.packageTypeCategory?.code ?? null,
     });
     bookingsBySalesId.set(b.salesId, list);
   }
@@ -212,16 +209,7 @@ async function _queryTopSales(
       hasTarget && target > 0 ? Math.round((revenue / target) * 100) : 0;
     const breakdown = computeBreakdown(bookings);
     const packageTypeBreakdown = computePackageTypeBreakdown(bookings);
-    const homebaseMap = new Map<string, SalesHomebaseBreakdown>();
-    for (const booking of bookings) {
-      const current = homebaseMap.get(booking.venue.id);
-      homebaseMap.set(booking.venue.id, {
-        venueId: booking.venue.id,
-        venueName: booking.venue.name,
-        count: (current?.count ?? 0) + 1,
-      });
-    }
-    const homebaseBreakdown = [...homebaseMap.values()].sort((a, b) => b.count - a.count);
+    const homebaseVenueName = profile?.homebaseVenue?.name ?? null;
 
     return {
       profileId,
@@ -235,7 +223,7 @@ async function _queryTopSales(
       achievementPct,
       breakdown,
       packageTypeBreakdown,
-      homebaseBreakdown,
+      homebaseVenueName,
     };
   });
 
