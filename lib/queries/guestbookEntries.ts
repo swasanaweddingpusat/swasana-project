@@ -157,7 +157,18 @@ const guestbookEntrySelect = {
     },
   },
   segment: { select: { id: true, name: true } },
-  festival: { select: { id: true, name: true, description: true, backgroundImageKey: true } },
+  festival: {
+    select: {
+      id: true,
+      name: true,
+      description: true,
+      backgroundImageKey: true,
+      barcodeBoxX: true,
+      barcodeBoxY: true,
+      barcodeBoxWidth: true,
+      barcodeBoxHeight: true,
+    },
+  },
 } satisfies Prisma.GuestbookEntrySelect;
 
 type GuestbookEntryRow = Prisma.GuestbookEntryGetPayload<{ select: typeof guestbookEntrySelect }>;
