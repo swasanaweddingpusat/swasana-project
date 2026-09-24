@@ -1,7 +1,9 @@
 "use client";
 
+import { useRef } from "react";
 import Image from "next/image";
 import { format } from "date-fns";
+import { useReactToPrint } from "react-to-print";
 import { id as idLocale } from "date-fns/locale";
 import { Printer, CloseCircle } from "@solar-icons/react";
 import {
@@ -120,11 +122,49 @@ export function QuotationPreview({
   onOpenChange,
   quotation,
 }: QuotationPreviewProps) {
+  const printRef = useRef<HTMLDivElement>(null);
+  const documentTitle = quotation
+    ? `Quotation-${deriveQuotationNo(quotation).replace(/[^a-z0-9-]+/gi, "-")}`
+    : "Quotation";
+  const handlePrint = useReactToPrint({
+    contentRef: printRef,
+    documentTitle,
+    pageStyle: `
+      @page {
+        size: A4 portrait;
+        margin: 12mm;
+      }
+
+      html,
+      body {
+        background: white !important;
+        print-color-adjust: exact !important;
+        -webkit-print-color-adjust: exact !important;
+      }
+
+      #${PRINT_AREA_ID} {
+        width: 100% !important;
+        max-width: none !important;
+        box-shadow: none !important;
+      }
+
+      #${PRINT_AREA_ID} thead {
+        display: table-header-group;
+      }
+
+      #${PRINT_AREA_ID} tr,
+      #${PRINT_AREA_ID} img,
+      #${PRINT_AREA_ID} [data-print-keep] {
+        break-inside: avoid;
+        page-break-inside: avoid;
+      }
+    `,
+  });
+
   if (!quotation) return null;
 
   const q = quotation;
   const items = resolveItems(q);
-
   const subtotal = q.price;
   const discount = q.discount ?? 0;
   const downPayment = q.downPayment ?? 0;
@@ -135,10 +175,6 @@ export function QuotationPreview({
     richTextToPlainText(q.cancellationPolicy) || DEFAULT_CANCELLATION_POLICY;
   const closingNote = richTextToPlainText(q.closingNote) || defaultClosingNote(q.venue);
   const termIncludesBankTransfer = /bank\s+transfer/i.test(termAndCondition);
-
-  function handlePrint() {
-    window.print();
-  }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -165,7 +201,7 @@ export function QuotationPreview({
               className="h-8 rounded-full px-4 text-xs cursor-pointer"
             >
               <Printer weight="BoldDuotone" className="h-3.5 w-3.5 mr-1.5" />
-              Cetak / PDF
+              Cetak / Simpan PDF
             </Button>
             <button
               type="button"
@@ -185,6 +221,7 @@ export function QuotationPreview({
         <div className="max-h-[80vh] overflow-y-auto bg-muted/40 p-4 sm:p-6">
           {/* ── Kertas dokumen ─────────────────────────────────── */}
           <div
+            ref={printRef}
             id={PRINT_AREA_ID}
             className="mx-auto w-full max-w-[760px] bg-card text-foreground shadow-sm"
           >
@@ -294,7 +331,10 @@ export function QuotationPreview({
               </table>
 
               {/* Term & payment + totals */}
-              <div className="mt-8 grid grid-cols-1 gap-8 border-t pt-4 sm:grid-cols-2">
+              <div
+                data-print-keep
+                className="mt-8 grid grid-cols-1 gap-8 border-t pt-4 sm:grid-cols-2"
+              >
                 {/* Kiri: term & payment */}
                 <div className="space-y-2 text-[11px] leading-relaxed">
                   <p className="font-bold text-foreground">Term &amp; Payment :</p>
@@ -430,7 +470,7 @@ export function QuotationPreview({
               </p>
 
               {/* Signature */}
-              <div className="mt-10 text-[11px]">
+              <div data-print-keep className="mt-10 text-[11px]">
                 <p className="text-foreground">
                   {q.signingLocation?.trim() || "Jakarta"},{" "}
                   {formatLongDate(q.issuedAt ?? q.createdAt)}
@@ -459,24 +499,6 @@ export function QuotationPreview({
         </div>
       </DialogContent>
 
-      {/* Print isolation: hanya kertas dokumen yang tampil saat cetak */}
-      <style>{`
-        @media print {
-          body * { visibility: hidden !important; }
-          #${PRINT_AREA_ID}, #${PRINT_AREA_ID} * { visibility: visible !important; }
-          #${PRINT_AREA_ID} {
-            position: absolute !important;
-            left: 0 !important;
-            top: 0 !important;
-            width: 100% !important;
-            max-width: none !important;
-            box-shadow: none !important;
-            print-color-adjust: exact !important;
-            -webkit-print-color-adjust: exact !important;
-          }
-          [data-print-hide] { display: none !important; }
-        }
-      `}</style>
     </Dialog>
   );
 }
