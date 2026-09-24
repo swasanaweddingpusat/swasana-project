@@ -15,6 +15,7 @@ export async function fetchGuestbookEntries(
   if (params?.interactionType) searchParams.set("interactionType", params.interactionType);
   if (params?.status) searchParams.set("status", params.status);
   if (params?.sourceOfInformationId) searchParams.set("sourceOfInformationId", params.sourceOfInformationId);
+  if (params?.festivalId) searchParams.set("festivalId", params.festivalId);
   const qs = searchParams.toString();
 
   const res = await fetch(`/api/guestbook${qs ? `?${qs}` : ""}`);

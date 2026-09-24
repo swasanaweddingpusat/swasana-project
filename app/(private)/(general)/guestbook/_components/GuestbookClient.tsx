@@ -77,7 +77,7 @@ import type {
   GuestbookOverviewBucket,
 } from "@/lib/queries/guestbookEntries";
 import type { GuestInteractionType, GuestVisitStatus } from "@prisma/client";
-import type { ProofFiles } from "@/lib/validations/guestbook";
+import { guestbookSourceLabel, type ProofFiles } from "@/lib/validations/guestbook";
 import { GuestbookDrawer } from "./GuestbookDrawer";
 import { GuestbookDetailDrawer } from "./GuestbookDetailDrawer";
 import { GuestbookFilterDrawer } from "./GuestbookFilterDrawer";
@@ -393,7 +393,7 @@ function MobileCard({
   onStatusClick?: (status: string) => void;
   onCheckoutSelect: (entry: GuestbookEntryItem, visitStatus: "deal" | "to_be_discuss" | "lost") => void;
 }) {
-  const sourceLabel = entry.sourceOfInformation?.name ?? null;
+  const sourceLabel = guestbookSourceLabel(entry.sourceOfInformation?.name, entry.bitrixAdsUrl);
   const statusInfo = entry.visitStatus ? STATUS_LABELS[entry.visitStatus] : null;
   const photoSrc = resolveGuestbookProofThumb((entry.proofFiles ?? null) as ProofFiles | null);
 
@@ -566,6 +566,7 @@ function GuestbookClientInner() {
   const [filterInteractionType, setFilterInteractionType] = useState<"all" | GuestInteractionType>("all");
   const [filterStatus, setFilterStatus] = useState<"all" | GuestVisitStatus>("all");
   const [filterSourceId, setFilterSourceId] = useState<string>("all");
+  const [filterFestivalId, setFilterFestivalId] = useState<string>("all");
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
@@ -597,13 +598,13 @@ function GuestbookClientInner() {
   // Any other filter change also resets page to 1.
   useEffect(() => {
     setCurrentPage(1);
-  }, [dateRange, filterVenueId, filterHostId, filterCategory, filterInteractionType, filterStatus, filterSourceId]);
+  }, [dateRange, filterVenueId, filterHostId, filterCategory, filterInteractionType, filterStatus, filterSourceId, filterFestivalId]);
 
   // Clear selection whenever the visible page/filter set changes, so bulk
   // actions never act on rows the user can no longer see.
   useEffect(() => {
     setSelectedIds([]);
-  }, [currentPage, debouncedSearch, filterVenueId, filterHostId, filterCategory, filterInteractionType, filterStatus, filterSourceId]);
+  }, [currentPage, debouncedSearch, filterVenueId, filterHostId, filterCategory, filterInteractionType, filterStatus, filterSourceId, filterFestivalId]);
 
   const queryClient = useQueryClient();
   const { data: guestbookData, isLoading } = useGuestbookEntries({
@@ -618,6 +619,7 @@ function GuestbookClientInner() {
     interactionType: filterInteractionType !== "all" ? filterInteractionType : undefined,
     status: filterStatus !== "all" ? filterStatus : undefined,
     sourceOfInformationId: filterSourceId !== "all" ? filterSourceId : undefined,
+    festivalId: filterFestivalId !== "all" ? filterFestivalId : undefined,
   });
   const entries = guestbookData?.data ?? [];
   const totalPages = Math.max(1, Math.ceil((guestbookData?.total ?? 0) / 50));
@@ -757,7 +759,8 @@ function GuestbookClientInner() {
     (filterCategory !== "all" ? 1 : 0) +
     (filterInteractionType !== "all" ? 1 : 0) +
     (filterStatus !== "all" ? 1 : 0) +
-    (filterSourceId !== "all" ? 1 : 0);
+    (filterSourceId !== "all" ? 1 : 0) +
+    (filterFestivalId !== "all" ? 1 : 0);
 
   function resetFilters() {
     setDateRange(todayRange());
@@ -767,6 +770,7 @@ function GuestbookClientInner() {
     setFilterInteractionType("all");
     setFilterStatus("all");
     setFilterSourceId("all");
+    setFilterFestivalId("all");
     setSearch("");
     setCurrentPage(1);
   }
@@ -984,7 +988,7 @@ function GuestbookClientInner() {
                 </TableHeader>
                 <TableBody>
                   {entries.map((entry) => {
-                    const sourceLabel = entry.sourceOfInformation?.name ?? null;
+                    const sourceLabel = guestbookSourceLabel(entry.sourceOfInformation?.name, entry.bitrixAdsUrl);
                     const statusInfo = entry.visitStatus ? STATUS_LABELS[entry.visitStatus] : null;
                     const totalVisit = countVisitsOnPage(entry, entries);
                     const festivalLabel = entry.festival?.name ?? "-";
@@ -1349,6 +1353,8 @@ function GuestbookClientInner() {
         onStatusChange={setFilterStatus}
         sourceOfInformationId={filterSourceId}
         onSourceOfInformationIdChange={setFilterSourceId}
+        festivalId={filterFestivalId}
+        onFestivalIdChange={setFilterFestivalId}
         venues={venues}
         salesOptions={salesOptions}
         onReset={resetFilters}

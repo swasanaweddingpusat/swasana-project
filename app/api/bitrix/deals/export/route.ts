@@ -2,6 +2,7 @@ import { requirePermissionForRoute } from "@/lib/permissions";
 import { apiLimiter, rateLimitResponse } from "@/lib/rate-limit";
 import {
   bitrixListAll,
+  buildDealSearchFilters,
   getBitrixCrmMeta,
   getBitrixDealEnums,
   resolveBitrixContactInfo,
@@ -106,8 +107,9 @@ async function fetchFilteredDeals(searchParams: URLSearchParams): Promise<DealRo
 
   // Build the same filter the Transaksi page applies.
   const filter: Record<string, string | string[]> = {};
+  // Free-text search is resolved below, alongside the list route, so an export
+  // returns exactly the rows the table is showing.
   const q = searchParams.get("q")?.trim();
-  if (q) filter["%TITLE"] = q;
 
   const stageName = searchParams.get("stage")?.trim();
   if (stageName) {
@@ -146,15 +148,36 @@ async function fetchFilteredDeals(searchParams: URLSearchParams): Promise<DealRo
   const pipeline = searchParams.get("pipeline")?.trim();
   if (pipeline) filter.CATEGORY_ID = pipeline;
 
-  const { items } = await bitrixListAll<RawDeal>(
-    "crm.deal.list",
-    {
-      ...(Object.keys(filter).length > 0 && { filter }),
-      select: DEAL_SELECT,
-      order: { DATE_CREATE: "DESC" },
-    },
-    MAX_PAGES,
-  );
+  // Search spans deal id, title, client name and phone; those are alternatives,
+  // and one Bitrix filter can only AND its keys — so fan out and merge by id.
+  const searchFilters = q ? await buildDealSearchFilters(q) : [];
+
+  let items: RawDeal[];
+  if (searchFilters.length > 0) {
+    const results = await Promise.all(
+      searchFilters.map((sf) =>
+        bitrixListAll<RawDeal>(
+          "crm.deal.list",
+          { filter: { ...filter, ...sf }, select: DEAL_SELECT, order: { DATE_CREATE: "DESC" } },
+          MAX_PAGES,
+        ).catch(() => ({ items: [] as RawDeal[] })),
+      ),
+    );
+    const merged = new Map<string, RawDeal>();
+    for (const r of results) for (const d of r.items) merged.set(d.ID, d);
+    items = [...merged.values()].sort((a, b) => Number(b.ID) - Number(a.ID));
+  } else {
+    const res = await bitrixListAll<RawDeal>(
+      "crm.deal.list",
+      {
+        ...(Object.keys(filter).length > 0 && { filter }),
+        select: DEAL_SELECT,
+        order: { DATE_CREATE: "DESC" },
+      },
+      MAX_PAGES,
+    );
+    items = res.items;
+  }
 
   const [contactMap, userMap] = await Promise.all([
     resolveBitrixContactInfo(items.map((d) => d.CONTACT_ID ?? "").filter(Boolean)),

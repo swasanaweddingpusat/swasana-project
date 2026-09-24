@@ -98,6 +98,7 @@ export const SETTINGS_MODULES = [
   "settings-tutorial",
   "settings-booking-log",
   "settings-banner",
+  "settings-festival",
   "hr-attendance",
 ] as const;
 
