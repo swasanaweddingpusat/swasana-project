@@ -14,16 +14,11 @@ import { formatRupiah } from "@/lib/utils/kpiFormatters";
 import type { KpiAssignmentItem } from "@/types/kpiInsentif";
 import { PageHeader } from "@/components/shared/page-header";
 import { PenugasanDrawer } from "./PenugasanDrawer";
-
-const MONTHS = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
+import { MONTHS, PeriodSelector, buildPeriodKey } from "../../_components/PeriodSelector";
 
 function periodLabel(date: string): string {
   const value = new Date(date);
   return `${MONTHS[value.getMonth()]} ${value.getFullYear()}`;
-}
-
-function periodKey(month: number, year: number): string {
-  return `${year}-${String(month).padStart(2, "0")}`;
 }
 
 export function PenugasanClient() {
@@ -37,7 +32,7 @@ export function PenugasanClient() {
   const [editItem, setEditItem] = useState<KpiAssignmentItem | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const { data: venues = [] } = useVenues();
-  const { data: assignments = [], isLoading } = useAssignments({ period: periodKey(month, year) });
+  const { data: assignments = [], isLoading } = useAssignments({ period: buildPeriodKey(month, year) });
   const deleteMutation = useDeleteAssignment();
 
   const filtered = assignments.filter((item) => {
@@ -62,8 +57,6 @@ export function PenugasanClient() {
     setDeleteId(null);
   }
 
-  const years = Array.from({ length: 5 }, (_, index) => now.getFullYear() - 2 + index);
-
   return (
     <>
       <div className="space-y-6">
@@ -71,8 +64,7 @@ export function PenugasanClient() {
         <div className="rounded-2xl border bg-card p-4 shadow-sm">
           <div className="flex flex-wrap items-center gap-3">
             <Filter weight="BoldDuotone" className="h-4 w-4 shrink-0 text-muted-foreground" />
-            <Select value={String(month)} onValueChange={(value) => setMonth(Number(value))}><SelectTrigger className="w-36 rounded-full"><SelectValue /></SelectTrigger><SelectContent>{MONTHS.map((label, index) => <SelectItem key={label} value={String(index + 1)}>{label}</SelectItem>)}</SelectContent></Select>
-            <Select value={String(year)} onValueChange={(value) => setYear(Number(value))}><SelectTrigger className="w-28 rounded-full"><SelectValue /></SelectTrigger><SelectContent>{years.map((value) => <SelectItem key={value} value={String(value)}>{value}</SelectItem>)}</SelectContent></Select>
+            <PeriodSelector month={month} year={year} onMonthChange={setMonth} onYearChange={setYear} />
             <Select value={role} onValueChange={setRole}><SelectTrigger className="w-36 rounded-full"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Semua Role</SelectItem><SelectItem value="sales">Sales</SelectItem><SelectItem value="manager">Manager</SelectItem></SelectContent></Select>
             <Select value={venueId} onValueChange={setVenueId}><SelectTrigger className="w-36 rounded-full"><SelectValue placeholder="Semua venue" /></SelectTrigger><SelectContent><SelectItem value="all">Semua venue</SelectItem>{venues.map((venue) => <SelectItem key={venue.id} value={venue.id}>{venue.name}</SelectItem>)}</SelectContent></Select>
             <Input type="search" placeholder="Cari nama karyawan..." className="h-8 w-44 rounded-full text-sm" value={search} onChange={(event) => setSearch(event.target.value)} />

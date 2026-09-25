@@ -4,6 +4,8 @@ import type {
   KpiAssignmentItem,
   KpiCalculationResultItem,
   ProfileForAssignment,
+  KpiAwardWinnerItem,
+  KpiAwardCandidateItem,
 } from "@/types/kpiInsentif";
 
 async function fetchJson<T>(url: string): Promise<T> {
@@ -56,4 +58,29 @@ export async function fetchKpiResults(
 
 export async function fetchProfilesForAssignment(): Promise<ProfileForAssignment[]> {
   return fetchJson<ProfileForAssignment[]>("/api/kpi-insentif/profiles");
+}
+
+export interface AwardWinnerFilters {
+  awardId?: string;
+  period?: string;
+  profileId?: string;
+}
+
+export async function fetchAwardWinners(
+  filters?: AwardWinnerFilters
+): Promise<KpiAwardWinnerItem[]> {
+  const sp = new URLSearchParams();
+  if (filters?.awardId) sp.set("awardId", filters.awardId);
+  if (filters?.period) sp.set("period", filters.period);
+  if (filters?.profileId) sp.set("profileId", filters.profileId);
+  const qs = sp.toString();
+  return fetchJson<KpiAwardWinnerItem[]>(`/api/kpi-insentif/award-winners${qs ? `?${qs}` : ""}`);
+}
+
+export async function fetchAwardCandidates(
+  awardId: string,
+  period: string
+): Promise<KpiAwardCandidateItem[]> {
+  const sp = new URLSearchParams({ awardId, period });
+  return fetchJson<KpiAwardCandidateItem[]>(`/api/kpi-insentif/award-candidates?${sp.toString()}`);
 }

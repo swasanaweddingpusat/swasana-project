@@ -8,8 +8,8 @@ export const submitAttendanceCorrectionSchema = z
     reason: z.string().min(1, "Alasan koreksi wajib diisi"),
     evidenceBase64: z
       .string()
-      .regex(/^data:image\/(png|jpe?g|webp|gif);base64,[A-Za-z0-9+/]+=*$/, "Format bukti tidak valid")
-      .optional(),
+      .min(1, "Bukti wajib diunggah")
+      .regex(/^data:image\/(png|jpe?g|webp|gif);base64,[A-Za-z0-9+/]+=*$/, "Format bukti tidak valid"),
   })
   .superRefine((val, ctx) => {
     if (!val.requestedClockInAt && !val.requestedClockOutAt) {
