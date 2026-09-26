@@ -27,6 +27,7 @@ export interface SalesPerformanceCardItem {
   achievementPct: number;
   breakdown: SalesCategoryBreakdown;
   packageTypeBreakdown: SalesPackageTypeBreakdown;
+  homebaseVenueName: string | null;
 }
 
 // ─── Helper: compute category breakdown in-memory ─────────────────────────────
@@ -122,7 +123,11 @@ async function _queryTopSales(
         bookingStatus: true,
         category: true,
         snapPackagePricing: { select: { price: true } },
+        // Frozen category code is only populated for bookings finalized after the
+        // packageTypeCategory feature shipped (2026-09-19); older bookings fall
+        // back to the live Package's category so historical counts aren't blank.
         snapPackage: { select: { packageTypeCategoryCode: true } },
+        package: { select: { packageTypeCategory: { select: { code: true } } } },
       },
       take: 5000,
     }),
@@ -133,6 +138,7 @@ async function _queryTopSales(
         id: true,
         fullName: true,
         avatarUrl: true,
+        homebaseVenue: { select: { name: true } },
         dataGroupMemberships: {
           select: { group: { select: { name: true } } },
           take: 1,
@@ -182,7 +188,8 @@ async function _queryTopSales(
       bookingStatus: b.bookingStatus,
       category: b.category,
       price: b.snapPackagePricing?.price ?? 0,
-      packageTypeCategoryCode: b.snapPackage?.packageTypeCategoryCode ?? null,
+      packageTypeCategoryCode:
+        b.snapPackage?.packageTypeCategoryCode ?? b.package?.packageTypeCategory?.code ?? null,
     });
     bookingsBySalesId.set(b.salesId, list);
   }
@@ -202,6 +209,7 @@ async function _queryTopSales(
       hasTarget && target > 0 ? Math.round((revenue / target) * 100) : 0;
     const breakdown = computeBreakdown(bookings);
     const packageTypeBreakdown = computePackageTypeBreakdown(bookings);
+    const homebaseVenueName = profile?.homebaseVenue?.name ?? null;
 
     return {
       profileId,
@@ -215,6 +223,7 @@ async function _queryTopSales(
       achievementPct,
       breakdown,
       packageTypeBreakdown,
+      homebaseVenueName,
     };
   });
 

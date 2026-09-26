@@ -20,13 +20,24 @@ export interface MiceBookingItem {
   poNumber: string | null;
   createdAt: string; // ISO — kapan booking dibuat/deal
   eventDate: string | null; // ISO — tanggal acara
+  eventEndDate: string | null;
+  eventTime: string | null;
+  eventType: { id: string; name: string; code: string } | null;
+  estimatedPax: number | null;
+  companyName: string | null;
+  notes: string | null;
   status: MiceBookingStatus;
   customer: { id: string; name: string; phone: string };
   venue: { id: string; name: string };
   sales: { id: string; fullName: string | null } | null;
   sourceOfInformation: { id: string; name: string } | null;
   terms: MiceTerm[];
-  quotation: null; // deferred — Quotation module not built yet
+  quotation: {
+    id: string;
+    quotationNo: string | null;
+    status: "draft" | "sent" | "revised" | "accepted" | "rejected";
+    totalPrice: number;
+  } | null;
 }
 
 export interface MiceBookingsResponse {

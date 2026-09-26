@@ -103,9 +103,9 @@ export function MiceDetailContent({
   const [approveTarget, setApproveTarget] = useState<{ stepId: string; stepLabel: string } | null>(null);
 
   const { data: approval } = useQuery({
-    queryKey: ["approval-records", "booking", booking.id],
+    queryKey: ["approval-records", "booking-mice", booking.id],
     queryFn: async () => {
-      const res = await fetch(`/api/approval-records?module=booking&entityId=${booking.id}`);
+      const res = await fetch(`/api/approval-records?module=booking-mice&entityId=${booking.id}`);
       if (!res.ok) return null;
       return res.json() as Promise<ApprovalRecord>;
     },
@@ -240,7 +240,12 @@ export function MiceDetailContent({
         </p>
         <div className="rounded-lg border border-border px-4 divide-y divide-border">
           <InfoRow label="Venue" value={booking.venue.name} />
+          <InfoRow label="Tipe Event" value={booking.eventType?.name ?? "—"} />
           <InfoRow label="Tanggal Event" value={fmtDate(booking.eventDate)} />
+          {booking.eventEndDate && (
+            <InfoRow label="Tanggal Selesai" value={fmtDate(booking.eventEndDate)} />
+          )}
+          <InfoRow label="Estimasi Pax" value={booking.estimatedPax ? `${booking.estimatedPax} pax` : "—"} />
           <InfoRow
             label="Tanggal Booking"
             value={fmtDate(booking.createdAt)}
@@ -272,17 +277,21 @@ export function MiceDetailContent({
         </div>
       </div>
 
-      {/* Quotation — deferred */}
       <div className="space-y-1">
         <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
           Quotation
         </p>
-        <div className="rounded-lg border border-border px-4">
-          <div className="py-2.5">
-            <span className="text-sm text-muted-foreground italic">
-              Modul Quotation menyusul
-            </span>
-          </div>
+        <div className="rounded-lg border border-border px-4 divide-y divide-border">
+          <InfoRow
+            label="Nomor"
+            value={booking.quotation?.quotationNo ?? "Booking manual"}
+          />
+          {booking.quotation && (
+            <InfoRow
+              label="Nilai"
+              value={fmtRp(booking.quotation.totalPrice)}
+            />
+          )}
         </div>
       </div>
 
@@ -314,13 +323,13 @@ export function MiceDetailContent({
           open={dialogOpen}
           onClose={() => {
             setDialogOpen(false);
-            void qc.invalidateQueries({ queryKey: ["approval-records", "booking", booking.id] });
+            void qc.invalidateQueries({ queryKey: ["approval-records", "booking-mice", booking.id] });
           }}
           packageId={booking.id}
           packageName={booking.customer.name}
           userProfileId={user.profileId}
           userRoleId={user.roleId}
-          module="booking"
+          module="booking-mice"
         />
       )}
       {approveTarget && (
@@ -328,7 +337,7 @@ export function MiceDetailContent({
           open={!!approveTarget}
           onClose={() => {
             setApproveTarget(null);
-            void qc.invalidateQueries({ queryKey: ["approval-records", "booking", booking.id] });
+            void qc.invalidateQueries({ queryKey: ["approval-records", "booking-mice", booking.id] });
           }}
           stepId={approveTarget.stepId}
           stepLabel={approveTarget.stepLabel}

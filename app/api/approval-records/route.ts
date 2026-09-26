@@ -12,11 +12,13 @@ export async function GET(request: Request) {
   if (!moduleName) return Response.json({ error: "Missing module param" }, { status: 400 });
 
   const permModule =
-    moduleName === "booking" || moduleName === "booking-mice"
-      ? "booking"
-      : moduleName === "quotations"
-        ? "quotations"
-        : "package";
+    moduleName === "booking-mice"
+      ? "booking-mice"
+      : moduleName === "booking"
+        ? "booking"
+        : moduleName === "quotations"
+          ? "quotations"
+          : "package";
   const { session, response } = await requirePermissionForRoute({ module: permModule, action: "view" });
   if (response) return response;
   if (!apiLimiter.check(`approval-records:${session.user.id}`)) return rateLimitResponse();

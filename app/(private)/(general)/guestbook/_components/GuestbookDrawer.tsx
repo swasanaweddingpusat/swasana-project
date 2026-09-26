@@ -3,12 +3,16 @@
 import { useState, useEffect, useRef, type ForwardRefExoticComponent, type RefAttributes } from "react";
 import { createPortal } from "react-dom";
 import Image from "next/image";
+import type { DateRange } from "react-day-picker";
+import { id as idLocale } from "date-fns/locale";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Drawer } from "@/components/shared/drawer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Calendar } from "@/components/ui/calendar";
 import {
   Select,
   SelectContent,
@@ -30,6 +34,7 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -53,12 +58,13 @@ import { normalizePhoneId } from "@/lib/phone";
 import { cn, formatRupiah } from "@/lib/utils";
 import { computeFullPrice } from "@/lib/package-prices";
 import { toast } from "sonner";
-import { useCreateGuestbookEntry, useUpdateGuestbookEntry } from "@/hooks/use-guestbook";
+import { useCreateGuestbookEntry, useUpdateGuestbookEntry, useRefreshGuestbookAdsUrl } from "@/hooks/use-guestbook";
 import { useVenues } from "@/hooks/use-venues";
 import { useSalesUsers } from "@/hooks/use-sales-users";
 import { usePermissions } from "@/hooks/use-permissions";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { createSourceOfInformation } from "@/actions/source-of-information";
+import { createFestival } from "@/actions/festival";
 import { createDailyActivitySegment } from "@/actions/daily-activity-segment";
 import type { GuestbookEntryItem } from "@/lib/queries/guestbookEntries";
 import { isBitrixSourceName, type FileDescriptor, type ProofFiles } from "@/lib/validations/guestbook";
@@ -71,9 +77,12 @@ function formatDateForInput(value: string | Date | null | undefined): string {
   if (Number.isNaN(date.getTime())) return "";
 
   const pad = (n: number) => String(n).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+  return `${date.getUTCFullYear()}-${pad(date.getUTCMonth() + 1)}-${pad(date.getUTCDate())}`;
 }
 
+// checkInAt/checkOutAt/commit dates are stored as naive local wall-clock values anchored to
+// UTC on the server (see parseLocalDateTime in actions/guestbook.ts) — reading them back with
+// UTC getters here keeps the typed numbers stable across server/browser timezone, avoiding drift.
 function formatDateTimeForInput(value: string | Date | null | undefined): string {
   if (!value) return "";
 
@@ -81,7 +90,7 @@ function formatDateTimeForInput(value: string | Date | null | undefined): string
   if (Number.isNaN(date.getTime())) return "";
 
   const pad = (n: number) => String(n).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  return `${date.getUTCFullYear()}-${pad(date.getUTCMonth() + 1)}-${pad(date.getUTCDate())}T${pad(date.getUTCHours())}:${pad(date.getUTCMinutes())}`;
 }
 
 async function fetchJson<T>(url: string): Promise<T> {
@@ -91,6 +100,7 @@ async function fetchJson<T>(url: string): Promise<T> {
 }
 
 type SourceOption = { id: string; name: string; createdAt: string };
+type FestivalOption = { id: string; name: string; createdAt: string };
 type PackageOption = {
   id: string;
   packageName: string;
@@ -133,6 +143,7 @@ type GuestbookForm = {
   notes: string;
   visitStatus: string;
   sourceOfInformationId: string;
+  festivalId: string;
   packageId: string;
   segmentId: string;
   eventCategory: string;
@@ -151,6 +162,7 @@ type GuestbookForm = {
   bitrixContactId: string;
   bitrixName: string;
   bitrixSourceInfo: string;
+  bitrixAdsUrl: string;
 };
 
 const EMPTY_FORM: GuestbookForm = {
@@ -168,6 +180,7 @@ const EMPTY_FORM: GuestbookForm = {
   notes: "",
   visitStatus: "cold",
   sourceOfInformationId: "",
+  festivalId: "",
   packageId: "",
   segmentId: "",
   eventCategory: "",
@@ -186,6 +199,7 @@ const EMPTY_FORM: GuestbookForm = {
   bitrixContactId: "",
   bitrixName: "",
   bitrixSourceInfo: "",
+  bitrixAdsUrl: "",
 };
 
 const INTERACTION_TYPE_OPTIONS = [
@@ -492,6 +506,11 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
   const [form, setForm] = useState<GuestbookForm>(EMPTY_FORM);
   const [showConfirm, setShowConfirm] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [doneVisitDialogOpen, setDoneVisitDialogOpen] = useState(false);
+  const [checklistVisited, setChecklistVisited] = useState(false);
+  const [checklistProofFilled, setChecklistProofFilled] = useState(false);
+  const [festivalDraft, setFestivalDraft] = useState<{ name: string; range: DateRange | undefined } | null>(null);
+  const [isCreatingFestival, setIsCreatingFestival] = useState(false);
   // Guard sinkron anti double-submit: setState nunggu re-render, ref langsung
   // ke-set — jadi klik kedua yang datang sebelum render berikutnya tetap ke-block.
   const submittingRef = useRef(false);
@@ -499,6 +518,7 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
   const isEditMode = editEntry != null;
   const createMutation = useCreateGuestbookEntry();
   const updateMutation = useUpdateGuestbookEntry();
+  const refreshAdsUrlMutation = useRefreshGuestbookAdsUrl();
   const isSaving = createMutation.isPending || updateMutation.isPending || isSubmitting;
   const { data: venues = [] } = useVenues();
   const { users: salesUsers } = useSalesUsers();
@@ -544,6 +564,12 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
     staleTime: 5 * 60_000,
   });
 
+  const { data: festivalOptions = [] } = useQuery({
+    queryKey: ["festivals"],
+    queryFn: () => fetchJson<FestivalOption[]>("/api/festivals"),
+    staleTime: 5 * 60_000,
+  });
+
   const { data: segmentOptions = [] } = useQuery({
     queryKey: ["daily-activity-segments"],
     queryFn: () => fetchJson<{ id: string; name: string }[]>("/api/daily-activity-segments"),
@@ -585,6 +611,7 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
         notes: editEntry.notes ?? "",
         visitStatus: editEntry.visitStatus ?? "",
         sourceOfInformationId: editEntry.sourceOfInformationId ?? "",
+        festivalId: editEntry.festivalId ?? "",
         packageId: editEntry.packageId ?? "",
         segmentId: editEntry.segmentId ?? "",
         eventCategory: editEntry.eventCategory ?? editEntry.package?.category ?? (canWedding ? "WEDDINGS" : "MICE"),
@@ -603,9 +630,25 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
         bitrixContactId: editEntry.bitrixContactId ?? "",
         bitrixName: editEntry.bitrixName ?? "",
         bitrixSourceInfo: editEntry.bitrixSourceInfo ?? "",
+        bitrixAdsUrl: editEntry.bitrixAdsUrl ?? "",
       });
     });
   }, [isOpen, isEditMode, editEntry, canWedding]);
+
+  // Backfill gap fix: entries with a Bitrix deal linked before this auto-refresh
+  // existed (or created via manual-ID fallback) never got bitrixAdsUrl fetched.
+  // Re-fetch it silently whenever such an entry's edit drawer is opened.
+  useEffect(() => {
+    if (!isOpen || !isEditMode || !editEntry) return;
+    if (!editEntry.bitrixContactId?.trim() || editEntry.bitrixAdsUrl?.trim()) return;
+
+    refreshAdsUrlMutation.mutate(editEntry.id, {
+      onSuccess: (result) => {
+        if (result.success && result.adsUrl) setField("bitrixAdsUrl", result.adsUrl);
+      },
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, isEditMode, editEntry?.id, editEntry?.bitrixContactId, editEntry?.bitrixAdsUrl]);
 
   function handleClose() {
     setForm(EMPTY_FORM);
@@ -615,6 +658,54 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
 
   function setField<K extends keyof GuestbookForm>(key: K, value: GuestbookForm[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
+  }
+
+  // Manual "Done Visit" selection has no QR check-in proof, so gate it behind a
+  // light confirmation checklist. Re-selecting the same value (or picking any
+  // other status) keeps the direct setField behavior — no dialog needed.
+  function handleVisitStatusChange(value: string) {
+    if (value === "done_visit" && form.visitStatus !== "done_visit") {
+      setChecklistVisited(false);
+      setChecklistProofFilled(false);
+      setDoneVisitDialogOpen(true);
+      return;
+    }
+    setField("visitStatus", value);
+  }
+
+  function confirmDoneVisit() {
+    setField("visitStatus", "done_visit");
+    setDoneVisitDialogOpen(false);
+    setChecklistVisited(false);
+    setChecklistProofFilled(false);
+  }
+
+  function cancelDoneVisitDialog() {
+    setDoneVisitDialogOpen(false);
+    setChecklistVisited(false);
+    setChecklistProofFilled(false);
+  }
+
+  async function handleCreateFestival() {
+    if (!festivalDraft?.range?.from || !festivalDraft.range.to) return;
+    setIsCreatingFestival(true);
+    try {
+      const res = await createFestival({
+        name: festivalDraft.name,
+        startDate: festivalDraft.range.from,
+        endDate: festivalDraft.range.to,
+      });
+      if (!res.success) {
+        toast.error(res.error ?? "Gagal menambah festival");
+        return;
+      }
+      await queryClient.invalidateQueries({ queryKey: ["festivals"] });
+      if (res.item) setField("festivalId", res.item.id);
+      toast.success(`Festival "${festivalDraft.name}" berhasil ditambahkan`);
+      setFestivalDraft(null);
+    } finally {
+      setIsCreatingFestival(false);
+    }
   }
 
   function setInteractionType(value: string) {
@@ -697,6 +788,14 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
       toast.error("Sales PIC wajib dipilih");
       return false;
     }
+    if (form.eventCategory === "MICE" && !form.segmentId) {
+      toast.error("Segmen wajib dipilih");
+      return false;
+    }
+    if (form.eventCategory !== "MICE" && !form.packageId) {
+      toast.error("Paket wajib dipilih");
+      return false;
+    }
     if (isBitrixSource && !form.bitrixContactId.trim()) {
       toast.error("Bitrix ID wajib dipilih");
       return false;
@@ -767,6 +866,7 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
       notes: form.notes.trim() || null,
       visitStatus: form.visitStatus || null,
       sourceOfInformationId: form.sourceOfInformationId || null,
+      festivalId: form.festivalId || null,
       packageId: form.packageId || null,
       segmentId: form.segmentId || null,
       checkInAt: form.checkInAt || null,
@@ -782,6 +882,7 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
       bitrixContactId: form.bitrixContactId || null,
       bitrixName: form.bitrixName || null,
       bitrixSourceInfo: form.bitrixSourceInfo || null,
+      bitrixAdsUrl: form.bitrixAdsUrl || null,
     };
 
     if (isEditMode) {
@@ -870,6 +971,7 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
                         onClick={() => {
                           setField("eventCategory", opt.value);
                           setField("packageId", "");
+                          if (opt.value !== "MICE") setField("segmentId", "");
                         }}
                         className={cn(
                           "flex items-center justify-center gap-2 min-h-11 rounded-full px-3 py-2.5 text-xs font-semibold leading-tight text-center transition-colors",
@@ -927,29 +1029,31 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
               />
             </div>
 
-            <div className="space-y-1.5">
-              <Label className="text-sm font-medium">Segmen / Kategori</Label>
-              <SearchableSelect
-                options={segmentOptions.map((o) => ({ id: o.id, name: o.name }))}
-                value={form.segmentId}
-                onChange={(v) => {
-                  setField("segmentId", v);
-                }}
-                onAdd={async (name) => {
-                  const res = await createDailyActivitySegment(name);
-                  if (!res.success) {
-                    toast.error(res.error ?? "Gagal menambah segmen");
-                    return;
-                  }
-                  await queryClient.invalidateQueries({ queryKey: ["daily-activity-segments"] });
-                  if (res.item) setField("segmentId", res.item.id);
-                  toast.success(`Segmen "${name}" berhasil ditambahkan`);
-                }}
-                placeholder="Pilih segmen / kategori"
-                searchPlaceholder="Cari segmen..."
-                emptyText="Segmen tidak ditemukan"
-              />
-            </div>
+            {form.eventCategory === "MICE" && (
+              <div className="space-y-1.5">
+                <Label className="text-sm font-medium">
+                  Segmen / Kategori <span className="text-destructive">*</span>
+                </Label>
+                <SearchableSelect
+                  options={segmentOptions.map((o) => ({ id: o.id, name: o.name }))}
+                  value={form.segmentId}
+                  onChange={(v) => setField("segmentId", v)}
+                  onAdd={async (name) => {
+                    const res = await createDailyActivitySegment(name);
+                    if (!res.success) {
+                      toast.error(res.error ?? "Gagal menambah segmen");
+                      return;
+                    }
+                    await queryClient.invalidateQueries({ queryKey: ["daily-activity-segments"] });
+                    if (res.item) setField("segmentId", res.item.id);
+                    toast.success(`Segmen "${name}" berhasil ditambahkan`);
+                  }}
+                  placeholder="Pilih segmen / kategori"
+                  searchPlaceholder="Cari segmen..."
+                  emptyText="Segmen tidak ditemukan"
+                />
+              </div>
+            )}
 
             <div className="space-y-1.5">
               <Label className="text-sm font-medium">
@@ -977,6 +1081,23 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
               />
             </div>
 
+            <div className="space-y-1.5">
+              <Label className="text-sm font-medium">Festival</Label>
+              <SearchableSelect
+                options={festivalOptions.map((o) => ({ id: o.id, name: o.name }))}
+                value={form.festivalId}
+                onChange={(v) => {
+                  setField("festivalId", v);
+                }}
+                onAdd={(name) => {
+                  setFestivalDraft({ name, range: undefined });
+                }}
+                placeholder="Pilih festival"
+                searchPlaceholder="Cari festival..."
+                emptyText="Tidak ada festival"
+              />
+            </div>
+
             {isBitrixSource && (
               <div className="space-y-1.5">
                 <Label className="text-sm font-medium">
@@ -993,6 +1114,16 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
                         if (deal?.phone) {
                           const norm = normalizePhoneId(deal.phone);
                           if (norm) setField("phoneNumber", norm);
+                        }
+                        // Ambil URL iklan dari deal Bitrix terkait; kalau ID dikosongkan,
+                        // reset field-nya.
+                        if (v) {
+                          void fetch(`/api/guestbook/bitrix-ads-url?dealId=${encodeURIComponent(v)}`)
+                            .then((res) => res.json())
+                            .then((data) => setField("bitrixAdsUrl", data.adsUrl ?? ""))
+                            .catch(() => {});
+                        } else {
+                          setField("bitrixAdsUrl", "");
                         }
                       }}
                     />
@@ -1101,7 +1232,9 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
               {/* Paket — hanya untuk Wedding; disembunyikan saat MICE */}
               {form.eventCategory !== "MICE" && (
                 <div className="space-y-1.5">
-                  <Label className="text-sm font-medium">Paket</Label>
+                  <Label className="text-sm font-medium">
+                    Paket <span className="text-destructive">*</span>
+                  </Label>
                   <SearchableSelect
                     options={packages.map((p) => {
                       const base = (p.categoryPrices ?? []).reduce(
@@ -1167,10 +1300,6 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
                       className="rounded-xl"
                     />
                   </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="gb-scheduledAt-online" className="text-sm font-medium">Jadwal</Label>
-                    <Input id="gb-scheduledAt-online" type="datetime-local" value={form.scheduledAt} onChange={(e) => setField("scheduledAt", e.target.value)} className="rounded-xl" />
-                  </div>
                 </>
               )}
 
@@ -1181,10 +1310,6 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
                       Lokasi <span className="text-destructive">*</span>
                     </Label>
                     <Input id="gb-meetingLocation-jemput" placeholder="Lokasi kunjungan" value={form.meetingLocation} onChange={(e) => setField("meetingLocation", e.target.value)} className="rounded-xl" />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="gb-scheduledAt-jemput" className="text-sm font-medium">Jadwal</Label>
-                    <Input id="gb-scheduledAt-jemput" type="datetime-local" value={form.scheduledAt} onChange={(e) => setField("scheduledAt", e.target.value)} className="rounded-xl" />
                   </div>
                 </>
               )}
@@ -1216,7 +1341,7 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
 
             <div className="space-y-1.5">
               <Label htmlFor="gb-visitStatus" className="text-sm font-medium">Status</Label>
-              <Select value={form.visitStatus} onValueChange={(v) => setField("visitStatus", v)}>
+              <Select value={form.visitStatus} onValueChange={handleVisitStatusChange}>
                 <SelectTrigger id="gb-visitStatus" className="rounded-xl w-full">
                   <SelectValue placeholder="Pilih status" />
                 </SelectTrigger>
@@ -1355,6 +1480,95 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <Dialog
+        open={doneVisitDialogOpen}
+        onOpenChange={(open) => {
+          if (!open) cancelDoneVisitDialog();
+        }}
+      >
+        <DialogContent className="rounded-2xl sm:max-w-xs">
+          <DialogHeader>
+            <DialogTitle>Konfirmasi Done Visit</DialogTitle>
+            <DialogDescription>
+              Pastikan checklist berikut sudah terpenuhi sebelum menandai status sebagai Done Visit.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-3">
+            <div className="flex items-start gap-2">
+              <Checkbox
+                id="gb-checklist-visited"
+                checked={checklistVisited}
+                onCheckedChange={(checked) => setChecklistVisited(checked === true)}
+              />
+              <Label htmlFor="gb-checklist-visited" className="cursor-pointer text-sm font-normal">
+                Tamu benar-benar sudah melakukan kunjungan
+              </Label>
+            </div>
+            <div className="flex items-start gap-2">
+              <Checkbox
+                id="gb-checklist-proof"
+                checked={checklistProofFilled}
+                onCheckedChange={(checked) => setChecklistProofFilled(checked === true)}
+              />
+              <Label htmlFor="gb-checklist-proof" className="cursor-pointer text-sm font-normal">
+                Bukti kunjungan (foto/chat) sudah diisi
+              </Label>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" className="rounded-full" onClick={cancelDoneVisitDialog}>
+              Batal
+            </Button>
+            <Button
+              type="button"
+              className="rounded-full"
+              onClick={confirmDoneVisit}
+              disabled={!checklistVisited || !checklistProofFilled}
+            >
+              Konfirmasi
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={!!festivalDraft}
+        onOpenChange={(open) => {
+          if (!open) setFestivalDraft(null);
+        }}
+      >
+        <DialogContent className="rounded-2xl sm:max-w-xs">
+          <DialogHeader>
+            <DialogTitle>Tambah Festival</DialogTitle>
+            <DialogDescription>
+              Tentukan tanggal berlangsungnya festival &quot;{festivalDraft?.name}&quot;.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-center rounded-xl border border-border">
+            <Calendar
+              mode="range"
+              numberOfMonths={1}
+              selected={festivalDraft?.range}
+              onSelect={(range) => setFestivalDraft((prev) => (prev ? { ...prev, range } : prev))}
+              locale={idLocale}
+            />
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" className="rounded-full" onClick={() => setFestivalDraft(null)}>
+              Batal
+            </Button>
+            <Button
+              type="button"
+              className="rounded-full"
+              disabled={!festivalDraft?.range?.from || !festivalDraft?.range?.to || isCreatingFestival}
+              onClick={handleCreateFestival}
+            >
+              {isCreatingFestival ? "Menyimpan..." : "Simpan"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Drawer>
   );
 }

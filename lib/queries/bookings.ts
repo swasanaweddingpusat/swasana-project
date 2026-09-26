@@ -646,8 +646,10 @@ export type SalesProfile = Awaited<ReturnType<typeof getSalesProfiles>>[number];
 const miceListInclude = {
   customer: { select: { id: true, name: true, mobileNumber: true } },
   venue: { select: { id: true, name: true } },
+  eventType: { select: { id: true, name: true, code: true } },
   sales: { select: { id: true, fullName: true } },
   sourceOfInformation: { select: { id: true, name: true } },
+  quotation: { select: { id: true, quotationNo: true, status: true, totalPrice: true } },
   termOfPayments: {
     orderBy: { sortOrder: "asc" as const },
     select: { id: true, name: true, amount: true, dueDate: true },
@@ -660,12 +662,16 @@ export interface PaginatedMiceBookings {
 }
 
 export async function getMiceBookings(
+  profileId: string | undefined,
+  dataScope: DataScope | undefined,
   options?: { page?: number; pageSize?: number; search?: string; status?: string },
 ): Promise<PaginatedMiceBookings> {
+  const scopeFilter = await buildOwnerScopeWhere(profileId, dataScope, "salesId");
   const page = Math.max(1, options?.page ?? 1);
   const pageSize = Math.min(100, Math.max(1, options?.pageSize ?? 10));
   const q = options?.search?.trim();
   const where: Prisma.BookingWhereInput = {
+    ...scopeFilter,
     category: "MICE",
     recordStatus: "saved",
     ...(options?.status && options.status !== "all"
@@ -678,6 +684,9 @@ export async function getMiceBookings(
             { venue: { name: { contains: q, mode: "insensitive" } } },
             { sales: { fullName: { contains: q, mode: "insensitive" } } },
             { poNumber: { contains: q, mode: "insensitive" } },
+            { companyName: { contains: q, mode: "insensitive" } },
+            { eventTypeName: { contains: q, mode: "insensitive" } },
+            { quotation: { quotationNo: { contains: q, mode: "insensitive" } } },
           ],
         }
       : {}),
@@ -706,8 +715,10 @@ export async function getMiceBookingById(id: string) {
     include: {
       customer: true,
       venue: { select: { id: true, name: true } },
+      eventType: { select: { id: true, name: true, code: true } },
       sales: { select: { id: true, fullName: true } },
       sourceOfInformation: { select: { id: true, name: true } },
+      quotation: { select: { id: true, quotationNo: true, status: true, totalPrice: true } },
       termOfPayments: { orderBy: { sortOrder: "asc" } },
     },
   });

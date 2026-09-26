@@ -2,6 +2,8 @@ import { requirePermissionForRoute } from "@/lib/permissions";
 import { apiLimiter, rateLimitResponse } from "@/lib/rate-limit";
 import {
   bitrixList,
+  bitrixListAll,
+  buildDealSearchFilters,
   getBitrixCrmMeta,
   getBitrixDealEnums,
   resolveBitrixContactInfo,
@@ -13,7 +15,13 @@ import {
 // specific to this Bitrix portal — discovered from crm.deal.fields.
 const UF_ISSUE = "UF_CRM_1768930533046"; // enum: Leads / No Response / Spam / Komplain …
 const UF_SUB_ISSUE = "UF_CRM_1774952346733"; // enum: Lokasi Terlalu Jauh / Pernikahan Batal / Catering …
-const UF_ADS_URL = "UF_CRM_1770698079121"; // ad source URL (IG/FB post link)
+// Exported so other routes (e.g. guestbook's ads-url lookup) reference the same
+// portal-specific field id instead of redeclaring the magic string.
+export const UF_ADS_URL = "UF_CRM_1770698079121"; // ad source URL (IG/FB post link)
+
+// Search merges several queries, so it pages client-side over the merged set
+// instead of using Bitrix's own paging. Matches crm.deal.list's page size.
+const SEARCH_PAGE_SIZE = 50;
 const UF_ADS_HEADLINE = "UF_CRM_1770698102639"; // ad headline
 const UF_ADS_BODY = "UF_CRM_1770698208232"; // ad body / caption
 const UF_DB_DATE = "UF_CRM_1786680629702"; // date: "Tanggal Database" — when the lead entered the database
@@ -90,16 +98,10 @@ export async function GET(request: Request) {
   }
   if (Object.keys(order).length === 0) order.DATE_CREATE = "DESC";
 
-  // Free-text search. Pure-numeric input → exact ID match (the user typed a
-  // Bitrix deal ID). Otherwise → partial title match (client name / deal title).
+  // Free-text search. Matched across deal id, deal title, client name and
+  // client phone at once — see resolveSearchFilters() below. Kept out of
+  // `filter` because a single Bitrix filter ANDs its keys, and these are OR.
   const q = searchParams.get("q")?.trim();
-  if (q) {
-    if (/^\d+$/.test(q)) {
-      filter["ID"] = q;
-    } else {
-      filter["%TITLE"] = q;
-    }
-  }
 
   // Stage filter — the client sends a stage *name* ("Hot Prospek") because the
   // same stage carries a different STATUS_ID per pipeline. Resolve it to every
@@ -170,12 +172,44 @@ export async function GET(request: Request) {
     if (isIsoDay(dbFrom)) stageFilter[`>=${UF_DB_DATE}`] = dbFrom;
     if (isIsoDay(dbTo)) stageFilter[`<=${UF_DB_DATE}`] = dbTo;
 
-    const { items, total, next } = await bitrixList<RawDeal>("crm.deal.list", {
-      select: DEAL_SELECT,
-      ...(Object.keys(stageFilter).length > 0 && { filter: stageFilter }),
-      order,
-      start,
-    });
+    // Free-text search fans out into several mutually-exclusive filters. Bitrix
+    // ANDs the keys inside one filter, so each variant is fetched separately and
+    // merged here; without a search term this stays a single paged call.
+    const searchFilters = q ? await buildDealSearchFilters(q) : [];
+
+    let items: RawDeal[];
+    let total: number;
+    let next: number | undefined;
+
+    if (searchFilters.length > 0) {
+      const results = await Promise.all(
+        searchFilters.map((sf) =>
+          bitrixListAll<RawDeal>("crm.deal.list", {
+            select: DEAL_SELECT,
+            filter: { ...stageFilter, ...sf },
+            order,
+          }).catch(() => ({ items: [] as RawDeal[] })),
+        ),
+      );
+
+      const merged = new Map<string, RawDeal>();
+      for (const r of results) for (const d of r.items) merged.set(d.ID, d);
+
+      const sorted = [...merged.values()].sort((a, b) => Number(b.ID) - Number(a.ID));
+      total = sorted.length;
+      items = sorted.slice(start, start + SEARCH_PAGE_SIZE);
+      next = start + SEARCH_PAGE_SIZE < total ? start + SEARCH_PAGE_SIZE : undefined;
+    } else {
+      const res = await bitrixList<RawDeal>("crm.deal.list", {
+        select: DEAL_SELECT,
+        ...(Object.keys(stageFilter).length > 0 && { filter: stageFilter }),
+        order,
+        start,
+      });
+      items = res.items;
+      total = res.total;
+      next = res.next;
+    }
 
     const [contactMap, userMap] = await Promise.all([
       resolveBitrixContactInfo(items.map((d) => d.CONTACT_ID ?? "").filter(Boolean)),

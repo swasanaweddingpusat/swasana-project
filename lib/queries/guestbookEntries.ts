@@ -1,7 +1,8 @@
 import { db } from "@/lib/db";
 import { buildOwnerScopeWhere } from "@/lib/access-control";
 import type { DataScope } from "@/types/user";
-import type { Prisma, GuestInteractionType } from "@prisma/client";
+import type { Prisma, GuestInteractionType, GuestVisitStatus } from "@prisma/client";
+import { isBitrixSourceName } from "@/lib/validations/guestbook";
 
 export type GuestbookCategoryFilter = "WEDDINGS" | "MICE" | "no_package";
 
@@ -13,6 +14,9 @@ export interface GuestbookFilterOptions {
   dateTo?: string; // yyyy-MM-dd
   category?: GuestbookCategoryFilter;
   interactionType?: GuestInteractionType;
+  status?: GuestVisitStatus;
+  sourceOfInformationId?: string;
+  festivalId?: string;
 }
 
 export interface GuestbookEntriesOptions extends GuestbookFilterOptions {
@@ -56,6 +60,9 @@ export function buildGuestbookWhere(filters: GuestbookFilterOptions): Prisma.Gue
   }
 
   if (filters.interactionType) where.interactionType = filters.interactionType;
+  if (filters.status) where.visitStatus = filters.status;
+  if (filters.sourceOfInformationId) where.sourceOfInformationId = filters.sourceOfInformationId;
+  if (filters.festivalId) where.festivalId = filters.festivalId;
 
   return where;
 }
@@ -74,19 +81,29 @@ export interface GuestbookOverviewBucket {
   key: string;
   label: string;
   count: number;
+  /**
+   * Berapa dari `count` yang datang lewat iklan (punya bitrixAdsUrl). Hanya
+   * diisi untuk sumber Bitrix — sumber lain tidak mengenal konsep ads URL.
+   */
+  adsCount?: number;
 }
 
 export interface GuestbookOverview {
+  /** Rencana Visit — semua entry yang tercatat. */
   total: number;
+  /** Sudah Visit — kunjungan yang tuntas, ditandai lewat checkOutAt. */
   checkedOut: number;
-  activeVisits: number;
+  /** Tidak Jadi Visit — entry yang berakhir Lost. */
+  lost: number;
+  /** Online Meeting — pertemuan daring, bukan kunjungan ke venue. */
   onlineMeetings: number;
-  inPersonVisits: number;
   byStatus: GuestbookOverviewBucket[];
   byCategory: GuestbookOverviewBucket[];
   bySource: GuestbookOverviewBucket[];
   byVenue: GuestbookOverviewBucket[];
   byHost: GuestbookOverviewBucket[];
+  adsUrlBuckets: GuestbookOverviewBucket[];
+  adsUrlOrganik: number;
 }
 
 const guestbookEntrySelect = {
@@ -109,6 +126,7 @@ const guestbookEntrySelect = {
   bitrixContactId: true,
   bitrixName: true,
   bitrixSourceInfo: true,
+  bitrixAdsUrl: true,
   visitStatus: true,
   proofFiles: true,
   commitVisitDate: true,
@@ -116,6 +134,7 @@ const guestbookEntrySelect = {
   sourceOfInformationId: true,
   packageId: true,
   segmentId: true,
+  festivalId: true,
   venueId: true,
   salesId: true,
   attendanceConfirmedAt: true,
@@ -138,6 +157,18 @@ const guestbookEntrySelect = {
     },
   },
   segment: { select: { id: true, name: true } },
+  festival: {
+    select: {
+      id: true,
+      name: true,
+      description: true,
+      backgroundImageKey: true,
+      barcodeBoxX: true,
+      barcodeBoxY: true,
+      barcodeBoxWidth: true,
+      barcodeBoxHeight: true,
+    },
+  },
 } satisfies Prisma.GuestbookEntrySelect;
 
 type GuestbookEntryRow = Prisma.GuestbookEntryGetPayload<{ select: typeof guestbookEntrySelect }>;
@@ -170,15 +201,23 @@ export async function getGuestbookEntries(
     .slice(0, 10)
     .map((row) => ({ key: row.key as string, label: labels.get(row.key as string) ?? fallback, count: row.count }));
 
-  const [statusGroups, categoryGroups, sourceGroups, venueGroups, hostGroups, interactionGroups, checkedOut, activeVisits] = await Promise.all([
+  const [statusGroups, categoryGroups, sourceGroups, venueGroups, hostGroups, adsUrlGroups, sourceAdsGroups, checkedOut, lost, onlineMeetings] = await Promise.all([
     db.guestbookEntry.groupBy({ by: ["visitStatus"], where, _count: { _all: true } }),
     db.guestbookEntry.groupBy({ by: ["eventCategory"], where, _count: { _all: true } }),
     db.guestbookEntry.groupBy({ by: ["sourceOfInformationId"], where, _count: { _all: true } }),
     db.guestbookEntry.groupBy({ by: ["venueId"], where, _count: { _all: true } }),
     db.guestbookEntry.groupBy({ by: ["hostId"], where, _count: { _all: true } }),
-    db.guestbookEntry.groupBy({ by: ["interactionType"], where, _count: { _all: true } }),
+    db.guestbookEntry.groupBy({ by: ["bitrixAdsUrl"], where, _count: { _all: true } }),
+    // Entry beriklan per sumber — dipakai menandai "Iklan (n)" di kartu Sumber
+    // Data, supaya Bitrix organik dan Bitrix dari iklan bisa dibedakan.
+    db.guestbookEntry.groupBy({
+      by: ["sourceOfInformationId"],
+      where: { ...where, bitrixAdsUrl: { not: null } },
+      _count: { _all: true },
+    }),
     db.guestbookEntry.count({ where: { ...where, checkOutAt: { not: null } } }),
-    db.guestbookEntry.count({ where: { ...where, checkOutAt: null } }),
+    db.guestbookEntry.count({ where: { ...where, visitStatus: "lost" } }),
+    db.guestbookEntry.count({ where: { ...where, interactionType: "online_meeting" } }),
   ]);
 
   const sourceIds = sourceGroups.flatMap((row) => row.sourceOfInformationId ? [row.sourceOfInformationId] : []);
@@ -193,20 +232,33 @@ export async function getGuestbookEntries(
   const sourceLabels = new Map(sources.map((row) => [row.id, row.name]));
   const venueLabels = new Map(venues.map((row) => [row.id, row.name]));
   const hostLabels = new Map(hosts.map((row) => [row.id, row.fullName ?? "Tanpa nama"]));
-  const interactionCounts = new Map(interactionGroups.map((row) => [row.interactionType, row._count._all]));
+  const sourceAdsCounts = new Map(
+    sourceAdsGroups.flatMap((row) =>
+      row.sourceOfInformationId ? [[row.sourceOfInformationId, row._count._all] as const] : [],
+    ),
+  );
   const overview: GuestbookOverview = {
     total: await db.guestbookEntry.count({ where }),
     checkedOut,
-    activeVisits,
-    onlineMeetings: interactionCounts.get("online_meeting") ?? 0,
-    inPersonVisits: (interactionCounts.get("client_visit") ?? 0) + (interactionCounts.get("jemput_bola") ?? 0),
+    lost,
+    onlineMeetings,
     byStatus: buildBuckets(statusGroups.map((row) => ({ key: row.visitStatus, count: row._count._all })), new Map([
       ["cold", "Cold"], ["warm", "Warm"], ["hot", "Hot"], ["done_visit", "Done Visit"], ["to_be_discuss", "To Be Discuss"], ["deal", "Deal"], ["lost", "Lost"],
     ]), "Tanpa status"),
     byCategory: buildBuckets(categoryGroups.map((row) => ({ key: row.eventCategory, count: row._count._all })), new Map([["WEDDINGS", "Wedding"], ["MICE", "MICE"]]), "Tanpa kategori"),
-    bySource: buildBuckets(sourceGroups.map((row) => ({ key: row.sourceOfInformationId, count: row._count._all })), sourceLabels, "Tanpa sumber"),
+    bySource: buildBuckets(sourceGroups.map((row) => ({ key: row.sourceOfInformationId, count: row._count._all })), sourceLabels, "Tanpa sumber")
+      .map((bucket) => {
+        const adsCount = sourceAdsCounts.get(bucket.key) ?? 0;
+        return isBitrixSourceName(bucket.label) && adsCount > 0 ? { ...bucket, adsCount } : bucket;
+      }),
     byVenue: buildBuckets(venueGroups.map((row) => ({ key: row.venueId, count: row._count._all })), venueLabels, "Tanpa venue"),
     byHost: buildBuckets(hostGroups.map((row) => ({ key: row.hostId, count: row._count._all })), hostLabels, "Tanpa PIC"),
+    adsUrlBuckets: adsUrlGroups
+      .filter((row) => !!row.bitrixAdsUrl)
+      .sort((a, b) => b._count._all - a._count._all)
+      .slice(0, 10)
+      .map((row) => ({ key: row.bitrixAdsUrl as string, label: row.bitrixAdsUrl as string, count: row._count._all })),
+    adsUrlOrganik: adsUrlGroups.find((row) => row.bitrixAdsUrl === null)?._count._all ?? 0,
   };
 
   const [data, total, weddingCount, miceCount] = await Promise.all([
@@ -222,11 +274,9 @@ export async function getGuestbookEntries(
     db.guestbookEntry.count({ where: categoryCountWhere("MICE") }),
   ]);
 
-  const uncategorizedCount = Math.max(0, total - weddingCount - miceCount);
   overview.byCategory = [
     { key: "WEDDINGS", label: "Wedding", count: weddingCount },
     { key: "MICE", label: "MICE", count: miceCount },
-    ...(uncategorizedCount > 0 ? [{ key: "other", label: "Lainnya", count: uncategorizedCount }] : []),
   ].filter((bucket) => bucket.count > 0);
 
   return { data, total, weddingCount, miceCount, overview, page, pageSize };

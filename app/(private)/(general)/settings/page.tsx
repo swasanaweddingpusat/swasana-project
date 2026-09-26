@@ -22,6 +22,7 @@ import {
   Widget,
   ClipboardList,
   GalleryWide,
+  Ticket,
   Tag,
   Wallet,
   ClipboardCheck,
@@ -164,6 +165,13 @@ const GROUPS: SettingGroup[] = [
         module: "settings-banner",
       },
       {
+        title: "Festival",
+        description: "Kelola festival: tanggal, keterangan, dan background tiket QR guestbook.",
+        icon: Ticket,
+        href: "/settings/festival",
+        module: "settings-festival",
+      },
+      {
         title: "Package Category",
         description: "Kelola kategori paket untuk pricing (Hadjatan, Regular, dll).",
         icon: Tag,
@@ -215,6 +223,7 @@ const GROUPS: SettingGroup[] = [
       { title: "Shift Kerja", description: "Kelola jadwal dan toleransi shift.", icon: ClockCircle, href: "/settings/attendance/shift", module: "hr-attendance" },
       { title: "Assignment Kehadiran", description: "Atur assignment shift dan lokasi karyawan.", icon: UsersGroupRounded, href: "/settings/attendance/assignment", module: "hr-attendance" },
       { title: "Pengaturan Kehadiran", description: "Atur parameter dan kebijakan absensi.", icon: Settings, href: "/settings/attendance/pengaturan", module: "hr-attendance" },
+      { title: "Koreksi Absen", description: "Kelola pengajuan koreksi absen karyawan.", icon: ClipboardCheck, href: "/settings/attendance/koreksi", module: "attendance-correction" },
     ],
   },
   {
@@ -259,10 +268,12 @@ export default async function SettingsHubPage() {
     "settings-maintenance-status",
     "settings-booking-log",
     "settings-banner",
+    "settings-festival",
     "settings-package-category",
     "kpi-master",
     "kpi-assignment", "kpi-report",
     "hr-attendance",
+    "attendance-correction",
   ]);
 
   const session = await auth();

@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useAttendanceToday, useClockIn, useClockOut } from "@/hooks/use-attendance";
 import { useWorkShifts } from "@/hooks/use-work-shifts";
 import { useWorkLocations } from "@/hooks/use-work-locations";
-import type { AttendanceStatusValue, DayOffTypeValue } from "@/lib/validations/attendance";
+import type { AttendanceStatusValue } from "@/lib/validations/attendance";
 import { CameraModal } from "./CameraModal";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -12,18 +12,13 @@ import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { ClockCircle, Login3, Logout3, MapPoint } from "@solar-icons/react";
+import { ClockCircle, Login3, Logout3, MapPoint, Camera, Restart } from "@solar-icons/react";
 
 type ClockAction = "in" | "out";
 
 const STATUS_OPTIONS: { value: AttendanceStatusValue; label: string }[] = [
   { value: "WORKDAY", label: "Work Day" },
   { value: "DAY_OFF", label: "Day Off" },
-];
-
-const DAY_OFF_TYPE_OPTIONS: { value: DayOffTypeValue; label: string }[] = [
-  { value: "REGULAR", label: "Libur Biasa" },
-  { value: "PUBLIC_HOLIDAY", label: "Public Holiday (Tanggal Merah)" },
 ];
 
 const WORK_TYPE_OPTIONS = [
@@ -59,13 +54,17 @@ function formatDuration(start: Date | string | null, end: Date | string | null):
 }
 
 export function AttendanceClock() {
-  const [currentTime, setCurrentTime] = useState(new Date());
+  // null on first (server + pre-hydration client) render so the clock text matches
+  // exactly, then filled in client-side after mount — avoids a hydration mismatch
+  // since server render time and client hydration time are never the same instant.
+  const [currentTime, setCurrentTime] = useState<Date | null>(null);
   const [cameraOpen, setCameraOpen] = useState(false);
   const [pendingAction, setPendingAction] = useState<ClockAction | null>(null);
+  const [capturedPhoto, setCapturedPhoto] = useState<string | null>(null);
   const [gpsCoords, setGpsCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [gpsLoading, setGpsLoading] = useState(false);
   const [selectedStatus, setSelectedStatus] = useState<AttendanceStatusValue | "">("");
-  const [selectedDayOffType, setSelectedDayOffType] = useState<DayOffTypeValue | "">("");
+  const [selectedIsPublicHoliday, setSelectedIsPublicHoliday] = useState(false);
   const [selectedPublicHolidayId, setSelectedPublicHolidayId] = useState<string>("");
   const [selectedShiftId, setSelectedShiftId] = useState<string>("");
   const [selectedWorkType, setSelectedWorkType] = useState<string>("");
@@ -83,6 +82,8 @@ export function AttendanceClock() {
   const shift = todayData?.shift ?? null;
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- hydration-safe clock: must set once on mount
+    setCurrentTime(new Date());
     const interval = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(interval);
   }, []);
@@ -103,11 +104,10 @@ export function AttendanceClock() {
   const handleStatusChange = useCallback((value: string) => {
     setSelectedStatus(value as AttendanceStatusValue);
     if (value === "WORKDAY") {
-      // Leaving the off flow — clear jenis libur.
-      setSelectedDayOffType("");
-      setSelectedPublicHolidayId("");
+      // Entering the workday flow — nothing off-flow to clear.
     } else {
-      // Entering the off flow — clear workday-only selections.
+      // Entering the off flow — clear workday-only selections, including the public
+      // holiday tag (Day Off is always libur biasa; Public Holiday only applies to WORKDAY).
       setSelectedShiftId("");
       setSelectedWorkType("");
       setSelectedLocationId("");
@@ -115,14 +115,13 @@ export function AttendanceClock() {
     }
   }, []);
 
-  const handleDayOffTypeChange = useCallback((value: string) => {
-    setSelectedDayOffType(value as DayOffTypeValue);
-    setSelectedPublicHolidayId(value === "PUBLIC_HOLIDAY" ? (context?.publicHolidayOptions[0]?.id ?? "") : "");
+  const handlePublicHolidayToggle = useCallback((checked: boolean) => {
+    setSelectedIsPublicHoliday(checked);
+    setSelectedPublicHolidayId(checked ? (context?.publicHolidayOptions[0]?.id ?? "") : "");
   }, [context?.publicHolidayOptions]);
 
   const isMutating = clockInMutation.isPending || clockOutMutation.isPending;
   const isWorkday = selectedStatus === "WORKDAY";
-  const isDayOff = selectedStatus === "DAY_OFF";
 
   const getStatusBadge = useCallback(() => {
     if (todayLoading) return <Badge variant="secondary">Memuat...</Badge>;
@@ -134,7 +133,7 @@ export function AttendanceClock() {
 
   const handleAction = useCallback((action: ClockAction) => {
     setGpsLoading(true);
-    setPendingAction(action);
+    setPendingAction("out");
 
     if (!navigator.geolocation) {
       toast.error("Browser Anda tidak mendukung geolocation");
@@ -158,25 +157,65 @@ export function AttendanceClock() {
     );
   }, []);
 
-  const handleClockIn = useCallback(() => {
+  const handleRetakePhoto = useCallback(() => {
+    setCameraOpen(true);
+  }, []);
+
+  const handleCancelClockIn = useCallback(() => {
+    setPendingAction(null);
+    setCapturedPhoto(null);
+    setGpsCoords(null);
+  }, []);
+
+  const handleCapture = useCallback((photoBase64: string) => {
+    setCameraOpen(false);
+    if (!pendingAction) return;
+
+    if (pendingAction === "in") {
+      // Photo captured — reveal the details step below instead of submitting right away.
+      setCapturedPhoto(photoBase64);
+      return;
+    }
+
+    if (!gpsCoords) return;
+    clockOutMutation.mutate(
+      { photoBase64, lat: gpsCoords.lat, lng: gpsCoords.lng },
+      {
+        onSuccess: () => {
+          toast.success("Clock out berhasil!");
+          setPendingAction(null);
+          setGpsCoords(null);
+        },
+        onError: (err) => {
+          toast.error(err.message);
+          setPendingAction(null);
+          setGpsCoords(null);
+        },
+      },
+    );
+  }, [gpsCoords, pendingAction, clockOutMutation]);
+
+  const handleSubmitClockIn = useCallback(() => {
+    if (!capturedPhoto) return;
+
     if (!selectedStatus) {
       toast.error("Pilih status kehadiran terlebih dahulu");
       return;
     }
 
     if (!isWorkday) {
-      // Off flow: pick jenis libur first. Nama hari besar tetap ditentukan HRD (master by-date).
-      if (!selectedDayOffType) {
-        toast.error("Pilih jenis libur terlebih dahulu");
-        return;
-      }
-      if (selectedDayOffType === "PUBLIC_HOLIDAY" && !selectedPublicHolidayId) {
-        toast.error("Pilih public holiday terlebih dahulu");
-        return;
-      }
-      // Selfie required, but no GPS/location.
-      setPendingAction("in");
-      setCameraOpen(true);
+      // Off flow: plain day off. Selfie only, no GPS/location needed.
+      clockInMutation.mutate(
+        { attendanceStatus: "DAY_OFF", photoBase64: capturedPhoto },
+        {
+          onSuccess: () => {
+            toast.success("Absensi berhasil disimpan!");
+            setPendingAction(null);
+            setCapturedPhoto(null);
+          },
+          onError: (err) => toast.error(err.message),
+        },
+      );
       return;
     }
 
@@ -184,12 +223,10 @@ export function AttendanceClock() {
       toast.error("Pilih shift terlebih dahulu");
       return;
     }
-
     if (!selectedWorkType) {
       toast.error("Pilih tipe kerja terlebih dahulu");
       return;
     }
-
     if (selectedWorkType === "WFO" && !selectedLocationId) {
       toast.error("Pilih lokasi kerja terlebih dahulu");
       return;
@@ -259,42 +296,52 @@ export function AttendanceClock() {
       return;
     }
 
-    if (!gpsCoords) return;
-    clockOutMutation.mutate(
-      { photoBase64, lat: gpsCoords.lat, lng: gpsCoords.lng },
+    clockInMutation.mutate(
+      {
+        attendanceStatus: "WORKDAY",
+        photoBase64: capturedPhoto,
+        lat: gpsCoords.lat,
+        lng: gpsCoords.lng,
+        workShiftId: selectedShiftId,
+        workType: selectedWorkType as "WFO" | "WFH" | "WFA",
+        workLocationId: selectedWorkType === "WFO" ? selectedLocationId : undefined,
+        // Nama hari besar tetap ditentukan HRD (master by-date); karyawan cuma menandai.
+        isPublicHoliday: selectedIsPublicHoliday,
+        publicHolidayId: selectedIsPublicHoliday ? (selectedPublicHolidayId || undefined) : undefined,
+      },
       {
         onSuccess: () => {
-          toast.success("Clock out berhasil!");
+          toast.success("Clock in berhasil!");
           setPendingAction(null);
+          setCapturedPhoto(null);
           setGpsCoords(null);
         },
-        onError: (err) => {
-          toast.error(err.message);
-          setPendingAction(null);
-          setGpsCoords(null);
-        },
+        onError: (err) => toast.error(err.message),
       },
     );
   }, [gpsCoords, pendingAction, isWorkday, selectedDayOffType, selectedPublicHolidayId, clockInMutation, clockOutMutation, selectedShiftId, selectedWorkType, selectedLocationId, workTypeReason]);
 
   const handleCameraClose = useCallback(() => {
     setCameraOpen(false);
-    setPendingAction(null);
-    setGpsCoords(null);
-  }, []);
+    // Only reset the whole flow if there's no photo yet (first open, user backed out).
+    // If closing mid-retake, keep the previously captured photo and the details step.
+    if (!capturedPhoto) {
+      setPendingAction(null);
+      setGpsCoords(null);
+    }
+  }, [capturedPhoto]);
 
   const canClockIn = !attendance?.clockInAt;
   const canClockOut = !!attendance?.clockInAt && !attendance?.clockOutAt;
   const isDone = !!attendance?.clockOutAt;
   const clockInDisabled =
     isMutating ||
-    gpsLoading ||
     !selectedStatus ||
-    (isDayOff && !selectedDayOffType) ||
-    (isDayOff && selectedDayOffType === "PUBLIC_HOLIDAY" && !selectedPublicHolidayId) ||
     (isWorkday && !selectedShiftId) ||
     (isWorkday && !selectedWorkType) ||
-    (isWorkday && selectedWorkType === "WFO" && !selectedLocationId);
+    (isWorkday && selectedWorkType === "WFO" && !selectedLocationId) ||
+    (isWorkday && selectedIsPublicHoliday && !selectedPublicHolidayId) ||
+    (isWorkday && (gpsLoading || !gpsCoords));
 
   return (
     <>
@@ -308,9 +355,9 @@ export function AttendanceClock() {
         <CardContent className="space-y-5">
           <div className="text-center space-y-1">
             <p className="text-2xl sm:text-3xl font-heading font-bold tabular-nums tracking-tight">
-              {formatTime(currentTime)}
+              {currentTime ? formatTime(currentTime) : "--:--:--"}
             </p>
-            <p className="text-sm text-muted-foreground">{formatDate(currentTime)}</p>
+            <p className="text-sm text-muted-foreground">{currentTime ? formatDate(currentTime) : " "}</p>
           </div>
 
           <div className="flex items-center justify-center gap-3">
@@ -368,8 +415,30 @@ export function AttendanceClock() {
             )
           )}
 
-          {canClockIn && (
+          {canClockIn && pendingAction !== "in" && (
+            <p className="text-center text-sm text-muted-foreground">
+              Ambil foto terlebih dahulu, lalu lengkapi detail kehadiran.
+            </p>
+          )}
+
+          {showClockInDetails && (
             <div className="space-y-3">
+              <div className="flex items-center gap-3 rounded-2xl border border-border bg-muted/30 p-3">
+                {capturedPhoto && (
+                  <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-xl">
+                    <Image src={capturedPhoto} alt="Foto absensi" fill unoptimized className="object-cover" />
+                  </div>
+                )}
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium">Foto absensi siap</p>
+                  <p className="text-xs text-muted-foreground">Lengkapi detail di bawah, lalu simpan.</p>
+                </div>
+                <Button type="button" variant="outline" size="sm" className="rounded-full shrink-0" onClick={handleRetakePhoto}>
+                  <Restart weight="BoldDuotone" className="h-4 w-4 mr-1.5" />
+                  Ambil Ulang
+                </Button>
+              </div>
+
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="space-y-1.5">
                   <label className="text-xs font-medium text-muted-foreground">Status Kehadiran</label>
@@ -386,45 +455,6 @@ export function AttendanceClock() {
                     </SelectContent>
                   </Select>
                 </div>
-
-                {isDayOff && (
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-medium text-muted-foreground">Jenis Libur</label>
-                    <Select value={selectedDayOffType} onValueChange={handleDayOffTypeChange}>
-                      <SelectTrigger className="w-full rounded-xl">
-                        <SelectValue placeholder="Pilih jenis libur" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {DAY_OFF_TYPE_OPTIONS.map((o) => (
-                          <SelectItem key={o.value} value={o.value}>
-                            {o.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
-
-                {isDayOff && selectedDayOffType === "PUBLIC_HOLIDAY" && (
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-medium text-muted-foreground">Public Holiday</label>
-                    <Select value={selectedPublicHolidayId} onValueChange={setSelectedPublicHolidayId} disabled={!context?.publicHolidayOptions.length}>
-                      <SelectTrigger className="w-full rounded-xl">
-                        <SelectValue placeholder="Pilih public holiday" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {context?.publicHolidayOptions.map((holiday) => (
-                          <SelectItem key={holiday.id} value={holiday.id}>
-                            {holiday.name} ({new Date(holiday.date).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })})
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    {!context?.publicHolidayOptions.length && (
-                      <p className="text-xs text-destructive">Saldo public holiday belum tersedia.</p>
-                    )}
-                  </div>
-                )}
 
                 {isWorkday && (
                   <div className="space-y-1.5">
@@ -497,12 +527,28 @@ export function AttendanceClock() {
                 )}
               </div>
 
-              {isDayOff && context?.isPublicHoliday && (
+              {isWorkday && (
+                <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-muted/20 px-3 py-2 text-xs">
+                  <MapPoint weight="BoldDuotone" className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                  {gpsLoading && <span className="text-muted-foreground">Mencari lokasi GPS...</span>}
+                  {!gpsLoading && gpsCoords && <span className="text-muted-foreground">Lokasi GPS ditemukan.</span>}
+                  {!gpsLoading && !gpsCoords && (
+                    <>
+                      <span className="text-destructive">Lokasi GPS belum tersedia.</span>
+                      <Button type="button" variant="link" size="sm" className="h-auto p-0 text-xs" onClick={requestGps}>
+                        Coba lagi
+                      </Button>
+                    </>
+                  )}
+                </div>
+              )}
+
+              {isWorkday && context?.isPublicHoliday && (
                 <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
                   <span className="font-medium">Hari besar hari ini</span>
                   {context.publicHolidayName ? ` — ${context.publicHolidayName}` : ""}
                   <span className="block text-xs text-destructive/80 mt-0.5">
-                    Ditandai HRD di kalender hari besar. Pilih &quot;Public Holiday&quot; agar tercatat sebagai tanggal merah.
+                    Ditandai HRD di kalender hari besar. Centang &quot;Tandai sebagai Public Holiday&quot; agar tercatat sebagai tanggal merah.
                   </span>
                 </div>
               )}
@@ -548,16 +594,39 @@ export function AttendanceClock() {
           )}
 
           <div className="flex flex-col gap-2 sm:flex-row sm:gap-3 justify-center">
-            {canClockIn && (
+            {canClockIn && pendingAction !== "in" && (
               <Button
                 size="lg"
                 className="rounded-full px-8"
-                disabled={clockInDisabled}
-                onClick={handleClockIn}
+                disabled={!settings || isMutating}
+                onClick={handleClockInTap}
               >
-                <Login3 weight="BoldDuotone" className="h-5 w-5 mr-2" />
-                {gpsLoading && pendingAction === "in" ? "Mencari lokasi..." : isWorkday ? "Clock In" : "Catat Kehadiran"}
+                <Camera weight="BoldDuotone" className="h-5 w-5 mr-2" />
+                Ambil Foto & Absen
               </Button>
+            )}
+
+            {showClockInDetails && (
+              <>
+                <Button
+                  size="lg"
+                  variant="ghost"
+                  className="rounded-full px-6"
+                  disabled={isMutating}
+                  onClick={handleCancelClockIn}
+                >
+                  Batal
+                </Button>
+                <Button
+                  size="lg"
+                  className="rounded-full px-8"
+                  disabled={submitClockInDisabled}
+                  onClick={handleSubmitClockIn}
+                >
+                  <Login3 weight="BoldDuotone" className="h-5 w-5 mr-2" />
+                  {isMutating ? "Menyimpan..." : "Simpan Absensi"}
+                </Button>
+              </>
             )}
 
             {canClockOut && (
@@ -566,7 +635,7 @@ export function AttendanceClock() {
                 variant="secondary"
                 className="rounded-full px-8"
                 disabled={isMutating || gpsLoading}
-                onClick={() => handleAction("out")}
+                onClick={handleClockOutTap}
               >
                 <Logout3 weight="BoldDuotone" className="h-5 w-5 mr-2" />
                 {gpsLoading && pendingAction === "out" ? "Mencari lokasi..." : "Clock Out"}

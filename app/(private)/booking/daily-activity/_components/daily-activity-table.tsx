@@ -19,7 +19,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { AddCircle, PenNewSquare, TrashBinTrash, Refresh, Magnifer, Eye, Filter } from "@solar-icons/react";
+import { AddCircle, PenNewSquare, TrashBinTrash, Refresh, Magnifer, Eye, Filter, Download } from "@solar-icons/react";
 import { PaginationBar } from "@/components/shared/pagination-bar";
 import { useDailyActivities, useDeleteDailyActivity } from "@/hooks/use-daily-activities";
 import { usePermissions } from "@/hooks/use-permissions";
@@ -105,6 +105,7 @@ export function DailyActivityTable({
   const [detailItem, setDetailItem] = useState<DailyActivityItem | null>(null);
   const [deletingItem, setDeletingItem] = useState<DailyActivityItem | null>(null);
   const [filterOpen, setFilterOpen] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
 
   useEffect(() => {
     const t = setTimeout(() => {
@@ -192,6 +193,43 @@ export function DailyActivityTable({
     }
   }
 
+  async function handleExport(): Promise<void> {
+    setIsExporting(true);
+    try {
+      // Same active filters as the table listing — minus page/pageSize, since
+      // export always pulls every row matching the current filter.
+      const { page: _page, pageSize: _pageSize, ...exportFilter } = params;
+      const exportParams = new URLSearchParams();
+      for (const [key, value] of Object.entries(exportFilter)) {
+        if (value) exportParams.set(key, String(value));
+      }
+
+      const res = await fetch(`/api/daily-activities/export?${exportParams.toString()}`);
+      if (!res.ok) {
+        const msg =
+          res.status === 429
+            ? "Terlalu banyak permintaan, coba lagi sebentar."
+            : "Gagal mengekspor data daily activity.";
+        toast.error(msg);
+        return;
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `daily-activity-${toIsoDay(new Date())}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      toast.success("Export berhasil diunduh.");
+    } catch {
+      toast.error("Gagal mengekspor data daily activity.");
+    } finally {
+      setIsExporting(false);
+    }
+  }
+
   function handleOpenAdd(): void {
     setEditingItem(null);
     setDrawerOpen(true);
@@ -216,101 +254,175 @@ export function DailyActivityTable({
 
   if (query.isLoading) {
     return (
-      <div className={cn("px-2", "sm:px-6", "pb-6")}>
-        <Card className="rounded-2xl shadow-sm">
-          <CardContent className="p-0">
-            <div className={cn("flex", "items-center", "justify-between", "px-4", "sm:px-6", "py-4", "border-b")}>
-              <div className={cn("flex", "items-center", "gap-2")}>
-                <Skeleton className={cn("h-5", "w-32")} />
+      <Card className="rounded-2xl shadow-sm">
+        <CardContent className="p-0">
+          <div className={cn("flex", "items-center", "justify-between", "px-4", "sm:px-6", "py-4", "border-b")}>
+            <div className={cn("flex", "items-center", "gap-2")}>
+              <Skeleton className={cn("h-5", "w-32")} />
+              <Skeleton className={cn("h-4", "w-8")} />
+            </div>
+            <Skeleton className={cn("h-9", "w-24", "rounded-xl")} />
+          </div>
+          <div className="px-4 sm:px-6">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div key={i} className={cn("flex", "items-center", "gap-4", "py-3", "border-b", "last:border-0")}>
                 <Skeleton className={cn("h-4", "w-8")} />
-              </div>
-              <Skeleton className={cn("h-9", "w-24", "rounded-xl")} />
-            </div>
-            <div className="px-4 sm:px-6">
-              {Array.from({ length: 5 }).map((_, i) => (
-                <div key={i} className={cn("flex", "items-center", "gap-4", "py-3", "border-b", "last:border-0")}>
-                  <Skeleton className={cn("h-4", "w-8")} />
-                  <Skeleton className={cn("h-4", "w-48")} />
-                  <Skeleton className={cn("h-4", "w-20")} />
-                  <div className="flex-1" />
-                  <div className={cn("flex", "gap-1")}>
-                    <Skeleton className={cn("h-7", "w-7")} />
-                    <Skeleton className={cn("h-7", "w-7")} />
-                  </div>
+                <Skeleton className={cn("h-4", "w-48")} />
+                <Skeleton className={cn("h-4", "w-20")} />
+                <div className="flex-1" />
+                <div className={cn("flex", "gap-1")}>
+                  <Skeleton className={cn("h-7", "w-7")} />
+                  <Skeleton className={cn("h-7", "w-7")} />
                 </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
     );
   }
 
   return (
     <>
-      <div className={cn("px-2", "sm:px-6", "pb-6")}>
-        <Card className="rounded-2xl shadow-sm">
-          <CardContent className="p-0">
-            {/* Header */}
-            <div className={cn("flex", "flex-col", "sm:flex-row", "items-start", "sm:items-center", "justify-between", "px-4", "sm:px-6", "py-4", "gap-3", "border-b")}>
-              <div className={cn("flex", "items-center", "gap-2")}>
-                <h2 className={cn("text-base", "font-heading", "font-bold", "text-foreground")}>Daily Activity</h2>
-                <span className={cn("text-sm", "text-muted-foreground")}>({query.data?.total ?? 0})</span>
-              </div>
-              <div className={cn("flex", "flex-wrap", "items-center", "gap-2")}>
-                <div className="relative">
-                  <Magnifer weight="BoldDuotone" className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                  <Input
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    placeholder="Cari perusahaan / kontak / milestone..."
-                    className="pl-8 h-9 w-56 rounded-xl"
-                  />
-                </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className={cn("h-9", "w-9", "p-0", "cursor-pointer", "rounded-xl", "relative")}
-                  onClick={() => setFilterOpen(true)}
-                  aria-label="Filter"
-                >
-                  <Filter weight="BoldDuotone" className="w-4 h-4" />
-                  {activeFilterCount > 0 && (
-                    <span className="absolute -top-1.5 -right-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[9px] font-bold text-primary-foreground leading-none">
-                      {activeFilterCount}
-                    </span>
-                  )}
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleRefresh}
-                  disabled={query.isFetching}
-                  className={cn("h-9", "w-9", "p-0", "cursor-pointer", "rounded-xl")}
-                  aria-label="Refresh"
-                >
-                  <Refresh weight="BoldDuotone" className={cn("w-4", "h-4", query.isFetching && "animate-spin")} />
-                </Button>
-                {(can("daily-activity", "create") || isAdmin) && (
-                  <Button onClick={handleOpenAdd} className={cn("cursor-pointer", "rounded-xl")}>
-                    <AddCircle weight="BoldDuotone" className={cn("w-4", "h-4", "mr-2")} /> Tambah Daily Activity
-                  </Button>
-                )}
-              </div>
+      <Card className="rounded-2xl shadow-sm">
+        <CardContent className="p-0">
+          {/* Header */}
+          <div className={cn("flex", "flex-col", "sm:flex-row", "items-start", "sm:items-center", "justify-between", "px-4", "sm:px-6", "py-4", "gap-3", "border-b")}>
+            <div className={cn("flex", "items-center", "gap-2")}>
+              <h2 className={cn("text-base", "font-heading", "font-bold", "text-foreground")}>Daily Activity</h2>
+              <span className={cn("text-sm", "text-muted-foreground")}>({query.data?.total ?? 0})</span>
             </div>
+            <div className={cn("flex", "flex-wrap", "items-center", "gap-2")}>
+              <div className="relative">
+                <Magnifer weight="BoldDuotone" className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Cari perusahaan / kontak / milestone..."
+                  className="pl-8 h-9 w-56 rounded-xl"
+                />
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                className={cn("h-9", "w-9", "p-0", "cursor-pointer", "rounded-xl", "relative")}
+                onClick={() => setFilterOpen(true)}
+                aria-label="Filter"
+              >
+                <Filter weight="BoldDuotone" className="w-4 h-4" />
+                {activeFilterCount > 0 && (
+                  <span className="absolute -top-1.5 -right-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[9px] font-bold text-primary-foreground leading-none">
+                    {activeFilterCount}
+                  </span>
+                )}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleRefresh}
+                disabled={query.isFetching}
+                className={cn("h-9", "w-9", "p-0", "cursor-pointer", "rounded-xl")}
+                aria-label="Refresh"
+              >
+                <Refresh weight="BoldDuotone" className={cn("w-4", "h-4", query.isFetching && "animate-spin")} />
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => { void handleExport(); }}
+                disabled={isExporting}
+                className={cn("h-9", "cursor-pointer", "rounded-xl", "gap-1.5")}
+              >
+                <Download weight="BoldDuotone" className="w-4 h-4" />
+                {isExporting ? "Mengekspor..." : "Export"}
+              </Button>
+              {(can("daily-activity", "create") || isAdmin) && (
+                <Button onClick={handleOpenAdd} className={cn("cursor-pointer", "rounded-xl")}>
+                  <AddCircle weight="BoldDuotone" className={cn("w-4", "h-4", "mr-2")} /> Tambah Daily Activity
+                </Button>
+              )}
+            </div>
+          </div>
 
-            {/* Mobile: card list (<sm) */}
-            <div className="block sm:hidden px-3 py-2 space-y-2">
-              {rows.length === 0 ? (
-                <div className={cn("text-center", "py-8", "text-muted-foreground", "text-sm")}>Belum ada data.</div>
-              ) : (
-                rows.map((item) => (
-                  <Card key={item.id} className="rounded-xl border bg-card shadow-none">
-                    <CardContent className="px-3 py-3 space-y-1">
-                      <div className="flex items-center justify-between gap-2">
-                        <p className="text-sm font-semibold text-foreground truncate">{item.companyName ?? "—"}</p>
-                        <div className="flex items-center gap-1 shrink-0">
-                          <ProgressStatusBadge status={item.progressStatus} />
+          {/* Mobile: card list (<sm) */}
+          <div className="block sm:hidden px-3 py-2 space-y-2">
+            {rows.length === 0 ? (
+              <div className={cn("text-center", "py-8", "text-muted-foreground", "text-sm")}>Belum ada data.</div>
+            ) : (
+              rows.map((item) => (
+                <Card key={item.id} className="rounded-xl border bg-card shadow-none">
+                  <CardContent className="px-3 py-3 space-y-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-sm font-semibold text-foreground truncate">{item.companyName ?? "—"}</p>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <ProgressStatusBadge status={item.progressStatus} />
+                        <button onClick={() => setDetailItem(item)} className={cn("p-1.5", "rounded-md", "hover:bg-muted", "cursor-pointer")} aria-label="Detail">
+                          <Eye weight="BoldDuotone" className={cn("w-4", "h-4", "text-muted-foreground")} />
+                        </button>
+                        {(can("daily-activity", "edit") || isAdmin) && (
+                          <button onClick={() => handleOpenEdit(item)} className={cn("p-1.5", "rounded-md", "hover:bg-muted", "cursor-pointer")} aria-label="Edit">
+                            <PenNewSquare weight="BoldDuotone" className={cn("w-4", "h-4", "text-muted-foreground")} />
+                          </button>
+                        )}
+                        {(can("daily-activity", "delete") || isAdmin) && (
+                          <button onClick={() => setDeletingItem(item)} className={cn("p-1.5", "rounded-md", "hover:bg-muted", "cursor-pointer")} aria-label="Hapus">
+                            <TrashBinTrash weight="BoldDuotone" className={cn("w-4", "h-4", "text-destructive")} />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {formatShortDate(item.activityDate)} · {item.sales.fullName} · {item.segment.name}
+                    </p>
+                    <p className="text-xs text-muted-foreground line-clamp-1">{item.milestone}</p>
+                  </CardContent>
+                </Card>
+              ))
+            )}
+          </div>
+
+          {/* Desktop/tablet: table (sm+) */}
+          <div className="hidden sm:block overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className={cn("px-4", "sm:px-6")}>Tanggal</TableHead>
+                  <TableHead>Perusahaan</TableHead>
+                  <TableHead>Sales</TableHead>
+                  <TableHead>Segment</TableHead>
+                  <TableHead>Progress</TableHead>
+                  <TableHead>Milestone</TableHead>
+                  <TableHead>Kontak</TableHead>
+                  <TableHead className="w-28 text-right pr-6">Aksi</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {rows.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={8} className={cn("text-center", "py-8", "text-muted-foreground")}>
+                      Belum ada data.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  rows.map((item) => (
+                    <TableRow key={item.id}>
+                      <TableCell className={cn("px-4", "sm:px-6", "whitespace-nowrap")}>
+                        {formatShortDate(item.activityDate)}
+                      </TableCell>
+                      <TableCell>
+                        <p className="font-medium truncate max-w-48">{item.companyName ?? "—"}</p>
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap">{item.sales.fullName}</TableCell>
+                      <TableCell className="whitespace-nowrap">{item.segment.name}</TableCell>
+                      <TableCell>
+                        <ProgressStatusBadge status={item.progressStatus} />
+                      </TableCell>
+                      <TableCell>
+                        <p className="text-sm text-muted-foreground line-clamp-1 max-w-56">{item.milestone}</p>
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap">{item.contactName ?? "—"}</TableCell>
+                      <TableCell>
+                        <div className={cn("flex", "items-center", "gap-1", "justify-end", "pr-2")}>
                           <button onClick={() => setDetailItem(item)} className={cn("p-1.5", "rounded-md", "hover:bg-muted", "cursor-pointer")} aria-label="Detail">
                             <Eye weight="BoldDuotone" className={cn("w-4", "h-4", "text-muted-foreground")} />
                           </button>
@@ -325,92 +437,24 @@ export function DailyActivityTable({
                             </button>
                           )}
                         </div>
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        {formatShortDate(item.activityDate)} · {item.sales.fullName} · {item.segment.name}
-                      </p>
-                      <p className="text-xs text-muted-foreground line-clamp-1">{item.milestone}</p>
-                    </CardContent>
-                  </Card>
-                ))
-              )}
-            </div>
-
-            {/* Desktop/tablet: table (sm+) */}
-            <div className="hidden sm:block overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className={cn("px-4", "sm:px-6")}>Tanggal</TableHead>
-                    <TableHead>Perusahaan</TableHead>
-                    <TableHead>Sales</TableHead>
-                    <TableHead>Segment</TableHead>
-                    <TableHead>Progress</TableHead>
-                    <TableHead>Milestone</TableHead>
-                    <TableHead>Kontak</TableHead>
-                    <TableHead className="w-28 text-right pr-6">Aksi</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {rows.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={8} className={cn("text-center", "py-8", "text-muted-foreground")}>
-                        Belum ada data.
                       </TableCell>
                     </TableRow>
-                  ) : (
-                    rows.map((item) => (
-                      <TableRow key={item.id}>
-                        <TableCell className={cn("px-4", "sm:px-6", "whitespace-nowrap")}>
-                          {formatShortDate(item.activityDate)}
-                        </TableCell>
-                        <TableCell>
-                          <p className="font-medium truncate max-w-48">{item.companyName ?? "—"}</p>
-                        </TableCell>
-                        <TableCell className="whitespace-nowrap">{item.sales.fullName}</TableCell>
-                        <TableCell className="whitespace-nowrap">{item.segment.name}</TableCell>
-                        <TableCell>
-                          <ProgressStatusBadge status={item.progressStatus} />
-                        </TableCell>
-                        <TableCell>
-                          <p className="text-sm text-muted-foreground line-clamp-1 max-w-56">{item.milestone}</p>
-                        </TableCell>
-                        <TableCell className="whitespace-nowrap">{item.contactName ?? "—"}</TableCell>
-                        <TableCell>
-                          <div className={cn("flex", "items-center", "gap-1", "justify-end", "pr-2")}>
-                            <button onClick={() => setDetailItem(item)} className={cn("p-1.5", "rounded-md", "hover:bg-muted", "cursor-pointer")} aria-label="Detail">
-                              <Eye weight="BoldDuotone" className={cn("w-4", "h-4", "text-muted-foreground")} />
-                            </button>
-                            {(can("daily-activity", "edit") || isAdmin) && (
-                              <button onClick={() => handleOpenEdit(item)} className={cn("p-1.5", "rounded-md", "hover:bg-muted", "cursor-pointer")} aria-label="Edit">
-                                <PenNewSquare weight="BoldDuotone" className={cn("w-4", "h-4", "text-muted-foreground")} />
-                              </button>
-                            )}
-                            {(can("daily-activity", "delete") || isAdmin) && (
-                              <button onClick={() => setDeletingItem(item)} className={cn("p-1.5", "rounded-md", "hover:bg-muted", "cursor-pointer")} aria-label="Hapus">
-                                <TrashBinTrash weight="BoldDuotone" className={cn("w-4", "h-4", "text-destructive")} />
-                              </button>
-                            )}
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-            </div>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
 
-            {totalPages > 1 && (
-              <PaginationBar
-                currentPage={page}
-                totalPages={totalPages}
-                onPageChange={setPage}
-                label="Navigasi halaman daily activity"
-              />
-            )}
-          </CardContent>
-        </Card>
-      </div>
+          {totalPages > 1 && (
+            <PaginationBar
+              currentPage={page}
+              totalPages={totalPages}
+              onPageChange={setPage}
+              label="Navigasi halaman daily activity"
+            />
+          )}
+        </CardContent>
+      </Card>
 
       <DailyActivityDrawer
         isOpen={drawerOpen}

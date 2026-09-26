@@ -3,10 +3,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import jsQR from "jsqr";
+import { toast } from "sonner";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { useConfirmGuestbookAttendance } from "@/hooks/use-guestbook";
-import { ArrowLeft, CheckCircle, CloseCircle, QrCode, Restart } from "@solar-icons/react";
+import type { ConfirmAttendanceResult } from "@/actions/guestbook";
+import { ArrowLeft, CheckCircle, CloseCircle, Keyboard, QrCode, Restart } from "@solar-icons/react";
 
 function formatDateTime(date: string | null | undefined): string {
   if (!date) return "—";
@@ -28,9 +31,37 @@ export function GuestbookScanClient(): React.ReactElement {
 
   const [cameraReady, setCameraReady] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
+  const [showManualEntry, setShowManualEntry] = useState(false);
+  const [manualCode, setManualCode] = useState("");
 
   const { mutate: confirmAttendance, data: result, isPending, isError, reset } =
     useConfirmGuestbookAttendance();
+
+  // Dedupe: react-query only hands back a new `result` object reference when a
+  // mutation actually resolves, so comparing against the last-seen reference
+  // guarantees the toast fires exactly once per scan (not once per re-render).
+  const lastToastedResultRef = useRef<ConfirmAttendanceResult | null>(null);
+  useEffect(() => {
+    if (!result || result === lastToastedResultRef.current) return;
+    lastToastedResultRef.current = result;
+
+    if (!result.success) {
+      toast.error(result.error ?? "Gagal konfirmasi kehadiran.");
+      return;
+    }
+
+    if (result.alreadyConfirmed) {
+      const confirmedAt = formatDateTime(result.confirmedAt);
+      toast.warning(
+        `${result.visitorName ?? "Tamu"} sudah hadir sebelumnya, tidak bisa check-in lagi.${
+          confirmedAt !== "—" ? ` (${confirmedAt})` : ""
+        }`
+      );
+      return;
+    }
+
+    toast.success(`${result.visitorName ?? "Tamu"} berhasil check-in.`);
+  }, [result]);
 
   // Kept in a ref so the mount-once effect below never needs to re-run
   // when the mutation object identity changes across renders.
@@ -110,7 +141,32 @@ export function GuestbookScanClient(): React.ReactElement {
   const handleScanAgain = useCallback(() => {
     reset();
     pausedRef.current = false;
+    setManualCode("");
+    setShowManualEntry(false);
   }, [reset]);
+
+  // Manual code entry reuses the exact same mutation used by the QR scan
+  // loop above, so both paths share identical validation/success/error handling.
+  const handleManualSubmit = useCallback(() => {
+    const trimmed = manualCode.trim();
+    if (!trimmed) return;
+    pausedRef.current = true;
+    confirmAttendance(trimmed);
+  }, [manualCode, confirmAttendance]);
+
+  const handleManualCodeChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+    setManualCode(event.target.value);
+  }, []);
+
+  const handleManualKeyDown = useCallback(
+    (event: React.KeyboardEvent<HTMLInputElement>) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        handleManualSubmit();
+      }
+    },
+    [handleManualSubmit]
+  );
 
   const showResultPanel = isPending || isError || Boolean(result);
 
@@ -222,6 +278,39 @@ export function GuestbookScanClient(): React.ReactElement {
           </div>
         </CardContent>
       </Card>
+
+      {!showResultPanel && (
+        <div className="flex flex-col gap-2">
+          <button
+            type="button"
+            onClick={() => setShowManualEntry((prev) => !prev)}
+            className="inline-flex items-center gap-1.5 self-start text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+          >
+            <Keyboard weight="BoldDuotone" className="h-4 w-4" />
+            Tidak bisa scan? Masukkan kode manual
+          </button>
+
+          {showManualEntry && (
+            <div className="flex items-center gap-2 rounded-2xl border border-border bg-card p-3">
+              <Input
+                value={manualCode}
+                onChange={handleManualCodeChange}
+                onKeyDown={handleManualKeyDown}
+                placeholder="Masukkan kode tamu..."
+                className="rounded-xl"
+                autoFocus
+              />
+              <Button
+                onClick={handleManualSubmit}
+                disabled={!manualCode.trim()}
+                className="shrink-0 rounded-xl"
+              >
+                Check-in
+              </Button>
+            </div>
+          )}
+        </div>
+      )}
 
       <canvas ref={canvasRef} className="hidden" />
     </div>

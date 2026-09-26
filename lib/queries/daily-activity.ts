@@ -71,12 +71,18 @@ async function resolveDailyActivityScopeFilter(
   return { salesId: { in: [...allowedIds] } };
 }
 
-export async function getDailyActivities(
-  filter: DailyActivityFilterInput,
-  caller?: { profileId: string; dataScope: DataScope },
-) {
-  // No "use cache": may receive an identity-scoped filter; caching a per-user
-  // result without a per-user key would leak data across callers.
+/** Filter fields shared by the paginated listing and the unpaginated export. */
+export type DailyActivityWhereFilter = Omit<DailyActivityFilterInput, "page" | "pageSize">;
+
+/**
+ * Build the `where` clause shared by `getDailyActivities` and
+ * `getDailyActivitiesForExport` — keeps the two reads in sync so the export
+ * always matches exactly what the table filter would return.
+ */
+function buildDailyActivityWhere(
+  filter: DailyActivityWhereFilter,
+  dataScopeFilter: Prisma.DailyActivityWhereInput,
+): Prisma.DailyActivityWhereInput {
   const {
     search,
     progressStatus,
@@ -86,15 +92,9 @@ export async function getDailyActivities(
     activityDateTo,
     siteVisitFrom,
     siteVisitTo,
-    page,
-    pageSize,
   } = filter;
 
-  const dataScopeFilter = caller
-    ? await resolveDailyActivityScopeFilter(caller.profileId, caller.dataScope)
-    : {};
-
-  const where: Prisma.DailyActivityWhereInput = {
+  return {
     deletedAt: null,
     ...dataScopeFilter,
     ...(search?.trim() && {
@@ -121,6 +121,21 @@ export async function getDailyActivities(
       },
     }),
   };
+}
+
+export async function getDailyActivities(
+  filter: DailyActivityFilterInput,
+  caller?: { profileId: string; dataScope: DataScope },
+) {
+  // No "use cache": may receive an identity-scoped filter; caching a per-user
+  // result without a per-user key would leak data across callers.
+  const { page, pageSize, ...whereFilter } = filter;
+
+  const dataScopeFilter = caller
+    ? await resolveDailyActivityScopeFilter(caller.profileId, caller.dataScope)
+    : {};
+
+  const where = buildDailyActivityWhere(whereFilter, dataScopeFilter);
 
   const skip = (page - 1) * pageSize;
 
@@ -142,6 +157,33 @@ export async function getDailyActivities(
     pageSize,
     totalPages: Math.max(1, Math.ceil(total / pageSize)),
   };
+}
+
+// Hard cap on export rows — mirrors the guestbook/export pattern. Protects
+// against an unbounded findMany() while comfortably covering real usage.
+const DAILY_ACTIVITY_EXPORT_LIMIT = 5000;
+
+/**
+ * Same filter/scope as `getDailyActivities` but unpaginated — used by the
+ * Excel export so the file always matches exactly what's active in the
+ * table's filter, never a raw/unfiltered dump.
+ */
+export async function getDailyActivitiesForExport(
+  filter: DailyActivityWhereFilter,
+  caller?: { profileId: string; dataScope: DataScope },
+) {
+  const dataScopeFilter = caller
+    ? await resolveDailyActivityScopeFilter(caller.profileId, caller.dataScope)
+    : {};
+
+  const where = buildDailyActivityWhere(filter, dataScopeFilter);
+
+  return db.dailyActivity.findMany({
+    where,
+    select: dailyActivitySelect,
+    orderBy: [{ activityDate: "desc" }, { createdAt: "desc" }],
+    take: DAILY_ACTIVITY_EXPORT_LIMIT,
+  });
 }
 
 export async function getDailyActivityById(id: string) {

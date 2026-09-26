@@ -1,18 +1,23 @@
 import { cacheTag } from "next/cache";
 import { db } from "@/lib/db";
-import type { QuotationStatus, EventCategory } from "@prisma/client";
+import type { QuotationStatus } from "@prisma/client";
 
 const quotationListSelect = {
   id: true,
   quotationNo: true,
-  category: true,
   status: true,
   clientName: true,
   clientPhone: true,
   instansi: true,
+  salesId: true,
+  venueId: true,
   venueName: true,
+  eventTypeId: true,
   eventTypeName: true,
-  weddingSession: true,
+  packageId: true,
+  packageName: true,
+  pax: true,
+  packageSource: true,
   eventDate: true,
   eventEndDate: true,
   time: true,
@@ -20,23 +25,39 @@ const quotationListSelect = {
   details: true,
   subtotal: true,
   discount: true,
+  discountName: true,
   totalPrice: true,
   bookingFee: true,
+  termAndCondition: true,
+  paymentNote: true,
+  cancellationPolicy: true,
+  closingNote: true,
   validUntil: true,
   notes: true,
   signingLocation: true,
   signatureSales: true,
   paymentMethodId: true,
+  // Frozen bank details — rendered directly, never re-resolved from PaymentMethod.
+  bankName: true,
+  bankAccountNumber: true,
+  bankRecipient: true,
   createdAt: true,
   updatedAt: true,
   sales: { select: { id: true, fullName: true, phoneNumber: true } },
-  venue: { select: { id: true, name: true } },
-  paymentMethod: { select: { id: true, bankName: true, bankAccountNumber: true, bankRecipient: true } },
-  eventType: { select: { id: true, name: true } },
-  items: { orderBy: { sortOrder: "asc" as const }, select: { id: true, title: true, description: true, qty: true, price: true, total: true, manualTotal: true, sortOrder: true } },
+  // No venue / eventType / paymentMethod joins: those pointers are FK-less and the
+  // document renders from its own frozen columns instead.
+  booking: { select: { id: true, poNumber: true } },
+  items: { orderBy: { sortOrder: "asc" as const }, select: { id: true, type: true, title: true, description: true, qty: true, price: true, total: true, manualTotal: true, sortOrder: true } },
+  prices: { orderBy: { sortOrder: "asc" as const }, select: { id: true, name: true, description: true, priceType: true, qty: true, price: true, total: true, sortOrder: true } },
+  taxDeposits: { orderBy: { sortOrder: "asc" as const }, select: { id: true, name: true, nominal: true, sortOrder: true } },
+  terms: { orderBy: { sortOrder: "asc" as const }, select: { id: true, name: true, amount: true, dueDate: true, sortOrder: true } },
   complimentaries: {
     orderBy: { sortOrder: "asc" as const },
     select: { id: true, complimentaryId: true, name: true, price: true, isShowPrice: true, description: true, qty: true, sortOrder: true },
+  },
+  bonuses: {
+    orderBy: { sortOrder: "asc" as const },
+    select: { id: true, bonusId: true, name: true, price: true, description: true, qty: true, sortOrder: true },
   },
 } as const;
 
@@ -54,7 +75,6 @@ interface GetQuotationsParams {
   pageSize?: number;
   search?: string;
   status?: QuotationStatus | "";
-  category?: EventCategory | "";
   salesId?: string;
 }
 
@@ -78,7 +98,6 @@ export async function getQuotations(params: GetQuotationsParams = {}): Promise<Q
         }
       : {}),
     ...(params.status ? { status: params.status } : {}),
-    ...(params.category ? { category: params.category } : {}),
     ...(params.salesId ? { salesId: params.salesId } : {}),
   };
 
@@ -104,72 +123,4 @@ export async function getQuotationById(id: string): Promise<QuotationListRow | n
     where: { id },
     select: quotationListSelect,
   });
-}
-
-// ── Approval helpers ──────────────────────────────────────────────────────────
-
-/**
- * Fetch the approval record for a single quotation.
- * Returns null if no approval record exists (pre-feature quotation).
- * NOTE: Not cached — used in server components/route handlers that need fresh data.
- */
-export async function getQuotationApprovalRecord(quotationId: string) {
-  return db.approvalRecord.findUnique({
-    where: { module_entityId: { module: "quotations", entityId: quotationId } },
-    select: {
-      id: true,
-      status: true,
-      steps: {
-        orderBy: { stepOrder: "asc" as const },
-        select: {
-          id: true,
-          stepOrder: true,
-          approverType: true,
-          approverRoleId: true,
-          status: true,
-          decidedAt: true,
-          approverRole: { select: { id: true, name: true } },
-          decidedBy: { select: { id: true, fullName: true } },
-        },
-      },
-    },
-  });
-}
-
-export type QuotationApprovalRecordResult = Awaited<ReturnType<typeof getQuotationApprovalRecord>>;
-
-/**
- * Fetch approval statuses for a batch of quotation IDs.
- * Returns a Map<quotationId, "pending" | "approved" | "rejected" | null>
- * where null = no approval record yet.
- *
- * Used by create-MICE booking to filter only fully-approved quotations.
- */
-export async function getQuotationApprovalStatuses(
-  quotationIds: string[]
-): Promise<Map<string, string | null>> {
-  if (quotationIds.length === 0) return new Map();
-
-  const records = await db.approvalRecord.findMany({
-    where: { module: "quotations", entityId: { in: quotationIds } },
-    select: { entityId: true, status: true },
-  });
-
-  const map = new Map<string, string | null>(quotationIds.map((id) => [id, null]));
-  for (const r of records) {
-    map.set(r.entityId, r.status);
-  }
-  return map;
-}
-
-/**
- * Convenience helper: returns true if a quotation approval record exists with status "approved".
- * Covers the gate for creating MICE bookings from a quotation.
- */
-export async function isQuotationFullyApproved(quotationId: string): Promise<boolean> {
-  const record = await db.approvalRecord.findUnique({
-    where: { module_entityId: { module: "quotations", entityId: quotationId } },
-    select: { status: true },
-  });
-  return record?.status === "approved";
 }

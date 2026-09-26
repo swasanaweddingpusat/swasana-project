@@ -10,6 +10,7 @@ import { avgSeconds, type ResponseSample } from "@/lib/bitrix-response";
 import { resolveSessionMetrics } from "@/lib/bitrix-session-metrics";
 import { parseSubject, channelFromSourceId } from "@/lib/bitrix-conversation";
 import { BITRIX_USER_NAME_OVERRIDES } from "@/lib/bitrix-accounts";
+import { normalizePhoneId } from "@/lib/phone";
 
 const PROVIDER_ID = "IMOPENLINES_SESSION";
 
@@ -101,7 +102,9 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const from = isIsoDay(searchParams.get("from")) ? (searchParams.get("from") as string) : yesterday();
   const to = isIsoDay(searchParams.get("to")) ? (searchParams.get("to") as string) : from;
-  const salesQuery = searchParams.get("sales")?.trim().toLowerCase() ?? "";
+  // "sales" is the legacy param name; the box now searches sales, client, deal
+  // id and phone alike, so "q" is accepted too and both mean the same thing.
+  const searchQuery = (searchParams.get("q") ?? searchParams.get("sales"))?.trim() ?? "";
   const dbFrom = searchParams.get("dbFrom")?.trim() ?? "";
   const dbTo = searchParams.get("dbTo")?.trim() ?? "";
 
@@ -209,10 +212,13 @@ export async function GET(request: Request) {
       Object.assign(userMap, extra);
     }
 
-    const rows: ResponseSalesRow[] = [...samplesByUser.entries()]
+    // Each row is paired with the text its conversations can be found by, so a
+    // search can match a client or a deal and not just the agent's name.
+    const rowsWithHaystack = [...samplesByUser.entries()]
       .map(([userId, samples]) => {
         const avg = avgSeconds(samples);
         const conversations: ConversationItem[] = [];
+        const sessionIds = new Set<string>();
 
         // Replied conversations.
         for (const [sessionId, byUser] of sessionSamples) {
@@ -222,6 +228,7 @@ export async function GET(request: Request) {
           if (!a) continue;
 
           const parsed = parseSubject(a.SUBJECT);
+          sessionIds.add(sessionId);
           conversations.push({
             sessionId,
             client: parsed.name,
@@ -238,6 +245,7 @@ export async function GET(request: Request) {
             const a = activityBySession.get(sessionId);
             if (!a) continue;
             const parsed = parseSubject(a.SUBJECT);
+            sessionIds.add(sessionId);
             conversations.push({
               sessionId,
               client: parsed.name,
@@ -253,19 +261,35 @@ export async function GET(request: Request) {
           return (y.avgResponseSec ?? 0) - (x.avgResponseSec ?? 0);
         });
 
+        // Session subject (client name + handle), session id and the owning
+        // deal id — the same identifiers Transaksi and Percakapan search by.
+        const haystack: string[] = [];
+        for (const sessionId of sessionIds) {
+          const a = activityBySession.get(sessionId);
+          haystack.push(sessionId);
+          if (a?.SUBJECT) haystack.push(a.SUBJECT);
+          if (a?.OWNER_TYPE_ID === "2" && a.OWNER_ID) haystack.push(a.OWNER_ID);
+        }
+
         return {
-          userId,
-          name: BITRIX_USER_NAME_OVERRIDES[userId] ?? userMap[userId] ?? `#${userId}`,
-          samples: samples.length,
-          avgSeconds: avg,
-          seconds: avg,
-          minutes: Math.round(avg / 60),
-          hours: formatHours(avg),
-          belumDibalasCount: conversations.filter((c) => c.status === "Belum Dibalas").length,
-          conversations,
+          row: {
+            userId,
+            name: BITRIX_USER_NAME_OVERRIDES[userId] ?? userMap[userId] ?? `#${userId}`,
+            samples: samples.length,
+            avgSeconds: avg,
+            seconds: avg,
+            minutes: Math.round(avg / 60),
+            hours: formatHours(avg),
+            belumDibalasCount: conversations.filter((c) => c.status === "Belum Dibalas").length,
+            conversations,
+          } satisfies ResponseSalesRow,
+          haystack,
         };
-      })
-      .filter((r) => !salesQuery || r.name.toLowerCase().includes(salesQuery))
+      });
+
+    const rows: ResponseSalesRow[] = rowsWithHaystack
+      .filter(({ row, haystack }) => matchesSearch(searchQuery, row.name, haystack))
+      .map(({ row }) => row)
       .sort((a, b) => b.avgSeconds - a.avgSeconds);
 
     const allSamples = [...samplesByUser.values()].flat();
@@ -338,6 +362,36 @@ async function sessionsOwnedByDeals(dealIds: string[]): Promise<RawActivity[]> {
   }
 
   return out;
+}
+
+/**
+ * Match a row against the free-text box.
+ *
+ * Rows are aggregated per sales, so unlike Transaksi and Percakapan there is no
+ * Bitrix query to push this into — the filter runs over what was already
+ * fetched. `haystack` carries each conversation's subject (client name and
+ * handle), session id and owning deal id, so the same things a user can search
+ * for elsewhere resolve here too.
+ *
+ * A phone is also retried in its normalised forms, because subjects store the
+ * handle unformatted ("628123…") while people type "08123…" or "+628123…".
+ */
+function matchesSearch(query: string, name: string, haystack: string[]): boolean {
+  const q = query.trim().toLowerCase();
+  if (!q) return true;
+  if (name.toLowerCase().includes(q)) return true;
+
+  const terms = [q];
+  const phone = normalizePhoneId(query);
+  if (phone) {
+    terms.push(phone.toLowerCase());
+    terms.push(`0${phone.slice(2)}`);
+  }
+
+  return haystack.some((entry) => {
+    const value = entry.toLowerCase();
+    return terms.some((t) => value.includes(t));
+  });
 }
 
 function isIsoDay(v: string | null): v is string {

@@ -3,6 +3,8 @@ import { apiLimiter, rateLimitResponse } from "@/lib/rate-limit";
 import { db } from "@/lib/db";
 import { buildOwnerScopeWhere } from "@/lib/access-control";
 import { buildGuestbookWhere, type GuestbookCategoryFilter } from "@/lib/queries/guestbookEntries";
+import { resolveGuestbookPhotoUrl } from "@/app/(private)/(general)/guestbook/_components/photo-url";
+import type { ProofFiles } from "@/lib/validations/guestbook";
 import type { Prisma, GuestInteractionType } from "@prisma/client";
 
 const ALLOWED_CATEGORY = new Set<GuestbookCategoryFilter>(["WEDDINGS", "MICE", "no_package"]);
@@ -72,6 +74,7 @@ const guestbookExportSelect = {
   package: { select: { packageName: true, category: true } },
   segment: { select: { name: true } },
   createdBy: { select: { fullName: true } },
+  proofFiles: true,
 } satisfies Prisma.GuestbookEntrySelect;
 
 // ─── GET /api/guestbook/export — Excel export of guestbook entries ────────────
@@ -142,6 +145,7 @@ export async function GET(req: Request): Promise<Response> {
       "Tanggal Commit Bayar",
       "Dicatat oleh",
       "Tanggal Dibuat",
+      "Link Bukti",
     ];
 
     const ExcelJS = await import("exceljs");
@@ -158,6 +162,8 @@ export async function GET(req: Request): Promise<Response> {
 
     rows.forEach((r) => {
       const cat = r.eventCategory ?? r.package?.category ?? null;
+      const proofFiles = (r.proofFiles ?? null) as ProofFiles | null;
+      const buktiUrl = resolveGuestbookPhotoUrl(proofFiles?.photo?.path ?? proofFiles?.chat?.path);
       sheet.addRow([
         r.visitorName,
         r.companyName ?? "",
@@ -178,6 +184,7 @@ export async function GET(req: Request): Promise<Response> {
         fmtDate(r.commitPayDate),
         r.createdBy?.fullName ?? "",
         fmtDateTime(r.createdAt),
+        buktiUrl ?? "",
       ]);
     });
 

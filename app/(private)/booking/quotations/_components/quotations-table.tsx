@@ -34,39 +34,18 @@ import {
   Pen,
   Eye,
   Refresh,
-  ClipboardCheck,
-  ClockCircle,
 } from "@solar-icons/react";
 import { cn } from "@/lib/utils";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useQuotations } from "@/hooks/use-quotations";
-import { useCurrentUser } from "@/hooks/use-current-user";
-import { usePermissions } from "@/hooks/use-permissions";
+
+import {
+  useConvertQuotationToMiceBooking,
+  useDuplicateQuotationRevision,
+  useQuotations,
+} from "@/hooks/use-quotations";
 import type { QuotationListRow } from "@/lib/queries/quotations";
+import { calculateQuotationTotals } from "@/lib/quotationPricing";
 import { QuotationDrawer } from "./quotation-drawer";
 import { QuotationPreview } from "./quotation-preview";
-import { ApprovalDialog } from "@/app/(private)/booking/packages/_components/approval-dialog";
-import { ApproveModal } from "@/app/(private)/booking/packages/_components/approve-modal";
-
-// ── Approval types ───────────────────────────────────────────────────────────
-
-interface QApprovalStep {
-  id: string;
-  stepOrder: number;
-  approverType: string;
-  approverRoleId: string | null;
-  approverUserId: string | null;
-  status: string;
-  approverRole: { id: string; name: string } | null;
-  approverUser: { id: string; fullName: string | null } | null;
-}
-
-interface QApprovalRecord {
-  id: string;
-  status: string;
-  steps: QApprovalStep[];
-  createdBy: { id: string; fullName: string | null };
-}
 
 /** Satu baris penawaran (flat list). Total default = qty * price, tapi bisa di-override manual. */
 export interface QuotationLineItem {
@@ -91,6 +70,41 @@ export interface QuotationComplimentaryItem {
   qty: number;
 }
 
+export interface QuotationBonusItem {
+  id: string;
+  bonusId: string | null;
+  name: string;
+  price: number;
+  description?: string;
+  qty: number;
+}
+
+export interface QuotationPriceItem {
+  id: string;
+  name: string;
+  description?: string;
+  priceType: "QTY" | "NOMINAL";
+  qty: number | null;
+  price: number | null;
+  total: number;
+  sortOrder: number;
+}
+
+export interface QuotationTaxDepositItem {
+  id: string;
+  name: string;
+  nominal: number;
+  sortOrder: number;
+}
+
+export interface QuotationTermItem {
+  id: string;
+  name: string;
+  amount: number;
+  dueDate: string | null;
+  sortOrder: number;
+}
+
 export interface QuotationItem {
   id: string;
   /** Nomor dokumen, mis. "#221-MICE". Optional — di-derive kalau kosong. */
@@ -104,10 +118,12 @@ export interface QuotationItem {
   // ── Sales ──────────────────────────────────────────────────────
   salesName: string;
   salesPhone?: string;
+  salesId?: string;
   // ── Event ──────────────────────────────────────────────────────
   venue: string;
-  category: "weddings" | "mice";
+  venueId?: string;
   eventType: string;
+  eventTypeId?: string;
   eventDate: string;
   /** Tanggal akhir event kalau berupa rentang; kosong = single-date. */
   eventEndDate?: string;
@@ -118,19 +134,35 @@ export interface QuotationItem {
   /** mis. "Ballroom" */
   place?: string;
   // ── Paket (ringkasan untuk list) ───────────────────────────────
+  packageId?: string;
+  packageSource?: string;
   packageName: string;
   variantName: string;
   pax: number;
   // ── Line items (detail penawaran) ──────────────────────────────
   items?: QuotationLineItem[];
+  additionals?: QuotationLineItem[];
+  // ── Harga (step 2) ─────────────────────────────────────────────
+  prices?: QuotationPriceItem[];
+  // ── Tax & Deposit (step 4) ─────────────────────────────────────
+  taxDeposits?: QuotationTaxDepositItem[];
+  // ── Term of Payment / TOP (step 4) ─────────────────────────────
+  terms?: QuotationTermItem[];
   // ── Complimentary (bonus gratis, tidak masuk pricing) ───────────
   complimentaries?: QuotationComplimentaryItem[];
+  // ── Bonus (tidak masuk pricing) ─────────────────────────────────
+  bonuses?: QuotationBonusItem[];
   // ── Pricing ────────────────────────────────────────────────────
   price: number;
   discount: number;
+  discountName?: string;
   totalPrice: number;
   // ── Term & Payment ─────────────────────────────────────────────
   bookingFee?: number;
+  termAndCondition?: string;
+  paymentNote?: string;
+  cancellationPolicy?: string;
+  closingNote?: string;
   bankName?: string;
   bankAccountNo?: string;
   bankAccountName?: string;
@@ -146,11 +178,41 @@ export interface QuotationItem {
   notes: string;
   signingLocation?: string;
   signatureSales?: string;
+  booking?: { id: string; poNumber: string | null } | null;
 }
 
 // ── DB row → display type mapper ─────────────────────────────────────────────
 
 function mapRowToQuotationItem(row: QuotationListRow): QuotationItem {
+  const items = row.items
+    .filter((item) => item.type !== "ADDITIONAL")
+    .map((item) => ({
+      id: item.id,
+      description: item.title,
+      richDescription: item.description ?? undefined,
+      qty: item.qty,
+      price: item.price,
+      total: item.total,
+      manualTotal: item.manualTotal,
+    }));
+  const additionals = row.items
+    .filter((item) => item.type === "ADDITIONAL")
+    .map((item) => ({
+      id: item.id,
+      description: item.title,
+      richDescription: item.description ?? undefined,
+      qty: item.qty,
+      price: item.price,
+      total: item.total,
+      manualTotal: item.manualTotal,
+    }));
+  const totals = calculateQuotationTotals({
+    items,
+    additionals,
+    prices: row.prices,
+    discount: row.discount,
+  });
+
   return {
     id: row.id,
     quotationNo: row.quotationNo ?? undefined,
@@ -159,23 +221,41 @@ function mapRowToQuotationItem(row: QuotationListRow): QuotationItem {
     instansi: row.instansi ?? undefined,
     salesName: row.sales.fullName ?? "",
     salesPhone: row.sales.phoneNumber ?? undefined,
-    venue: row.venueName ?? row.venue?.name ?? "",
-    category: row.category.toLowerCase() as "weddings" | "mice",
-    eventType: row.eventTypeName ?? row.eventType?.name ?? "",
+    salesId: row.salesId,
+    venue: row.venueName ?? "",
+    venueId: row.venueId ?? undefined,
+    eventType: row.eventTypeName ?? "",
+    eventTypeId: row.eventTypeId ?? undefined,
     eventDate: row.eventDate ? format(new Date(row.eventDate), "yyyy-MM-dd") : "",
     eventEndDate: row.eventEndDate ? format(new Date(row.eventEndDate), "yyyy-MM-dd") : "",
     time: row.time ?? undefined,
     place: row.place ?? undefined,
     details: row.details ?? undefined,
-    // items from DB → QuotationLineItem[]
-    items: row.items.map((it) => ({
-      id: it.id,
-      description: it.title,
-      richDescription: it.description ?? undefined,
-      qty: it.qty,
-      price: it.price,
-      total: it.total,
-      manualTotal: it.manualTotal,
+    // items from DB → QuotationLineItem[] (split by type)
+    items,
+    additionals,
+    prices: row.prices.map((p) => ({
+      id: p.id,
+      name: p.name,
+      description: p.description ?? undefined,
+      priceType: p.priceType as "QTY" | "NOMINAL",
+      qty: p.qty,
+      price: p.price,
+      total: p.total,
+      sortOrder: p.sortOrder,
+    })),
+    taxDeposits: row.taxDeposits.map((t) => ({
+      id: t.id,
+      name: t.name,
+      nominal: t.nominal,
+      sortOrder: t.sortOrder,
+    })),
+    terms: row.terms.map((t) => ({
+      id: t.id,
+      name: t.name,
+      amount: t.amount,
+      dueDate: t.dueDate ? format(new Date(t.dueDate), "yyyy-MM-dd") : null,
+      sortOrder: t.sortOrder,
     })),
     complimentaries: row.complimentaries.map((c) => ({
       id: c.id,
@@ -186,23 +266,39 @@ function mapRowToQuotationItem(row: QuotationListRow): QuotationItem {
       description: c.description ?? undefined,
       qty: c.qty,
     })),
-    price: row.subtotal,
+    bonuses: row.bonuses.map((b) => ({
+      id: b.id,
+      bonusId: b.bonusId,
+      name: b.name,
+      price: b.price,
+      description: b.description ?? undefined,
+      qty: b.qty,
+    })),
+    price: totals.subtotal,
     discount: row.discount,
-    totalPrice: row.totalPrice,
+    discountName: row.discountName ?? undefined,
+    totalPrice: totals.totalPrice,
     bookingFee: row.bookingFee ?? undefined,
+    termAndCondition: row.termAndCondition ?? undefined,
+    paymentNote: row.paymentNote ?? undefined,
+    cancellationPolicy: row.cancellationPolicy ?? undefined,
+    closingNote: row.closingNote ?? undefined,
     status: row.status as QuotationItem["status"],
     paymentMethodId: row.paymentMethodId ?? undefined,
-    bankName: row.paymentMethod?.bankName,
-    bankAccountNo: row.paymentMethod?.bankAccountNumber,
-    bankAccountName: row.paymentMethod?.bankRecipient,
+    bankName: row.bankName ?? undefined,
+    bankAccountNo: row.bankAccountNumber ?? undefined,
+    bankAccountName: row.bankRecipient ?? undefined,
     validUntil: row.validUntil ? format(new Date(row.validUntil), "yyyy-MM-dd") : "",
     createdAt: format(new Date(row.createdAt), "yyyy-MM-dd"),
     notes: row.notes ?? "",
     signingLocation: row.signingLocation ?? undefined,
     signatureSales: row.signatureSales ?? undefined,
-    packageName: "",
+    packageId: row.packageId ?? undefined,
+    packageSource: row.packageSource ?? undefined,
+    packageName: row.packageName ?? "",
     variantName: "",
-    pax: 0,
+    pax: row.pax,
+    booking: row.booking,
   };
 }
 
@@ -291,6 +387,19 @@ function formatEventDateRange(eventDate: string, eventEndDate?: string): string 
   return formatDate(eventDate);
 }
 
+/**
+ * True when the offer's validity window has closed. Compared date-only (the
+ * quotation is still valid for the whole of its last day), and only for
+ * quotations that have not been converted — once a booking exists the validity
+ * date is history and flagging it as expired would be misleading.
+ */
+function isQuotationExpired(q: QuotationItem): boolean {
+  if (!q.validUntil || q.booking) return false;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return new Date(q.validUntil) < today;
+}
+
 export function QuotationsTable() {
   const [search, setSearch] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
@@ -298,13 +407,8 @@ export function QuotationsTable() {
   const [editQuotation, setEditQuotation] = useState<QuotationItem | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewQuotation, setPreviewQuotation] = useState<QuotationItem | null>(null);
-  const [approvalDialogOpen, setApprovalDialogOpen] = useState(false);
-  const [approvalTarget, setApprovalTarget] = useState<QuotationItem | null>(null);
-  const [approveStepTarget, setApproveStepTarget] = useState<{ stepId: string; stepLabel: string; quotation: QuotationItem } | null>(null);
-
-  const qc = useQueryClient();
-  const { user } = useCurrentUser();
-  const { isAdmin } = usePermissions();
+  const convertMutation = useConvertQuotationToMiceBooking();
+  const revisionMutation = useDuplicateQuotationRevision();
 
   // ── Server-side data ──────────────────────────────────────────────────────
   const { data: quotationsResult, isLoading, isError, isFetching, refetch } = useQuotations({
@@ -317,57 +421,6 @@ export function QuotationsTable() {
   const total = quotationsResult?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / ROWS_PER_PAGE));
   const paginated = rawRows.map(mapRowToQuotationItem);
-
-  // ── Approval data (batch fetch for visible rows) ─────────────────────────
-  const quotationIds = paginated.map((q) => q.id);
-  const { data: approvalMap } = useQuery({
-    queryKey: ["quotation-approvals", quotationIds],
-    queryFn: async () => {
-      if (quotationIds.length === 0) return {} as Record<string, QApprovalRecord>;
-      const results: Record<string, QApprovalRecord> = {};
-      await Promise.all(
-        quotationIds.map(async (id) => {
-          try {
-            const res = await fetch(`/api/approval-records?module=quotations&entityId=${id}`);
-            if (res.ok) {
-              const data: QApprovalRecord = await res.json();
-              if (data) results[id] = data;
-            }
-          } catch { /* ignore */ }
-        })
-      );
-      return results;
-    },
-    enabled: quotationIds.length > 0,
-    staleTime: 15_000,
-  });
-
-  // ── Approval helpers ──────────────────────────────────────────────────────
-  function getApprovalBadge(qId: string): { label: string; variant: "default" | "outline" | "secondary" | "destructive" } | null {
-    const record = approvalMap?.[qId];
-    if (!record) return null;
-    const steps = record.steps.filter((s) => s.approverType !== "client");
-    if (steps.length === 0) return null;
-    if (steps.some((s) => s.status === "rejected")) return { label: "Ditolak", variant: "destructive" };
-    if (steps.every((s) => s.status === "approved")) return { label: "Approved", variant: "default" };
-    return { label: "Menunggu", variant: "secondary" };
-  }
-
-  function getActionableSteps(qId: string): QApprovalStep[] {
-    const record = approvalMap?.[qId];
-    if (!record) return [];
-    return record.steps.filter((s) =>
-      s.status === "pending" && s.approverType !== "client" && (
-        isAdmin ||
-        (s.approverType === "role" && s.approverRoleId === user?.roleId) ||
-        (s.approverType === "user" && s.approverUserId === user?.profileId)
-      )
-    );
-  }
-
-  function stepLabel(s: QApprovalStep): string {
-    return (s.approverType === "role" ? s.approverRole?.name : s.approverUser?.fullName) ?? "Approver";
-  }
 
   const handleAdd = useCallback(() => {
     setEditQuotation(null);
@@ -384,8 +437,29 @@ export function QuotationsTable() {
     setPreviewOpen(true);
   }, []);
 
-  function handleConvertToBooking(q: QuotationItem) {
-    toast.info(`Convert ke Booking untuk ${q.leadName} — coming soon.`);
+  async function handleConvertToBooking(q: QuotationItem): Promise<void> {
+    if (q.booking) {
+      toast.info(`Quotation sudah menjadi booking ${q.booking.poNumber ?? q.booking.id}.`);
+      return;
+    }
+    const result = await convertMutation.mutateAsync(q.id);
+    if (!result.success) {
+      toast.error(result.error);
+      return;
+    }
+    toast.success("Quotation berhasil dikonversi ke Booking MICE.");
+    refetch();
+  }
+
+  async function handleCreateRevision(q: QuotationItem): Promise<void> {
+    const result = await revisionMutation.mutateAsync(q.id);
+    if (!result.success) {
+      toast.error(result.error);
+      return;
+    }
+    toast.success(`Revisi ${result.data.quotationNo} berhasil dibuat.`);
+    setCurrentPage(1);
+    refetch();
   }
 
   return (
@@ -535,18 +609,19 @@ export function QuotationsTable() {
                     <TableRow>
                       {/* # — 3% */}
                       <TableHead className="w-[3%] text-center">#</TableHead>
-                      {/* Customer — 18% */}
-                      <TableHead className="w-[18%]">Customer</TableHead>
-                      {/* Venue — 15% */}
-                      <TableHead className="w-[15%]">Venue</TableHead>
-                      {/* Sales — 14% — hidden xs */}
-                      <TableHead className="w-[14%] hidden sm:table-cell">Sales</TableHead>
-                      {/* Submit Date — 11% — hidden until md */}
-                      <TableHead className="w-[11%] hidden md:table-cell">Submit</TableHead>
-                      {/* Event Date — 11% — hidden until xl */}
-                      <TableHead className="w-[11%] hidden xl:table-cell">Event</TableHead>
-                      {/* Total — 23% — right-aligned */}
-                      <TableHead className="w-[23%] text-right">Total</TableHead>
+                      {/* Quotation no + client + instansi — 21% */}
+                      <TableHead className="w-[21%]">Customer</TableHead>
+                      {/* Event type + pax — 14%, hidden below lg to protect the
+                          columns a salesperson scans first on narrow screens */}
+                      <TableHead className="w-[14%] hidden lg:table-cell">Event</TableHead>
+                      {/* Venue + event date — 18% */}
+                      <TableHead className="w-[18%]">Venue</TableHead>
+                      {/* Sales + created date — 15% */}
+                      <TableHead className="w-[15%] hidden sm:table-cell">Sales</TableHead>
+                      {/* Total + validity — 15% */}
+                      <TableHead className="w-[15%] text-right">Total</TableHead>
+                      {/* Document/conversion state — 14% */}
+                      <TableHead className="w-[14%]">Status</TableHead>
                       {/* Actions — 5% */}
                       <TableHead className="w-[5%]" />
                     </TableRow>
@@ -554,7 +629,7 @@ export function QuotationsTable() {
                   <TableBody>
                     {isFetching ? (
                       <TableRow>
-                        <TableCell colSpan={7} className="py-10 text-center text-muted-foreground">
+                        <TableCell colSpan={8} className="py-10 text-center text-muted-foreground">
                           <Refresh weight="BoldDuotone" aria-hidden="true" className="h-6 w-6 opacity-40 animate-spin mx-auto" />
                         </TableCell>
                       </TableRow>
@@ -562,23 +637,35 @@ export function QuotationsTable() {
                       paginated.map((q, idx) => (
                         <TableRow
                           key={q.id}
-                          onClick={() => handleEdit(q)}
+                          onClick={() => {
+                            if (q.booking) {
+                              handlePreview(q);
+                            } else {
+                              handleEdit(q);
+                            }
+                          }}
                           onKeyDown={(e) => {
                             if (e.key === "Enter" || e.key === " ") {
                               e.preventDefault();
-                              handleEdit(q);
+                              if (q.booking) {
+                                handlePreview(q);
+                              } else {
+                                handleEdit(q);
+                              }
                             }
                           }}
                           tabIndex={0}
                           role="button"
-                          aria-label={`Edit quotation ${q.leadName}`}
+                          aria-label={`${q.booking ? "Lihat" : "Edit"} quotation ${q.leadName}`}
                           className="cursor-pointer hover:bg-accent/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
                         >
                           {/* # */}
                           <TableCell className="text-center text-sm text-muted-foreground tabular-nums">
                             {(currentPage - 1) * ROWS_PER_PAGE + idx + 1}
                           </TableCell>
-                          {/* Customer */}
+                          {/* Customer — document no, PIC, and the company the offer
+                              is addressed to (MICE sells to organisations, so the
+                              instansi is often what people search by) */}
                           <TableCell className="min-w-0">
                             <div className="min-w-0">
                               <span className="block truncate font-mono text-[11px] text-muted-foreground">
@@ -590,29 +677,44 @@ export function QuotationsTable() {
                               >
                                 {q.leadName}
                               </span>
-                              <span className="block truncate text-xs text-muted-foreground">
-                                {q.leadPhone}
-                              </span>
-                              {(() => {
-                                const badge = getApprovalBadge(q.id);
-                                if (!badge) return null;
-                                return (
-                                  <Badge variant={badge.variant} className="text-[10px] mt-0.5">
-                                    {badge.label}
-                                  </Badge>
-                                );
-                              })()}
+                              {q.instansi ? (
+                                <span title={q.instansi} className="block truncate text-xs text-muted-foreground">
+                                  {q.instansi}
+                                </span>
+                              ) : (
+                                <span className="block truncate text-xs text-muted-foreground">
+                                  {q.leadPhone}
+                                </span>
+                              )}
                             </div>
                           </TableCell>
 
-                          {/* Venue */}
-                          <TableCell className="min-w-0">
-                            <span title={q.venue} className="block truncate text-sm">
-                              {q.venue}
-                            </span>
+                          {/* Event type + pax — the two figures that separate an
+                              otherwise identical Halfday and Fullday quotation */}
+                          <TableCell className="min-w-0 hidden lg:table-cell">
+                            <div className="min-w-0">
+                              <span title={q.eventType} className="block truncate text-sm text-foreground">
+                                {q.eventType || "—"}
+                              </span>
+                              <span className="block truncate text-xs text-muted-foreground tabular-nums">
+                                {q.pax > 0 ? `${q.pax} pax` : "—"}
+                              </span>
+                            </div>
                           </TableCell>
 
-                          {/* Sales — hidden xs */}
+                          {/* Venue + Event Date */}
+                          <TableCell className="min-w-0">
+                            <div className="min-w-0">
+                              <span title={q.venue} className="block truncate text-sm text-foreground">
+                                {q.venue || "—"}
+                              </span>
+                              <span className="block truncate text-xs text-muted-foreground tabular-nums">
+                                {q.eventDate ? formatEventDateRange(q.eventDate, q.eventEndDate) : "—"}
+                              </span>
+                            </div>
+                          </TableCell>
+
+                          {/* Sales + Submit Date — hidden xs */}
                           <TableCell className="min-w-0 hidden sm:table-cell">
                             <div className="min-w-0">
                               <span
@@ -621,31 +723,56 @@ export function QuotationsTable() {
                               >
                                 {q.salesName || "—"}
                               </span>
-                              {q.salesPhone && (
-                                <span className="block truncate text-xs text-muted-foreground">
-                                  {q.salesPhone}
+                              <span className="block truncate text-xs text-muted-foreground tabular-nums">
+                                {q.createdAt ? formatDate(q.createdAt) : "—"}
+                              </span>
+                            </div>
+                          </TableCell>
+
+                          {/* Total + validity — an expired offer is called out in
+                              red so it is not quoted to a client by accident */}
+                          <TableCell className="text-right">
+                            <div className="min-w-0">
+                              <span className="block truncate tabular-nums font-semibold text-sm text-foreground">
+                                {formatRupiah(q.totalPrice)}
+                              </span>
+                              {q.validUntil && (
+                                <span
+                                  className={cn(
+                                    "block truncate text-xs tabular-nums",
+                                    isQuotationExpired(q) ? "text-destructive font-medium" : "text-muted-foreground",
+                                  )}
+                                >
+                                  {isQuotationExpired(q) ? "Expired " : "s/d "}
+                                  {formatDate(q.validUntil)}
                                 </span>
                               )}
                             </div>
                           </TableCell>
 
-                          {/* Submit Date — hidden until md */}
-                          <TableCell className="min-w-0 hidden md:table-cell">
-                            <span className="block text-sm tabular-nums text-muted-foreground">
-                              {q.createdAt ? formatDate(q.createdAt) : "—"}
-                            </span>
-                          </TableCell>
-
-                          {/* Event Date — hidden until xl */}
-                          <TableCell className="min-w-0 hidden xl:table-cell">
-                            <span className="block text-sm tabular-nums">
-                              {q.eventDate ? formatEventDateRange(q.eventDate, q.eventEndDate) : "—"}
-                            </span>
-                          </TableCell>
-
-                          {/* Total */}
-                          <TableCell className="text-right tabular-nums font-semibold text-sm">
-                            {formatRupiah(q.totalPrice)}
+                          {/* Quotation has no approval lifecycle. Status only shows
+                              whether it is still editable or already converted. */}
+                          <TableCell className="min-w-0">
+                            <div className="min-w-0 space-y-1">
+                              <Badge variant={q.booking ? "default" : "secondary"} className="text-[10px]">
+                                {q.booking ? "Converted" : "Siap"}
+                              </Badge>
+                              {q.booking && (
+                                <span
+                                  title={q.booking.poNumber ?? undefined}
+                                  className="flex items-center gap-1 min-w-0 text-[11px] text-muted-foreground"
+                                >
+                                  <CalendarMark
+                                    weight="BoldDuotone"
+                                    aria-hidden="true"
+                                    className="h-3 w-3 shrink-0 text-primary"
+                                  />
+                                  <span className="truncate font-mono">
+                                    {q.booking.poNumber ?? "Booking"}
+                                  </span>
+                                </span>
+                              )}
+                            </div>
                           </TableCell>
 
                           {/* Actions */}
@@ -672,31 +799,28 @@ export function QuotationsTable() {
                                   <Eye weight="BoldDuotone" aria-hidden="true" className="h-4 w-4 mr-2 text-primary" />
                                   Lihat / Cetak
                                 </DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => handleEdit(q)}>
-                                  <Pen weight="BoldDuotone" aria-hidden="true" className="h-4 w-4 mr-2 text-primary" />
-                                  Edit
-                                </DropdownMenuItem>
-                                {getActionableSteps(q.id).map((step) => (
-                                  <DropdownMenuItem
-                                    key={step.id}
-                                    onClick={() => setApproveStepTarget({
-                                      stepId: step.id,
-                                      stepLabel: stepLabel(step),
-                                      quotation: q,
-                                    })}
-                                  >
-                                    <ClipboardCheck weight="BoldDuotone" aria-hidden="true" className="h-4 w-4 mr-2 text-primary" />
-                                    Approve {stepLabel(step)}
+                                {!q.booking && (
+                                  <DropdownMenuItem onClick={() => handleEdit(q)}>
+                                    <Pen weight="BoldDuotone" aria-hidden="true" className="h-4 w-4 mr-2 text-primary" />
+                                    Edit
                                   </DropdownMenuItem>
-                                ))}
-                                <DropdownMenuItem onClick={() => { setApprovalTarget(q); setApprovalDialogOpen(true); }}>
-                                  <ClockCircle weight="BoldDuotone" aria-hidden="true" className="h-4 w-4 mr-2 text-muted-foreground" />
-                                  Lihat Approval
-                                </DropdownMenuItem>
+                                )}
+                                {q.booking && (
+                                  <DropdownMenuItem
+                                    onClick={() => handleCreateRevision(q)}
+                                    disabled={revisionMutation.isPending}
+                                  >
+                                    <Refresh weight="BoldDuotone" aria-hidden="true" className="h-4 w-4 mr-2 text-primary" />
+                                    Buat Revisi
+                                  </DropdownMenuItem>
+                                )}
                                 <DropdownMenuSeparator />
-                                <DropdownMenuItem onClick={() => handleConvertToBooking(q)}>
+                                <DropdownMenuItem
+                                  onClick={() => handleConvertToBooking(q)}
+                                  disabled={!!q.booking || convertMutation.isPending}
+                                >
                                   <CalendarMark weight="BoldDuotone" aria-hidden="true" className="h-4 w-4 mr-2 text-primary" />
-                                  Convert ke Booking
+                                  {q.booking ? "Sudah Dikonversi" : "Convert ke Booking"}
                                 </DropdownMenuItem>
                               </DropdownMenuContent>
                             </DropdownMenu>
@@ -735,15 +859,27 @@ export function QuotationsTable() {
                             >
                               {q.leadName}
                             </span>
-                            {(() => {
-                              const badge = getApprovalBadge(q.id);
-                              if (!badge) return null;
-                              return (
-                                <Badge variant={badge.variant} className="text-[10px] mt-0.5">
-                                  {badge.label}
-                                </Badge>
-                              );
-                            })()}
+                            {q.instansi && (
+                              <span title={q.instansi} className="block text-xs text-muted-foreground truncate">
+                                {q.instansi}
+                              </span>
+                            )}
+                            <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
+                              <Badge variant={q.booking ? "default" : "secondary"} className="text-[10px]">
+                                {q.booking ? "Converted" : "Siap"}
+                              </Badge>
+                              {q.booking && (
+                                <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground min-w-0">
+                                  <CalendarMark weight="BoldDuotone" aria-hidden="true" className="h-3 w-3 shrink-0 text-primary" />
+                                  <span className="truncate font-mono">{q.booking.poNumber ?? "Booking"}</span>
+                                </span>
+                              )}
+                              {isQuotationExpired(q) && (
+                                <span className="text-[10px] font-medium text-destructive">
+                                  Expired {formatDate(q.validUntil)}
+                                </span>
+                              )}
+                            </div>
                           </div>
                         </div>
 
@@ -754,6 +890,12 @@ export function QuotationsTable() {
                             <>
                               <span aria-hidden="true">·</span>
                               <span className="truncate">{q.eventType}</span>
+                            </>
+                          )}
+                          {q.pax > 0 && (
+                            <>
+                              <span aria-hidden="true">·</span>
+                              <span className="truncate tabular-nums">{q.pax} pax</span>
                             </>
                           )}
                           {q.eventDate && (
@@ -785,42 +927,41 @@ export function QuotationsTable() {
                             />
                             Lihat/Cetak
                           </Button>
-                          <Button
-                            variant="outline"
-                            className="h-9 flex-1 text-xs"
-                            onClick={() => handleEdit(q)}
-                            aria-label={`Edit ${deriveQuotationNo(q)}`}
-                          >
-                            <Pen
-                              weight="BoldDuotone"
-                              aria-hidden="true"
-                              className="h-3.5 w-3.5 mr-1 text-muted-foreground"
-                            />
-                            Edit
-                          </Button>
-                          {(() => {
-                            const steps = getActionableSteps(q.id);
-                            if (steps.length === 0) return null;
-                            return (
-                              <Button
-                                variant="outline"
-                                className="h-9 flex-1 text-xs"
-                                onClick={() => setApproveStepTarget({
-                                  stepId: steps[0].id,
-                                  stepLabel: stepLabel(steps[0]),
-                                  quotation: q,
-                                })}
-                                aria-label={`Approve ${deriveQuotationNo(q)}`}
-                              >
-                                <ClipboardCheck weight="BoldDuotone" aria-hidden="true" className="h-3.5 w-3.5 mr-1 text-muted-foreground" />
-                                Approve
-                              </Button>
-                            );
-                          })()}
+                          {q.booking ? (
+                            <Button
+                              variant="outline"
+                              className="h-9 flex-1 text-xs"
+                              onClick={() => handleCreateRevision(q)}
+                              disabled={revisionMutation.isPending}
+                              aria-label={`Buat revisi ${deriveQuotationNo(q)}`}
+                            >
+                              <Refresh
+                                weight="BoldDuotone"
+                                aria-hidden="true"
+                                className="h-3.5 w-3.5 mr-1 text-muted-foreground"
+                              />
+                              Revisi
+                            </Button>
+                          ) : (
+                            <Button
+                              variant="outline"
+                              className="h-9 flex-1 text-xs"
+                              onClick={() => handleEdit(q)}
+                              aria-label={`Edit ${deriveQuotationNo(q)}`}
+                            >
+                              <Pen
+                                weight="BoldDuotone"
+                                aria-hidden="true"
+                                className="h-3.5 w-3.5 mr-1 text-muted-foreground"
+                              />
+                              Edit
+                            </Button>
+                          )}
                           <Button
                             variant="outline"
                             className="h-9 flex-1 text-xs"
                             onClick={() => handleConvertToBooking(q)}
+                            disabled={!!q.booking || convertMutation.isPending}
                             aria-label={`Convert ke booking ${deriveQuotationNo(q)}`}
                           >
                             <CalendarMark
@@ -828,7 +969,7 @@ export function QuotationsTable() {
                               aria-hidden="true"
                               className="h-3.5 w-3.5 mr-1 text-muted-foreground"
                             />
-                            Convert
+                            {q.booking ? "Converted" : "Convert"}
                           </Button>
                         </div>
                       </div>
@@ -915,34 +1056,6 @@ export function QuotationsTable() {
         quotation={previewQuotation}
       />
 
-      {approvalDialogOpen && approvalTarget && user && (
-        <ApprovalDialog
-          open={approvalDialogOpen}
-          onClose={() => {
-            setApprovalDialogOpen(false);
-            setApprovalTarget(null);
-            qc.invalidateQueries({ queryKey: ["quotation-approvals"] });
-          }}
-          packageId={approvalTarget.id}
-          packageName={approvalTarget.leadName}
-          userProfileId={user.profileId}
-          userRoleId={user.roleId ?? null}
-          module="quotations"
-        />
-      )}
-
-      {approveStepTarget && (
-        <ApproveModal
-          open={!!approveStepTarget}
-          onClose={() => {
-            setApproveStepTarget(null);
-            qc.invalidateQueries({ queryKey: ["quotation-approvals"] });
-          }}
-          stepId={approveStepTarget.stepId}
-          stepLabel={approveStepTarget.stepLabel}
-          packageName={approveStepTarget.quotation.leadName}
-        />
-      )}
     </>
   );
 }

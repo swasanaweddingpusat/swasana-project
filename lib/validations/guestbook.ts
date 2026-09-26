@@ -32,6 +32,7 @@ export const createGuestbookEntrySchema = z
     bitrixContactId: z.string().optional().nullable(),
     bitrixName: z.string().optional().nullable(),
     bitrixSourceInfo: z.string().optional().nullable(),
+    bitrixAdsUrl: z.string().optional().nullable(),
     interactionType: z.enum(['client_visit', 'online_meeting', 'jemput_bola']),
     onlineMedium: z.enum(['zoom', 'google_meet', 'whatsapp_call', 'microsoft_teams', 'other']).optional().nullable(),
     meetingUrl: z.string().optional().nullable(),
@@ -45,16 +46,25 @@ export const createGuestbookEntrySchema = z
     sourceOfInformationId: z.string().optional().nullable(),
     packageId: z.string().optional().nullable(),
     segmentId: z.string().optional().nullable(),
+    festivalId: z.string().optional().nullable(),
     proofFiles: proofFilesSchema,
     commitVisitDate: z.string().optional().nullable(),
     commitPayDate: z.string().optional().nullable(),
   })
   .superRefine((val, ctx) => {
-    if (!val.proofFiles?.photo) {
+    if (val.eventCategory === 'MICE' && !val.segmentId?.trim()) {
       ctx.addIssue({
-        path: ['proofFiles', 'photo'],
+        path: ['segmentId'],
         code: z.ZodIssueCode.custom,
-        message: 'Bukti Foto Visit wajib diupload',
+        message: 'Segmen wajib dipilih',
+      });
+    }
+
+    if (val.eventCategory !== 'MICE' && !val.packageId?.trim()) {
+      ctx.addIssue({
+        path: ['packageId'],
+        code: z.ZodIssueCode.custom,
+        message: 'Paket wajib dipilih',
       });
     }
 
@@ -104,6 +114,7 @@ export const updateGuestbookEntrySchema = z.object({
   sourceOfInformationId: z.string().optional().nullable(),
   packageId: z.string().optional().nullable(),
   segmentId: z.string().optional().nullable(),
+  festivalId: z.string().optional().nullable(),
   visitorName: z.string().min(1).optional(),
   companyName: z.string().optional().nullable(),
   eventCategory: z.enum(['WEDDINGS', 'MICE']).optional().nullable(),
@@ -112,6 +123,7 @@ export const updateGuestbookEntrySchema = z.object({
   bitrixContactId: z.string().optional().nullable(),
   bitrixName: z.string().optional().nullable(),
   bitrixSourceInfo: z.string().optional().nullable(),
+  bitrixAdsUrl: z.string().optional().nullable(),
   interactionType: z.enum(['client_visit', 'online_meeting', 'jemput_bola']).optional(),
   onlineMedium: z.enum(['zoom', 'google_meet', 'whatsapp_call', 'microsoft_teams', 'other']).optional().nullable(),
   meetingUrl: z.string().optional().nullable(),
@@ -124,6 +136,22 @@ export const updateGuestbookEntrySchema = z.object({
   proofFiles: proofFilesSchema,
   commitVisitDate: z.string().optional().nullable(),
   commitPayDate: z.string().optional().nullable(),
+}).superRefine((val, ctx) => {
+  if (val.eventCategory === 'MICE' && !val.segmentId?.trim()) {
+    ctx.addIssue({
+      path: ['segmentId'],
+      code: z.ZodIssueCode.custom,
+      message: 'Segmen wajib dipilih',
+    });
+  }
+
+  if (val.eventCategory !== 'MICE' && !val.packageId?.trim()) {
+    ctx.addIssue({
+      path: ['packageId'],
+      code: z.ZodIssueCode.custom,
+      message: 'Paket wajib dipilih',
+    });
+  }
 });
 
 export type UpdateGuestbookEntryInput = z.infer<typeof updateGuestbookEntrySchema>;
@@ -131,4 +159,22 @@ export type UpdateGuestbookEntryInput = z.infer<typeof updateGuestbookEntrySchem
 /** Sumber informasi dianggap "dari Bitrix" kalau namanya mengandung kata "bitrix" — heuristik yang sama dipakai client (GuestbookDrawer) dan server (actions/guestbook.ts) supaya konsisten. */
 export function isBitrixSourceName(name: string | null | undefined): boolean {
   return (name ?? "").toLowerCase().includes("bitrix");
+}
+
+/**
+ * Label sumber untuk tabel/kartu guestbook.
+ *
+ * Entry dari Bitrix bisa datang lewat iklan atau organik, dan bedanya cuma
+ * kelihatan dari ada/tidaknya ads URL. Tandai yang beriklan jadi
+ * "Bitrix (Iklan)" supaya keduanya bisa dibedakan langsung dari list tanpa
+ * membuka detail. Sumber non-Bitrix dikembalikan apa adanya.
+ */
+export function guestbookSourceLabel(
+  sourceName: string | null | undefined,
+  bitrixAdsUrl: string | null | undefined,
+): string | null {
+  const name = sourceName?.trim() || null;
+  if (!name) return null;
+  if (!isBitrixSourceName(name)) return name;
+  return bitrixAdsUrl?.trim() ? `${name} (Iklan)` : name;
 }

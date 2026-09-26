@@ -3,6 +3,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   createMiceBooking,
+  convertApprovedQuotationToMiceBooking,
   updateMiceBooking,
   deleteMiceBooking,
   markMiceLost,
@@ -67,6 +68,17 @@ export function useCreateMiceBooking() {
   return useMutation({
     mutationFn: (data: CreateMiceBookingInput) => createMiceBooking(data),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["mice-bookings"] }),
+  });
+}
+
+export function useConvertApprovedQuotationToMiceBooking() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (quotationId: string) => convertApprovedQuotationToMiceBooking(quotationId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["mice-bookings"] });
+      qc.invalidateQueries({ queryKey: ["quotations-search"] });
+    },
   });
 }
 

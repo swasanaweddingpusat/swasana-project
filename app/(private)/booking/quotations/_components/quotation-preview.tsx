@@ -10,6 +10,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { richTextToPlainText } from "@/lib/richText";
 import { cn } from "@/lib/utils";
 import type { QuotationItem, QuotationLineItem } from "./quotations-table";
 
@@ -20,6 +21,16 @@ interface QuotationPreviewProps {
 }
 
 const PRINT_AREA_ID = "quotation-print-area";
+
+// Editable-clause fallbacks — used when the quotation's corresponding field is
+// null (legacy rows / not yet customized via the drawer's Step 5 form).
+const DEFAULT_PAYMENT_NOTE =
+  "The remaining payment shall be completed according to the agreed schedule.";
+const DEFAULT_CANCELLATION_POLICY =
+  "All confirmed transactions are non-cancellable and non-refundable.";
+function defaultClosingNote(venue: string): string {
+  return `We look forward to welcoming you and your team at Kediaman Event Venue — ${venue}. Should you require any further assistance, please do not hesitate to contact us.`;
+}
 
 /**
  * Nomor dokumen — pakai yang tersimpan (format register: "#201-MICE").
@@ -51,9 +62,21 @@ function formatEventDateRange(eventDate: string, eventEndDate?: string): string 
   return formatLongDate(eventDate);
 }
 
-/** Fallback line items kalau quotation belum punya detail — pakai 1 baris ringkasan paket. */
+/** Build the printable rows from every commercial section in the drawer. */
 function resolveItems(q: QuotationItem): QuotationLineItem[] {
-  if (q.items && q.items.length > 0) return q.items;
+  const priceRows: QuotationLineItem[] = (q.prices ?? []).map((price) => ({
+    id: `price-${price.id}`,
+    description: price.name,
+    richDescription: price.description,
+    qty: price.priceType === "QTY" ? (price.qty ?? 0) : 0,
+    price: price.priceType === "QTY" ? (price.price ?? 0) : 0,
+    total: price.total,
+    manualTotal: price.priceType === "NOMINAL",
+  }));
+  const itemRows = q.items ?? [];
+  const additionalRows = q.additionals ?? [];
+  const rows = [...priceRows, ...itemRows, ...additionalRows];
+  if (rows.length > 0) return rows;
   return [
     {
       id: "fallback-1",
@@ -102,14 +125,16 @@ export function QuotationPreview({
   const q = quotation;
   const items = resolveItems(q);
 
-  const subtotal =
-    q.items && q.items.length > 0
-      ? items.reduce((sum, it) => sum + it.total, 0)
-      : q.price;
+  const subtotal = q.price;
   const discount = q.discount ?? 0;
   const downPayment = q.downPayment ?? 0;
   const others = q.others ?? 0;
-  const total = Math.max(0, subtotal - discount + others);
+  const total = q.totalPrice;
+  const termAndCondition = richTextToPlainText(q.termAndCondition);
+  const cancellationPolicy =
+    richTextToPlainText(q.cancellationPolicy) || DEFAULT_CANCELLATION_POLICY;
+  const closingNote = richTextToPlainText(q.closingNote) || defaultClosingNote(q.venue);
+  const termIncludesBankTransfer = /bank\s+transfer/i.test(termAndCondition);
 
   function handlePrint() {
     window.print();
@@ -241,7 +266,12 @@ export function QuotationPreview({
                             header && "pt-3 font-bold"
                           )}
                         >
-                          {it.description}
+                          <span className="block">{it.description}</span>
+                          {it.richDescription?.trim() ? (
+                            <p className="mt-0.5 whitespace-pre-line text-[10px] font-normal leading-relaxed text-muted-foreground">
+                              {richTextToPlainText(it.richDescription)}
+                            </p>
+                          ) : null}
                         </td>
                         <td className="py-0.5 text-right align-top tabular-nums text-muted-foreground">
                           {it.qty > 0 ? it.qty : ""}
@@ -268,20 +298,33 @@ export function QuotationPreview({
                 {/* Kiri: term & payment */}
                 <div className="space-y-2 text-[11px] leading-relaxed">
                   <p className="font-bold text-foreground">Term &amp; Payment :</p>
-                  {q.bookingFee && q.bookingFee > 0 ? (
+                  {termAndCondition ? (
+                    <p className="whitespace-pre-line text-foreground">
+                      {termAndCondition}
+                    </p>
+                  ) : (
+                    <>
+                      {q.bookingFee && q.bookingFee > 0 ? (
+                        <p className="text-foreground">
+                          Booking Fee of{" "}
+                          <span className="font-bold">
+                            {formatRupiah(q.bookingFee)}
+                          </span>{" "}
+                          is required to confirm the reservation.
+                        </p>
+                      ) : null}
+                      <p className="text-muted-foreground">
+                        {q.paymentNote?.trim() || DEFAULT_PAYMENT_NOTE}
+                      </p>
+                    </>
+                  )}
+                  {!termIncludesBankTransfer ? (
                     <p className="text-foreground">
-                      Booking Fee of{" "}
-                      <span className="font-bold">
-                        {formatRupiah(q.bookingFee)}
-                      </span>{" "}
-                      is required to confirm the reservation.
+                      Payment can be made via{" "}
+                      <span className="font-bold">bank transfer</span> to the
+                      following account:
                     </p>
                   ) : null}
-                  <p className="text-foreground">
-                    Payment can be made via{" "}
-                    <span className="font-bold">bank transfer</span> to the
-                    following account:
-                  </p>
                   <div className="space-y-0.5 pt-1">
                     <p>
                       <span className="font-bold text-foreground">Bank</span> :{" "}
@@ -300,6 +343,19 @@ export function QuotationPreview({
                       : {q.bankAccountName ?? "—"}
                     </p>
                   </div>
+                  {q.terms && q.terms.length > 0 ? (
+                    <div className="space-y-1 border-t border-border pt-2">
+                      <p className="font-bold text-foreground">Payment Schedule</p>
+                      {q.terms.map((term) => (
+                        <div key={term.id} className="flex justify-between gap-3">
+                          <span>{term.name}</span>
+                          <span className="text-right tabular-nums">
+                            {formatRupiah(term.amount)} · {term.dueDate ? formatLongDate(term.dueDate) : "—"}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
                 </div>
 
                 {/* Kanan: ringkasan total */}
@@ -340,6 +396,17 @@ export function QuotationPreview({
                       {formatRupiah(total)}
                     </span>
                   </div>
+                  {q.taxDeposits && q.taxDeposits.length > 0 ? (
+                    <div className="mt-3 space-y-1 border-t border-border pt-2">
+                      <p className="font-bold text-foreground">Tax &amp; Deposit</p>
+                      {q.taxDeposits.map((item) => (
+                        <div key={item.id} className="flex justify-between gap-3 text-muted-foreground">
+                          <span>{item.name}</span>
+                          <span className="tabular-nums">{formatRupiah(item.nominal)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
                 </div>
               </div>
 
@@ -350,15 +417,16 @@ export function QuotationPreview({
                 </p>
               ) : null}
 
-              {/* Klausul standar dokumen QUO — muncul di semua venue. */}
-              <p className="mt-6 text-[11px] font-medium text-foreground">
-                All confirm transactions are non-cancellable and non-refundable
+              {/* Cancellation & Refund Policy — editable per quotation, falls back to
+                  the standard clause when not customized. */}
+              <p className="mt-6 whitespace-pre-line text-[11px] font-medium text-foreground">
+                {cancellationPolicy}
               </p>
 
-              <p className="mt-6 text-[11px] leading-relaxed text-muted-foreground">
-                We look forward to welcoming you and your team at Kediaman Event
-                Venue — {q.venue}. Should you require any further assistance,
-                please do not hesitate to contact us.
+              {/* Closing — editable per quotation, falls back to the standard closing
+                  paragraph (with venue name interpolated) when not customized. */}
+              <p className="mt-6 whitespace-pre-line text-[11px] leading-relaxed text-muted-foreground">
+                {closingNote}
               </p>
 
               {/* Signature */}

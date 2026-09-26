@@ -206,7 +206,7 @@ export function LeaveRequestForm({ inDialog = false, onSubmitted }: LeaveRequest
           {isHolidayToken ? (
             <>
               <div className="grid gap-2">
-                <Label htmlFor="holiday-token">Hari Besar (Token) *</Label>
+                <Label htmlFor="holiday-token">Hari Besar *</Label>
                 <Select
                   value={form.publicHolidayId}
                   onValueChange={(v) =>
@@ -279,8 +279,9 @@ export function LeaveRequestForm({ inDialog = false, onSubmitted }: LeaveRequest
           )}
 
           {calculatedDays > 0 && (
-            <div className="sm:col-span-2 flex flex-wrap items-center gap-x-6 gap-y-2 rounded-xl border bg-muted/40 px-4 py-3">
-              <p className="text-sm font-medium text-foreground">
+            <div className="sm:col-span-2 flex flex-wrap animate-in items-center gap-x-6 gap-y-2 rounded-xl border bg-muted/40 px-4 py-3 fade-in-0 zoom-in-95">
+              <p className="flex items-center gap-2 text-sm font-medium text-foreground">
+                <Wallet weight="BoldDuotone" className="h-4 w-4 text-primary" />
                 Total hari kerja:{" "}
                 <span className="font-semibold">{calculatedDays} hari</span>
               </p>
@@ -311,28 +312,44 @@ export function LeaveRequestForm({ inDialog = false, onSubmitted }: LeaveRequest
 
           <div className="sm:col-span-2 grid gap-2">
             <Label htmlFor="evidence">Bukti *</Label>
-            <Input
-              id="evidence"
-              type="file"
-              accept="image/*"
-              onChange={handleFileChange}
-              className="rounded-xl"
-            />
-            {form.photoName ? (
-              <p className="text-xs text-muted-foreground truncate">
-                Terpilih: {form.photoName}
-              </p>
-            ) : (
-              <p className="text-xs text-muted-foreground">
-                Wajib lampirkan foto bukti (mis. surat, dokumen pendukung).
-              </p>
+            <div className="relative flex items-center gap-3 rounded-xl border border-dashed border-border bg-muted/30 px-4 py-3 text-muted-foreground transition-colors hover:border-primary/40 hover:bg-primary/5">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-background text-primary shadow-sm">
+                <Camera weight="BoldDuotone" className="h-4 w-4" />
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium text-foreground">Klik untuk pilih foto bukti</p>
+                <p className="text-xs text-muted-foreground">
+                  Wajib lampirkan foto bukti (mis. surat, dokumen pendukung).
+                </p>
+              </div>
+              <input
+                id="evidence"
+                type="file"
+                accept="image/*"
+                onChange={handleFileChange}
+                className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+              />
+            </div>
+            {form.photoName && (
+              <div className="flex animate-in items-center gap-2 rounded-xl border bg-muted/40 px-3 py-2 text-sm fade-in-0 slide-in-from-top-1">
+                <FileText weight="BoldDuotone" className="h-4 w-4 shrink-0 text-primary" />
+                <span className="min-w-0 flex-1 truncate">{form.photoName}</span>
+                <button
+                  type="button"
+                  aria-label="Hapus foto"
+                  className="shrink-0 text-muted-foreground transition-colors hover:text-destructive"
+                  onClick={() => setForm((f) => ({ ...f, photoBase64: "", photoName: "" }))}
+                >
+                  <CloseCircle weight="BoldDuotone" className="h-4 w-4" />
+                </button>
+              </div>
             )}
           </div>
 
 
           <div className="sm:col-span-2 flex justify-end border-t pt-5">
             <Button
-              className="w-full rounded-xl sm:w-auto"
+              className="w-full rounded-xl shadow-sm transition-shadow hover:shadow-md sm:w-auto"
               onClick={handleSubmit}
               disabled={
                 submitMutation.isPending ||

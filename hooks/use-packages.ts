@@ -7,12 +7,12 @@ import type { FetchPackagesParams } from "@/services/package-service";
 import {
   createPackage,
   updatePackage,
+  saveMicePackage,
   deletePackage,
   duplicatePackage,
   deleteBulkPackages,
   saveVendorItems,
   saveInternalItems,
-  saveMiceItems,
   savePackagePrices,
   updatePackageTC,
   togglePackageAvailable,
@@ -47,6 +47,14 @@ export function useUpdatePackage() {
   return useMutation({
     mutationFn: ({ id, data }: { id: string; data: Parameters<typeof updatePackage>[1] }) =>
       updatePackage(id, data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["packages"] }),
+  });
+}
+
+export function useSaveMicePackage() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: Parameters<typeof saveMicePackage>[0]) => saveMicePackage(data),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["packages"] }),
   });
 }
@@ -97,20 +105,6 @@ export function useSaveInternalItems() {
   return useMutation({
     mutationFn: ({ packageId, items }: { packageId: string; items: { itemName: string; itemDescription: string }[] }) =>
       saveInternalItems(packageId, items),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["packages"] }),
-  });
-}
-
-export function useSaveMiceItems() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: ({
-      packageId,
-      items,
-    }: {
-      packageId: string;
-      items: { itemName: string; itemDescription: string; itemType: string; itemPrice: number }[];
-    }) => saveMiceItems(packageId, items),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["packages"] }),
   });
 }

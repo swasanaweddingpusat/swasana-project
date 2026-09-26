@@ -3,14 +3,12 @@ import { z } from "zod";
 export const attendanceStatusEnum = z.enum(["WORKDAY", "DAY_OFF"]);
 export type AttendanceStatusValue = z.infer<typeof attendanceStatusEnum>;
 
-// Jenis libur yang dipilih karyawan saat Day Off.
-export const dayOffTypeEnum = z.enum(["REGULAR", "PUBLIC_HOLIDAY"]);
-export type DayOffTypeValue = z.infer<typeof dayOffTypeEnum>;
-
 export const clockInSchema = z
   .object({
     attendanceStatus: attendanceStatusEnum,
-    dayOffType: dayOffTypeEnum.optional(),
+    // Public holiday is a tag on a WORKDAY clock-in (employee still comes to work on a
+    // tanggal merah) — never on DAY_OFF, which is always a plain libur biasa.
+    isPublicHoliday: z.boolean().optional(),
     publicHolidayId: z.string().optional(),
     workShiftId: z.string().optional(),
     workLocationId: z.string().optional(),
@@ -22,12 +20,6 @@ export const clockInSchema = z
   })
   .superRefine((data, ctx) => {
     if (data.attendanceStatus !== "WORKDAY") {
-      if (!data.dayOffType) {
-        ctx.addIssue({ code: "custom", message: "Jenis libur wajib dipilih", path: ["dayOffType"] });
-      }
-      if (data.dayOffType === "PUBLIC_HOLIDAY" && !data.publicHolidayId) {
-        ctx.addIssue({ code: "custom", message: "Public holiday wajib dipilih", path: ["publicHolidayId"] });
-      }
       if (!data.photoBase64) {
         ctx.addIssue({ code: "custom", message: "Foto wajib disertakan", path: ["photoBase64"] });
       }
@@ -41,6 +33,9 @@ export const clockInSchema = z
     }
     if (data.workType === "WFO" && !data.workLocationId) {
       ctx.addIssue({ code: "custom", message: "Lokasi kerja wajib dipilih", path: ["workLocationId"] });
+    }
+    if (data.isPublicHoliday && !data.publicHolidayId) {
+      ctx.addIssue({ code: "custom", message: "Public holiday wajib dipilih", path: ["publicHolidayId"] });
     }
     if (!data.photoBase64) {
       ctx.addIssue({ code: "custom", message: "Foto wajib disertakan", path: ["photoBase64"] });
