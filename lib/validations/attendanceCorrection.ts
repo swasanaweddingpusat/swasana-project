@@ -1,42 +1,65 @@
 import { z } from "zod";
 
+export const attendanceCorrectionTypeEnum = z.enum(["CLOCK_IN", "CLOCK_OUT", "BOTH"]);
+export type AttendanceCorrectionTypeValue = z.infer<typeof attendanceCorrectionTypeEnum>;
+
 export const submitAttendanceCorrectionSchema = z
   .object({
     date: z.coerce.date(),
+    type: attendanceCorrectionTypeEnum,
     requestedClockInAt: z.coerce.date().optional(),
     requestedClockOutAt: z.coerce.date().optional(),
-    reason: z.string().min(1, "Alasan koreksi wajib diisi"),
-    evidenceBase64: z
-      .string()
-      .regex(/^data:image\/(png|jpe?g|webp|gif);base64,[A-Za-z0-9+/]+=*$/, "Format bukti tidak valid")
-      .optional(),
+    workShiftId: z.string().optional(),
+    workLocationId: z.string().optional(),
+    workType: z.enum(["WFO", "WFH", "WFA"]).optional(),
+    reason: z.string().min(1, "Alasan wajib diisi"),
+    photoBase64: z.string().min(1, "Bukti wajib diupload"),
   })
-  .superRefine((val, ctx) => {
-    if (!val.requestedClockInAt && !val.requestedClockOutAt) {
-      ctx.addIssue({
-        path: ["requestedClockInAt"],
-        code: z.ZodIssueCode.custom,
-        message: "Isi minimal salah satu koreksi clock-in atau clock-out",
-      });
+  .superRefine((data, ctx) => {
+    const today = new Date();
+    today.setHours(23, 59, 59, 999);
+    if (data.date > today) {
+      ctx.addIssue({ code: "custom", message: "Tanggal tidak boleh di masa depan", path: ["date"] });
+    }
+
+    if (data.type === "CLOCK_IN" || data.type === "BOTH") {
+      if (!data.requestedClockInAt) {
+        ctx.addIssue({ code: "custom", message: "Jam clock-in wajib diisi", path: ["requestedClockInAt"] });
+      }
+      if (!data.workShiftId) {
+        ctx.addIssue({ code: "custom", message: "Shift wajib dipilih", path: ["workShiftId"] });
+      }
+      if (!data.workType) {
+        ctx.addIssue({ code: "custom", message: "Tipe kerja wajib dipilih", path: ["workType"] });
+      }
+      if (data.workType === "WFO" && !data.workLocationId) {
+        ctx.addIssue({ code: "custom", message: "Lokasi kerja wajib dipilih", path: ["workLocationId"] });
+      }
+    }
+
+    if (data.type === "CLOCK_OUT" || data.type === "BOTH") {
+      if (!data.requestedClockOutAt) {
+        ctx.addIssue({ code: "custom", message: "Jam clock-out wajib diisi", path: ["requestedClockOutAt"] });
+      }
     }
   });
 
-export const approveCorrectionSchema = z.object({
+export const approveAttendanceCorrectionSchema = z.object({
   requestId: z.string().min(1),
   note: z.string().optional(),
 });
 
-export const rejectCorrectionSchema = z.object({
+export const rejectAttendanceCorrectionSchema = z.object({
   requestId: z.string().min(1),
   reason: z.string().min(1, "Alasan penolakan wajib diisi"),
 });
 
-export const cancelCorrectionSchema = z.object({
+export const cancelAttendanceCorrectionSchema = z.object({
   requestId: z.string().min(1),
   reason: z.string().optional(),
 });
 
 export type SubmitAttendanceCorrectionInput = z.infer<typeof submitAttendanceCorrectionSchema>;
-export type ApproveCorrectionInput = z.infer<typeof approveCorrectionSchema>;
-export type RejectCorrectionInput = z.infer<typeof rejectCorrectionSchema>;
-export type CancelCorrectionInput = z.infer<typeof cancelCorrectionSchema>;
+export type ApproveAttendanceCorrectionInput = z.infer<typeof approveAttendanceCorrectionSchema>;
+export type RejectAttendanceCorrectionInput = z.infer<typeof rejectAttendanceCorrectionSchema>;
+export type CancelAttendanceCorrectionInput = z.infer<typeof cancelAttendanceCorrectionSchema>;

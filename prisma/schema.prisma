@@ -200,10 +200,11 @@ model Profile {
   leaveManagerApprovals        LeaveRequest[]             @relation("LeaveManagerApprover")
   leaveHrApprovals             LeaveRequest[]             @relation("LeaveHrApprover")
   leaveRejections              LeaveRequest[]             @relation("LeaveRejector")
-  attendanceCorrections        AttendanceCorrection[]
-  correctionManagerApprovals   AttendanceCorrection[]     @relation("CorrectionManagerApprover")
-  correctionHrApprovals        AttendanceCorrection[]     @relation("CorrectionHrApprover")
-  correctionRejections         AttendanceCorrection[]     @relation("CorrectionRejector")
+  attendanceCorrections         AttendanceCorrection[]
+  attendanceCorrectionsReviewed AttendanceCorrection[] @relation("AttendanceCorrectionReviewer")
+  attendanceWorkTypeApprovals   Attendance[]           @relation("AttendanceWorkTypeApprover")
+  holidayTokenGrants           HolidayTokenGrant[]
+  holidayTokenGrantsIssued     HolidayTokenGrant[]        @relation("HolidayTokenGranter")
   employeeSalaries             EmployeeSalary[]
   payslips                     Payslip[]
   payrollsGenerated            PayrollPeriod[]            @relation("PayrollGenerator")
@@ -962,6 +963,25 @@ enum WorkType {
   WFO
   WFH
   WFA
+}
+
+enum WorkTypeApprovalStatus {
+  pending
+  approved
+  rejected
+}
+
+enum AttendanceCorrectionType {
+  CLOCK_IN
+  CLOCK_OUT
+  BOTH
+}
+
+enum AttendanceCorrectionStatus {
+  pending
+  approved
+  rejected
+  cancelled
 }
 
 enum LeaveRequestStatus {
@@ -2789,13 +2809,21 @@ model Attendance {
   publicHolidayId   String?
   publicHolidayName String?
 
+  // WFH/WFA butuh approval HR (WFO & Day Off tidak relevan, field ini null).
+  workTypeReason         String?
+  workTypeApprovalStatus WorkTypeApprovalStatus?
+  workTypeApprovedBy     String?
+  workTypeApprovedAt     DateTime?
+  workTypeReviewNote     String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  profile       Profile        @relation(fields: [profileId], references: [id], onDelete: Cascade)
-  workLocation  WorkLocation?  @relation(fields: [workLocationId], references: [id], onDelete: SetNull)
-  workShift     WorkShift?     @relation(fields: [workShiftId], references: [id], onDelete: SetNull)
-  publicHoliday PublicHoliday? @relation(fields: [publicHolidayId], references: [id], onDelete: SetNull)
+  profile          Profile        @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  workLocation     WorkLocation?  @relation(fields: [workLocationId], references: [id], onDelete: SetNull)
+  workShift        WorkShift?     @relation(fields: [workShiftId], references: [id], onDelete: SetNull)
+  publicHoliday    PublicHoliday? @relation(fields: [publicHolidayId], references: [id], onDelete: SetNull)
+  workTypeApprover Profile?       @relation("AttendanceWorkTypeApprover", fields: [workTypeApprovedBy], references: [id], onDelete: SetNull)
 
   @@unique([profileId, date])
   @@index([profileId])
@@ -2803,6 +2831,7 @@ model Attendance {
   @@index([workLocationId])
   @@index([workShiftId])
   @@index([publicHolidayId])
+  @@index([workTypeApprovalStatus])
   @@map("attendances")
 }
 
@@ -2816,6 +2845,7 @@ model PublicHoliday {
 
   attendances   Attendance[]
   leaveRequests LeaveRequest[]
+  tokenGrants   HolidayTokenGrant[]
 
   @@index([date])
   @@map("public_holidays")
@@ -2856,6 +2886,7 @@ model WorkLocation {
   assignments EmployeeWorkAssignment[]
   overrides   ShiftOverride[]
   attendances Attendance[]
+  attendanceCorrections AttendanceCorrection[]
 
   clockInAssignments  EmployeeWorkAssignment[] @relation("ClockInLocation")
   clockOutAssignments EmployeeWorkAssignment[] @relation("ClockOutLocation")
@@ -2879,6 +2910,7 @@ model WorkShift {
   assignments EmployeeWorkAssignment[]
   overrides   ShiftOverride[]
   attendances Attendance[]
+  attendanceCorrections AttendanceCorrection[]
 
   @@map("work_shifts")
 }
@@ -3121,40 +3153,57 @@ model AttendanceCorrection {
   profileId String
   date      DateTime
 
+  type                AttendanceCorrectionType
   requestedClockInAt  DateTime?
   requestedClockOutAt DateTime?
-  reason              String
-  evidence            Json?
 
-  status LeaveRequestStatus @default(pending)
+  workShiftId    String?
+  workLocationId String?
+  workType       WorkType?
 
-  managerApprovedBy String?
-  managerApprovedAt DateTime?
-  managerNote       String?
+  reason   String
+  evidence Json?
 
-  hrApprovedBy String?
-  hrApprovedAt DateTime?
-  hrNote       String?
+  status     AttendanceCorrectionStatus @default(pending)
+  reviewedBy String?
+  reviewedAt DateTime?
+  reviewNote String?
 
-  rejectedBy      String?
-  rejectedAt      DateTime?
-  rejectionReason String?
-
-  cancelledAt        DateTime?
-  cancellationReason String?
+  cancelledAt DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  profile         Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
-  managerApprover Profile? @relation("CorrectionManagerApprover", fields: [managerApprovedBy], references: [id], onDelete: SetNull)
-  hrApprover      Profile? @relation("CorrectionHrApprover", fields: [hrApprovedBy], references: [id], onDelete: SetNull)
-  rejector        Profile? @relation("CorrectionRejector", fields: [rejectedBy], references: [id], onDelete: SetNull)
+  profile      Profile       @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  workShift    WorkShift?    @relation(fields: [workShiftId], references: [id], onDelete: SetNull)
+  workLocation WorkLocation? @relation(fields: [workLocationId], references: [id], onDelete: SetNull)
+  reviewer     Profile?      @relation("AttendanceCorrectionReviewer", fields: [reviewedBy], references: [id], onDelete: SetNull)
 
   @@index([profileId])
-  @@index([status])
   @@index([date])
+  @@index([status])
   @@map("attendance_corrections")
+}
+
+model HolidayTokenGrant {
+  id                String   @id @default(uuid())
+  profileId         String
+  publicHolidayId   String
+  publicHolidayName String
+  note              String?
+  grantedBy         String?
+  grantedAt         DateTime @default(now())
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  profile       Profile       @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  publicHoliday PublicHoliday @relation(fields: [publicHolidayId], references: [id], onDelete: Cascade)
+  granter       Profile?      @relation("HolidayTokenGranter", fields: [grantedBy], references: [id], onDelete: SetNull)
+
+  @@unique([profileId, publicHolidayId])
+  @@index([profileId])
+  @@index([publicHolidayId])
+  @@map("holiday_token_grants")
 }
 
 // ─── Payroll Engine ──────────────────────────────────────────────────────────

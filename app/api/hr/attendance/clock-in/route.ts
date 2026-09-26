@@ -115,9 +115,9 @@ export async function POST(req: Request) {
     }
   }
 
-  // --- Normal flow: employee self-selects shift + work type (+ venue for WFO). Public
-  // Holiday is an optional tag here — employee still comes to work on a tanggal merah. ---
-  const { workShiftId, workLocationId, workType, photoBase64, lat, lng, isPublicHoliday: wantsPublicHoliday, publicHolidayId } = parsed.data;
+  // --- Normal flow: employee self-selects shift + work type (+ venue for WFO) ---
+  const { workShiftId, workLocationId, workType, workTypeReason, photoBase64, lat, lng, isPublicHoliday, publicHolidayId } = parsed.data;
+  const wantsPublicHoliday = isPublicHoliday === true;
   if (!workShiftId || !workType || !photoBase64 || lat === undefined || lng === undefined) {
     return Response.json({ error: "Data absensi tidak lengkap" }, { status: 422 });
   }
@@ -205,9 +205,14 @@ export async function POST(req: Request) {
         workShiftId: workShift.id,
         workType,
         attendantType: "WORKDAY",
-        isPublicHoliday: !!resolvedHolidayId,
+        isPublicHoliday: wantsPublicHoliday,
         publicHolidayId: resolvedHolidayId,
         publicHolidayName: resolvedHolidayName,
+        workTypeReason: workType === "WFO" ? null : (workTypeReason ?? null),
+        workTypeApprovalStatus: workType === "WFO" ? null : "pending",
+        workTypeApprovedBy: null,
+        workTypeApprovedAt: null,
+        workTypeReviewNote: null,
       },
       update: {
         clockInAt: now,
@@ -219,9 +224,14 @@ export async function POST(req: Request) {
         workShiftId: workShift.id,
         workType,
         attendantType: "WORKDAY",
-        isPublicHoliday: !!resolvedHolidayId,
+        isPublicHoliday: wantsPublicHoliday,
         publicHolidayId: resolvedHolidayId,
         publicHolidayName: resolvedHolidayName,
+        workTypeReason: workType === "WFO" ? null : (workTypeReason ?? null),
+        workTypeApprovalStatus: workType === "WFO" ? null : "pending",
+        workTypeApprovedBy: null,
+        workTypeApprovedAt: null,
+        workTypeReviewNote: null,
       },
     });
 

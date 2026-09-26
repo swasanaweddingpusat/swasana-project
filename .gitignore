@@ -29,6 +29,7 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
+dev-server.log
 
 # ad-hoc build output dumps (e.g. `npm run build > build-check.txt`) — never commit
 build-check*.txt

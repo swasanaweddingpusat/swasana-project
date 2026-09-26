@@ -81,16 +81,17 @@ export const moduleActions: Record<string, string[]> = {
   // Attendance — own permission so ALL roles can be granted `attendance:view`
   // (menu Absensi = GENERAL) without unlocking the whole HRD world (hr:view).
   attendance: ["view"],
-  // HR Attendance Management — CRUD for work locations, shifts, assignments, overrides
-  "hr-attendance": ["view", "create", "edit", "delete"],
-  // Attendance Correction — employee self-service submit (create/delete own via
-  // cancel), Manager approval is ownership-based (no permission needed), HR
-  // final approval needs `approve`.
-  "attendance-correction": ["view", "create", "edit", "delete", "approve"],
+  // HR Attendance Management — CRUD for work locations, shifts, assignments, overrides.
+  // `approve` = review Koreksi Absen (attendance correction) requests.
+  "hr-attendance": ["view", "create", "edit", "delete", "approve"],
   // HR Recruitment & Onboarding — seeded originally via migration 20260622180000.
   // Listed here so the seeder treats it as a valid module (else step 3b would
   // delete these permissions) and can assign them per the role matrix.
   "hr-recruitment": ["view", "create", "edit", "delete", "hire", "approve"],
+  // HR Leave Management — seeded originally via migration 20260622140000. Listed
+  // here so the seeder treats it as a valid module (else step 3b would delete
+  // these permissions, breaking leave types/balances/approvals + holiday tokens).
+  "hr-leave": ["view", "create", "edit", "delete", "approve"],
   // Finance AP — customer payout (cashback program + overpay refund)
   "finance-ap": ["view", "create", "edit", "delete"],
   // Internal FAQ / Memo — general knowledge-base module
@@ -307,8 +308,7 @@ export const rolePermissionMap: Record<string, Record<string, string[]>> = {
   // sengaja DICABUT — tidak ada di spec menu HR.
   "human-resource": {
     hr: ["view", "create", "edit", "delete", "approve"],
-    "hr-attendance": ["view", "create", "edit", "delete"],
-    "attendance-correction": ["view", "create", "edit", "delete", "approve"],
+    "hr-attendance": ["view", "create", "edit", "delete", "approve"],
     "hr-recruitment": ["view", "create", "edit", "delete", "hire", "approve"],
     procurement: ["view"],
     "settings-public-holiday": ["view", "create", "edit", "delete"],

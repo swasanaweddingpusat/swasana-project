@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import type { Prisma } from "@prisma/client";
 import type { AttendanceListQuery, AttendanceExportQuery, AttendanceOverviewQuery } from "@/lib/validations/attendance";
 import type { AttendanceContext } from "@/lib/attendance-helpers";
 
@@ -245,3 +246,32 @@ export async function getEmployeeAttendanceOverview(params: AttendanceOverviewQu
 
 export type EmployeeAttendanceOverview = Awaited<ReturnType<typeof getEmployeeAttendanceOverview>>;
 export type EmployeeAttendanceOverviewRecord = EmployeeAttendanceOverview["records"][number];
+
+const pendingWorkTypeApprovalSelect = {
+  id: true,
+  date: true,
+  clockInAt: true,
+  clockInEvidence: true,
+  workType: true,
+  workTypeReason: true,
+  profile: {
+    select: {
+      id: true,
+      fullName: true,
+      avatarUrl: true,
+      department: { select: { name: true } },
+    },
+  },
+  workShift: { select: { id: true, name: true } },
+} satisfies Prisma.AttendanceSelect;
+
+export async function getPendingWorkTypeApprovals() {
+  return db.attendance.findMany({
+    where: { workTypeApprovalStatus: "pending" },
+    orderBy: { date: "desc" },
+    take: 500,
+    select: pendingWorkTypeApprovalSelect,
+  });
+}
+
+export type PendingWorkTypeApprovalItem = Awaited<ReturnType<typeof getPendingWorkTypeApprovals>>[number];
