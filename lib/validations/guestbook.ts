@@ -156,6 +156,12 @@ export const updateGuestbookEntrySchema = z.object({
 
 export type UpdateGuestbookEntryInput = z.infer<typeof updateGuestbookEntrySchema>;
 
+export const confirmGuestbookGuestCountSchema = z.object({
+  guestCount: z.coerce.number().int().min(1, 'Jumlah tamu minimal 1').max(1000, 'Jumlah tamu maksimal 1000'),
+});
+
+export type ConfirmGuestbookGuestCountInput = z.infer<typeof confirmGuestbookGuestCountSchema>;
+
 /** Sumber informasi dianggap "dari Bitrix" kalau namanya mengandung kata "bitrix" — heuristik yang sama dipakai client (GuestbookDrawer) dan server (actions/guestbook.ts) supaya konsisten. */
 export function isBitrixSourceName(name: string | null | undefined): boolean {
   return (name ?? "").toLowerCase().includes("bitrix");

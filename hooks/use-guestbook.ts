@@ -1,13 +1,14 @@
 "use client";
 
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
-import { fetchGuestbookEntries } from "@/services/guestbookService";
+import { fetchGuestbookEntries, fetchGuestVisitHistory } from "@/services/guestbookService";
 import {
   createGuestbookEntry,
   checkOutGuestbookEntry,
   updateGuestbookEntry,
   deleteGuestbookEntry,
   confirmGuestbookAttendance,
+  lookupGuestbookEntryByCode,
   deleteBulkGuestbookEntries,
   bulkCheckOutGuestbookEntries,
   refreshGuestbookAdsUrl,
@@ -23,15 +24,15 @@ export function useGuestbookEntries(params?: GuestbookFilterOptions & { page?: n
       page,
       pageSize,
       params?.search,
-      params?.venueId,
+      params?.venueIds,
       params?.hostId,
       params?.dateFrom,
       params?.dateTo,
-      params?.category,
-      params?.interactionType,
-      params?.status,
-      params?.sourceOfInformationId,
-      params?.festivalId,
+      params?.categories,
+      params?.interactionTypes,
+      params?.statuses,
+      params?.sourceOfInformationIds,
+      params?.festivalIds,
     ],
     queryFn: () => fetchGuestbookEntries({ page, pageSize, ...params }),
     placeholderData: keepPreviousData,
@@ -92,8 +93,24 @@ export function useBulkCheckOutGuestbookEntries() {
 export function useConfirmGuestbookAttendance() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (guestCode: string) => confirmGuestbookAttendance(guestCode),
+    mutationFn: ({ guestCode, actualGuestCount }: { guestCode: string; actualGuestCount?: number }) =>
+      confirmGuestbookAttendance(guestCode, actualGuestCount),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["guestbook-entries"] }),
+  });
+}
+
+export function useLookupGuestbookEntryByCode() {
+  return useMutation({
+    mutationFn: (guestCode: string) => lookupGuestbookEntryByCode(guestCode),
+  });
+}
+
+export function useGuestVisitHistory(entryId: string | undefined) {
+  return useQuery({
+    queryKey: ["guestbook-visit-history", entryId],
+    queryFn: () => fetchGuestVisitHistory(entryId as string),
+    enabled: !!entryId,
+    staleTime: 5 * 60 * 1000,
   });
 }
 

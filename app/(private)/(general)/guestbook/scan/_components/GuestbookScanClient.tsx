@@ -7,9 +7,17 @@ import { toast } from "sonner";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { useConfirmGuestbookAttendance } from "@/hooks/use-guestbook";
-import type { ConfirmAttendanceResult } from "@/actions/guestbook";
-import { ArrowLeft, CheckCircle, CloseCircle, Keyboard, QrCode, Restart } from "@solar-icons/react";
+import { useConfirmGuestbookAttendance, useLookupGuestbookEntryByCode } from "@/hooks/use-guestbook";
+import type { ConfirmAttendanceResult, LookupGuestbookEntryResult } from "@/actions/guestbook";
+import {
+  ArrowLeft,
+  CheckCircle,
+  CloseCircle,
+  Keyboard,
+  QrCode,
+  Restart,
+  UsersGroupRounded,
+} from "@solar-icons/react";
 
 function formatDateTime(date: string | null | undefined): string {
   if (!date) return "—";
@@ -33,42 +41,79 @@ export function GuestbookScanClient(): React.ReactElement {
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [showManualEntry, setShowManualEntry] = useState(false);
   const [manualCode, setManualCode] = useState("");
+  const [pendingGuestCode, setPendingGuestCode] = useState<string | null>(null);
+  const [guestCountInput, setGuestCountInput] = useState("");
 
-  const { mutate: confirmAttendance, data: result, isPending, isError, reset } =
-    useConfirmGuestbookAttendance();
+  const {
+    mutate: lookupEntry,
+    data: lookupResult,
+    isPending: lookupIsPending,
+    isError: lookupIsError,
+    reset: resetLookup,
+  } = useLookupGuestbookEntryByCode();
 
-  // Dedupe: react-query only hands back a new `result` object reference when a
+  const {
+    mutate: confirmAttendance,
+    data: confirmResult,
+    isPending: confirmIsPending,
+    isError: confirmIsError,
+    reset: resetConfirm,
+  } = useConfirmGuestbookAttendance();
+
+  // Once the lookup resolves for a non-already-confirmed entry, pre-fill the editable
+  // guest-count field with the client's RSVP confirmation (falls back to a prior
+  // actualGuestCount, then blank) so staff can review/override before confirming.
+  useEffect(() => {
+    if (!lookupResult || !lookupResult.success || lookupResult.alreadyConfirmed) return;
+    const prefill = lookupResult.confirmedGuestCount ?? lookupResult.actualGuestCount ?? null;
+    setGuestCountInput(prefill !== null ? String(prefill) : "");
+  }, [lookupResult]);
+
+  // Dedupe: react-query only hands back a new `confirmResult` object reference when a
   // mutation actually resolves, so comparing against the last-seen reference
-  // guarantees the toast fires exactly once per scan (not once per re-render).
+  // guarantees the toast fires exactly once per confirmation (not once per re-render).
   const lastToastedResultRef = useRef<ConfirmAttendanceResult | null>(null);
   useEffect(() => {
-    if (!result || result === lastToastedResultRef.current) return;
-    lastToastedResultRef.current = result;
+    if (!confirmResult || confirmResult === lastToastedResultRef.current) return;
+    lastToastedResultRef.current = confirmResult;
 
-    if (!result.success) {
-      toast.error(result.error ?? "Gagal konfirmasi kehadiran.");
+    if (!confirmResult.success) {
+      toast.error(confirmResult.error ?? "Gagal konfirmasi kehadiran.");
       return;
     }
 
-    if (result.alreadyConfirmed) {
-      const confirmedAt = formatDateTime(result.confirmedAt);
+    if (confirmResult.alreadyConfirmed) {
+      const confirmedAt = formatDateTime(confirmResult.confirmedAt);
       toast.warning(
-        `${result.visitorName ?? "Tamu"} sudah hadir sebelumnya, tidak bisa check-in lagi.${
+        `${confirmResult.visitorName ?? "Tamu"} sudah hadir sebelumnya, tidak bisa check-in lagi.${
           confirmedAt !== "—" ? ` (${confirmedAt})` : ""
         }`
       );
       return;
     }
 
-    toast.success(`${result.visitorName ?? "Tamu"} berhasil check-in.`);
-  }, [result]);
+    toast.success(`${confirmResult.visitorName ?? "Tamu"} berhasil check-in.`);
+  }, [confirmResult]);
+
+  // Same dedupe pattern as above, but for lookup failures (e.g. "Kode tidak ditemukan.")
+  // — surfaced as a toast in addition to the inline error panel for consistency with
+  // how confirm failures are already handled.
+  const lastToastedLookupRef = useRef<LookupGuestbookEntryResult | null>(null);
+  useEffect(() => {
+    if (!lookupResult || lookupResult === lastToastedLookupRef.current) return;
+    lastToastedLookupRef.current = lookupResult;
+
+    if (!lookupResult.success) {
+      toast.error(lookupResult.error ?? "Gagal mencari data tamu.");
+    }
+  }, [lookupResult]);
 
   // Kept in a ref so the mount-once effect below never needs to re-run
   // when the mutation object identity changes across renders.
-  const confirmAttendanceRef = useRef(confirmAttendance);
+  const lookupEntryRef = useRef(lookupEntry);
   useEffect(() => {
-    confirmAttendanceRef.current = confirmAttendance;
-  }, [confirmAttendance]);
+    lookupEntryRef.current = lookupEntry;
+  }, [lookupEntry]);
 
   useEffect(() => {
     let cancelled = false;
@@ -89,7 +134,8 @@ export function GuestbookScanClient(): React.ReactElement {
             const trimmed = code.data.trim();
             if (trimmed) {
               pausedRef.current = true;
-              confirmAttendanceRef.current(trimmed);
+              setPendingGuestCode(trimmed);
+              lookupEntryRef.current(trimmed);
             }
           }
         }
@@ -139,20 +185,24 @@ export function GuestbookScanClient(): React.ReactElement {
   }, []);
 
   const handleScanAgain = useCallback(() => {
-    reset();
+    resetLookup();
+    resetConfirm();
     pausedRef.current = false;
     setManualCode("");
     setShowManualEntry(false);
-  }, [reset]);
+    setPendingGuestCode(null);
+    setGuestCountInput("");
+  }, [resetLookup, resetConfirm]);
 
-  // Manual code entry reuses the exact same mutation used by the QR scan
-  // loop above, so both paths share identical validation/success/error handling.
+  // Manual code entry reuses the exact same lookup mutation used by the QR scan
+  // loop above, so both paths share the identical review-then-confirm flow.
   const handleManualSubmit = useCallback(() => {
     const trimmed = manualCode.trim();
     if (!trimmed) return;
     pausedRef.current = true;
-    confirmAttendance(trimmed);
-  }, [manualCode, confirmAttendance]);
+    setPendingGuestCode(trimmed);
+    lookupEntry(trimmed);
+  }, [manualCode, lookupEntry]);
 
   const handleManualCodeChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
     setManualCode(event.target.value);
@@ -168,7 +218,35 @@ export function GuestbookScanClient(): React.ReactElement {
     [handleManualSubmit]
   );
 
-  const showResultPanel = isPending || isError || Boolean(result);
+  const handleGuestCountChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+    setGuestCountInput(event.target.value);
+  }, []);
+
+  const handleConfirmCheckIn = useCallback(() => {
+    if (!pendingGuestCode) return;
+    const trimmedCount = guestCountInput.trim();
+    const parsedCount = trimmedCount ? Number(trimmedCount) : undefined;
+    const actualGuestCount = parsedCount !== undefined && Number.isFinite(parsedCount) ? parsedCount : undefined;
+    confirmAttendance({ guestCode: pendingGuestCode, actualGuestCount });
+  }, [pendingGuestCode, guestCountInput, confirmAttendance]);
+
+  const isReviewing = Boolean(
+    !confirmIsPending &&
+      !confirmIsError &&
+      !confirmResult &&
+      !lookupIsPending &&
+      !lookupIsError &&
+      lookupResult?.success &&
+      !lookupResult.alreadyConfirmed
+  );
+
+  const showOverlayPanel =
+    lookupIsPending ||
+    lookupIsError ||
+    Boolean(lookupResult) ||
+    confirmIsPending ||
+    confirmIsError ||
+    Boolean(confirmResult);
 
   return (
     <div className="flex flex-col gap-4 w-full">
@@ -214,18 +292,100 @@ export function GuestbookScanClient(): React.ReactElement {
               </div>
             )}
 
-            {!cameraError && cameraReady && !showResultPanel && (
+            {!cameraError && cameraReady && !showOverlayPanel && (
               <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
                 <div className="h-56 w-56 rounded-2xl border-4 border-primary/70" />
               </div>
             )}
 
-            {showResultPanel && (
+            {showOverlayPanel && (
               <div className="absolute inset-0 flex items-center justify-center bg-background/95 p-4">
                 <div className="flex w-full max-w-sm flex-col items-center gap-3 rounded-2xl border border-border bg-card p-5 text-center">
-                  {isPending && <p className="text-sm text-muted-foreground">Memproses...</p>}
+                  {lookupIsPending && <p className="text-sm text-muted-foreground">Mencari data tamu...</p>}
 
-                  {!isPending && isError && (
+                  {!lookupIsPending && lookupIsError && (
+                    <>
+                      <CloseCircle weight="BoldDuotone" className="h-12 w-12 text-destructive" />
+                      <p className="text-sm font-semibold text-destructive">Terjadi kesalahan</p>
+                      <p className="text-xs text-muted-foreground">Gagal mencari data tamu. Coba lagi.</p>
+                    </>
+                  )}
+
+                  {!lookupIsPending && !lookupIsError && lookupResult && !lookupResult.success && (
+                    <>
+                      <CloseCircle weight="BoldDuotone" className="h-12 w-12 text-destructive" />
+                      <p className="text-sm font-semibold text-destructive">
+                        {lookupResult.error ?? "Kode tidak valid."}
+                      </p>
+                    </>
+                  )}
+
+                  {/* Already confirmed — matches the existing already-confirmed result state,
+                      just now reached via the lookup step instead of an immediate confirm call. */}
+                  {!lookupIsPending &&
+                    !lookupIsError &&
+                    lookupResult &&
+                    lookupResult.success &&
+                    lookupResult.alreadyConfirmed &&
+                    !confirmResult && (
+                      <>
+                        <CheckCircle weight="BoldDuotone" className="h-12 w-12 text-emerald-600" />
+                        <div className="flex flex-col gap-1">
+                          <p className="text-sm font-bold text-foreground">{lookupResult.visitorName}</p>
+                          {lookupResult.companyName && (
+                            <p className="text-xs text-muted-foreground">{lookupResult.companyName}</p>
+                          )}
+                          <span className="mt-2 inline-flex items-center justify-center rounded-full bg-secondary px-3 py-1 text-xs font-medium text-secondary-foreground">
+                            Sudah dikonfirmasi sebelumnya
+                          </span>
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            {formatDateTime(lookupResult.confirmedAt)}
+                          </p>
+                        </div>
+                      </>
+                    )}
+
+                  {/* Review step — not yet confirmed: editable guest count auto-filled from
+                      the client's RSVP confirmation, staff can override before confirming. */}
+                  {isReviewing && lookupResult && !confirmResult && (
+                    <>
+                      <div className="flex flex-col gap-1">
+                        <p className="text-sm font-bold text-foreground">{lookupResult.visitorName}</p>
+                        {lookupResult.companyName && (
+                          <p className="text-xs text-muted-foreground">{lookupResult.companyName}</p>
+                        )}
+                      </div>
+                      <div className="w-full space-y-1.5 text-left">
+                        <label className="flex items-center gap-1.5 text-xs font-medium text-foreground">
+                          <UsersGroupRounded weight="BoldDuotone" className="h-4 w-4 text-muted-foreground" />
+                          Jumlah tamu hadir
+                        </label>
+                        <Input
+                          type="number"
+                          min={1}
+                          max={1000}
+                          value={guestCountInput}
+                          onChange={handleGuestCountChange}
+                          placeholder="Jumlah tamu"
+                          className="rounded-xl"
+                        />
+                        {lookupResult.confirmedGuestCount != null && (
+                          <p className="text-xs text-muted-foreground">
+                            Client konfirmasi {lookupResult.confirmedGuestCount} tamu — bisa diubah kalau beda
+                          </p>
+                        )}
+                      </div>
+                      <Button
+                        onClick={handleConfirmCheckIn}
+                        disabled={confirmIsPending}
+                        className="mt-1 w-full rounded-full"
+                      >
+                        {confirmIsPending ? "Memproses..." : "Konfirmasi Kehadiran"}
+                      </Button>
+                    </>
+                  )}
+
+                  {!confirmIsPending && confirmIsError && (
                     <>
                       <CloseCircle weight="BoldDuotone" className="h-12 w-12 text-destructive" />
                       <p className="text-sm font-semibold text-destructive">Terjadi kesalahan</p>
@@ -235,38 +395,43 @@ export function GuestbookScanClient(): React.ReactElement {
                     </>
                   )}
 
-                  {!isPending && !isError && result && !result.success && (
+                  {!confirmIsPending && !confirmIsError && confirmResult && !confirmResult.success && (
                     <>
                       <CloseCircle weight="BoldDuotone" className="h-12 w-12 text-destructive" />
                       <p className="text-sm font-semibold text-destructive">
-                        {result.error ?? "Kode tidak valid."}
+                        {confirmResult.error ?? "Kode tidak valid."}
                       </p>
                     </>
                   )}
 
-                  {!isPending && !isError && result && result.success && (
+                  {!confirmIsPending && !confirmIsError && confirmResult && confirmResult.success && (
                     <>
                       <CheckCircle weight="BoldDuotone" className="h-12 w-12 text-emerald-600" />
                       <div className="flex flex-col gap-1">
-                        <p className="text-sm font-bold text-foreground">{result.visitorName}</p>
-                        {result.companyName && (
-                          <p className="text-xs text-muted-foreground">{result.companyName}</p>
+                        <p className="text-sm font-bold text-foreground">{confirmResult.visitorName}</p>
+                        {confirmResult.companyName && (
+                          <p className="text-xs text-muted-foreground">{confirmResult.companyName}</p>
                         )}
                         <span
                           className={
-                            result.alreadyConfirmed
+                            confirmResult.alreadyConfirmed
                               ? "mt-2 inline-flex items-center justify-center rounded-full bg-secondary px-3 py-1 text-xs font-medium text-secondary-foreground"
                               : "mt-2 inline-flex items-center justify-center rounded-full bg-emerald-100 px-3 py-1 text-xs font-medium text-emerald-700"
                           }
                         >
-                          {result.alreadyConfirmed ? "Sudah dikonfirmasi sebelumnya" : "Kehadiran dikonfirmasi"}
+                          {confirmResult.alreadyConfirmed ? "Sudah dikonfirmasi sebelumnya" : "Kehadiran dikonfirmasi"}
                         </span>
-                        <p className="mt-1 text-xs text-muted-foreground">{formatDateTime(result.confirmedAt)}</p>
+                        {confirmResult.actualGuestCount != null && (
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            {confirmResult.actualGuestCount} tamu hadir
+                          </p>
+                        )}
+                        <p className="mt-1 text-xs text-muted-foreground">{formatDateTime(confirmResult.confirmedAt)}</p>
                       </div>
                     </>
                   )}
 
-                  {!isPending && (
+                  {!lookupIsPending && !confirmIsPending && !isReviewing && (
                     <Button onClick={handleScanAgain} className="mt-2 rounded-full px-6">
                       <Restart weight="BoldDuotone" className="h-4 w-4 mr-2" />
                       Scan Lagi
@@ -279,7 +444,7 @@ export function GuestbookScanClient(): React.ReactElement {
         </CardContent>
       </Card>
 
-      {!showResultPanel && (
+      {!showOverlayPanel && (
         <div className="flex flex-col gap-2">
           <button
             type="button"

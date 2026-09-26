@@ -4225,6 +4225,10 @@ model GuestbookEntry {
   festivalId            String?
   attendanceConfirmedAt DateTime?
   attendanceConfirmedById String?
+  rsvpToken             String?               @unique // token dipakai di link publik konfirmasi jumlah tamu (dikirim bareng tiket via WA)
+  confirmedGuestCount   Int?                  // jumlah tamu yang dikonfirmasi client lewat link RSVP publik
+  confirmedGuestCountAt DateTime?
+  actualGuestCount      Int?                  // jumlah tamu aktual yang di-set staff saat scan (default dari confirmedGuestCount, bisa di-override)
   createdAt             DateTime              @default(now())
   updatedAt             DateTime              @updatedAt
 

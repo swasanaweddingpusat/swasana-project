@@ -2,7 +2,7 @@
 
 import { revalidateTag } from "next/cache";
 import { Prisma } from "@prisma/client";
-import { randomInt } from "crypto";
+import { randomInt, randomBytes } from "crypto";
 import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/permissions";
 import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
@@ -82,6 +82,7 @@ export async function createGuestbookEntry(data: unknown): Promise<{ success: bo
               ...rest,
               proofFiles: (proofFiles ?? undefined) as Prisma.InputJsonValue | undefined,
               guestCode,
+              rsvpToken: randomBytes(32).toString("hex"),
               checkInAt: checkInAt ? parseLocalDateTime(checkInAt) : undefined,
               scheduledAt: scheduledAt ? parseLocalDateTime(scheduledAt) : undefined,
               commitVisitDate: commitVisitDate ? parseLocalDateOnly(commitVisitDate) : undefined,
@@ -178,9 +179,14 @@ export interface ConfirmAttendanceResult {
   companyName?: string | null;
   alreadyConfirmed?: boolean;
   confirmedAt?: string;
+  confirmedGuestCount?: number | null;
+  actualGuestCount?: number | null;
 }
 
-export async function confirmGuestbookAttendance(guestCode: string): Promise<ConfirmAttendanceResult> {
+export async function confirmGuestbookAttendance(
+  guestCode: string,
+  actualGuestCount?: number
+): Promise<ConfirmAttendanceResult> {
   const { session, error } = await requirePermission({ module: "guestbook", action: "edit" });
   if (error) return { success: false, error };
   if (!mutationLimiter.check(`guestbook-confirm-attendance:${session!.user.id}`)) {
@@ -189,11 +195,21 @@ export async function confirmGuestbookAttendance(guestCode: string): Promise<Con
 
   const code = guestCode.trim();
   if (!code) return { success: false, error: "Kode tidak valid." };
+  if (actualGuestCount !== undefined && (!Number.isInteger(actualGuestCount) || actualGuestCount < 1 || actualGuestCount > 1000)) {
+    return { success: false, error: "Jumlah tamu tidak valid." };
+  }
 
   try {
     const existing = await db.guestbookEntry.findUnique({
       where: { guestCode: code },
-      select: { id: true, visitorName: true, companyName: true, attendanceConfirmedAt: true },
+      select: {
+        id: true,
+        visitorName: true,
+        companyName: true,
+        attendanceConfirmedAt: true,
+        confirmedGuestCount: true,
+        actualGuestCount: true,
+      },
     });
     if (!existing) return { success: false, error: "Kode tidak ditemukan." };
 
@@ -204,14 +220,22 @@ export async function confirmGuestbookAttendance(guestCode: string): Promise<Con
         visitorName: existing.visitorName,
         companyName: existing.companyName,
         confirmedAt: existing.attendanceConfirmedAt.toISOString(),
+        confirmedGuestCount: existing.confirmedGuestCount,
+        actualGuestCount: existing.actualGuestCount,
       };
     }
 
     const now = new Date();
+    const resolvedActualGuestCount = actualGuestCount ?? existing.confirmedGuestCount ?? null;
     await db.$transaction([
       db.guestbookEntry.update({
         where: { id: existing.id },
-        data: { attendanceConfirmedAt: now, attendanceConfirmedById: session!.user.profileId, visitStatus: "done_visit" },
+        data: {
+          attendanceConfirmedAt: now,
+          attendanceConfirmedById: session!.user.profileId,
+          visitStatus: "done_visit",
+          actualGuestCount: resolvedActualGuestCount,
+        },
       }),
     ]);
 
@@ -230,9 +254,62 @@ export async function confirmGuestbookAttendance(guestCode: string): Promise<Con
       visitorName: existing.visitorName,
       companyName: existing.companyName,
       confirmedAt: now.toISOString(),
+      confirmedGuestCount: existing.confirmedGuestCount,
+      actualGuestCount: resolvedActualGuestCount,
     };
   } catch (e) {
     console.error("[confirmGuestbookAttendance]", e);
+    return { success: false, error: "Terjadi kesalahan." };
+  }
+}
+
+export interface LookupGuestbookEntryResult {
+  success: boolean;
+  error?: string;
+  entryFound?: boolean;
+  visitorName?: string;
+  companyName?: string | null;
+  alreadyConfirmed?: boolean;
+  confirmedAt?: string;
+  confirmedGuestCount?: number | null;
+  actualGuestCount?: number | null;
+}
+
+export async function lookupGuestbookEntryByCode(guestCode: string): Promise<LookupGuestbookEntryResult> {
+  const { session, error } = await requirePermission({ module: "guestbook", action: "edit" });
+  if (error) return { success: false, error };
+  if (!mutationLimiter.check(`guestbook-lookup:${session!.user.id}`)) {
+    return { success: false, ...rateLimitError() };
+  }
+
+  const code = guestCode.trim();
+  if (!code) return { success: false, error: "Kode tidak valid." };
+
+  try {
+    const existing = await db.guestbookEntry.findUnique({
+      where: { guestCode: code },
+      select: {
+        visitorName: true,
+        companyName: true,
+        attendanceConfirmedAt: true,
+        confirmedGuestCount: true,
+        actualGuestCount: true,
+      },
+    });
+    if (!existing) return { success: false, error: "Kode tidak ditemukan." };
+
+    return {
+      success: true,
+      entryFound: true,
+      visitorName: existing.visitorName,
+      companyName: existing.companyName,
+      alreadyConfirmed: !!existing.attendanceConfirmedAt,
+      confirmedAt: existing.attendanceConfirmedAt?.toISOString(),
+      confirmedGuestCount: existing.confirmedGuestCount,
+      actualGuestCount: existing.actualGuestCount,
+    };
+  } catch (e) {
+    console.error("[lookupGuestbookEntryByCode]", e);
     return { success: false, error: "Terjadi kesalahan." };
   }
 }
