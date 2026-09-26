@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import Image from "next/image";
 import { useAttendanceToday, useClockIn, useClockOut } from "@/hooks/use-attendance";
 import { useWorkShifts } from "@/hooks/use-work-shifts";
 import { useWorkLocations } from "@/hooks/use-work-locations";
@@ -9,6 +10,8 @@ import { CameraModal } from "./CameraModal";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
@@ -111,6 +114,8 @@ export function AttendanceClock() {
       setSelectedShiftId("");
       setSelectedWorkType("");
       setSelectedLocationId("");
+      setSelectedIsPublicHoliday(false);
+      setSelectedPublicHolidayId("");
       setWorkTypeReason("");
     }
   }, []);
@@ -131,7 +136,40 @@ export function AttendanceClock() {
     return <Badge variant="outline">Belum Absen</Badge>;
   }, [attendance, todayLoading]);
 
-  const handleAction = useCallback((action: ClockAction) => {
+  // GPS is fetched best-effort in the background so it never blocks the camera from
+  // opening — the workday/location fields (which need it) are only validated later,
+  // at submit time in the details step below.
+  const requestGps = useCallback(() => {
+    setGpsLoading(true);
+    if (!navigator.geolocation) {
+      setGpsLoading(false);
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setGpsCoords({ lat: position.coords.latitude, lng: position.coords.longitude });
+        setGpsLoading(false);
+      },
+      () => {
+        setGpsCoords(null);
+        setGpsLoading(false);
+      },
+      { enableHighAccuracy: true, timeout: 10000 },
+    );
+  }, []);
+
+  // Clock-in tap: open the camera immediately — no field is required beforehand.
+  // Status/shift/work-type/location are filled AFTER the photo, in the details step.
+  const handleClockInTap = useCallback(() => {
+    setPendingAction("in");
+    setCapturedPhoto(null);
+    setGpsCoords(null);
+    requestGps();
+    setCameraOpen(true);
+  }, [requestGps]);
+
+  // Clock-out has no fields to fill, so it keeps the original GPS-then-camera order.
+  const handleClockOutTap = useCallback(() => {
     setGpsLoading(true);
     setPendingAction("out");
 
@@ -231,68 +269,16 @@ export function AttendanceClock() {
       toast.error("Pilih lokasi kerja terlebih dahulu");
       return;
     }
-
-    handleAction("in");
-  }, [selectedStatus, isWorkday, selectedDayOffType, selectedPublicHolidayId, selectedShiftId, selectedWorkType, selectedLocationId, handleAction]);
-
-  const handleCapture = useCallback((photoBase64: string) => {
-    setCameraOpen(false);
-    if (!pendingAction) return;
-
-    if (pendingAction === "in") {
-      // Off flow: selfie only, no GPS. Karyawan pilih jenis libur; nama hari besar diisi
-      // server dari master by-date.
-      if (!isWorkday) {
-        clockInMutation.mutate(
-          {
-            attendanceStatus: "DAY_OFF",
-            dayOffType: (selectedDayOffType || "REGULAR") as DayOffTypeValue,
-            publicHolidayId: selectedPublicHolidayId || undefined,
-            photoBase64,
-          },
-          {
-            onSuccess: () => {
-              toast.success("Absensi berhasil disimpan!");
-              setPendingAction(null);
-            },
-            onError: (err) => {
-              toast.error(err.message);
-              setPendingAction(null);
-            },
-          },
-        );
-        return;
-      }
-
-      if (!gpsCoords) return;
-      clockInMutation.mutate(
-        {
-          attendanceStatus: "WORKDAY",
-          photoBase64,
-          lat: gpsCoords.lat,
-          lng: gpsCoords.lng,
-          workShiftId: selectedShiftId,
-          workType: selectedWorkType as "WFO" | "WFH" | "WFA",
-          workLocationId: selectedWorkType === "WFO" ? selectedLocationId : undefined,
-          workTypeReason: selectedWorkType !== "WFO" ? workTypeReason || undefined : undefined,
-        },
-        {
-          onSuccess: () => {
-            if (selectedWorkType === "WFO") {
-              toast.success("Clock in berhasil!");
-            } else {
-              toast.success("Clock in berhasil! Menunggu persetujuan HR untuk tipe kerja WFH/WFA.");
-            }
-            setPendingAction(null);
-            setGpsCoords(null);
-          },
-          onError: (err) => {
-            toast.error(err.message);
-            setPendingAction(null);
-            setGpsCoords(null);
-          },
-        },
-      );
+    if (selectedIsPublicHoliday && !selectedPublicHolidayId) {
+      toast.error("Pilih public holiday terlebih dahulu");
+      return;
+    }
+    if (gpsLoading) {
+      toast.error("Menunggu lokasi GPS, mohon tunggu sebentar");
+      return;
+    }
+    if (!gpsCoords) {
+      toast.error("Lokasi GPS tidak tersedia. Coba lagi.");
       return;
     }
 
@@ -305,13 +291,18 @@ export function AttendanceClock() {
         workShiftId: selectedShiftId,
         workType: selectedWorkType as "WFO" | "WFH" | "WFA",
         workLocationId: selectedWorkType === "WFO" ? selectedLocationId : undefined,
+        workTypeReason: selectedWorkType !== "WFO" ? (workTypeReason || undefined) : undefined,
         // Nama hari besar tetap ditentukan HRD (master by-date); karyawan cuma menandai.
         isPublicHoliday: selectedIsPublicHoliday,
         publicHolidayId: selectedIsPublicHoliday ? (selectedPublicHolidayId || undefined) : undefined,
       },
       {
         onSuccess: () => {
-          toast.success("Clock in berhasil!");
+          if (selectedWorkType === "WFO") {
+            toast.success("Clock in berhasil!");
+          } else {
+            toast.success("Clock in berhasil! Menunggu persetujuan HR untuk tipe kerja WFH/WFA.");
+          }
           setPendingAction(null);
           setCapturedPhoto(null);
           setGpsCoords(null);
@@ -319,7 +310,7 @@ export function AttendanceClock() {
         onError: (err) => toast.error(err.message),
       },
     );
-  }, [gpsCoords, pendingAction, isWorkday, selectedDayOffType, selectedPublicHolidayId, clockInMutation, clockOutMutation, selectedShiftId, selectedWorkType, selectedLocationId, workTypeReason]);
+  }, [capturedPhoto, selectedStatus, isWorkday, selectedShiftId, selectedWorkType, selectedLocationId, selectedIsPublicHoliday, selectedPublicHolidayId, workTypeReason, gpsLoading, gpsCoords, clockInMutation]);
 
   const handleCameraClose = useCallback(() => {
     setCameraOpen(false);
@@ -334,7 +325,8 @@ export function AttendanceClock() {
   const canClockIn = !attendance?.clockInAt;
   const canClockOut = !!attendance?.clockInAt && !attendance?.clockOutAt;
   const isDone = !!attendance?.clockOutAt;
-  const clockInDisabled =
+  const showClockInDetails = canClockIn && pendingAction === "in" && !!capturedPhoto;
+  const submitClockInDisabled =
     isMutating ||
     !selectedStatus ||
     (isWorkday && !selectedShiftId) ||
@@ -357,7 +349,7 @@ export function AttendanceClock() {
             <p className="text-2xl sm:text-3xl font-heading font-bold tabular-nums tracking-tight">
               {currentTime ? formatTime(currentTime) : "--:--:--"}
             </p>
-            <p className="text-sm text-muted-foreground">{currentTime ? formatDate(currentTime) : " "}</p>
+            <p className="text-sm text-muted-foreground">{currentTime ? formatDate(currentTime) : " "}</p>
           </div>
 
           <div className="flex items-center justify-center gap-3">
@@ -525,6 +517,40 @@ export function AttendanceClock() {
                     </p>
                   </div>
                 )}
+
+                {isWorkday && (
+                  <div className="flex items-center gap-2 sm:col-span-2">
+                    <Checkbox
+                      id="public-holiday-toggle"
+                      checked={selectedIsPublicHoliday}
+                      onCheckedChange={handlePublicHolidayToggle}
+                    />
+                    <Label htmlFor="public-holiday-toggle" className="text-xs font-medium text-muted-foreground cursor-pointer">
+                      Tandai sebagai Public Holiday (kerja di tanggal merah)
+                    </Label>
+                  </div>
+                )}
+
+                {isWorkday && selectedIsPublicHoliday && (
+                  <div className="space-y-1.5 sm:col-span-2">
+                    <label className="text-xs font-medium text-muted-foreground">Public Holiday</label>
+                    <Select value={selectedPublicHolidayId} onValueChange={setSelectedPublicHolidayId} disabled={!context?.publicHolidayOptions.length}>
+                      <SelectTrigger className="w-full rounded-xl">
+                        <SelectValue placeholder="Pilih public holiday" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {context?.publicHolidayOptions.map((holiday) => (
+                          <SelectItem key={holiday.id} value={holiday.id}>
+                            {holiday.name} ({new Date(holiday.date).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {!context?.publicHolidayOptions.length && (
+                      <p className="text-xs text-destructive">Saldo public holiday belum tersedia.</p>
+                    )}
+                  </div>
+                )}
               </div>
 
               {isWorkday && (
@@ -598,7 +624,7 @@ export function AttendanceClock() {
               <Button
                 size="lg"
                 className="rounded-full px-8"
-                disabled={!settings || isMutating}
+                disabled={isMutating}
                 onClick={handleClockInTap}
               >
                 <Camera weight="BoldDuotone" className="h-5 w-5 mr-2" />

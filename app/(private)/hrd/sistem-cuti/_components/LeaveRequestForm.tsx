@@ -20,7 +20,7 @@ import { useLeaveBalances } from "@/hooks/use-leave-balances";
 import { useSubmitLeaveRequest } from "@/hooks/use-leave-requests";
 import { useHolidayTokens } from "@/hooks/use-holiday-tokens";
 import { countWeekdays, getAvailableBalance } from "@/lib/leave-helpers";
-import { DocumentText } from "@solar-icons/react";
+import { Camera, CloseCircle, DocumentText, FileText, Wallet } from "@solar-icons/react";
 
 interface FormState {
   leaveTypeId: string;
