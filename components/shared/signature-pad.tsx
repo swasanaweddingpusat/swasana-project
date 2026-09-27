@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useCallback } from "react";
+import { useRef, useCallback, useEffect } from "react";
 import SignatureCanvas from "react-signature-canvas";
 import { Button } from "@/components/ui/button";
 import { Eraser } from "@solar-icons/react";
@@ -14,6 +14,25 @@ interface SignaturePadProps {
 
 export function SignaturePad({ onSignature, label = "Tanda Tangan", className }: SignaturePadProps) {
   const sigRef = useRef<SignatureCanvas | null>(null);
+
+  // Canvas defaults to its CSS-rendered size at 1x — on hi-DPI screens that
+  // produces a blurry/pixelated signature once exported to dataURL. Scale the
+  // backing store by devicePixelRatio so the exported PNG stays crisp.
+  const resizeCanvas = useCallback(() => {
+    const canvas = sigRef.current?.getCanvas();
+    if (!canvas) return;
+    const ratio = Math.max(window.devicePixelRatio || 1, 1);
+    canvas.width = canvas.offsetWidth * ratio;
+    canvas.height = canvas.offsetHeight * ratio;
+    canvas.getContext("2d")?.scale(ratio, ratio);
+    sigRef.current?.clear();
+  }, []);
+
+  useEffect(() => {
+    resizeCanvas();
+    window.addEventListener("resize", resizeCanvas);
+    return () => window.removeEventListener("resize", resizeCanvas);
+  }, [resizeCanvas]);
 
   const handleEnd = useCallback(() => {
     if (!sigRef.current || sigRef.current.isEmpty()) {

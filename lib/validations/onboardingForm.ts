@@ -41,6 +41,10 @@ export const submitOnboardingFormPublicSchema = z.object({
 export const createOnboardingFormLinkSchema = z.object({
   name: z.string().min(1, "Nama onboarding wajib diisi"),
   expiryDays: z.coerce.number().int().min(1).max(365).default(30),
+  divisi: z.string().min(1, "Divisi wajib dipilih"),
+  jabatan: z.string().min(1, "Jabatan wajib dipilih"),
+  venueId: z.string().min(1, "Venue wajib dipilih"),
+  joinDate: z.string().min(1, "Tanggal bergabung wajib diisi"),
 });
 
 export type ValidateOnboardingFormInput = z.infer<typeof validateOnboardingFormSchema>;

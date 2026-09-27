@@ -45,6 +45,26 @@ function ClientAgreementContent() {
   const [loadingSignedPdf, setLoadingSignedPdf] = React.useState(false);
   const sigRef = React.useRef<SignatureCanvas>(null);
 
+  // Canvas defaults to its CSS-rendered size at 1x — on hi-DPI screens that
+  // produces a blurry/pixelated signature once exported to dataURL. Scale the
+  // backing store by devicePixelRatio so the signature embedded in the PO PDF stays crisp.
+  const resizeSignatureCanvas = React.useCallback(() => {
+    const canvas = sigRef.current?.getCanvas();
+    if (!canvas) return;
+    const ratio = Math.max(window.devicePixelRatio || 1, 1);
+    canvas.width = canvas.offsetWidth * ratio;
+    canvas.height = canvas.offsetHeight * ratio;
+    canvas.getContext("2d")?.scale(ratio, ratio);
+    sigRef.current?.clear();
+  }, []);
+
+  React.useEffect(() => {
+    if (step !== "sign") return;
+    resizeSignatureCanvas();
+    window.addEventListener("resize", resizeSignatureCanvas);
+    return () => window.removeEventListener("resize", resizeSignatureCanvas);
+  }, [step, resizeSignatureCanvas]);
+
   const handleValidate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!token) { toast.error("Link tidak valid"); return; }

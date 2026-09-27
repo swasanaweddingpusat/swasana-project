@@ -8,6 +8,13 @@ export const kpiIndicatorTypeEnum = z.enum(["dealing", "omset", "homebase"]);
 export const kpiBusinessRoleEnum = z.enum(["sales", "manager"]);
 export const kpiTierActionEnum = z.enum(["bonus", "deduction", "warning", "under_performance"]);
 export const kpiResultStatusEnum = z.enum(["DRAFT", "SIMULATED", "PENDING_REVIEW", "FINALIZED"]);
+export const kpiAwardRankingMetricEnum = z.enum([
+  "totalBonus",
+  "netAmount",
+  "dealingAchievementPct",
+  "omsetAchievementPct",
+  "manual",
+]);
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -32,6 +39,15 @@ const positiveDecimalString = z
   .transform((v) => String(v))
   .refine((v) => /^\d+(\.\d+)?$/.test(v), "Nilai harus berupa angka desimal")
   .refine((v) => parseFloat(v) > 0, "Target harus lebih besar dari nol");
+
+/**
+ * Percentage string bounded 0-100 (e.g. staged-payment payout %).
+ */
+const percentageDecimalString = z
+  .union([z.string(), z.number()])
+  .transform((v) => String(v))
+  .refine((v) => /^\d+(\.\d+)?$/.test(v), "Nilai harus berupa angka desimal")
+  .refine((v) => parseFloat(v) >= 0 && parseFloat(v) <= 100, "Persentase harus di antara 0-100");
 
 // ─── KpiTargetItem ────────────────────────────────────────────────────────────
 
@@ -139,15 +155,41 @@ export type TierInput = z.infer<typeof tierSchema>;
 
 // ─── KpiAchievementSchema ─────────────────────────────────────────────────────
 
-export const createAchievementSchemaSchema = z.object({
+const achievementSchemaBaseSchema = z.object({
   name: z.string().min(1, "Nama skema wajib diisi"),
   description: z.string().optional().nullable(),
   businessRole: kpiBusinessRoleEnum,
   isDraft: z.boolean().default(true),
   gatingMinIndicators: z.number().int().min(1).max(3).optional().nullable(),
+  // ── Skema Pembayaran Bertahap (Tahap 1/2) — opt-in ──────────────────────────
+  stagedPaymentEnabled: z.boolean().default(false),
+  stage1PayoutPct: percentageDecimalString.optional().nullable(),
+  stage2PayoutPct: percentageDecimalString.optional().nullable(),
+  stage1MinClientPayment: z.number().int().min(0).optional().nullable(),
+  stage2PayoutMonthOffset: z.number().int().min(1).optional().nullable(),
 });
 
-export const updateAchievementSchemaSchema = createAchievementSchemaSchema.partial();
+export const createAchievementSchemaSchema = achievementSchemaBaseSchema.superRefine((data, ctx) => {
+  if (!data.stagedPaymentEnabled) return;
+  if (data.stage1PayoutPct == null || data.stage2PayoutPct == null) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Tahap 1 dan Tahap 2 wajib diisi saat pembayaran bertahap aktif",
+      path: ["stage1PayoutPct"],
+    });
+    return;
+  }
+  const sum = parseFloat(data.stage1PayoutPct) + parseFloat(data.stage2PayoutPct);
+  if (Math.abs(sum - 100) > 0.01) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Total Tahap 1 + Tahap 2 harus 100%",
+      path: ["stage2PayoutPct"],
+    });
+  }
+});
+
+export const updateAchievementSchemaSchema = achievementSchemaBaseSchema.partial();
 
 export const upsertTiersSchema = z.object({
   achievementSchemaId: z.string().min(1),
@@ -224,6 +266,9 @@ const commissionPolicyBaseSchema = z.object({
   packageCategory: z.enum(["WEDDINGS", "MICE"]).optional().nullable(),
   effectiveFrom: z.coerce.date().optional().nullable(),
   effectiveTo: z.coerce.date().optional().nullable(),
+  // ── Bonus over-achievement (>100% target) — opt-in ──────────────────────────
+  overAchievementNominalPerExtraDeal: nonNegativeDecimalString.optional().nullable(),
+  overAchievementPctOfExtraRevenue: nonNegativeDecimalString.optional().nullable(),
 });
 
 export const createCommissionPolicySchema = commissionPolicyBaseSchema.superRefine((data, ctx) => {
@@ -264,3 +309,71 @@ export const finalizeResultSchema = z.object({
 
 export type RunSimulationInput = z.infer<typeof runSimulationSchema>;
 export type FinalizeResultInput = z.infer<typeof finalizeResultSchema>;
+
+// ─── Staged payment payout (Tahap 1 / Tahap 2 mark-paid) ───────────────────────
+
+export const runStagePayoutSchema = z.object({
+  resultId: z.string().min(1, "Result ID wajib diisi"),
+  stage: z.union([z.literal(1), z.literal(2)]),
+});
+
+export type RunStagePayoutInput = z.infer<typeof runStagePayoutSchema>;
+
+// ─── KpiAward ─────────────────────────────────────────────────────────────────
+
+const awardBaseSchema = z.object({
+  name: z.string().min(1, "Nama award wajib diisi"),
+  description: z.string().optional().nullable(),
+  businessRole: kpiBusinessRoleEnum.optional().nullable(), // null = semua role
+  isRanked: z.boolean().default(true),
+  rankingMetric: kpiAwardRankingMetricEnum.optional().nullable(),
+  defaultPrizeDescription: z.string().optional().nullable(),
+  isActive: z.boolean().default(true),
+});
+
+export const createAwardSchema = awardBaseSchema.superRefine((data, ctx) => {
+  if (data.isRanked) {
+    if (data.rankingMetric == null || data.rankingMetric === "manual") {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Award ranked wajib punya rankingMetric (bukan manual)",
+        path: ["rankingMetric"],
+      });
+    }
+  }
+});
+
+export const updateAwardSchema = awardBaseSchema.partial();
+
+export type CreateAwardInput = z.infer<typeof createAwardSchema>;
+export type UpdateAwardInput = z.infer<typeof updateAwardSchema>;
+
+// ─── KpiAwardWinner ───────────────────────────────────────────────────────────
+
+const awardWinnerBaseSchema = z.object({
+  awardId: z.string().min(1, "Award wajib dipilih"),
+  period: firstOfMonthDate,
+  // Exactly-one XOR: profileId (individual) / groupId (team) — enforced below.
+  profileId: z.string().optional().nullable(),
+  groupId: z.string().optional().nullable(),
+  prizeDescription: z.string().optional().nullable(),
+  rankValueSnapshot: nonNegativeDecimalString.optional().nullable(),
+  notes: z.string().optional().nullable(),
+});
+
+export const createAwardWinnerSchema = awardWinnerBaseSchema.superRefine((data, ctx) => {
+  const hasProfile = data.profileId != null && data.profileId !== "";
+  const hasGroup = data.groupId != null && data.groupId !== "";
+  if (hasProfile === hasGroup) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Pilih salah satu: pemenang individu (profileId) atau tim (groupId)",
+      path: ["profileId"],
+    });
+  }
+});
+
+export const updateAwardWinnerSchema = awardWinnerBaseSchema.partial();
+
+export type CreateAwardWinnerInput = z.infer<typeof createAwardWinnerSchema>;
+export type UpdateAwardWinnerInput = z.infer<typeof updateAwardWinnerSchema>;

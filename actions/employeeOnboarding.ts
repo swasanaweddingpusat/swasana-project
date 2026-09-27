@@ -290,7 +290,7 @@ export async function createOnboardingFormLink(
   const parsed = createOnboardingFormLinkSchema.safeParse(input);
   if (!parsed.success) return { success: false, error: parsed.error.issues[0].message };
 
-  const { name, expiryDays } = parsed.data;
+  const { name, expiryDays, divisi, jabatan, venueId, joinDate } = parsed.data;
 
   try {
     const token = crypto.randomBytes(32).toString("hex");
@@ -303,6 +303,10 @@ export async function createOnboardingFormLink(
         token,
         accessCode,
         expiresAt,
+        divisi,
+        jabatan,
+        venueId,
+        joinDate: new Date(joinDate),
         createdBy: session!.user.profileId,
       },
     });
