@@ -5,9 +5,10 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Refresh, Copy, UploadMinimalistic, FileText, CloseCircle, CheckCircle, DangerTriangle, DownloadMinimalistic } from "@solar-icons/react";
 import { cn } from "@/lib/utils";
-import { generateAgreementToken, uploadManualAgreement } from "@/actions/client-agreement";
+import { generateAgreementToken, uploadManualAgreement, updateAgreementPdfTemplate } from "@/actions/client-agreement";
 import { uploadFileDirect } from "@/lib/upload-client";
 import { MAX_UPLOAD_SIZE_BYTES, isAllowedAgreementUploadMimeType } from "@/lib/validations/upload";
 import { ApprovalWarningDialog } from "@/components/shared/approval-warning-dialog";
@@ -50,7 +51,7 @@ export interface AgreementPanelProps {
  * standalone in any host surface.
  */
 export function AgreementPanel({ bookingId, onCompleted }: AgreementPanelProps): React.JSX.Element {
-  const [agreement, setAgreement] = React.useState<{ token: string; accessCode: string; status?: string } | null>(null);
+  const [agreement, setAgreement] = React.useState<{ token: string; accessCode: string; status?: string; pdfTemplate?: "V1" | "V2" } | null>(null);
   const [bookingStatus, setBookingStatus] = React.useState<string>("");
   const [confirmRegen, setConfirmRegen] = React.useState(false);
   const [isPending, startTransition] = React.useTransition();
@@ -171,8 +172,17 @@ export function AgreementPanel({ bookingId, onCompleted }: AgreementPanelProps):
       const result = await generateAgreementToken(bookingId);
       if (!result.success) { toast.error(result.error); return; }
       setConfirmRegen(false);
-      setAgreement({ token: result.agreement.token, accessCode: result.agreement.accessCode, status: result.agreement.status });
+      setAgreement((prev) => ({ token: result.agreement.token, accessCode: result.agreement.accessCode, status: result.agreement.status, pdfTemplate: prev?.pdfTemplate ?? "V1" }));
       toast.success("Link & kode akses baru di-generate");
+    });
+  }, [bookingId]);
+
+  const changeTemplate = React.useCallback((pdfTemplate: "V1" | "V2") => {
+    startTransition(async () => {
+      const result = await updateAgreementPdfTemplate({ bookingId, pdfTemplate });
+      if (!result.success) { toast.error(result.error); return; }
+      setAgreement((prev) => (prev ? { ...prev, pdfTemplate: result.pdfTemplate } : prev));
+      toast.success("Template PDF diperbarui");
     });
   }, [bookingId]);
 
@@ -183,7 +193,7 @@ export function AgreementPanel({ bookingId, onCompleted }: AgreementPanelProps):
       const data = await res.json() as {
         bookingStatus?: string;
         poNumber?: string | null;
-        clientAgreement?: { token: string; accessCode: string; status: string } | null;
+        clientAgreement?: { token: string; accessCode: string; status: string; pdfTemplate?: "V1" | "V2" } | null;
         clientSignature?: string | null;
         clientAgreementUploaded?: { fileName: string; fileUrl?: string } | null;
       };
@@ -191,7 +201,12 @@ export function AgreementPanel({ bookingId, onCompleted }: AgreementPanelProps):
       if (data.poNumber) setSystemPoNumber(data.poNumber.trim());
       // Only show existing agreement if booking is Confirmed or agreement is genuinely pending/sent
       if (data.clientAgreement && (data.bookingStatus === "Confirmed" || data.clientAgreement.status !== "Signed")) {
-        setAgreement({ token: data.clientAgreement.token, accessCode: data.clientAgreement.accessCode, status: data.clientAgreement.status });
+        setAgreement({
+          token: data.clientAgreement.token,
+          accessCode: data.clientAgreement.accessCode,
+          status: data.clientAgreement.status,
+          pdfTemplate: data.clientAgreement.pdfTemplate ?? "V1",
+        });
       }
       // PO manual (scan fisik) hanya tampil kalau step BUKAN diselesaikan lewat
       // ttd digital — ttd digital jadi bukti utama & lebih diprioritaskan.
@@ -339,6 +354,26 @@ export function AgreementPanel({ bookingId, onCompleted }: AgreementPanelProps):
         </div>
       ) : (
         <>
+          <div className="space-y-1.5">
+            <p className={cn('text-xs', 'text-muted-foreground', 'font-medium')}>Template PDF</p>
+            <Tabs
+              value={agreement.pdfTemplate ?? "V1"}
+              onValueChange={(v) => changeTemplate(v as "V1" | "V2")}
+            >
+              <TabsList className="w-full">
+                <TabsTrigger value="V1" disabled={isPending} className="flex-1">
+                  PO Lama
+                </TabsTrigger>
+                <TabsTrigger value="V2" disabled={isPending} className="flex-1">
+                  PO Baru (Kediaman)
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
+            <p className="text-[10px] text-muted-foreground">
+              Menentukan tampilan PDF yang dilihat & ditandatangani client. Bisa diganti kapan saja tanpa mengubah link, kode akses, atau tanda tangan.
+            </p>
+          </div>
+
           <div className="space-y-1">
             <p className={cn('text-xs', 'text-muted-foreground', 'font-medium')}>Link Agreement</p>
             <div className={cn('flex', 'items-center', 'gap-2', 'overflow-hidden')}>

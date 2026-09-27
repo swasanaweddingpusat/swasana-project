@@ -435,6 +435,7 @@ model Venue {
   memos                     Memo[]
   announcements             Announcement[]
   onboardingFormSubmissions OnboardingFormSubmission[]
+  onboardingFormLinks       OnboardingFormLink[]
   groupAssignments          UserGroupVenue[]
   kpiAssignments            KpiAssignment[]            @relation("KpiAssignmentVenue")
   kpiResults                KpiCalculationResult[]     @relation("KpiResultVenue")
@@ -2128,6 +2129,11 @@ enum AgreementStatus {
   Signed
 }
 
+enum AgreementPdfTemplate {
+  V1
+  V2
+}
+
 // ─── Order Status ─────────────────────────────────────────────────────────────
 
 model OrderStatus {
@@ -2144,16 +2150,17 @@ model OrderStatus {
 // ─── Client Agreement ─────────────────────────────────────────────────────────
 
 model ClientAgreement {
-  id         String          @id @default(uuid())
-  bookingId  String          @unique
-  token      String          @unique
-  accessCode String
-  status     AgreementStatus @default(Pending)
-  sentAt     DateTime?
-  viewedAt   DateTime?
-  signedAt   DateTime?
-  createdAt  DateTime        @default(now())
-  updatedAt  DateTime        @updatedAt
+  id          String               @id @default(uuid())
+  bookingId   String               @unique
+  token       String               @unique
+  accessCode  String
+  status      AgreementStatus      @default(Pending)
+  pdfTemplate AgreementPdfTemplate @default(V1)
+  sentAt      DateTime?
+  viewedAt    DateTime?
+  signedAt    DateTime?
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
 
   booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
 
@@ -3619,11 +3626,16 @@ model OnboardingFormLink {
   status     OnboardingFormLinkStatus @default(Active)
   viewedAt   DateTime?
   expiresAt  DateTime?
+  divisi     String?
+  jabatan    String?
+  venueId    String?
+  joinDate   DateTime?
   createdBy  String
   createdAt  DateTime                 @default(now())
   updatedAt  DateTime                 @updatedAt
 
   creator    Profile                   @relation("OnboardingFormLinkCreator", fields: [createdBy], references: [id])
+  venue      Venue?                    @relation(fields: [venueId], references: [id], onDelete: SetNull)
   submission OnboardingFormSubmission?
 
   @@index([token])
