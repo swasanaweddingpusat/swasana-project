@@ -128,7 +128,6 @@ model Profile {
   // Access control
   roleId    String?
   managerId String?
-  homebaseVenueId String?
   dataScope DataScope     @default(own)
   status    ProfileStatus @default(active)
 
@@ -149,7 +148,6 @@ model Profile {
   user                         User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
   manager                      Profile?                   @relation("ProfileManager", fields: [managerId], references: [id], onDelete: SetNull)
   subordinates                 Profile[]                  @relation("ProfileManager")
-  homebaseVenue                Venue?                     @relation("ProfileHomebase", fields: [homebaseVenueId], references: [id], onDelete: SetNull)
   dataGroupMemberships         UserGroupMember[]
   ledGroups                    UserGroup[]                @relation("GroupLeader")
   dailyReportsSubmitted        DailyReport[]              @relation("DailyReportSubmitter")
@@ -258,7 +256,6 @@ model Profile {
   @@index([dataScope])
   @@index([departmentId])
   @@index([positionId])
-  @@index([homebaseVenueId])
   @@map("profiles")
 }
 
@@ -434,7 +431,6 @@ model Venue {
   announcements             Announcement[]
   onboardingFormSubmissions OnboardingFormSubmission[]
   groupAssignments          UserGroupVenue[]
-  profileHomebases          Profile[]                  @relation("ProfileHomebase")
   kpiAssignments            KpiAssignment[]            @relation("KpiAssignmentVenue")
   kpiResults                KpiCalculationResult[]     @relation("KpiResultVenue")
   homebases                 UserGroupHomebase[]         @relation("GroupHomebases")
