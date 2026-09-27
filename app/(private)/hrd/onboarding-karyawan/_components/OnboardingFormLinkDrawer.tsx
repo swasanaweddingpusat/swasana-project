@@ -15,6 +15,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useCreateOnboardingFormLink } from "@/hooks/use-employee-onboarding";
+import { useVenues } from "@/hooks/use-venues";
 
 interface OnboardingFormLinkDrawerProps {
   isOpen: boolean;
@@ -34,19 +35,47 @@ const EXPIRY_OPTIONS = [
   { value: "90", label: "90 hari" },
 ];
 
+const DIVISI_OPTIONS = [
+  { value: "Sales", label: "Sales" },
+  { value: "Venue Specialist", label: "Venue Specialist" },
+  { value: "Operational", label: "Operational" },
+  { value: "Finance", label: "Finance" },
+  { value: "HR", label: "HR" },
+  { value: "MICE", label: "MICE" },
+  { value: "IT & Design Creative", label: "IT & Design Creative" },
+  { value: "Supporting", label: "Supporting" },
+];
+
+const JABATAN_OPTIONS = [
+  { value: "Staff", label: "Staff" },
+  { value: "Manager", label: "Manager" },
+  { value: "Direksi", label: "Direksi" },
+  { value: "CEO", label: "CEO" },
+];
+
 export function OnboardingFormLinkDrawer({
   isOpen,
   onClose,
 }: OnboardingFormLinkDrawerProps) {
   const [name, setName] = useState("");
   const [expiryDays, setExpiryDays] = useState("30");
+  const [divisi, setDivisi] = useState("");
+  const [jabatan, setJabatan] = useState("");
+  const [venueId, setVenueId] = useState("");
+  const [joinDate, setJoinDate] = useState("");
   const [successData, setSuccessData] = useState<SuccessData | null>(null);
 
   const createMutation = useCreateOnboardingFormLink();
+  const { data: venuesData } = useVenues();
+  const venues = venuesData ?? [];
 
   function resetForm() {
     setName("");
     setExpiryDays("30");
+    setDivisi("");
+    setJabatan("");
+    setVenueId("");
+    setJoinDate("");
     setSuccessData(null);
   }
 
@@ -60,10 +89,30 @@ export function OnboardingFormLinkDrawer({
       toast.error("Nama onboarding wajib diisi");
       return;
     }
+    if (!divisi) {
+      toast.error("Divisi wajib dipilih");
+      return;
+    }
+    if (!jabatan) {
+      toast.error("Jabatan wajib dipilih");
+      return;
+    }
+    if (!venueId) {
+      toast.error("Venue wajib dipilih");
+      return;
+    }
+    if (!joinDate) {
+      toast.error("Tanggal bergabung wajib diisi");
+      return;
+    }
 
     const result = await createMutation.mutateAsync({
       name: name.trim(),
       expiryDays: parseInt(expiryDays, 10),
+      divisi,
+      jabatan,
+      venueId,
+      joinDate,
     });
 
     if (result.success && result.data) {
@@ -179,6 +228,76 @@ export function OnboardingFormLinkDrawer({
                 ))}
               </SelectContent>
             </Select>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-sm">
+              Divisi
+              <span className="ml-0.5 text-destructive">*</span>
+            </Label>
+            <Select value={divisi} onValueChange={setDivisi}>
+              <SelectTrigger className="rounded-xl">
+                <SelectValue placeholder="Pilih divisi" />
+              </SelectTrigger>
+              <SelectContent>
+                {DIVISI_OPTIONS.map((opt) => (
+                  <SelectItem key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-sm">
+              Jabatan
+              <span className="ml-0.5 text-destructive">*</span>
+            </Label>
+            <Select value={jabatan} onValueChange={setJabatan}>
+              <SelectTrigger className="rounded-xl">
+                <SelectValue placeholder="Pilih jabatan" />
+              </SelectTrigger>
+              <SelectContent>
+                {JABATAN_OPTIONS.map((opt) => (
+                  <SelectItem key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-sm">
+              Venue
+              <span className="ml-0.5 text-destructive">*</span>
+            </Label>
+            <Select value={venueId} onValueChange={setVenueId}>
+              <SelectTrigger className="rounded-xl">
+                <SelectValue placeholder="Pilih venue" />
+              </SelectTrigger>
+              <SelectContent>
+                {venues.map((venue) => (
+                  <SelectItem key={venue.id} value={venue.id}>
+                    {venue.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-sm">
+              Tanggal Bergabung
+              <span className="ml-0.5 text-destructive">*</span>
+            </Label>
+            <Input
+              type="date"
+              value={joinDate}
+              onChange={(e) => setJoinDate(e.target.value)}
+              className="rounded-xl"
+            />
           </div>
 
           <div className="flex items-center justify-end gap-3 pt-2">
