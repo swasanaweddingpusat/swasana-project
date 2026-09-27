@@ -56,8 +56,11 @@ export async function fetchKpiResults(
   return fetchJson<KpiCalculationResultItem[]>(`/api/kpi-insentif/results${qs ? `?${qs}` : ""}`);
 }
 
-export async function fetchProfilesForAssignment(): Promise<ProfileForAssignment[]> {
-  return fetchJson<ProfileForAssignment[]>("/api/kpi-insentif/profiles");
+export async function fetchProfilesForAssignment(
+  businessRole?: "sales" | "manager"
+): Promise<ProfileForAssignment[]> {
+  const qs = businessRole ? `?businessRole=${businessRole}` : "";
+  return fetchJson<ProfileForAssignment[]>(`/api/kpi-insentif/profiles${qs}`);
 }
 
 export interface AwardWinnerFilters {

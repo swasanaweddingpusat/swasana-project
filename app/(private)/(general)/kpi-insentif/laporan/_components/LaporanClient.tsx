@@ -33,11 +33,19 @@ import {
   GraphUp,
 } from "@solar-icons/react";
 import { PageHeader } from "@/components/shared/page-header";
-import { useCalculationResults } from "@/hooks/useKpiInsentif";
+import { toast } from "sonner";
+import {
+  useCalculationResults,
+  useMarkStagePaid,
+  useRecomputeStagedPayment,
+} from "@/hooks/useKpiInsentif";
 import { useVenues } from "@/hooks/use-venues";
 import { formatRupiah, formatPct } from "@/lib/utils/kpiFormatters";
+import type { KpiCalculationResultItem } from "@/types/kpiInsentif";
 import { SummaryCard } from "@/components/shared/SummaryCard";
 import { MONTHS, PeriodSelector } from "../../_components/PeriodSelector";
+import { EmptyState } from "../../_components/EmptyState";
+import { ResultDetailDrawer } from "../../simulasi/_components/ResultDetailDrawer";
 
 export function LaporanClient() {
   const now = new Date();
@@ -46,6 +54,7 @@ export function LaporanClient() {
   const [filterRole, setFilterRole] = useState("all");
   const [filterVenueId, setFilterVenueId] = useState("all");
   const [search, setSearch] = useState("");
+  const [selectedResult, setSelectedResult] = useState<KpiCalculationResultItem | null>(null);
 
   const { data: venues = [] } = useVenues();
   const period = `${filterYear}-${String(filterMonth).padStart(2, "0")}`;
@@ -56,6 +65,27 @@ export function LaporanClient() {
     businessRole: filterRole !== "all" ? filterRole : undefined,
     venueId: filterVenueId !== "all" ? filterVenueId : undefined,
   });
+
+  const markStagePaidMutation = useMarkStagePaid();
+  const recomputeStagedMutation = useRecomputeStagedPayment();
+
+  async function handleMarkStagePaid(resultId: string, stage: 1 | 2) {
+    const res = await markStagePaidMutation.mutateAsync({ resultId, stage });
+    if (res.success) {
+      toast.success(`Tahap ${stage} berhasil ditandai lunas`);
+    } else {
+      toast.error(res.error ?? "Gagal menandai pembayaran");
+    }
+  }
+
+  async function handleRecomputeStagedPayment(resultId: string) {
+    const res = await recomputeStagedMutation.mutateAsync(resultId);
+    if (res.success) {
+      toast.success("Pembayaran bertahap berhasil dievaluasi ulang");
+    } else {
+      toast.error(res.error ?? "Gagal re-evaluasi pembayaran bertahap");
+    }
+  }
 
   const filtered = results.filter((r) => {
     if (!search.trim()) return true;
@@ -171,30 +201,25 @@ export function LaporanClient() {
                   <TableHead className="font-semibold text-right">Bersih</TableHead>
                   <TableHead className="font-semibold text-center">Grade</TableHead>
                   <TableHead className="font-semibold text-center">Finalisasi</TableHead>
+                  <TableHead className="font-semibold text-center">Pembayaran</TableHead>
                   <TableHead className="font-semibold text-center">Status</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {isLoading ? (
                   <TableRow>
-                    <TableCell colSpan={12} className="h-32 text-center text-muted-foreground">
+                    <TableCell colSpan={13} className="h-32 text-center text-muted-foreground">
                       Memuat laporan...
                     </TableCell>
                   </TableRow>
                 ) : filtered.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={12} className="h-48 text-center">
-                      <div className="flex flex-col items-center gap-3 py-6">
-                        <GraphUp weight="BoldDuotone" className="h-10 w-10 text-muted-foreground/40" />
-                        <div>
-                          <p className="text-sm font-medium text-muted-foreground">
-                            Belum ada laporan final
-                          </p>
-                          <p className="text-xs text-muted-foreground mt-0.5">
-                            untuk periode {MONTHS[filterMonth - 1]} {filterYear}
-                          </p>
-                        </div>
-                      </div>
+                    <TableCell colSpan={13} className="p-0">
+                      <EmptyState
+                        icon={<GraphUp weight="BoldDuotone" className="h-8 w-8 text-muted-foreground" />}
+                        title="Belum ada laporan final"
+                        description={`Untuk periode ${MONTHS[filterMonth - 1]} ${filterYear}`}
+                      />
                     </TableCell>
                   </TableRow>
                 ) : (
@@ -207,9 +232,14 @@ export function LaporanClient() {
                         })
                       : "-";
                     const deductionNum = r.deductionAmount != null ? Number(r.deductionAmount) : 0;
+                    const hasStagedPayment = r.stage1Total != null;
 
                     return (
-                      <TableRow key={r.id} className="hover:bg-muted/20 transition-colors">
+                      <TableRow
+                        key={r.id}
+                        className="hover:bg-muted/20 transition-colors cursor-pointer"
+                        onClick={() => setSelectedResult(r)}
+                      >
                         <TableCell>
                           <div>
                             <p className="font-medium text-sm">{r.profile.fullName ?? "-"}</p>
@@ -246,6 +276,20 @@ export function LaporanClient() {
                           {finalizedDate}
                         </TableCell>
                         <TableCell className="text-center">
+                          {hasStagedPayment ? (
+                            <div className="flex items-center justify-center gap-1">
+                              <Badge variant={r.stage1PaidAt ? "default" : "secondary"} className="rounded-full text-[10px]">
+                                T1 {r.stage1PaidAt ? "Cair" : "Menunggu"}
+                              </Badge>
+                              <Badge variant={r.stage2PaidAt ? "default" : "secondary"} className="rounded-full text-[10px]">
+                                T2 {r.stage2PaidAt ? "Cair" : "Menunggu"}
+                              </Badge>
+                            </div>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">-</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-center">
                           <Badge variant="default" className="rounded-full text-xs">FINAL</Badge>
                         </TableCell>
                       </TableRow>
@@ -271,6 +315,18 @@ export function LaporanClient() {
           )}
         </div>
       </div>
+
+      {selectedResult && (
+        <ResultDetailDrawer
+          result={selectedResult}
+          isOpen={!!selectedResult}
+          onClose={() => setSelectedResult(null)}
+          onMarkStagePaid={handleMarkStagePaid}
+          isMarkingStagePaid={markStagePaidMutation.isPending}
+          onRecomputeStagedPayment={handleRecomputeStagedPayment}
+          isRecomputing={recomputeStagedMutation.isPending}
+        />
+      )}
     </TooltipProvider>
   );
 }
