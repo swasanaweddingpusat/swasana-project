@@ -27,10 +27,12 @@ import {
   CheckCircle,
   ShareCircle,
   Link as LinkIcon,
+  UsersGroupRounded,
 } from "@solar-icons/react";
 import type { GuestbookEntryItem } from "@/lib/queries/guestbookEntries";
 import { BitrixDealDetail } from "@/components/shared/BitrixDealDetail";
 import type { ProofFiles } from "@/lib/validations/guestbook";
+import { useGuestVisitHistory } from "@/hooks/use-guestbook";
 import { resolveGuestbookPhotoUrl } from "./photo-url";
 import { generateGuestbookTicketBlob } from "./guestbook-ticket";
 
@@ -38,7 +40,6 @@ interface GuestbookDetailDrawerProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   entry: GuestbookEntryItem | null;
-  allEntries: GuestbookEntryItem[];
 }
 
 const VISIT_STATUS_LABELS: Record<string, { label: string; className: string }> = {
@@ -137,11 +138,11 @@ export function GuestbookDetailDrawer({
   open,
   onOpenChange,
   entry,
-  allEntries,
 }: GuestbookDetailDrawerProps): ReactNode {
   const [overlayImage, setOverlayImage] = useState<string | null>(null);
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
   const [isSharing, setIsSharing] = useState(false);
+  const { data: visitHistory } = useGuestVisitHistory(open ? entry?.id : undefined);
 
   useEffect(() => {
     if (!entry?.guestCode) {
@@ -173,10 +174,14 @@ export function GuestbookDetailDrawer({
         navigator.canShare({ files: [file] });
 
       if (canShareFile) {
+        // Share targets like WhatsApp ignore a separate `url` field when `files` is also
+        // present, so the RSVP link must be embedded directly inside `text`.
+        const rsvpLink = entry.rsvpToken ? `${window.location.origin}/guestbook-rsvp/${entry.rsvpToken}` : null;
+        const rsvpSuffix = rsvpLink ? ` Konfirmasi jumlah tamu di sini: ${rsvpLink}` : "";
         await navigator.share({
           files: [file],
           title: "Tiket Kehadiran Expo",
-          text: `Tiket kehadiran expo untuk ${entry.visitorName}. Mohon konfirmasi kehadiran Anda beserta jumlah tamu yang akan hadir ya.`,
+          text: `Tiket kehadiran expo untuk ${entry.visitorName}. Mohon konfirmasi kehadiran Anda beserta jumlah tamu yang akan hadir ya.${rsvpSuffix}`,
         });
       } else {
         const url = URL.createObjectURL(blob);
@@ -198,15 +203,10 @@ export function GuestbookDetailDrawer({
     }
   }
 
-  const matchingEntries = allEntries.filter(
-    (e) =>
-      e.id !== entry.id &&
-      e.visitorName.toLowerCase() === entry.visitorName.toLowerCase() &&
-      e.phoneNumber != null &&
-      entry.phoneNumber != null &&
-      e.phoneNumber === entry.phoneNumber
-  );
-  const totalVisit = matchingEntries.length + 1;
+  // Full cross-festival history from the server (matched by normalized phone +
+  // name) — falls back to the grouped-listing's own count while it's loading.
+  const pastVisits = (visitHistory ?? []).filter((v) => v.id !== entry.id);
+  const totalVisit = visitHistory ? visitHistory.length : entry.visitHistoryCount;
   const proofFiles = (entry.proofFiles ?? null) as ProofFiles | null;
   const proofChat = resolveGuestbookPhotoUrl(proofFiles?.chat?.path);
   const proofPhoto = resolveGuestbookPhotoUrl(proofFiles?.photo?.path);
@@ -265,6 +265,15 @@ export function GuestbookDetailDrawer({
                 />
               )}
               <p className="font-mono text-xs text-muted-foreground">{entry.guestCode}</p>
+              {entry.confirmedGuestCount != null && (
+                <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <UsersGroupRounded weight="BoldDuotone" className="h-3.5 w-3.5" />
+                  <span>
+                    Client konfirmasi {entry.confirmedGuestCount} tamu
+                    {entry.confirmedGuestCountAt ? ` (${formatDateTime(entry.confirmedGuestCountAt)})` : ""}
+                  </span>
+                </div>
+              )}
               {entry.attendanceConfirmedAt ? (
                 <div className="flex flex-col items-center gap-1 pt-1">
                   <Badge className="rounded-full text-xs bg-emerald-100 text-emerald-700 border-0">
@@ -485,31 +494,29 @@ export function GuestbookDetailDrawer({
         </div>
 
         {/* Visit History */}
-        {matchingEntries.length > 0 && (
+        {pastVisits.length > 0 && (
           <div className="bg-muted/30 rounded-2xl p-4 space-y-3">
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-              Riwayat Kunjungan ({matchingEntries.length})
+              Riwayat Kunjungan ({pastVisits.length})
             </p>
             <div className="space-y-2">
-              {matchingEntries
-                .sort((a, b) => new Date(b.checkInAt).getTime() - new Date(a.checkInAt).getTime())
-                .slice(0, 10)
-                .map((past) => {
-                  const pastStatus = past.visitStatus ? VISIT_STATUS_LABELS[past.visitStatus] : null;
-                  return (
-                    <div key={past.id} className="flex items-center justify-between gap-2 text-sm border-b border-border/50 pb-2 last:border-0 last:pb-0">
-                      <div className="space-y-0.5">
-                        <p className="text-foreground font-medium">{formatVisitDateTime(past.checkInAt)}</p>
-                        <p className="text-xs text-muted-foreground">{past.venue?.name ?? "—"}</p>
-                      </div>
-                      {pastStatus && (
-                        <Badge className={`rounded-full text-[11px] shrink-0 ${pastStatus.className}`}>
-                          {pastStatus.label}
-                        </Badge>
-                      )}
+              {pastVisits.slice(0, 10).map((past) => {
+                const pastStatus = past.visitStatus ? VISIT_STATUS_LABELS[past.visitStatus] : null;
+                const place = [past.festival?.name, past.venue?.name].filter(Boolean).join(" • ");
+                return (
+                  <div key={past.id} className="flex items-center justify-between gap-2 text-sm border-b border-border/50 pb-2 last:border-0 last:pb-0">
+                    <div className="space-y-0.5">
+                      <p className="text-foreground font-medium">{formatVisitDateTime(past.checkInAt)}</p>
+                      <p className="text-xs text-muted-foreground">{place || "—"}</p>
                     </div>
-                  );
-                })}
+                    {pastStatus && (
+                      <Badge className={`rounded-full text-[11px] shrink-0 ${pastStatus.className}`}>
+                        {pastStatus.label}
+                      </Badge>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}

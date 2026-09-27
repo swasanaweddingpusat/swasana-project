@@ -20,6 +20,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -34,12 +35,14 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
   AddCircle,
   UsersGroupRounded,
   CalendarMinimalistic,
+  ClockCircle,
   Download,
   Eye,
   Filter,
@@ -57,6 +60,7 @@ import {
   Leaf,
   Videocamera,
   Link as LinkIcon,
+  MenuDotsCircle,
 } from "@solar-icons/react";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
@@ -82,6 +86,7 @@ import { guestbookSourceLabel, type ProofFiles } from "@/lib/validations/guestbo
 import { GuestbookDrawer } from "./GuestbookDrawer";
 import { GuestbookDetailDrawer } from "./GuestbookDetailDrawer";
 import { GuestbookFilterDrawer } from "./GuestbookFilterDrawer";
+import { ActivityLogModal } from "./activity-log-modal";
 import { resolveGuestbookProofThumb } from "./photo-url";
 import { PaginationBar } from "@/components/shared/pagination-bar";
 
@@ -139,21 +144,6 @@ function getPackagePrice(pkg: NonNullable<GuestbookEntryItem["package"]>): numbe
 // Shorten an ad URL for display (drop protocol + trailing slash).
 function shortUrl(url: string): string {
   return url.replace(/^https?:\/\//i, "").replace(/\/$/, "");
-}
-
-// Lightweight per-page visit-count indicator — mirrors the matching logic in
-// GuestbookDetailDrawer (same name + same phone number = same contact), but
-// only against the current page's entries (not the full history).
-function countVisitsOnPage(entry: GuestbookEntryItem, pageEntries: GuestbookEntryItem[]): number {
-  const matching = pageEntries.filter(
-    (e) =>
-      e.id !== entry.id &&
-      e.visitorName.toLowerCase() === entry.visitorName.toLowerCase() &&
-      e.phoneNumber != null &&
-      entry.phoneNumber != null &&
-      e.phoneNumber === entry.phoneNumber
-  );
-  return matching.length + 1;
 }
 
 // Progress-bar row used by the "Sumber Iklan" card — label + count + percentage.
@@ -247,25 +237,25 @@ function GuestbookAdsSourceCard({
 
 function GuestbookOverview({
   overview,
-  activeStatus,
+  activeStatuses,
   onStatusClick,
-  activeCategory,
+  activeCategories,
   onCategoryClick,
-  activeSourceId,
+  activeSourceIds,
   onSourceClick,
-  activeVenueId,
+  activeVenueIds,
   onVenueClick,
   activeHostId,
   onHostClick,
 }: {
   overview: GuestbookOverview;
-  activeStatus: string | undefined;
+  activeStatuses: string[];
   onStatusClick: (key: string) => void;
-  activeCategory: string | undefined;
+  activeCategories: string[];
   onCategoryClick: (key: string) => void;
-  activeSourceId: string | undefined;
+  activeSourceIds: string[];
   onSourceClick: (key: string) => void;
-  activeVenueId: string | undefined;
+  activeVenueIds: string[];
   onVenueClick: (key: string) => void;
   activeHostId: string | undefined;
   onHostClick: (key: string) => void;
@@ -282,14 +272,14 @@ function GuestbookOverview({
   const lists: {
     title: string;
     items: GuestbookOverviewBucket[];
-    activeKey: string | undefined;
+    activeKeys: string[];
     onItemClick: (key: string) => void;
   }[] = [
-    { title: "Status", items: overview.byStatus, activeKey: activeStatus, onItemClick: onStatusClick },
-    { title: "Kategori Event", items: overview.byCategory, activeKey: activeCategory, onItemClick: onCategoryClick },
-    { title: "Sumber Data", items: overview.bySource, activeKey: activeSourceId, onItemClick: onSourceClick },
-    { title: "Venue Teratas", items: overview.byVenue, activeKey: activeVenueId, onItemClick: onVenueClick },
-    { title: "PIC Teratas", items: overview.byHost, activeKey: activeHostId, onItemClick: onHostClick },
+    { title: "Status", items: overview.byStatus, activeKeys: activeStatuses, onItemClick: onStatusClick },
+    { title: "Kategori Event", items: overview.byCategory, activeKeys: activeCategories, onItemClick: onCategoryClick },
+    { title: "Sumber Data", items: overview.bySource, activeKeys: activeSourceIds, onItemClick: onSourceClick },
+    { title: "Venue Teratas", items: overview.byVenue, activeKeys: activeVenueIds, onItemClick: onVenueClick },
+    { title: "PIC Teratas", items: overview.byHost, activeKeys: activeHostId ? [activeHostId] : [], onItemClick: onHostClick },
   ];
 
   return (
@@ -310,7 +300,7 @@ function GuestbookOverview({
       ))}
       </div>
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-        {lists.map(({ title, items, activeKey, onItemClick }) => (
+        {lists.map(({ title, items, activeKeys, onItemClick }) => (
           <Card key={title} className="rounded-2xl shadow-sm">
             <CardContent className="p-4">
               <p className="mb-3 text-sm font-semibold text-foreground">{title}</p>
@@ -319,7 +309,7 @@ function GuestbookOverview({
               ) : (
                 <div className="space-y-1">
                   {items.slice(0, 5).map((item) => {
-                    const isActive = activeKey === item.key;
+                    const isActive = activeKeys.includes(item.key);
                     return (
                       <div
                         key={item.key}
@@ -377,6 +367,7 @@ function SkeletonRows() {
           <TableCell><Skeleton className="h-4 w-24" /></TableCell>
           <TableCell><Skeleton className="h-4 w-24" /></TableCell>
           <TableCell><Skeleton className="h-8 w-28" /></TableCell>
+          <TableCell className="hidden lg:table-cell text-center"><Skeleton className="h-8 w-8 rounded-full mx-auto" /></TableCell>
           <TableCell><Skeleton className="h-5 w-20 rounded-full" /></TableCell>
           <TableCell className="hidden xl:table-cell"><Skeleton className="h-4 w-24" /></TableCell>
           <TableCell className="hidden xl:table-cell"><Skeleton className="h-4 w-24" /></TableCell>
@@ -395,6 +386,7 @@ function MobileCard({
   onDeleteClick,
   onStatusClick,
   onCheckoutSelect,
+  onActivityClick,
 }: {
   entry: GuestbookEntryItem;
   totalVisit: number;
@@ -403,6 +395,7 @@ function MobileCard({
   onDeleteClick: (entry: GuestbookEntryItem) => void;
   onStatusClick?: (status: string) => void;
   onCheckoutSelect: (entry: GuestbookEntryItem, visitStatus: "deal" | "to_be_discuss" | "lost") => void;
+  onActivityClick: (entry: GuestbookEntryItem) => void;
 }) {
   const sourceLabel = guestbookSourceLabel(entry.sourceOfInformation?.name, entry.bitrixAdsUrl);
   const statusInfo = entry.visitStatus ? STATUS_LABELS[entry.visitStatus] : null;
@@ -528,6 +521,14 @@ function MobileCard({
           <TrashBinTrash weight="BoldDuotone" className="h-5 w-5 text-destructive" />
           <span className="text-[10px] font-medium text-destructive leading-none">Hapus</span>
         </button>
+        <button
+          type="button"
+          className="flex flex-col items-center justify-center gap-0.5 w-14 rounded-xl py-1.5 px-1 cursor-pointer transition-colors hover:bg-accent"
+          onClick={() => onActivityClick(entry)}
+        >
+          <ClockCircle weight="BoldDuotone" className="h-5 w-5 text-primary" />
+          <span className="text-[10px] font-medium text-muted-foreground leading-none">Aktivitas</span>
+        </button>
         {!entry.checkOutAt && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -569,15 +570,16 @@ function GuestbookClientInner() {
   const [editEntry, setEditEntry] = useState<GuestbookEntryItem | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
+  const [activityLogTarget, setActivityLogTarget] = useState<GuestbookEntryItem | null>(null);
 
   const [dateRange, setDateRange] = useState<DateRange | undefined>(todayRange);
-  const [filterVenueId, setFilterVenueId] = useState<string>("all");
+  const [filterVenueIds, setFilterVenueIds] = useState<string[]>([]);
   const [filterHostId, setFilterHostId] = useState<string>("all");
-  const [filterCategory, setFilterCategory] = useState<"all" | GuestbookCategoryFilter>("all");
-  const [filterInteractionType, setFilterInteractionType] = useState<"all" | GuestInteractionType>("all");
-  const [filterStatus, setFilterStatus] = useState<"all" | GuestVisitStatus>("all");
-  const [filterSourceId, setFilterSourceId] = useState<string>("all");
-  const [filterFestivalId, setFilterFestivalId] = useState<string>("all");
+  const [filterCategories, setFilterCategories] = useState<GuestbookCategoryFilter[]>([]);
+  const [filterInteractionTypes, setFilterInteractionTypes] = useState<GuestInteractionType[]>([]);
+  const [filterStatuses, setFilterStatuses] = useState<GuestVisitStatus[]>([]);
+  const [filterSourceIds, setFilterSourceIds] = useState<string[]>([]);
+  const [filterFestivalIds, setFilterFestivalIds] = useState<string[]>([]);
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
@@ -609,28 +611,28 @@ function GuestbookClientInner() {
   // Any other filter change also resets page to 1.
   useEffect(() => {
     setCurrentPage(1);
-  }, [dateRange, filterVenueId, filterHostId, filterCategory, filterInteractionType, filterStatus, filterSourceId, filterFestivalId]);
+  }, [dateRange, filterVenueIds, filterHostId, filterCategories, filterInteractionTypes, filterStatuses, filterSourceIds, filterFestivalIds]);
 
   // Clear selection whenever the visible page/filter set changes, so bulk
   // actions never act on rows the user can no longer see.
   useEffect(() => {
     setSelectedIds([]);
-  }, [currentPage, debouncedSearch, filterVenueId, filterHostId, filterCategory, filterInteractionType, filterStatus, filterSourceId, filterFestivalId]);
+  }, [currentPage, debouncedSearch, filterVenueIds, filterHostId, filterCategories, filterInteractionTypes, filterStatuses, filterSourceIds, filterFestivalIds]);
 
   const queryClient = useQueryClient();
   const { data: guestbookData, isLoading } = useGuestbookEntries({
     page: currentPage,
     pageSize: 50,
     search: debouncedSearch,
-    venueId: filterVenueId !== "all" ? filterVenueId : undefined,
+    venueIds: filterVenueIds.length > 0 ? filterVenueIds : undefined,
     hostId: filterHostId !== "all" ? filterHostId : undefined,
     dateFrom: dateRange?.from ? format(dateRange.from, "yyyy-MM-dd") : undefined,
     dateTo: dateRange?.to ? format(dateRange.to, "yyyy-MM-dd") : undefined,
-    category: filterCategory !== "all" ? filterCategory : undefined,
-    interactionType: filterInteractionType !== "all" ? filterInteractionType : undefined,
-    status: filterStatus !== "all" ? filterStatus : undefined,
-    sourceOfInformationId: filterSourceId !== "all" ? filterSourceId : undefined,
-    festivalId: filterFestivalId !== "all" ? filterFestivalId : undefined,
+    categories: filterCategories.length > 0 ? filterCategories : undefined,
+    interactionTypes: filterInteractionTypes.length > 0 ? filterInteractionTypes : undefined,
+    statuses: filterStatuses.length > 0 ? filterStatuses : undefined,
+    sourceOfInformationIds: filterSourceIds.length > 0 ? filterSourceIds : undefined,
+    festivalIds: filterFestivalIds.length > 0 ? filterFestivalIds : undefined,
   });
   const entries = guestbookData?.data ?? [];
   const totalPages = Math.max(1, Math.ceil((guestbookData?.total ?? 0) / 50));
@@ -642,20 +644,24 @@ function GuestbookClientInner() {
   const bulkDeleteMutation = useDeleteBulkGuestbookEntries();
   const bulkCheckoutMutation = useBulkCheckOutGuestbookEntries();
 
+  function toggleArrayValue<T>(arr: T[], value: T): T[] {
+    return arr.includes(value) ? arr.filter((v) => v !== value) : [...arr, value];
+  }
+
   function handleStatusBucketClick(key: string) {
-    setFilterStatus((prev) => (prev === key ? "all" : (key as GuestVisitStatus)));
+    setFilterStatuses((prev) => toggleArrayValue(prev, key as GuestVisitStatus));
   }
 
   function handleSourceBucketClick(key: string) {
-    setFilterSourceId((prev) => (prev === key ? "all" : key));
+    setFilterSourceIds((prev) => toggleArrayValue(prev, key));
   }
 
   function handleCategoryBucketClick(key: string) {
-    setFilterCategory((prev) => (prev === key ? "all" : (key as GuestbookCategoryFilter)));
+    setFilterCategories((prev) => toggleArrayValue(prev, key as GuestbookCategoryFilter));
   }
 
   function handleVenueBucketClick(key: string) {
-    setFilterVenueId((prev) => (prev === key ? "all" : key));
+    setFilterVenueIds((prev) => toggleArrayValue(prev, key));
   }
 
   function handleHostBucketClick(key: string) {
@@ -731,10 +737,10 @@ function GuestbookClientInner() {
       if (dateRange?.from) params.set("from", format(dateRange.from, "yyyy-MM-dd"));
       if (dateRange?.to) params.set("to", format(dateRange.to, "yyyy-MM-dd"));
       if (debouncedSearch) params.set("search", debouncedSearch);
-      if (filterVenueId !== "all") params.set("venueId", filterVenueId);
+      if (filterVenueIds.length > 0) params.set("venueIds", filterVenueIds.join(","));
       if (filterHostId !== "all") params.set("hostId", filterHostId);
-      if (filterCategory !== "all") params.set("category", filterCategory);
-      if (filterInteractionType !== "all") params.set("interactionType", filterInteractionType);
+      if (filterCategories.length > 0) params.set("categories", filterCategories.join(","));
+      if (filterInteractionTypes.length > 0) params.set("interactionTypes", filterInteractionTypes.join(","));
 
       const res = await fetch(`/api/guestbook/export?${params.toString()}`);
       if (!res.ok) {
@@ -764,24 +770,24 @@ function GuestbookClientInner() {
 
   const activeFilterCount =
     (dateRange?.from ? 1 : 0) +
-    (filterVenueId !== "all" ? 1 : 0) +
+    (filterVenueIds.length > 0 ? 1 : 0) +
     (filterHostId !== "all" ? 1 : 0) +
     (search.trim() !== "" ? 1 : 0) +
-    (filterCategory !== "all" ? 1 : 0) +
-    (filterInteractionType !== "all" ? 1 : 0) +
-    (filterStatus !== "all" ? 1 : 0) +
-    (filterSourceId !== "all" ? 1 : 0) +
-    (filterFestivalId !== "all" ? 1 : 0);
+    (filterCategories.length > 0 ? 1 : 0) +
+    (filterInteractionTypes.length > 0 ? 1 : 0) +
+    (filterStatuses.length > 0 ? 1 : 0) +
+    (filterSourceIds.length > 0 ? 1 : 0) +
+    (filterFestivalIds.length > 0 ? 1 : 0);
 
   function resetFilters() {
     setDateRange(todayRange());
-    setFilterVenueId("all");
+    setFilterVenueIds([]);
     setFilterHostId("all");
-    setFilterCategory("all");
-    setFilterInteractionType("all");
-    setFilterStatus("all");
-    setFilterSourceId("all");
-    setFilterFestivalId("all");
+    setFilterCategories([]);
+    setFilterInteractionTypes([]);
+    setFilterStatuses([]);
+    setFilterSourceIds([]);
+    setFilterFestivalIds([]);
     setSearch("");
     setCurrentPage(1);
   }
@@ -802,13 +808,13 @@ function GuestbookClientInner() {
           adsUrlBuckets: [],
           adsUrlOrganik: 0,
         }}
-        activeStatus={filterStatus !== "all" ? filterStatus : undefined}
+        activeStatuses={filterStatuses}
         onStatusClick={handleStatusBucketClick}
-        activeCategory={filterCategory !== "all" ? filterCategory : undefined}
+        activeCategories={filterCategories}
         onCategoryClick={handleCategoryBucketClick}
-        activeSourceId={filterSourceId !== "all" ? filterSourceId : undefined}
+        activeSourceIds={filterSourceIds}
         onSourceClick={handleSourceBucketClick}
-        activeVenueId={filterVenueId !== "all" ? filterVenueId : undefined}
+        activeVenueIds={filterVenueIds}
         onVenueClick={handleVenueBucketClick}
         activeHostId={filterHostId !== "all" ? filterHostId : undefined}
         onHostClick={handleHostBucketClick}
@@ -957,6 +963,7 @@ function GuestbookClientInner() {
                   <TableHead>Venue</TableHead>
                   <TableHead>PIC</TableHead>
                   <TableHead>In / Out</TableHead>
+                  <TableHead className="hidden lg:table-cell text-center">Aktivitas</TableHead>
                   <TableHead className="hidden xl:table-cell">Sumber</TableHead>
                   <TableHead className="hidden xl:table-cell">Dicatat oleh</TableHead>
                   <TableHead className="text-right">Aksi</TableHead>
@@ -991,6 +998,7 @@ function GuestbookClientInner() {
                     <TableHead>Venue</TableHead>
                     <TableHead>PIC</TableHead>
                     <TableHead>In / Out</TableHead>
+                    <TableHead className="hidden lg:table-cell text-center">Aktivitas</TableHead>
                     <TableHead className="hidden xl:table-cell">Sumber</TableHead>
                     <TableHead className="hidden xl:table-cell">Dicatat oleh</TableHead>
                     <TableHead className="text-right pr-4">Aksi</TableHead>
@@ -1000,7 +1008,7 @@ function GuestbookClientInner() {
                   {entries.map((entry) => {
                     const sourceLabel = guestbookSourceLabel(entry.sourceOfInformation?.name, entry.bitrixAdsUrl);
                     const statusInfo = entry.visitStatus ? STATUS_LABELS[entry.visitStatus] : null;
-                    const totalVisit = countVisitsOnPage(entry, entries);
+                    const totalVisit = entry.visitHistoryCount;
                     const festivalLabel = entry.festival?.name ?? "-";
 
                     return (
@@ -1031,7 +1039,7 @@ function GuestbookClientInner() {
                                 {totalVisit > 1 && (
                                   <span
                                     className="hidden sm:inline-flex shrink-0 items-center gap-0.5 rounded-full bg-secondary px-1.5 py-0.5 text-[10px] font-medium text-secondary-foreground"
-                                    title={`${totalVisit}x kunjungan (nama & nomor telepon sama)`}
+                                    title={`${totalVisit}x kunjungan (nama & nomor telepon sama, lintas festival)`}
                                   >
                                     <Repeat weight="BoldDuotone" className="h-2.5 w-2.5" />
                                     {totalVisit}x
@@ -1112,6 +1120,18 @@ function GuestbookClientInner() {
                             </span>
                           </div>
                         </TableCell>
+                        <TableCell className="hidden lg:table-cell text-center" onClick={(e) => e.stopPropagation()}>
+                          <Tooltip>
+                            <TooltipTrigger
+                              onClick={() => setActivityLogTarget(entry)}
+                              aria-label="Lihat Aktivitas"
+                              className="inline-flex items-center justify-center h-8 w-8 rounded-full text-muted-foreground hover:bg-muted hover:text-foreground transition-colors cursor-pointer"
+                            >
+                              <ClockCircle weight="BoldDuotone" className="h-4 w-4" />
+                            </TooltipTrigger>
+                            <TooltipContent side="bottom">Lihat Aktivitas</TooltipContent>
+                          </Tooltip>
+                        </TableCell>
                         <TableCell className="text-muted-foreground max-w-32 hidden xl:table-cell">
                           <div className="flex flex-col gap-1 items-start min-w-0 max-w-full">
                             <span className="truncate max-w-full">
@@ -1128,55 +1148,55 @@ function GuestbookClientInner() {
                           {entry.createdBy?.fullName ?? "—"}
                         </TableCell>
                         <TableCell className="text-right pr-4">
-                          <div className="flex items-center justify-end gap-1" onClick={(e) => e.stopPropagation()}>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8 rounded-full"
-                              onClick={() => setSelectedEntry(entry)}
-                            >
-                              <Eye weight="BoldDuotone" className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8 rounded-full"
-                              onClick={() => handleEditClick(entry)}
-                            >
-                              <Pen weight="BoldDuotone" className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8 rounded-full text-destructive hover:bg-destructive/10"
-                              onClick={() => setConfirmDelete(entry)}
-                            >
-                              <TrashBinTrash weight="BoldDuotone" className="h-4 w-4" />
-                            </Button>
-                            {!entry.checkOutAt && (
-                              <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-8 w-8 rounded-full"
-                                    aria-label="Checkout"
-                                  >
-                                    <Logout weight="BoldDuotone" className="h-4 w-4" />
-                                  </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end">
-                                  {CHECKOUT_STATUS_OPTIONS.map((opt) => (
-                                    <DropdownMenuItem
-                                      key={opt.value}
-                                      onClick={() => { void handleCheckoutSelect(entry, opt.value); }}
-                                    >
-                                      {opt.label}
-                                    </DropdownMenuItem>
-                                  ))}
-                                </DropdownMenuContent>
-                              </DropdownMenu>
-                            )}
+                          <div className="flex items-center justify-end" onClick={(e) => e.stopPropagation()}>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8 rounded-full"
+                                  aria-label="Aksi lainnya"
+                                >
+                                  <MenuDotsCircle weight="BoldDuotone" className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem onClick={() => setSelectedEntry(entry)}>
+                                  <Eye weight="BoldDuotone" className="h-4 w-4" />
+                                  Detail
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => handleEditClick(entry)}>
+                                  <Pen weight="BoldDuotone" className="h-4 w-4" />
+                                  Edit
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => setActivityLogTarget(entry)}>
+                                  <ClockCircle weight="BoldDuotone" className="h-4 w-4" />
+                                  Lihat Aktivitas
+                                </DropdownMenuItem>
+                                {!entry.checkOutAt && (
+                                  <>
+                                    <DropdownMenuSeparator />
+                                    {CHECKOUT_STATUS_OPTIONS.map((opt) => (
+                                      <DropdownMenuItem
+                                        key={opt.value}
+                                        onClick={() => { void handleCheckoutSelect(entry, opt.value); }}
+                                      >
+                                        <Logout weight="BoldDuotone" className="h-4 w-4" />
+                                        {opt.label}
+                                      </DropdownMenuItem>
+                                    ))}
+                                  </>
+                                )}
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem
+                                  variant="destructive"
+                                  onClick={() => setConfirmDelete(entry)}
+                                >
+                                  <TrashBinTrash weight="BoldDuotone" className="h-4 w-4" />
+                                  Hapus
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
                           </div>
                         </TableCell>
                       </TableRow>
@@ -1211,8 +1231,8 @@ function GuestbookClientInner() {
           />
         </div>
 
-        {/* Mobile toolbar: count · filter popover · export · refresh · add */}
-        <div className="flex items-center gap-2">
+        {/* Mobile toolbar: stat badges (scrollable) */}
+        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
           <span className="text-xs font-medium bg-muted text-muted-foreground px-2.5 py-1 border border-border rounded-full shrink-0">
             {guestbookData?.total ?? 0} tamu
           </span>
@@ -1222,8 +1242,10 @@ function GuestbookClientInner() {
           <span className="text-xs font-medium bg-muted text-muted-foreground px-2.5 py-1 border border-border rounded-full shrink-0">
             MICE {guestbookData?.miceCount ?? 0}
           </span>
-          <div className="flex-1" />
+        </div>
 
+        {/* Mobile toolbar: filter · refresh · scan · export · add */}
+        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
           <Button
             type="button"
             variant="outline"
@@ -1245,11 +1267,22 @@ function GuestbookClientInner() {
             variant="outline"
             size="icon"
             className="shrink-0"
-            onClick={() => { void handleExport(); }}
-            disabled={isExporting}
-            aria-label="Export guestbook"
+            onClick={() => queryClient.invalidateQueries({ queryKey: ["guestbook-entries"] })}
+            aria-label="Refresh data guestbook"
           >
-            <Download weight="BoldDuotone" className="h-4 w-4" />
+            <Refresh weight="BoldDuotone" className="h-4 w-4" />
+          </Button>
+
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            nativeButton={false}
+            className="shrink-0"
+            render={<Link href="/guestbook/scan" />}
+            aria-label="Scan Kehadiran"
+          >
+            <QrCode weight="BoldDuotone" className="h-4 w-4" />
           </Button>
 
           <Button
@@ -1257,11 +1290,14 @@ function GuestbookClientInner() {
             variant="outline"
             size="icon"
             className="shrink-0"
-            onClick={() => queryClient.invalidateQueries({ queryKey: ["guestbook-entries"] })}
-            aria-label="Refresh data guestbook"
+            onClick={() => { void handleExport(); }}
+            disabled={isExporting}
+            aria-label="Export guestbook"
           >
-            <Refresh weight="BoldDuotone" className="h-4 w-4" />
+            <Download weight="BoldDuotone" className="h-4 w-4" />
           </Button>
+
+          <div className="flex-1" />
 
           <Button
             type="button"
@@ -1307,12 +1343,13 @@ function GuestbookClientInner() {
             <MobileCard
               key={entry.id}
               entry={entry}
-              totalVisit={countVisitsOnPage(entry, entries)}
+              totalVisit={entry.visitHistoryCount}
               onViewClick={setSelectedEntry}
               onEditClick={handleEditClick}
               onDeleteClick={setConfirmDelete}
               onStatusClick={handleStatusBucketClick}
               onCheckoutSelect={(e, visitStatus) => { void handleCheckoutSelect(e, visitStatus); }}
+              onActivityClick={setActivityLogTarget}
             />
           ))}
 
@@ -1341,7 +1378,6 @@ function GuestbookClientInner() {
           }
         }}
         entry={selectedEntry}
-        allEntries={entries}
       />
 
       <GuestbookFilterDrawer
@@ -1351,23 +1387,30 @@ function GuestbookClientInner() {
         onSearchChange={setSearch}
         dateRange={dateRange}
         onDateRangeChange={setDateRange}
-        venueId={filterVenueId}
-        onVenueIdChange={setFilterVenueId}
+        venueIds={filterVenueIds}
+        onVenueIdsChange={setFilterVenueIds}
         hostId={filterHostId}
         onHostIdChange={setFilterHostId}
-        category={filterCategory}
-        onCategoryChange={setFilterCategory}
-        interactionType={filterInteractionType}
-        onInteractionTypeChange={setFilterInteractionType}
-        status={filterStatus}
-        onStatusChange={setFilterStatus}
-        sourceOfInformationId={filterSourceId}
-        onSourceOfInformationIdChange={setFilterSourceId}
-        festivalId={filterFestivalId}
-        onFestivalIdChange={setFilterFestivalId}
+        categories={filterCategories}
+        onCategoriesChange={setFilterCategories}
+        interactionTypes={filterInteractionTypes}
+        onInteractionTypesChange={setFilterInteractionTypes}
+        statuses={filterStatuses}
+        onStatusesChange={setFilterStatuses}
+        sourceOfInformationIds={filterSourceIds}
+        onSourceOfInformationIdsChange={setFilterSourceIds}
+        festivalIds={filterFestivalIds}
+        onFestivalIdsChange={setFilterFestivalIds}
         venues={venues}
         salesOptions={salesOptions}
         onReset={resetFilters}
+      />
+
+      <ActivityLogModal
+        open={activityLogTarget !== null}
+        onClose={() => setActivityLogTarget(null)}
+        entryId={activityLogTarget?.id ?? ""}
+        visitorName={activityLogTarget?.visitorName}
       />
 
       {/* Delete confirmation */}

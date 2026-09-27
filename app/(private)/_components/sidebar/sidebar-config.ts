@@ -44,6 +44,7 @@ import {
   ChatRound,
   UserRounded,
   Wallet,
+  QrCode,
 } from "@solar-icons/react";
 
 type SolarIcon = ForwardRefExoticComponent<Omit<IconProps, "ref"> & RefAttributes<SVGSVGElement>>;
@@ -176,7 +177,11 @@ export const GENERAL_NAV: NavItem[] = [
       { name: "Response Sales", href: "/bitrix24/response-sales", icon: GraphUp, title: "Response Sales Bitrix24", subtitle: "Rata-rata waktu respons sales per percakapan", permission: { module: "bitrix", action: "view" } },
       { name: "Report CS", href: "/bitrix24/cs-report", icon: ClipboardCheck, title: "Report Chat CS Bitrix24", subtitle: "Ringkasan chat masuk harian & auto-generate report WhatsApp CS", permission: { module: "bitrix", action: "view" } },
     ] },
-  { name: "Guestbook", href: "/guestbook", icon: Notebook, subtitle: "Catat kunjungan tamu, vendor, dan client ke kantor", permission: { module: "guestbook", action: "view" } },
+  { name: "Guestbook", href: "/guestbook", icon: Notebook, subtitle: "Catat kunjungan tamu, vendor, dan client ke kantor", permission: { module: "guestbook", action: "view" },
+    submenu: [
+      { name: "Daftar Tamu", href: "/guestbook", icon: Notebook, title: "Guest Book", subtitle: "Catat kunjungan tamu, vendor, dan client ke kantor", permission: { module: "guestbook", action: "view" } },
+      { name: "Scan Kehadiran", href: "/guestbook/scan", icon: QrCode, title: "Scan Kehadiran Expo", subtitle: "Konfirmasi kehadiran tamu expo lewat scan QR code", permission: { module: "guestbook", action: "view" } },
+    ] },
   { name: "Customers", href: "/customers", icon: UserRounded, subtitle: "Kelola data customer, member status, dan riwayat booking", permission: { module: "customers", action: "view" } },
   { name: "Indikator Pernikahan", href: "/wedding-indicators", icon: Heart, subtitle: "Kelola kuesioner penilaian kepuasan pasangan pernikahan", permission: { module: "vendor-specialist", action: "view" } },
   { name: "Absensi", href: "/absensi", icon: CheckSquare, subtitle: "Catat kehadiran dengan foto dan lokasi", permission: { module: "attendance", action: "view" } },
