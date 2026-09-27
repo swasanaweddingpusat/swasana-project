@@ -63,11 +63,17 @@ export function GuestbookScanClient(): React.ReactElement {
   // Once the lookup resolves for a non-already-confirmed entry, pre-fill the editable
   // guest-count field with the client's RSVP confirmation (falls back to a prior
   // actualGuestCount, then blank) so staff can review/override before confirming.
-  useEffect(() => {
-    if (!lookupResult || !lookupResult.success || lookupResult.alreadyConfirmed) return;
-    const prefill = lookupResult.confirmedGuestCount ?? lookupResult.actualGuestCount ?? null;
-    setGuestCountInput(prefill !== null ? String(prefill) : "");
-  }, [lookupResult]);
+  // Adjusted during render (not an effect) — see https://react.dev/learn/you-might-not-need-an-effect
+  const [prefilledForResult, setPrefilledForResult] = useState<LookupGuestbookEntryResult | null>(
+    null
+  );
+  if (lookupResult !== undefined && lookupResult !== prefilledForResult) {
+    setPrefilledForResult(lookupResult);
+    if (lookupResult.success && !lookupResult.alreadyConfirmed) {
+      const prefill = lookupResult.confirmedGuestCount ?? lookupResult.actualGuestCount ?? null;
+      setGuestCountInput(prefill !== null ? String(prefill) : "");
+    }
+  }
 
   // Dedupe: react-query only hands back a new `confirmResult` object reference when a
   // mutation actually resolves, so comparing against the last-seen reference
