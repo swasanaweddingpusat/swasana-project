@@ -2126,6 +2126,11 @@ enum AgreementStatus {
   Signed
 }
 
+enum AgreementPdfTemplate {
+  V1
+  V2
+}
+
 // ─── Order Status ─────────────────────────────────────────────────────────────
 
 model OrderStatus {
@@ -2142,16 +2147,17 @@ model OrderStatus {
 // ─── Client Agreement ─────────────────────────────────────────────────────────
 
 model ClientAgreement {
-  id         String          @id @default(uuid())
-  bookingId  String          @unique
-  token      String          @unique
-  accessCode String
-  status     AgreementStatus @default(Pending)
-  sentAt     DateTime?
-  viewedAt   DateTime?
-  signedAt   DateTime?
-  createdAt  DateTime        @default(now())
-  updatedAt  DateTime        @updatedAt
+  id          String               @id @default(uuid())
+  bookingId   String               @unique
+  token       String               @unique
+  accessCode  String
+  status      AgreementStatus      @default(Pending)
+  pdfTemplate AgreementPdfTemplate @default(V1)
+  sentAt      DateTime?
+  viewedAt    DateTime?
+  signedAt    DateTime?
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
 
   booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
 
