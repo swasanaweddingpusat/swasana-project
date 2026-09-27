@@ -28,6 +28,7 @@ import { toast } from "sonner";
 import { PageHeader } from "@/components/shared/page-header";
 import { useAchievementSchemas, useDeleteAchievementSchema } from "@/hooks/useKpiInsentif";
 import { AchievementSchemaDrawer } from "./AchievementSchemaDrawer";
+import { EmptyState } from "../../_components/EmptyState";
 import type { AchievementSchemaRow } from "@/lib/queries/kpiInsentif";
 
 interface AchievementClientProps {
@@ -121,21 +122,17 @@ export function AchievementClient({ initialSchemas }: AchievementClientProps) {
             ))}
           </div>
         ) : filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center gap-4 py-20 text-center">
-            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-muted">
-              <BoxMinimalistic weight="BoldDuotone" className="h-8 w-8 text-muted-foreground" />
-            </div>
-            <div>
-              <p className="font-semibold text-foreground">Belum ada skema achievement</p>
-              <p className="text-sm text-muted-foreground mt-1">
-                Buat skema achievement untuk mendefinisikan matriks bonus dan potongan
-              </p>
-            </div>
-            <Button onClick={handleAdd} className="rounded-full gap-2" size="sm">
-              <AddCircle weight="BoldDuotone" className="h-4 w-4" />
-              Tambah Skema
-            </Button>
-          </div>
+          <EmptyState
+            icon={<BoxMinimalistic weight="BoldDuotone" className="h-8 w-8 text-muted-foreground" />}
+            title="Belum ada skema achievement"
+            description="Buat skema achievement untuk mendefinisikan matriks bonus dan potongan"
+            action={
+              <Button onClick={handleAdd} className="rounded-full gap-2" size="sm">
+                <AddCircle weight="BoldDuotone" className="h-4 w-4" />
+                Tambah Skema
+              </Button>
+            }
+          />
         ) : (
           <div className="overflow-x-auto">
             <Table>

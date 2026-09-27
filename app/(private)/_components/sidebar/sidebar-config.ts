@@ -26,6 +26,7 @@ import {
   Sledgehammer,
   Gift,
   MedalStar,
+  MedalRibbonStar,
   TagPrice,
   ClipboardCheck,
   ChartSquare,
@@ -222,6 +223,7 @@ export const GENERAL_NAV: NavItem[] = [
       { name: "Penugasan Target", href: "/kpi-insentif/penugasan", icon: UserHands, subtitle: "Tugaskan KPI ke Sales atau Manager", permission: { module: "kpi-assignment", action: "view" } },
       { name: "Review & Simulasi", href: "/kpi-insentif/simulasi", icon: ChartSquare, subtitle: "Tinjau hasil sementara dan jalankan kalkulasi", permission: { module: "kpi-simulation", action: "view" } },
       { name: "Laporan & Riwayat", href: "/kpi-insentif/laporan", icon: GraphNew, subtitle: "Lihat hasil final dan riwayat penilaian", permission: { module: "kpi-report", action: "view" } },
+      { name: "Awards & Best Performer", href: "/kpi-insentif/awards", icon: MedalRibbonStar, subtitle: "Kelola award dan pemenang Sales/Manager terbaik", permission: { module: "kpi-award", action: "view" } },
     ],
   },
 ];

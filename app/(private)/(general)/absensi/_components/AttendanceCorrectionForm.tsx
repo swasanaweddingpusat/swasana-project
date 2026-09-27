@@ -79,6 +79,10 @@ export function AttendanceCorrectionForm({ inDialog = false, onSubmitted }: Atte
       toast.error("Alasan koreksi wajib diisi");
       return;
     }
+    if (!form.evidenceBase64) {
+      toast.error("Bukti wajib diunggah");
+      return;
+    }
 
     const requestedClockInAt = form.clockInTime
       ? new Date(`${form.date}T${form.clockInTime}`).toISOString()
@@ -93,7 +97,7 @@ export function AttendanceCorrectionForm({ inDialog = false, onSubmitted }: Atte
         requestedClockInAt,
         requestedClockOutAt,
         reason: form.reason,
-        evidenceBase64: form.evidenceBase64 || undefined,
+        evidenceBase64: form.evidenceBase64,
       },
       {
         onSuccess: (result) => {
@@ -180,7 +184,7 @@ export function AttendanceCorrectionForm({ inDialog = false, onSubmitted }: Atte
           </div>
 
           <div className="sm:col-span-2 grid gap-2">
-            <Label htmlFor="correction-evidence">Bukti (opsional)</Label>
+            <Label htmlFor="correction-evidence">Bukti *</Label>
             <Input
               id="correction-evidence"
               type="file"
@@ -192,7 +196,7 @@ export function AttendanceCorrectionForm({ inDialog = false, onSubmitted }: Atte
               <p className="text-xs text-muted-foreground truncate">Terpilih: {form.evidenceName}</p>
             ) : (
               <p className="text-xs text-muted-foreground">
-                Lampirkan foto pendukung bila ada (mis. screenshot lokasi/aktivitas).
+                Lampirkan foto pendukung (mis. screenshot lokasi/aktivitas).
               </p>
             )}
           </div>
@@ -205,6 +209,7 @@ export function AttendanceCorrectionForm({ inDialog = false, onSubmitted }: Atte
                 submitMutation.isPending ||
                 !form.date ||
                 !form.reason.trim() ||
+                !form.evidenceBase64 ||
                 (!form.clockInTime && !form.clockOutTime)
               }
             >
