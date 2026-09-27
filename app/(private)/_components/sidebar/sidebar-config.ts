@@ -173,6 +173,7 @@ export const GENERAL_NAV: NavItem[] = [
       { name: "Transaksi", href: "/bitrix24/transaksi", icon: ClipboardList, title: "Transaksi Bitrix24", subtitle: "Data transaksi (deals) CRM dari Bitrix24", permission: { module: "bitrix", action: "view" } },
       { name: "Percakapan", href: "/bitrix24/percakapan", icon: ChatRound, title: "Percakapan Bitrix24", subtitle: "Data percakapan Contact Center (Open Lines) dari Bitrix24", permission: { module: "bitrix", action: "view" } },
       { name: "Response Sales", href: "/bitrix24/response-sales", icon: GraphUp, title: "Response Sales Bitrix24", subtitle: "Rata-rata waktu respons sales per percakapan", permission: { module: "bitrix", action: "view" } },
+      { name: "Report CS", href: "/bitrix24/cs-report", icon: ClipboardCheck, title: "Report Chat CS Bitrix24", subtitle: "Ringkasan chat masuk harian & auto-generate report WhatsApp CS", permission: { module: "bitrix", action: "view" } },
     ] },
   { name: "Guestbook", href: "/guestbook", icon: Notebook, subtitle: "Catat kunjungan tamu, vendor, dan client ke kantor", permission: { module: "guestbook", action: "view" } },
   { name: "Customers", href: "/customers", icon: UserRounded, subtitle: "Kelola data customer, member status, dan riwayat booking", permission: { module: "customers", action: "view" } },
