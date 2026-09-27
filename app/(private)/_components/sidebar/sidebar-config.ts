@@ -26,6 +26,7 @@ import {
   Sledgehammer,
   Gift,
   MedalStar,
+  MedalRibbonStar,
   TagPrice,
   ClipboardCheck,
   ChartSquare,
@@ -213,14 +214,11 @@ export const GENERAL_NAV: NavItem[] = [
     submenu: [
       { name: "Dashboard KPI", href: "/kpi-insentif", icon: PieChart, subtitle: "Ringkasan penilaian, kelengkapan, dan review", permission: { module: "kpi-insentif", action: "view" } },
       { name: "KPI Saya", href: "/kpi-insentif/kpi-saya", icon: UserHands, subtitle: "Lihat target dan hasil penilaian pribadi", permission: { module: "kpi-insentif", action: "view" } },
-      { name: "Master & Template", href: "/kpi-insentif/konfigurasi", icon: ClipboardList, subtitle: "Kelola indikator, skema, dan versi KPI", permission: { module: "kpi-master", action: "view" }, submenu: [
-        { name: "Target Item", href: "/kpi-insentif/target-item", permission: { module: "kpi-master", action: "view" } },
-        { name: "Skema Achievement", href: "/kpi-insentif/achievement", permission: { module: "kpi-master", action: "view" } },
-        { name: "Master KPI", href: "/kpi-insentif/kpi-master", permission: { module: "kpi-master", action: "view" } },
-      ] },
+      { name: "Master & Template", href: "/kpi-insentif/konfigurasi", icon: ClipboardList, subtitle: "Kelola target item, skema achievement, master KPI, dan komisi & bonus lanjutan", permission: { module: "kpi-master", action: "view" } },
       { name: "Penugasan Target", href: "/kpi-insentif/penugasan", icon: UserHands, subtitle: "Tugaskan KPI ke Sales atau Manager", permission: { module: "kpi-assignment", action: "view" } },
       { name: "Review & Simulasi", href: "/kpi-insentif/simulasi", icon: ChartSquare, subtitle: "Tinjau hasil sementara dan jalankan kalkulasi", permission: { module: "kpi-simulation", action: "view" } },
       { name: "Laporan & Riwayat", href: "/kpi-insentif/laporan", icon: GraphNew, subtitle: "Lihat hasil final dan riwayat penilaian", permission: { module: "kpi-report", action: "view" } },
+      { name: "Awards & Best Performer", href: "/kpi-insentif/awards", icon: MedalRibbonStar, subtitle: "Kelola award dan pemenang Sales/Manager terbaik", permission: { module: "kpi-award", action: "view" } },
     ],
   },
 ];

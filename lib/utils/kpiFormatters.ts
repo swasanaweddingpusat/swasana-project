@@ -28,12 +28,44 @@ export function formatKpiStatus(status: string): { label: string; variant: Badge
     case "SIMULATED":
       return { label: "Simulasi", variant: "outline" };
     case "PENDING_REVIEW":
-      return { label: "Menunggu", variant: "destructive" };
+      // Neutral "awaiting action" state, not an error/rejection — must not use
+      // the destructive (red) variant (mirrors the "pending" precedent in
+      // lib finance ar-format.tsx, which reserves destructive for unpaid/overdue).
+      return { label: "Menunggu Review", variant: "outline" };
     case "FINALIZED":
       return { label: "Final", variant: "default" };
     default:
       return { label: status, variant: "secondary" };
   }
+}
+
+// ─── Achievement progress helpers ──────────────────────────────────────────────
+// Shared color/percentage helpers for KPI achievement progress bars & badges —
+// used by both the KPI & Insentif module and the Overview "KPI Saya Ringkas" widget.
+
+export function achievementColorClass(pct: string | number | null | undefined): string {
+  if (pct == null) return "bg-muted";
+  const n = typeof pct === "number" ? pct : parseFloat(pct);
+  if (Number.isNaN(n)) return "bg-muted";
+  if (n >= 100) return "bg-primary";
+  if (n >= 70) return "bg-ring";
+  return "bg-destructive";
+}
+
+export function achievementTextClass(pct: string | number | null | undefined): string {
+  if (pct == null) return "text-muted-foreground";
+  const n = typeof pct === "number" ? pct : parseFloat(pct);
+  if (Number.isNaN(n)) return "text-muted-foreground";
+  if (n >= 100) return "text-primary";
+  if (n >= 70) return "text-ring";
+  return "text-destructive";
+}
+
+export function clampPct(pct: string | number | null | undefined): number {
+  if (pct == null) return 0;
+  const n = typeof pct === "number" ? pct : parseFloat(pct);
+  if (Number.isNaN(n)) return 0;
+  return Math.min(n, 100);
 }
 
 export function formatMissingReason(reason: string): string {

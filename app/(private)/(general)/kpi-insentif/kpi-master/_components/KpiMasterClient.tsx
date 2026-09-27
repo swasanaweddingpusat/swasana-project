@@ -34,9 +34,11 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/shared/page-header";
+import { PermissionGate } from "@/components/shared/permission-gate";
 import { useKpiMasters, useDeleteKpiMaster } from "@/hooks/useKpiInsentif";
 import { KpiMasterDrawer } from "./KpiMasterDrawer";
 import type { KpiMasterRow } from "@/lib/queries/kpiInsentif";
+import { EmptyState } from "../../_components/EmptyState";
 
 interface KpiMasterClientProps {
   initialMasters: KpiMasterRow[];
@@ -120,10 +122,12 @@ export function KpiMasterClient({ initialMasters }: KpiMasterClientProps) {
         title="Master KPI"
         description="Kelola konfigurasi KPI bulanan per role"
         action={
-          <Button onClick={handleAdd} className="rounded-full gap-2">
-            <AddCircle weight="BoldDuotone" className="h-4 w-4" />
-            Tambah KPI Master
-          </Button>
+          <PermissionGate module="kpi-master" action="create">
+            <Button onClick={handleAdd} className="rounded-full gap-2">
+              <AddCircle weight="BoldDuotone" className="h-4 w-4" />
+              Tambah KPI Master
+            </Button>
+          </PermissionGate>
         }
       />
 
@@ -185,108 +189,174 @@ export function KpiMasterClient({ initialMasters }: KpiMasterClientProps) {
             ))}
           </div>
         ) : filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center gap-4 py-20 text-center">
-            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-muted">
-              <BoxMinimalistic weight="BoldDuotone" className="h-8 w-8 text-muted-foreground" />
-            </div>
-            <div>
-              <p className="font-semibold text-foreground">Belum ada KPI Master</p>
-              <p className="text-sm text-muted-foreground mt-1">
-                {filterRole !== "all" || filterMonth || search.trim()
-                  ? "Tidak ada data sesuai filter"
-                  : "Buat KPI Master untuk mulai mengatur target dan skema achievement"}
-              </p>
-            </div>
-            {filterRole === "all" && !filterMonth && !search.trim() && (
-              <Button onClick={handleAdd} className="rounded-full gap-2" size="sm">
-                <AddCircle weight="BoldDuotone" className="h-4 w-4" />
-                Tambah KPI Master
-              </Button>
-            )}
-          </div>
+          <EmptyState
+            icon={<BoxMinimalistic weight="BoldDuotone" className="h-8 w-8 text-muted-foreground" />}
+            title="Belum ada KPI Master"
+            description={
+              filterRole !== "all" || filterMonth || search.trim()
+                ? "Tidak ada data sesuai filter"
+                : "Buat KPI Master untuk mulai mengatur target dan skema achievement"
+            }
+            action={
+              filterRole === "all" && !filterMonth && !search.trim() ? (
+                <PermissionGate module="kpi-master" action="create">
+                  <Button onClick={handleAdd} className="rounded-full gap-2" size="sm">
+                    <AddCircle weight="BoldDuotone" className="h-4 w-4" />
+                    Tambah KPI Master
+                  </Button>
+                </PermissionGate>
+              ) : undefined
+            }
+          />
         ) : (
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="pl-5">Nama</TableHead>
-                  <TableHead>Bulan</TableHead>
-                  <TableHead>Role</TableHead>
-                  <TableHead>Target Item</TableHead>
-                  <TableHead>Skema Achievement</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="pr-5 text-right">Aksi</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filtered.map((master) => (
-                  <TableRow key={master.id}>
-                    <TableCell className="pl-5">
-                      <div>
-                        <p className="font-medium">{master.name}</p>
-                        {master.description && (
-                          <p className="text-xs text-muted-foreground mt-0.5 max-w-40 truncate">
-                            {master.description}
-                          </p>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-sm font-mono">
-                      {formatMonth(master.month)}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="secondary" className="rounded-full text-xs">
-                        {BUSINESS_ROLE_LABELS[master.businessRole] ?? master.businessRole}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-sm text-muted-foreground max-w-32">
-                      <p className="truncate">{master.targetItem?.name ?? "—"}</p>
-                    </TableCell>
-                    <TableCell className="text-sm text-muted-foreground max-w-32">
-                      <p className="truncate">{master.achievementSchema?.name ?? "—"}</p>
-                    </TableCell>
-                    <TableCell>
-                      {master.isDraft ? (
-                        <Badge
-                          variant="outline"
-                          className="rounded-full text-xs bg-muted text-muted-foreground"
-                        >
-                          Draft
-                        </Badge>
-                      ) : (
-                        <Badge
-                          variant="outline"
-                          className="rounded-full text-xs bg-primary/10 text-primary border-primary/30"
-                        >
-                          Aktif
-                        </Badge>
-                      )}
-                    </TableCell>
-                    <TableCell className="pr-5">
-                      <div className="flex items-center justify-end gap-2">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 rounded-xl"
-                          onClick={() => handleEdit(master)}
-                        >
-                          <Pen weight="BoldDuotone" className="h-4 w-4 text-muted-foreground" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 rounded-xl text-destructive hover:text-destructive"
-                          onClick={() => confirmDelete(master)}
-                        >
-                          <TrashBinTrash weight="BoldDuotone" className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </TableCell>
+          <>
+            {/* Table — desktop (sm+) */}
+            <div className="hidden sm:block w-full overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="pl-5">Nama</TableHead>
+                    <TableHead>Bulan</TableHead>
+                    <TableHead>Role</TableHead>
+                    <TableHead>Target Item</TableHead>
+                    <TableHead>Skema Achievement</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="pr-5 text-right">Aksi</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
+                </TableHeader>
+                <TableBody>
+                  {filtered.map((master) => (
+                    <TableRow key={master.id}>
+                      <TableCell className="pl-5">
+                        <div>
+                          <p className="font-medium">{master.name}</p>
+                          {master.description && (
+                            <p className="text-xs text-muted-foreground mt-0.5 max-w-40 truncate">
+                              {master.description}
+                            </p>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-sm font-mono">
+                        {formatMonth(master.month)}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="secondary" className="rounded-full text-xs">
+                          {BUSINESS_ROLE_LABELS[master.businessRole] ?? master.businessRole}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground max-w-32">
+                        <p className="truncate">{master.targetItem?.name ?? "—"}</p>
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground max-w-32">
+                        <p className="truncate">{master.achievementSchema?.name ?? "—"}</p>
+                      </TableCell>
+                      <TableCell>
+                        {master.isDraft ? (
+                          <Badge
+                            variant="outline"
+                            className="rounded-full text-xs bg-muted text-muted-foreground"
+                          >
+                            Draft
+                          </Badge>
+                        ) : (
+                          <Badge
+                            variant="outline"
+                            className="rounded-full text-xs bg-primary/10 text-primary border-primary/30"
+                          >
+                            Aktif
+                          </Badge>
+                        )}
+                      </TableCell>
+                      <TableCell className="pr-5">
+                        <div className="flex items-center justify-end gap-2">
+                          <PermissionGate module="kpi-master" action="edit">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 rounded-xl"
+                              onClick={() => handleEdit(master)}
+                            >
+                              <Pen weight="BoldDuotone" className="h-4 w-4 text-muted-foreground" />
+                            </Button>
+                          </PermissionGate>
+                          <PermissionGate module="kpi-master" action="delete">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 rounded-xl text-destructive hover:text-destructive"
+                              onClick={() => confirmDelete(master)}
+                            >
+                              <TrashBinTrash weight="BoldDuotone" className="h-4 w-4" />
+                            </Button>
+                          </PermissionGate>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+
+            {/* Card list — mobile (<sm) */}
+            <div className="block sm:hidden p-4 space-y-3">
+              {filtered.map((master) => (
+                <div key={master.id} className="rounded-xl border bg-card p-3 space-y-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="font-medium text-foreground truncate">{master.name}</p>
+                      {master.description && (
+                        <p className="text-xs text-muted-foreground mt-0.5 truncate">
+                          {master.description}
+                        </p>
+                      )}
+                    </div>
+                    {master.isDraft ? (
+                      <Badge variant="outline" className="shrink-0 rounded-full text-xs bg-muted text-muted-foreground">
+                        Draft
+                      </Badge>
+                    ) : (
+                      <Badge variant="outline" className="shrink-0 rounded-full text-xs bg-primary/10 text-primary border-primary/30">
+                        Aktif
+                      </Badge>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-1.5 flex-wrap text-xs text-muted-foreground">
+                    <Badge variant="secondary" className="rounded-full text-xs">
+                      {BUSINESS_ROLE_LABELS[master.businessRole] ?? master.businessRole}
+                    </Badge>
+                    <span className="font-mono">{formatMonth(master.month)}</span>
+                  </div>
+                  <div className="text-xs text-muted-foreground space-y-0.5">
+                    <p className="truncate">Target: {master.targetItem?.name ?? "—"}</p>
+                    <p className="truncate">Skema: {master.achievementSchema?.name ?? "—"}</p>
+                  </div>
+                  <div className="flex items-center gap-1 pt-1 border-t border-border">
+                    <PermissionGate module="kpi-master" action="edit">
+                      <Button
+                        variant="outline"
+                        className="h-9 flex-1 text-xs"
+                        onClick={() => handleEdit(master)}
+                      >
+                        <Pen weight="BoldDuotone" className="h-3.5 w-3.5 mr-1 text-muted-foreground" />
+                        Edit
+                      </Button>
+                    </PermissionGate>
+                    <PermissionGate module="kpi-master" action="delete">
+                      <Button
+                        variant="outline"
+                        className="h-9 flex-1 text-xs text-destructive border-destructive/30 hover:bg-destructive/5"
+                        onClick={() => confirmDelete(master)}
+                      >
+                        <TrashBinTrash weight="BoldDuotone" className="h-3.5 w-3.5 mr-1" />
+                        Hapus
+                      </Button>
+                    </PermissionGate>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
         )}
       </div>
 
