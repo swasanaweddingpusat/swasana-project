@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/select";
 import { useCreateTargetItem, useUpdateTargetItem } from "@/hooks/useKpiInsentif";
 import type { TargetItemRow } from "@/lib/queries/kpiInsentif";
+import { SectionLabel } from "../../_components/SectionLabel";
 
 interface TargetItemDrawerProps {
   isOpen: boolean;
@@ -50,14 +51,6 @@ const DEFAULT_VALUES: FormValues = {
   priceReguler: "",
   priceHadjatan: "",
 };
-
-function SectionLabel({ text }: { text: string }) {
-  return (
-    <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground border-b border-border pb-1">
-      {text}
-    </p>
-  );
-}
 
 export function TargetItemDrawer({ isOpen, onClose, editItem }: TargetItemDrawerProps) {
   const isEditMode = editItem != null;

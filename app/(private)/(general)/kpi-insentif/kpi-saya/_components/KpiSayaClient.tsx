@@ -8,13 +8,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Target,
@@ -26,58 +19,24 @@ import {
   MedalStar,
   Graph,
   ListCheck,
+  CupStar,
 } from "@solar-icons/react";
 import { useCurrentUser } from "@/hooks/use-current-user";
-import { useAssignments, useCalculationResults } from "@/hooks/useKpiInsentif";
-import { formatRupiah, formatPct, formatKpiStatus } from "@/lib/utils/kpiFormatters";
-import type { KpiCalculationResultItem, KpiAssignmentItem } from "@/types/kpiInsentif";
-
-const MONTHS = [
-  "Januari", "Februari", "Maret", "April", "Mei", "Juni",
-  "Juli", "Agustus", "September", "Oktober", "November", "Desember",
-];
-
-function buildPeriodKey(month: number, year: number): string {
-  return `${year}-${String(month).padStart(2, "0")}`;
-}
-
-// Returns a color class string based on achievement percentage
-function achievementColorClass(pct: string | null | undefined): string {
-  if (!pct) return "bg-muted";
-  const n = parseFloat(pct);
-  if (Number.isNaN(n)) return "bg-muted";
-  if (n >= 100) return "bg-primary";
-  if (n >= 70) return "bg-ring";
-  return "bg-destructive";
-}
-
-function achievementTextClass(pct: string | null | undefined): string {
-  if (!pct) return "text-muted-foreground";
-  const n = parseFloat(pct);
-  if (Number.isNaN(n)) return "text-muted-foreground";
-  if (n >= 100) return "text-primary";
-  if (n >= 70) return "text-ring";
-  return "text-destructive";
-}
-
-function clampPct(pct: string | null | undefined): number {
-  if (!pct) return 0;
-  const n = parseFloat(pct);
-  if (Number.isNaN(n)) return 0;
-  return Math.min(n, 100);
-}
+import { useAssignments, useCalculationResults, useAwardWinners } from "@/hooks/useKpiInsentif";
+import {
+  formatRupiah,
+  formatPct,
+  formatKpiStatus,
+  achievementColorClass,
+  achievementTextClass,
+  clampPct,
+} from "@/lib/utils/kpiFormatters";
+import type { KpiCalculationResultItem, KpiAssignmentItem, KpiAwardWinnerItem } from "@/types/kpiInsentif";
+import { SummaryCard, SummaryCardSkeleton } from "@/components/shared/SummaryCard";
+import { MONTHS, PeriodSelector, buildPeriodKey } from "../../_components/PeriodSelector";
+import { EmptyState } from "../../_components/EmptyState";
 
 // ─── Sub-components ──────────────────────────────────────────────────────────
-
-function SummaryCardSkeleton() {
-  return (
-    <div className="rounded-2xl border bg-card p-5 shadow-sm space-y-2">
-      <Skeleton className="h-3 w-20" />
-      <Skeleton className="h-8 w-32" />
-      <Skeleton className="h-3 w-16" />
-    </div>
-  );
-}
 
 function AchievementRow({
   label,
@@ -191,48 +150,53 @@ function FinancialRow({
 
 // ─── Result section (per venue result) ──────────────────────────────────────
 
-function ResultSection({ result, month, year }: { result: KpiCalculationResultItem; month: number; year: number }) {
+function ResultSection({
+  result,
+  month,
+  year,
+  profileId,
+}: {
+  result: KpiCalculationResultItem;
+  month: number;
+  year: number;
+  profileId: string;
+}) {
   const statusInfo = formatKpiStatus(result.status);
   const deductionNum = result.deductionAmount != null ? Number(result.deductionAmount) : 0;
   const gradeLabel = result.grade ?? "—";
+  const period = buildPeriodKey(month, year);
+  const { data: awardWinners = [] } = useAwardWinners({ profileId, period });
+  const stage2ClawbackNum = result.stage2ClawbackAmount != null ? Number(result.stage2ClawbackAmount) : 0;
 
   return (
     <div className="space-y-4">
       {/* Summary cards */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
-        <div className="rounded-2xl border bg-card p-5 shadow-sm space-y-1">
-          <p className="text-xs text-muted-foreground flex items-center gap-1">
-            <MedalStar weight="BoldDuotone" className="h-3.5 w-3.5" />
-            Grade
-          </p>
-          <p className={`font-heading text-4xl font-bold ${result.grade ? "text-foreground" : "text-muted-foreground/40"}`}>
-            {gradeLabel}
-          </p>
-          <p className="text-xs text-muted-foreground">{MONTHS[month - 1]} {year}</p>
-        </div>
+        <SummaryCard
+          label="Grade"
+          icon={<MedalStar weight="BoldDuotone" className="h-3.5 w-3.5" />}
+          value={gradeLabel}
+          sub={`${MONTHS[month - 1]} ${year}`}
+          valueClassName={result.grade ? "text-4xl" : "text-4xl text-muted-foreground/40"}
+        />
 
-        <div className="rounded-2xl border bg-card p-5 shadow-sm space-y-1">
-          <p className="text-xs text-muted-foreground flex items-center gap-1">
-            <MoneyBag weight="BoldDuotone" className="h-3.5 w-3.5" />
-            Saldo Bonus
-          </p>
-          <p className="font-heading text-xl font-bold text-foreground tabular-nums">
-            {formatRupiah(result.totalBonus)}
-          </p>
-          <p className="text-xs text-muted-foreground">Bonus bulan ini</p>
-        </div>
+        <SummaryCard
+          label="Saldo Bonus"
+          icon={<MoneyBag weight="BoldDuotone" className="h-3.5 w-3.5" />}
+          value={formatRupiah(result.totalBonus)}
+          sub="Bonus bulan ini"
+          valueClassName="text-xl tabular-nums"
+        />
 
-        <div className="rounded-2xl border bg-card p-5 shadow-sm space-y-1">
-          <p className="text-xs text-muted-foreground flex items-center gap-1">
-            <WalletMoney weight="BoldDuotone" className="h-3.5 w-3.5" />
-            Total Bersih
-          </p>
-          <p className="font-heading text-xl font-bold text-foreground tabular-nums">
-            {formatRupiah(result.netAmount)}
-          </p>
-          <p className="text-xs text-muted-foreground">Insentif bulan ini</p>
-        </div>
+        <SummaryCard
+          label="Total Bersih"
+          icon={<WalletMoney weight="BoldDuotone" className="h-3.5 w-3.5" />}
+          value={formatRupiah(result.netAmount)}
+          sub="Insentif bulan ini"
+          valueClassName="text-xl tabular-nums"
+        />
 
+        {/* Status — kept custom (Badge value doesn't fit SummaryCard's string|number value slot) */}
         <div className="rounded-2xl border bg-card p-5 shadow-sm space-y-1">
           <p className="text-xs text-muted-foreground flex items-center gap-1">
             <ChartSquare weight="BoldDuotone" className="h-3.5 w-3.5" />
@@ -250,15 +214,12 @@ function ResultSection({ result, month, year }: { result: KpiCalculationResultIt
           )}
         </div>
 
-        <div className="rounded-2xl border bg-card p-5 shadow-sm space-y-1">
-          <p className="text-xs text-muted-foreground flex items-center gap-1">
-            <Buildings2 weight="BoldDuotone" className="h-3.5 w-3.5" />
-            Venue
-          </p>
-          <p className="text-sm font-semibold text-foreground">
-            {result.venue?.name ?? "Semua Venue"}
-          </p>
-        </div>
+        <SummaryCard
+          label="Venue"
+          icon={<Buildings2 weight="BoldDuotone" className="h-3.5 w-3.5" />}
+          value={result.venue?.name ?? "Semua Venue"}
+          valueClassName="text-sm font-semibold"
+        />
       </div>
 
       {/* Achievement progress */}
@@ -305,11 +266,112 @@ function ResultSection({ result, month, year }: { result: KpiCalculationResultIt
         <CardContent className="p-5">
           <FinancialRow label="Komisi Dasar" value={result.baseCommissionTotal} />
           <FinancialRow label="Total Bonus" value={result.totalBonus} />
+          {result.overAchievementTotal != null && (
+            <>
+              <FinancialRow label="Bonus Over-Achievement Dealing" value={result.overAchievementDealingBonus} />
+              <FinancialRow label="Bonus Over-Achievement Omset" value={result.overAchievementOmsetBonus} />
+              <FinancialRow label="Total Over-Achievement" value={result.overAchievementTotal} large />
+            </>
+          )}
           <FinancialRow label="Gross" value={result.grossAmount} />
           {deductionNum > 0 && (
             <FinancialRow label="Potongan" value={result.deductionAmount} variant="destructive" />
           )}
           <FinancialRow label="Total Bersih" value={result.netAmount} large />
+        </CardContent>
+      </Card>
+
+      {/* Skema Pembayaran (staged payment) */}
+      {result.stage1Total != null && (
+        <Card className="rounded-2xl shadow-sm">
+          <CardHeader className="border-b">
+            <CardTitle className="flex items-center gap-2 text-sm font-semibold">
+              <WalletMoney weight="BoldDuotone" className="h-4 w-4 text-muted-foreground" />
+              Skema Pembayaran
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-5 space-y-4">
+            <div className="flex items-start justify-between gap-3 py-1">
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-foreground">Tahap 1</p>
+                <p className="text-sm font-semibold tabular-nums text-foreground">
+                  {formatRupiah(result.stage1Total)}
+                </p>
+              </div>
+              <div className="text-right space-y-1">
+                <Badge variant={result.stage1PaidAt ? "default" : "secondary"} className="rounded-full">
+                  {result.stage1PaidAt ? "Cair" : "Menunggu"}
+                </Badge>
+                {result.stage1PaidAt && (
+                  <p className="text-xs text-muted-foreground">
+                    {new Date(result.stage1PaidAt).toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric" })}
+                    {result.stage1PaidBy?.fullName ? ` · ${result.stage1PaidBy.fullName}` : ""}
+                  </p>
+                )}
+              </div>
+            </div>
+
+            <div className="flex items-start justify-between gap-3 py-1 border-t pt-4">
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-foreground">Tahap 2</p>
+                <p className="text-sm font-semibold tabular-nums text-foreground">
+                  {formatRupiah(result.stage2Total)}
+                </p>
+              </div>
+              <div className="text-right space-y-1">
+                <Badge variant={result.stage2PaidAt ? "default" : "secondary"} className="rounded-full">
+                  {result.stage2PaidAt ? "Cair" : "Menunggu"}
+                </Badge>
+                {result.stage2PaidAt && (
+                  <p className="text-xs text-muted-foreground">
+                    {new Date(result.stage2PaidAt).toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric" })}
+                    {result.stage2PaidBy?.fullName ? ` · ${result.stage2PaidBy.fullName}` : ""}
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {stage2ClawbackNum > 0 && (
+              <p className="text-xs text-destructive">
+                Potongan pembatalan: {formatRupiah(result.stage2ClawbackAmount)}
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Award & Penghargaan */}
+      <Card className="rounded-2xl shadow-sm">
+        <CardHeader className="border-b">
+          <CardTitle className="flex items-center gap-2 text-sm font-semibold">
+            <CupStar weight="BoldDuotone" className="h-4 w-4 text-muted-foreground" />
+            Award & Penghargaan
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-5">
+          {awardWinners.length === 0 ? (
+            <EmptyState
+              icon={<CupStar weight="BoldDuotone" className="h-8 w-8 text-muted-foreground" />}
+              title="Belum ada penghargaan bulan ini"
+            />
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              {awardWinners.map((winner: KpiAwardWinnerItem) => (
+                <div
+                  key={winner.id}
+                  className="flex items-center gap-2 rounded-full border bg-muted/30 px-4 py-2"
+                >
+                  <CupStar weight="BoldDuotone" className="h-4 w-4 text-primary shrink-0" />
+                  <div className="space-y-0">
+                    <p className="text-sm font-medium text-foreground leading-tight">{winner.award.name}</p>
+                    {winner.prizeDescription && (
+                      <p className="text-xs text-muted-foreground leading-tight">{winner.prizeDescription}</p>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -350,7 +412,6 @@ export function KpiSayaClient() {
     profileId ? { profileId, period } : undefined
   );
 
-  const yearOptions = Array.from({ length: 5 }, (_, i) => now.getFullYear() - 2 + i);
   const isLoading = userLoading || assignmentsLoading || resultsLoading;
   const userName = user?.name ?? "Kamu";
 
@@ -370,29 +431,12 @@ export function KpiSayaClient() {
         </div>
 
         {/* Period selector */}
-        <div className="flex items-center gap-2">
-          <Select value={String(filterMonth)} onValueChange={(v) => setFilterMonth(Number(v))}>
-            <SelectTrigger className="rounded-full w-36">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {MONTHS.map((m, i) => (
-                <SelectItem key={i + 1} value={String(i + 1)}>{m}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-          <Select value={String(filterYear)} onValueChange={(v) => setFilterYear(Number(v))}>
-            <SelectTrigger className="rounded-full w-28">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {yearOptions.map((y) => (
-                <SelectItem key={y} value={String(y)}>{y}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+        <PeriodSelector
+          month={filterMonth}
+          year={filterYear}
+          onMonthChange={setFilterMonth}
+          onYearChange={setFilterYear}
+        />
       </div>
 
       {/* Loading skeleton */}
@@ -424,6 +468,7 @@ export function KpiSayaClient() {
                 result={result}
                 month={filterMonth}
                 year={filterYear}
+                profileId={profileId ?? "none"}
               />
             ))
           ) : (
