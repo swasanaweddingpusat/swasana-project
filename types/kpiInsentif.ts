@@ -1,5 +1,3 @@
-export type KpiTargetType = "qty" | "price";
-export type KpiIndicatorType = "dealing" | "omset" | "homebase";
 export type KpiBusinessRole = "sales" | "manager";
 export type KpiResultStatus = "DRAFT" | "SIMULATED" | "PENDING_REVIEW" | "FINALIZED";
 
@@ -17,8 +15,9 @@ export interface KpiMasterItem {
   targetItem: {
     id: string;
     name: string;
-    indicatorType: KpiIndicatorType;
-    type: KpiTargetType;
+    dealingQty: number | null;
+    omsetPrice: string | null;
+    homebaseQty: number | null;
   };
   achievementSchema: {
     id: string;
@@ -49,8 +48,9 @@ export interface KpiAssignmentItem {
     businessRole: KpiBusinessRole;
     targetItem: {
       name: string;
-      indicatorType: KpiIndicatorType;
-      type: KpiTargetType;
+      dealingQty: number | null;
+      omsetPrice: string | null;
+      homebaseQty: number | null;
     };
   };
   profile: {

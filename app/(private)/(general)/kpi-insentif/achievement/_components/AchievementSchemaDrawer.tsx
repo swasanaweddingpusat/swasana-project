@@ -40,6 +40,7 @@ import {
   useAchievementSchemaById,
 } from "@/hooks/useKpiInsentif";
 import type { AchievementSchemaRow, AchievementSchemaDetail } from "@/lib/queries/kpiInsentif";
+import { SectionLabel } from "../../_components/SectionLabel";
 
 interface AchievementSchemaDrawerProps {
   isOpen: boolean;
@@ -118,14 +119,6 @@ function tierToFormRow(tier: DetailTier): TierFormRow {
     homebaseBonus: tier.homebaseBonus != null ? String(tier.homebaseBonus) : "",
     deductionPct: tier.deductionPct != null ? String(tier.deductionPct) : "",
   };
-}
-
-function SectionLabel({ text }: { text: string }) {
-  return (
-    <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground border-b border-border pb-1">
-      {text}
-    </p>
-  );
 }
 
 export function AchievementSchemaDrawer({

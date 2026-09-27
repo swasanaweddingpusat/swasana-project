@@ -4490,11 +4490,6 @@ model DailyReport {
 // Aktifkan hanya setelah konfirmasi: arti achievement, periode Manager,
 // batas tier (inclusive/exclusive), sumber komisi dasar, dan definisi homebase.
 
-enum KpiTargetType {
-  qty   // count (dealing)
-  price // nominal Rupiah (omset)
-}
-
 enum KpiIndicatorType {
   dealing   // Jumlah dealing
   omset     // Jumlah omset
@@ -4524,20 +4519,24 @@ enum KpiResultStatus {
 // ── TargetItem — master ukuran KPI ──────────────────────────────────────────
 
 model KpiTargetItem {
-  id               String           @id @default(cuid())
-  name             String
-  indicatorType    KpiIndicatorType
-  type             KpiTargetType
-  // Total target — gunakan qty untuk dealing/homebase, price untuk omset
-  qty              Int?
-  price            Decimal?         @db.Decimal(15, 2)
-  // Rincian per kategori paket (opsional — Reguler & Hadjatan)
-  // KEPUTUSAN: mapping Reguler/Hadjatan ke EventCategory belum dikonfirmasi.
-  // Placeholder: null = belum dipetakan. Konfirmasi sebelum realisasi otomatis diaktifkan.
-  qtyReguler       Int?
-  qtyHadjatan      Int?
-  priceReguler     Decimal?         @db.Decimal(15, 2)
-  priceHadjatan    Decimal?         @db.Decimal(15, 2)
+  id   String @id @default(cuid())
+  name String
+
+  // Dealing — jumlah dealing (qty)
+  dealingQty         Int?
+  dealingQtyReguler  Int?
+  dealingQtyHadjatan Int?
+
+  // Omset — nominal Rupiah (price)
+  omsetPrice         Decimal? @db.Decimal(15, 2)
+  omsetPriceReguler  Decimal? @db.Decimal(15, 2)
+  omsetPriceHadjatan Decimal? @db.Decimal(15, 2)
+
+  // Homebase — jumlah booking di venue home base (qty)
+  homebaseQty         Int?
+  homebaseQtyReguler  Int?
+  homebaseQtyHadjatan Int?
+
   // EventCategory yang mewakili "Reguler" dan "Hadjatan" — diisi admin saat konfigurasi
   regulerCategory  EventCategory?
   hadjatanCategory EventCategory?

@@ -19,6 +19,16 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   RefreshCircle,
   Filter,
   DangerCircle,
@@ -28,7 +38,13 @@ import {
 } from "@solar-icons/react";
 import { PageHeader } from "@/components/shared/page-header";
 import { toast } from "sonner";
-import { useCalculationResults, useRunAutoCalculation, useFinalizeResult } from "@/hooks/useKpiInsentif";
+import {
+  useCalculationResults,
+  useRunAutoCalculation,
+  useFinalizeResult,
+  useMarkStagePaid,
+  useRecomputeStagedPayment,
+} from "@/hooks/useKpiInsentif";
 import { useVenues } from "@/hooks/use-venues";
 import {
   formatRupiah,
@@ -39,6 +55,7 @@ import type { KpiCalculationResultItem } from "@/types/kpiInsentif";
 import { ResultDetailDrawer } from "./ResultDetailDrawer";
 import { SummaryCard } from "@/components/shared/SummaryCard";
 import { MONTHS, PeriodSelector } from "../../_components/PeriodSelector";
+import { EmptyState } from "../../_components/EmptyState";
 
 const STATUS_OPTIONS: Array<{ value: string; label: string }> = [
   { value: "all", label: "Semua Status" },
@@ -57,6 +74,7 @@ export function SimulasiClient() {
   const [filterStatus, setFilterStatus] = useState("all");
   const [search, setSearch] = useState("");
   const [selectedResult, setSelectedResult] = useState<KpiCalculationResultItem | null>(null);
+  const [confirmFinalizeResult, setConfirmFinalizeResult] = useState<KpiCalculationResultItem | null>(null);
 
   const { data: venues = [] } = useVenues();
   const period = `${filterYear}-${String(filterMonth).padStart(2, "0")}`;
@@ -70,6 +88,8 @@ export function SimulasiClient() {
 
   const autoCalcMutation = useRunAutoCalculation();
   const finalizeMutation = useFinalizeResult();
+  const markStagePaidMutation = useMarkStagePaid();
+  const recomputeStagedMutation = useRecomputeStagedPayment();
 
   const filtered = results.filter((r) => {
     if (!search.trim()) return true;
@@ -105,6 +125,24 @@ export function SimulasiClient() {
       toast.success("Hasil berhasil difinalisasi");
     } else {
       toast.error(res.error ?? "Gagal finalisasi");
+    }
+  }
+
+  async function handleMarkStagePaid(resultId: string, stage: 1 | 2) {
+    const res = await markStagePaidMutation.mutateAsync({ resultId, stage });
+    if (res.success) {
+      toast.success(`Tahap ${stage} berhasil ditandai lunas`);
+    } else {
+      toast.error(res.error ?? "Gagal menandai pembayaran");
+    }
+  }
+
+  async function handleRecomputeStagedPayment(resultId: string) {
+    const res = await recomputeStagedMutation.mutateAsync(resultId);
+    if (res.success) {
+      toast.success("Pembayaran bertahap berhasil dievaluasi ulang");
+    } else {
+      toast.error(res.error ?? "Gagal re-evaluasi pembayaran bertahap");
     }
   }
 
@@ -233,14 +271,12 @@ export function SimulasiClient() {
                   </tr>
                 ) : filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={11} className="py-16 text-center">
-                      <div className="flex flex-col items-center gap-2">
-                        <InfoCircle weight="BoldDuotone" className="h-10 w-10 text-muted-foreground/40" />
-                        <p className="text-sm text-muted-foreground">
-                          Belum ada data kalkulasi untuk periode{" "}
-                          {MONTHS[filterMonth - 1]} {filterYear}
-                        </p>
-                      </div>
+                    <td colSpan={11} className="p-0">
+                      <EmptyState
+                        icon={<InfoCircle weight="BoldDuotone" className="h-8 w-8 text-muted-foreground" />}
+                        title="Belum ada data kalkulasi"
+                        description={`Tidak ada hasil untuk periode ${MONTHS[filterMonth - 1]} ${filterYear}`}
+                      />
                     </td>
                   </tr>
                 ) : (
@@ -309,7 +345,7 @@ export function SimulasiClient() {
                                     variant="ghost"
                                     size="icon"
                                     className="h-7 w-7 rounded-full hover:bg-primary/10 hover:text-primary"
-                                    onClick={() => handleFinalize(r.id)}
+                                    onClick={() => setConfirmFinalizeResult(r)}
                                     disabled={finalizeMutation.isPending}
                                   >
                                     <CheckCircle weight="BoldDuotone" className="h-3.5 w-3.5" />
@@ -340,8 +376,44 @@ export function SimulasiClient() {
           onRunCalc={handleRunCalc}
           isFinalizing={finalizeMutation.isPending}
           isRunningCalc={autoCalcMutation.isPending}
+          onMarkStagePaid={handleMarkStagePaid}
+          isMarkingStagePaid={markStagePaidMutation.isPending}
+          onRecomputeStagedPayment={handleRecomputeStagedPayment}
+          isRecomputing={recomputeStagedMutation.isPending}
         />
       )}
+
+      {/* Confirm: finalize from the inline table quick-action (one-way — locks the result) */}
+      <AlertDialog
+        open={!!confirmFinalizeResult}
+        onOpenChange={(open) => { if (!open) setConfirmFinalizeResult(null); }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Finalisasi Hasil KPI</AlertDialogTitle>
+            <AlertDialogDescription>
+              Hasil kalkulasi {confirmFinalizeResult?.profile.fullName ?? "karyawan ini"} akan dikunci dan
+              tidak bisa dihitung ulang setelah difinalisasi. Lanjutkan?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="rounded-full" disabled={finalizeMutation.isPending}>
+              Batal
+            </AlertDialogCancel>
+            <AlertDialogAction
+              className="rounded-full"
+              onClick={() => {
+                const id = confirmFinalizeResult?.id;
+                setConfirmFinalizeResult(null);
+                if (id) handleFinalize(id);
+              }}
+              disabled={finalizeMutation.isPending}
+            >
+              {finalizeMutation.isPending ? "Finalisasi..." : "Ya, Finalisasi"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </TooltipProvider>
   );
 }

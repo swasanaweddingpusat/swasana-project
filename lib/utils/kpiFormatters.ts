@@ -28,7 +28,10 @@ export function formatKpiStatus(status: string): { label: string; variant: Badge
     case "SIMULATED":
       return { label: "Simulasi", variant: "outline" };
     case "PENDING_REVIEW":
-      return { label: "Menunggu", variant: "destructive" };
+      // Neutral "awaiting action" state, not an error/rejection — must not use
+      // the destructive (red) variant (mirrors the "pending" precedent in
+      // lib finance ar-format.tsx, which reserves destructive for unpaid/overdue).
+      return { label: "Menunggu Review", variant: "outline" };
     case "FINALIZED":
       return { label: "Final", variant: "default" };
     default:

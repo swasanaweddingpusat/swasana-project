@@ -472,16 +472,12 @@ export function KpiSayaClient() {
               />
             ))
           ) : (
-            <div className="rounded-2xl border bg-card p-10 shadow-sm flex flex-col items-center gap-3 text-center">
-              <ChartSquare weight="BoldDuotone" className="h-12 w-12 text-muted-foreground/30" />
-              <div className="space-y-1">
-                <p className="text-sm font-semibold text-muted-foreground">
-                  Belum ada data KPI untuk periode ini
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  {MONTHS[filterMonth - 1]} {filterYear} · KPI belum dihitung atau belum ada penugasan
-                </p>
-              </div>
+            <div className="rounded-2xl border bg-card shadow-sm">
+              <EmptyState
+                icon={<ChartSquare weight="BoldDuotone" className="h-8 w-8 text-muted-foreground" />}
+                title="Belum ada data KPI untuk periode ini"
+                description={`${MONTHS[filterMonth - 1]} ${filterYear} · KPI belum dihitung atau belum ada penugasan`}
+              />
             </div>
           )}
 
@@ -500,10 +496,10 @@ export function KpiSayaClient() {
             </CardHeader>
             <CardContent className="p-5">
               {assignments.length === 0 ? (
-                <div className="flex flex-col items-center gap-2 py-6 text-center">
-                  <Target weight="BoldDuotone" className="h-8 w-8 text-muted-foreground/30" />
-                  <p className="text-sm text-muted-foreground">Tidak ada penugasan untuk periode ini</p>
-                </div>
+                <EmptyState
+                  icon={<Target weight="BoldDuotone" className="h-8 w-8 text-muted-foreground" />}
+                  title="Tidak ada penugasan untuk periode ini"
+                />
               ) : (
                 <div>
                   {assignments.map((item) => (

@@ -1,5 +1,6 @@
 // FILE: lib/queries/kpiInsentif.ts
 import { cacheTag, cacheLife } from "next/cache";
+import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 
 // Prisma Decimal objects can't cross the Server→Client boundary.
@@ -17,14 +18,15 @@ function toPlain<T>(obj: T): T {
 const targetItemSelect = {
   id: true,
   name: true,
-  indicatorType: true,
-  type: true,
-  qty: true,
-  price: true,
-  qtyReguler: true,
-  qtyHadjatan: true,
-  priceReguler: true,
-  priceHadjatan: true,
+  dealingQty: true,
+  dealingQtyReguler: true,
+  dealingQtyHadjatan: true,
+  omsetPrice: true,
+  omsetPriceReguler: true,
+  omsetPriceHadjatan: true,
+  homebaseQty: true,
+  homebaseQtyReguler: true,
+  homebaseQtyHadjatan: true,
   regulerCategory: true,
   hadjatanCategory: true,
   createdAt: true,
@@ -78,7 +80,15 @@ const kpiMasterRowSelect = {
   achievementSchemaId: true,
   createdAt: true,
   updatedAt: true,
-  targetItem: { select: { id: true, name: true, indicatorType: true, type: true } },
+  targetItem: {
+    select: {
+      id: true,
+      name: true,
+      dealingQty: true,
+      omsetPrice: true,
+      homebaseQty: true,
+    },
+  },
   achievementSchema: { select: { id: true, name: true, businessRole: true } },
   createdBy: { select: { id: true, fullName: true } },
 };
@@ -100,7 +110,9 @@ const assignmentRowSelect = {
       id: true,
       name: true,
       businessRole: true,
-      targetItem: { select: { name: true, indicatorType: true, type: true } },
+      targetItem: {
+        select: { name: true, dealingQty: true, omsetPrice: true, homebaseQty: true },
+      },
     },
   },
   profile: { select: { id: true, fullName: true } },
@@ -400,21 +412,33 @@ export async function getCalculationResults(filters: {
   period?: Date;
   status?: string;
   venueId?: string;
+  businessRole?: string;
 }) {
   "use cache";
   cacheTag("kpi-insentif");
   cacheLife("seconds");
 
-  const where: {
-    profileId?: string;
-    period?: Date;
-    status?: "DRAFT" | "SIMULATED" | "PENDING_REVIEW" | "FINALIZED";
-    venueId?: string;
-  } = {
+  const where: Prisma.KpiCalculationResultWhereInput = {
     ...(filters.profileId ? { profileId: filters.profileId } : {}),
     ...(filters.period ? { period: filters.period } : {}),
     ...(filters.status ? { status: filters.status as "DRAFT" | "SIMULATED" | "PENDING_REVIEW" | "FINALIZED" } : {}),
     ...(filters.venueId ? { venueId: filters.venueId } : {}),
+    // businessRole (sales/manager) isn't stored on the result itself — it's
+    // resolved per (profile, period) via the KpiAssignment → KpiMaster chain,
+    // the same path runAutoCalculation uses. Only meaningful with a period set.
+    ...(filters.businessRole && filters.period
+      ? {
+          profile: {
+            kpiAssignments: {
+              some: {
+                period: filters.period,
+                isDraft: false,
+                kpiMaster: { businessRole: filters.businessRole as "sales" | "manager" },
+              },
+            },
+          },
+        }
+      : {}),
   };
 
   const rows = await db.kpiCalculationResult.findMany({
@@ -480,7 +504,15 @@ export type ResultDetail = Awaited<ReturnType<typeof getCalculationResultById>>;
 
 // ─── Profile picker for KPI assignment ───────────────────────────────────────
 
-export async function getProfilesForKpiAssignment() {
+/**
+ * Profile tidak punya kolom "businessRole" khusus — katalog role (lihat
+ * prisma/seeders/roles-permissions.ts) memakai kata "sales" / "manager" di
+ * nama role (mis. "sales", "sales-mice", "manager", "manager-mice"). Filter
+ * ini adalah NARROWING di UI (bukan hard security gate) supaya profile-picker
+ * di Penugasan Target & Award Winner otomatis menyempit sesuai businessRole
+ * KpiMaster/KpiAward yang sedang dipilih.
+ */
+export async function getProfilesForKpiAssignment(businessRole?: "sales" | "manager") {
   "use cache";
   cacheTag("kpi-insentif");
   cacheLife("minutes");
@@ -488,9 +520,9 @@ export async function getProfilesForKpiAssignment() {
   const profiles = await db.profile.findMany({
     where: {
       status: "active",
-      role: {
-        isNot: null,
-      },
+      role: businessRole
+        ? { name: { contains: businessRole, mode: "insensitive" } }
+        : { isNot: null },
     },
     orderBy: { fullName: "asc" },
     take: 100,
@@ -622,6 +654,18 @@ export async function getKpiAwardCandidates(awardId: string, period: Date): Prom
     if (candidateProfileIds.length === 0) return [];
   }
 
+  // Exclude profiles that already have a winner record for this award/period so
+  // the ranking list can't be used to confirm the same person twice.
+  const existingWinners = await db.kpiAwardWinner.findMany({
+    where: { awardId, period, profileId: { not: null } },
+    select: { profileId: true },
+  });
+  const alreadyWonProfileIds = new Set(existingWinners.map((w) => w.profileId));
+  if (candidateProfileIds) {
+    candidateProfileIds = candidateProfileIds.filter((id) => !alreadyWonProfileIds.has(id));
+    if (candidateProfileIds.length === 0) return [];
+  }
+
   const orderBy =
     award.rankingMetric === "totalBonus"
       ? { totalBonus: "desc" as const }
@@ -634,7 +678,11 @@ export async function getKpiAwardCandidates(awardId: string, period: Date): Prom
   const results = await db.kpiCalculationResult.findMany({
     where: {
       period,
-      ...(candidateProfileIds ? { profileId: { in: candidateProfileIds } } : {}),
+      ...(candidateProfileIds
+        ? { profileId: { in: candidateProfileIds } }
+        : alreadyWonProfileIds.size > 0
+        ? { profileId: { notIn: [...alreadyWonProfileIds].filter((id): id is string => id != null) } }
+        : {}),
     },
     orderBy,
     take: 10,

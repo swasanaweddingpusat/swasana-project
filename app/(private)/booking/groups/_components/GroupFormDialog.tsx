@@ -36,11 +36,8 @@ export function GroupFormDialog({ open, onOpenChange, group, eligibleLeaders = [
   const [name, setName] = useState(group?.name ?? "");
   const [description, setDescription] = useState(group?.description ?? "");
   const [leaderId, setLeaderId] = useState<string | null>(group?.leaderId ?? null);
-  const initialVenueIds = group?.venues.map((v) => v.id) ?? [];
-  const [venueIds, setVenueIds] = useState<string[]>(initialVenueIds);
-  const [homebaseVenueIds, setHomebaseVenueIds] = useState<string[]>(
-    group?.homebases?.map((h) => h.venueId) ?? [],
-  );
+  const initialHomebaseVenueIds = group?.homebases?.map((h) => h.venueId) ?? [];
+  const [homebaseVenueIds, setHomebaseVenueIds] = useState<string[]>(initialHomebaseVenueIds);
 
   const venueOptions = venues.map((v) => ({ id: v.id, name: v.name }));
 
@@ -49,13 +46,15 @@ export function GroupFormDialog({ open, onOpenChange, group, eligibleLeaders = [
     onOpenChange(false);
   }
 
+  // Venue (informational/filter) mirrors the homebase selection — a group's
+  // venue picker was consolidated into one field, so it always stays in sync.
   function syncVenues(groupId: string) {
-    if (sameVenueIds(venueIds, initialVenueIds)) {
+    if (sameVenueIds(homebaseVenueIds, initialHomebaseVenueIds)) {
       finishGroupSave();
       return;
     }
     updateVenuesMutation.mutate(
-      { groupId, venueIds },
+      { groupId, venueIds: homebaseVenueIds },
       {
         onSuccess: (res) => {
           if (res.success) {
@@ -145,29 +144,14 @@ export function GroupFormDialog({ open, onOpenChange, group, eligibleLeaders = [
             <MultiSelect
               className="mt-1"
               options={venueOptions}
-              value={venueIds}
-              onChange={setVenueIds}
+              value={homebaseVenueIds}
+              onChange={setHomebaseVenueIds}
               placeholder="Pilih venue..."
               searchPlaceholder="Cari venue..."
               emptyText="Tidak ada venue"
             />
             <p className="text-xs text-muted-foreground mt-1">
-              Opsional — buat filter/tampilan, gak ngaruh ke akses data
-            </p>
-          </div>
-          <div>
-            <Label className="text-sm">Homebase Venue (KPI)</Label>
-            <MultiSelect
-              className="mt-1"
-              options={venueOptions}
-              value={homebaseVenueIds}
-              onChange={setHomebaseVenueIds}
-              placeholder="Pilih venue homebase..."
-              searchPlaceholder="Cari venue..."
-              emptyText="Tidak ada venue"
-            />
-            <p className="text-xs text-muted-foreground mt-1">
-              Dipakai untuk menghitung KPI homebase Sales di grup ini
+              Dipakai untuk filter/tampilan grup & menghitung KPI homebase Sales di grup ini
             </p>
           </div>
         </div>
