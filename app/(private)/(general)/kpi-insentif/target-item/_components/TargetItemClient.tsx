@@ -30,6 +30,7 @@ import { useTargetItems, useDeleteTargetItem } from "@/hooks/useKpiInsentif";
 import { TargetItemDrawer } from "./TargetItemDrawer";
 import { formatRupiah } from "@/lib/utils";
 import type { TargetItemRow } from "@/lib/queries/kpiInsentif";
+import { EmptyState } from "../../_components/EmptyState";
 
 interface TargetItemClientProps {
   initialItems: TargetItemRow[];
@@ -164,21 +165,17 @@ export function TargetItemClient({ initialItems }: TargetItemClientProps) {
             ))}
           </div>
         ) : filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center gap-4 py-20 text-center">
-            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-muted">
-              <BoxMinimalistic weight="BoldDuotone" className="h-8 w-8 text-muted-foreground" />
-            </div>
-            <div>
-              <p className="font-semibold text-foreground">Belum ada target item</p>
-              <p className="text-sm text-muted-foreground mt-1">
-                Tambahkan target item untuk memulai konfigurasi KPI
-              </p>
-            </div>
-            <Button onClick={handleAdd} className="rounded-full gap-2" size="sm">
-              <AddCircle weight="BoldDuotone" className="h-4 w-4" />
-              Tambah Target Item
-            </Button>
-          </div>
+          <EmptyState
+            icon={<BoxMinimalistic weight="BoldDuotone" className="h-8 w-8 text-muted-foreground" />}
+            title="Belum ada target item"
+            description="Tambahkan target item untuk memulai konfigurasi KPI"
+            action={
+              <Button onClick={handleAdd} className="rounded-full gap-2" size="sm">
+                <AddCircle weight="BoldDuotone" className="h-4 w-4" />
+                Tambah Target Item
+              </Button>
+            }
+          />
         ) : (
           <div className="overflow-x-auto">
             <Table>

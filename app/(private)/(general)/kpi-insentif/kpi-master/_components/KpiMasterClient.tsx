@@ -37,6 +37,7 @@ import { PageHeader } from "@/components/shared/page-header";
 import { useKpiMasters, useDeleteKpiMaster } from "@/hooks/useKpiInsentif";
 import { KpiMasterDrawer } from "./KpiMasterDrawer";
 import type { KpiMasterRow } from "@/lib/queries/kpiInsentif";
+import { EmptyState } from "../../_components/EmptyState";
 
 interface KpiMasterClientProps {
   initialMasters: KpiMasterRow[];
@@ -185,25 +186,23 @@ export function KpiMasterClient({ initialMasters }: KpiMasterClientProps) {
             ))}
           </div>
         ) : filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center gap-4 py-20 text-center">
-            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-muted">
-              <BoxMinimalistic weight="BoldDuotone" className="h-8 w-8 text-muted-foreground" />
-            </div>
-            <div>
-              <p className="font-semibold text-foreground">Belum ada KPI Master</p>
-              <p className="text-sm text-muted-foreground mt-1">
-                {filterRole !== "all" || filterMonth || search.trim()
-                  ? "Tidak ada data sesuai filter"
-                  : "Buat KPI Master untuk mulai mengatur target dan skema achievement"}
-              </p>
-            </div>
-            {filterRole === "all" && !filterMonth && !search.trim() && (
-              <Button onClick={handleAdd} className="rounded-full gap-2" size="sm">
-                <AddCircle weight="BoldDuotone" className="h-4 w-4" />
-                Tambah KPI Master
-              </Button>
-            )}
-          </div>
+          <EmptyState
+            icon={<BoxMinimalistic weight="BoldDuotone" className="h-8 w-8 text-muted-foreground" />}
+            title="Belum ada KPI Master"
+            description={
+              filterRole !== "all" || filterMonth || search.trim()
+                ? "Tidak ada data sesuai filter"
+                : "Buat KPI Master untuk mulai mengatur target dan skema achievement"
+            }
+            action={
+              filterRole === "all" && !filterMonth && !search.trim() ? (
+                <Button onClick={handleAdd} className="rounded-full gap-2" size="sm">
+                  <AddCircle weight="BoldDuotone" className="h-4 w-4" />
+                  Tambah KPI Master
+                </Button>
+              ) : undefined
+            }
+          />
         ) : (
           <div className="overflow-x-auto">
             <Table>
