@@ -223,7 +223,6 @@ const GROUPS: SettingGroup[] = [
       { title: "Shift Kerja", description: "Kelola jadwal dan toleransi shift.", icon: ClockCircle, href: "/settings/attendance/shift", module: "hr-attendance" },
       { title: "Assignment Kehadiran", description: "Atur assignment shift dan lokasi karyawan.", icon: UsersGroupRounded, href: "/settings/attendance/assignment", module: "hr-attendance" },
       { title: "Pengaturan Kehadiran", description: "Atur parameter dan kebijakan absensi.", icon: Settings, href: "/settings/attendance/pengaturan", module: "hr-attendance" },
-      { title: "Koreksi Absen", description: "Kelola pengajuan koreksi absen karyawan.", icon: ClipboardCheck, href: "/settings/attendance/koreksi", module: "attendance-correction" },
     ],
   },
   {
@@ -273,7 +272,6 @@ export default async function SettingsHubPage() {
     "kpi-master",
     "kpi-assignment", "kpi-report",
     "hr-attendance",
-    "attendance-correction",
   ]);
 
   const session = await auth();
