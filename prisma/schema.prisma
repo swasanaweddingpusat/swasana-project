@@ -128,7 +128,6 @@ model Profile {
   // Access control
   roleId    String?
   managerId String?
-  homebaseVenueId String?
   dataScope DataScope     @default(own)
   status    ProfileStatus @default(active)
 
@@ -149,7 +148,6 @@ model Profile {
   user                         User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
   manager                      Profile?                   @relation("ProfileManager", fields: [managerId], references: [id], onDelete: SetNull)
   subordinates                 Profile[]                  @relation("ProfileManager")
-  homebaseVenue                Venue?                     @relation("ProfileHomebase", fields: [homebaseVenueId], references: [id], onDelete: SetNull)
   dataGroupMemberships         UserGroupMember[]
   ledGroups                    UserGroup[]                @relation("GroupLeader")
   dailyReportsSubmitted        DailyReport[]              @relation("DailyReportSubmitter")
@@ -250,15 +248,18 @@ model Profile {
   kpiAssignmentsCreated        KpiAssignment[]            @relation("KpiAssignmentCreatedBy")
   kpiResults                   KpiCalculationResult[]     @relation("KpiResults")
   kpiResultsFinalized          KpiCalculationResult[]     @relation("KpiResultFinalizedBy")
+  kpiResultsStage1Paid         KpiCalculationResult[]     @relation("KpiResultStage1PaidBy")
+  kpiResultsStage2Paid         KpiCalculationResult[]     @relation("KpiResultStage2PaidBy")
   kpiCommissionPoliciesApproved KpiCommissionPolicy[]     @relation("KpiCommissionPolicyApprovedBy")
   kpiPolicySnapshotsCreated    KpiPolicySnapshot[]        @relation("KpiPolicySnapshotCreatedBy")
+  kpiAwardWinners              KpiAwardWinner[]           @relation("KpiAwardWinnerProfile")
+  kpiAwardWinnersAwarded       KpiAwardWinner[]           @relation("KpiAwardWinnerAwardedBy")
 
   @@index([roleId])
   @@index([managerId])
   @@index([dataScope])
   @@index([departmentId])
   @@index([positionId])
-  @@index([homebaseVenueId])
   @@map("profiles")
 }
 
@@ -346,6 +347,7 @@ model UserGroup {
   members      UserGroupMember[]
   venues       UserGroupVenue[]
   dailyReports DailyReport[]
+  kpiAwardWinners KpiAwardWinner[]
 
   @@index([leaderId])
   @@map("user_groups")
@@ -435,7 +437,6 @@ model Venue {
   onboardingFormSubmissions OnboardingFormSubmission[]
   onboardingFormLinks       OnboardingFormLink[]
   groupAssignments          UserGroupVenue[]
-  profileHomebases          Profile[]                  @relation("ProfileHomebase")
   kpiAssignments            KpiAssignment[]            @relation("KpiAssignmentVenue")
   kpiResults                KpiCalculationResult[]     @relation("KpiResultVenue")
   homebases                 UserGroupHomebase[]         @relation("GroupHomebases")
@@ -1266,6 +1267,7 @@ model Booking {
   eventEvaluations   EventEvaluation[]
   creditBalance      CreditBalance?
   bookingPayables    BookingPayable[]
+  kpiDealLinks       KpiCalculationDealLink[]
 
   @@index([salesId])
   @@index([managerId])
@@ -2127,6 +2129,11 @@ enum AgreementStatus {
   Signed
 }
 
+enum AgreementPdfTemplate {
+  V1
+  V2
+}
+
 // ─── Order Status ─────────────────────────────────────────────────────────────
 
 model OrderStatus {
@@ -2143,16 +2150,17 @@ model OrderStatus {
 // ─── Client Agreement ─────────────────────────────────────────────────────────
 
 model ClientAgreement {
-  id         String          @id @default(uuid())
-  bookingId  String          @unique
-  token      String          @unique
-  accessCode String
-  status     AgreementStatus @default(Pending)
-  sentAt     DateTime?
-  viewedAt   DateTime?
-  signedAt   DateTime?
-  createdAt  DateTime        @default(now())
-  updatedAt  DateTime        @updatedAt
+  id          String               @id @default(uuid())
+  bookingId   String               @unique
+  token       String               @unique
+  accessCode  String
+  status      AgreementStatus      @default(Pending)
+  pdfTemplate AgreementPdfTemplate @default(V1)
+  sentAt      DateTime?
+  viewedAt    DateTime?
+  signedAt    DateTime?
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
 
   booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
 
@@ -4552,6 +4560,15 @@ model KpiAchievementSchema {
   // KEPUTUSAN: definisi "tercapai" (≥100%? >100%? kombinasi mana?) belum dikonfirmasi.
   gatingMinIndicators Int?
 
+  // ── Skema Pembayaran Bertahap (Tahap 1 / Tahap 2) — opt-in per schema ──────
+  // Tahap 1 dibayar setelah laporan KPI keluar, Tahap 2 bulan berikutnya —
+  // ditahan sebagian kalau client belum bayar minimum & di-clawback kalau booking batal.
+  stagedPaymentEnabled    Boolean  @default(false)
+  stage1PayoutPct         Decimal? @db.Decimal(5, 2)
+  stage2PayoutPct         Decimal? @db.Decimal(5, 2)
+  stage1MinClientPayment  Int?     @default(30000000)
+  stage2PayoutMonthOffset Int?     @default(1)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -4636,6 +4653,9 @@ model KpiCommissionPolicy {
   nominalPerDeal  Decimal?        @db.Decimal(15, 2)
   // Jika komisi % omset: pctOfRevenue Decimal
   pctOfRevenue    Decimal?        @db.Decimal(5, 4) // e.g. 0.0089 = 0.89%
+  // ── Bonus over-achievement (>100% target) — opt-in, null = fitur tidak aktif ──
+  overAchievementNominalPerExtraDeal Decimal? @db.Decimal(15, 2)
+  overAchievementPctOfExtraRevenue   Decimal? @db.Decimal(5, 4)
   // Berlaku untuk kategori paket tertentu (null = semua)
   packageCategory EventCategory?
   effectiveFrom   DateTime?       @db.Date
@@ -4724,6 +4744,22 @@ model KpiCalculationResult {
   homebaseBonus         Decimal?        @db.Decimal(15, 2)
   totalBonus            Decimal?        @db.Decimal(15, 2)
 
+  // ── Bonus over-achievement (>100% target) — null = policy belum di-set ─────
+  overAchievementDealingBonus Decimal? @db.Decimal(15, 2)
+  overAchievementOmsetBonus   Decimal? @db.Decimal(15, 2)
+  overAchievementTotal        Decimal? @db.Decimal(15, 2)
+
+  // ── Pembayaran bertahap (Tahap 1 / Tahap 2) — null = staged payment tidak aktif ─
+  stage1Total          Decimal?  @db.Decimal(15, 2)
+  stage2Total          Decimal?  @db.Decimal(15, 2)
+  stage1EligibleAmount Decimal?  @db.Decimal(15, 2)
+  stage2AdjustedAmount Decimal?  @db.Decimal(15, 2)
+  stage2ClawbackAmount Decimal?  @db.Decimal(15, 2)
+  stage1PaidAt         DateTime?
+  stage2PaidAt         DateTime?
+  stage1PaidById       String?
+  stage2PaidById       String?
+
   // ── Komisi dasar (null = belum dikonfigurasi / missing) ───────────────────
   baseCommissionReguler Decimal?        @db.Decimal(15, 2)
   baseCommissionHadjatan Decimal?       @db.Decimal(15, 2)
@@ -4758,7 +4794,10 @@ model KpiCalculationResult {
   profile        Profile                       @relation("KpiResults", fields: [profileId], references: [id], onDelete: Restrict)
   venue          Venue?                        @relation("KpiResultVenue", fields: [venueId], references: [id], onDelete: SetNull)
   finalizedBy    Profile?                      @relation("KpiResultFinalizedBy", fields: [finalizedById], references: [id], onDelete: SetNull)
+  stage1PaidBy   Profile?                      @relation("KpiResultStage1PaidBy", fields: [stage1PaidById], references: [id], onDelete: SetNull)
+  stage2PaidBy   Profile?                      @relation("KpiResultStage2PaidBy", fields: [stage2PaidById], references: [id], onDelete: SetNull)
   details        KpiCalculationDetail[]
+  dealLinks      KpiCalculationDealLink[]
   policySnapshot KpiPolicySnapshot?            @relation(fields: [policySnapshotId], references: [id], onDelete: SetNull)
 
   @@unique([profileId, period, venueId])
@@ -4766,6 +4805,32 @@ model KpiCalculationResult {
   @@index([period])
   @@index([status])
   @@map("kpi_calculation_results")
+}
+
+// ── KpiCalculationDealLink — breakdown per-booking untuk clawback Tahap 2 ─────
+//
+// Simpan share Tahap 1/2 per booking agar clawback bisa dievaluasi ulang terhadap
+// status booking yang live (bukan dibekukan saat kalkulasi awal).
+
+model KpiCalculationDealLink {
+  id             String        @id @default(cuid())
+  resultId       String
+  bookingId      String
+  dealAmount     Decimal       @db.Decimal(15, 2)
+  category       EventCategory
+  stage1Share    Decimal?      @db.Decimal(15, 2)
+  stage2Share    Decimal?      @db.Decimal(15, 2)
+  stage1Eligible Boolean       @default(false)
+
+  createdAt DateTime @default(now())
+
+  result  KpiCalculationResult @relation(fields: [resultId], references: [id], onDelete: Cascade)
+  booking Booking              @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+
+  @@unique([resultId, bookingId])
+  @@index([resultId])
+  @@index([bookingId])
+  @@map("kpi_calculation_deal_links")
 }
 
 // ── KpiCalculationDetail — breakdown per baris KPI untuk transparansi ─────────
@@ -4805,4 +4870,62 @@ model KpiPolicySnapshot {
   results   KpiCalculationResult[]
 
   @@map("kpi_policy_snapshots")
+}
+
+// ── KpiAward / KpiAwardWinner — hadiah non-cash (Sales/Team/Manager Terbaik dll) ──
+
+enum KpiAwardRankingMetric {
+  totalBonus
+  netAmount
+  dealingAchievementPct
+  omsetAchievementPct
+  manual // subjektif, tidak bisa di-auto-rank (mis. "Content Terbaik")
+}
+
+model KpiAward {
+  id                      String                 @id @default(cuid())
+  name                    String
+  description             String?
+  businessRole            KpiBusinessRole?       // null = semua role
+  isRanked                Boolean                @default(true)
+  rankingMetric           KpiAwardRankingMetric?
+  defaultPrizeDescription String?
+  isActive                Boolean                @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  winners KpiAwardWinner[]
+
+  @@index([businessRole])
+  @@map("kpi_awards")
+}
+
+model KpiAwardWinner {
+  id                String   @id @default(cuid())
+  awardId           String
+  period            DateTime @db.Date
+  // Exactly-one XOR (profileId individual / groupId team) — divalidasi di Zod,
+  // konsisten dengan pola project (tidak ada CHECK constraint untuk XOR di schema lain).
+  profileId         String?
+  groupId           String?
+  prizeDescription  String?
+  rankValueSnapshot Decimal? @db.Decimal(15, 4)
+  notes             String?
+  awardedById       String?
+  awardedAt         DateTime @default(now())
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  award     KpiAward   @relation(fields: [awardId], references: [id], onDelete: Restrict)
+  profile   Profile?   @relation("KpiAwardWinnerProfile", fields: [profileId], references: [id], onDelete: Restrict)
+  group     UserGroup? @relation(fields: [groupId], references: [id], onDelete: Restrict)
+  awardedBy Profile?   @relation("KpiAwardWinnerAwardedBy", fields: [awardedById], references: [id], onDelete: SetNull)
+
+  @@index([awardId])
+  @@index([period])
+  @@index([profileId])
+  @@index([groupId])
+  @@map("kpi_award_winners")
 }

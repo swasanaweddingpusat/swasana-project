@@ -37,11 +37,8 @@ import {
 } from "@/lib/utils/kpiFormatters";
 import type { KpiCalculationResultItem } from "@/types/kpiInsentif";
 import { ResultDetailDrawer } from "./ResultDetailDrawer";
-
-const MONTHS = [
-  "Januari", "Februari", "Maret", "April", "Mei", "Juni",
-  "Juli", "Agustus", "September", "Oktober", "November", "Desember",
-];
+import { SummaryCard } from "@/components/shared/SummaryCard";
+import { MONTHS, PeriodSelector } from "../../_components/PeriodSelector";
 
 const STATUS_OPTIONS: Array<{ value: string; label: string }> = [
   { value: "all", label: "Semua Status" },
@@ -50,16 +47,6 @@ const STATUS_OPTIONS: Array<{ value: string; label: string }> = [
   { value: "PENDING_REVIEW", label: "Menunggu Review" },
   { value: "FINALIZED", label: "Final" },
 ];
-
-function SummaryCard({ label, value, sub }: { label: string; value: string | number; sub?: string }) {
-  return (
-    <div className="rounded-2xl border bg-card p-5 shadow-sm space-y-1">
-      <p className="text-xs text-muted-foreground">{label}</p>
-      <p className="text-2xl font-semibold font-heading text-foreground">{value}</p>
-      {sub && <p className="text-xs text-muted-foreground">{sub}</p>}
-    </div>
-  );
-}
 
 export function SimulasiClient() {
   const now = new Date();
@@ -88,8 +75,6 @@ export function SimulasiClient() {
     if (!search.trim()) return true;
     return (r.profile.fullName ?? "").toLowerCase().includes(search.toLowerCase());
   });
-  const yearOptions = Array.from({ length: 5 }, (_, i) => now.getFullYear() - 2 + i);
-
   // Summary stats
   const totalKaryawan = filtered.length;
   const totalBonus = filtered.reduce((sum, r) => {
@@ -136,27 +121,12 @@ export function SimulasiClient() {
           <div className="flex flex-wrap items-center gap-3">
             <Filter weight="BoldDuotone" className="h-4 w-4 text-muted-foreground shrink-0" />
 
-            <Select value={String(filterMonth)} onValueChange={(v) => setFilterMonth(Number(v))}>
-              <SelectTrigger className="rounded-full w-36">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {MONTHS.map((m, i) => (
-                  <SelectItem key={i + 1} value={String(i + 1)}>{m}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            <Select value={String(filterYear)} onValueChange={(v) => setFilterYear(Number(v))}>
-              <SelectTrigger className="rounded-full w-28">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {yearOptions.map((y) => (
-                  <SelectItem key={y} value={String(y)}>{y}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <PeriodSelector
+              month={filterMonth}
+              year={filterYear}
+              onMonthChange={setFilterMonth}
+              onYearChange={setFilterYear}
+            />
 
             <Select value={filterRole} onValueChange={setFilterRole}>
               <SelectTrigger className="rounded-full w-36">
