@@ -4219,7 +4219,6 @@ model GuestbookEntry {
   hostId                String?
   venueId               String?
   checkInAt             DateTime              @default(now())
-  checkOutAt            DateTime?
   notes                 String?
   guestCode             String?               @unique
   visitStatus           GuestVisitStatus?

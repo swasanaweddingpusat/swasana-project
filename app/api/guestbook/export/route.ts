@@ -29,7 +29,7 @@ const VISIT_STATUS_LABELS: Record<string, string> = {
 };
 
 const INTERACTION_TYPE_LABELS: Record<string, string> = {
-  client_visit: "Kunjungan Client",
+  client_visit: "Database",
   online_meeting: "Online Meeting",
   jemput_bola: "Jemput Bola",
 };
@@ -71,7 +71,6 @@ const guestbookExportSelect = {
   interactionType: true,
   visitStatus: true,
   checkInAt: true,
-  checkOutAt: true,
   commitVisitDate: true,
   commitPayDate: true,
   createdAt: true,
@@ -143,7 +142,6 @@ export async function GET(req: Request): Promise<Response> {
       "Paket",
       "Visit Status",
       "Check-in",
-      "Check-out",
       "Tanggal Commit Visit",
       "Tanggal Commit Bayar",
       "Dicatat oleh",
@@ -182,7 +180,6 @@ export async function GET(req: Request): Promise<Response> {
         r.package?.packageName ?? "",
         r.visitStatus ? VISIT_STATUS_LABELS[r.visitStatus] ?? r.visitStatus : "",
         fmtDateTime(r.checkInAt),
-        fmtDateTime(r.checkOutAt),
         fmtDate(r.commitVisitDate),
         fmtDate(r.commitPayDate),
         r.createdBy?.fullName ?? "",
