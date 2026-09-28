@@ -1,22 +1,9 @@
 "use client";
 
-import type { ReactNode } from "react";
 import { format } from "date-fns";
 import type { DateRange } from "react-day-picker";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  ChartSquare,
-  Videocamera,
-  UsersGroupRounded,
-  Buildings2,
-  TrashBinTrash,
-  MedalStar,
-  Snowflake,
-  Fire,
-  Flame,
-  GraphUp,
-} from "@solar-icons/react";
 import { cn } from "@/lib/utils";
 import { useGuestbookFunnelReport } from "@/hooks/use-guestbook";
 import type { GuestbookFunnelReport, GuestbookProspectBreakdown } from "@/lib/queries/guestbookEntries";
@@ -27,6 +14,15 @@ interface GuestbookFunnelReportSectionProps {
   hostId?: string;
 }
 
+type CellTone = "default" | "primary" | "secondary" | "destructive";
+
+const CELL_TONE_CLASSNAMES: Record<CellTone, string> = {
+  default: "border-border bg-card text-foreground",
+  primary: "border-primary/20 bg-primary/10 text-primary",
+  secondary: "border-border bg-secondary text-secondary-foreground",
+  destructive: "border-destructive/20 bg-destructive/10 text-destructive",
+};
+
 function formatPct(value: number): string {
   return `${value.toLocaleString("id-ID", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`;
 }
@@ -35,98 +31,132 @@ function formatCount(value: number): string {
   return value.toLocaleString("id-ID");
 }
 
-type StatTone = "primary" | "muted" | "destructive" | "success";
-
-const STAT_TONE_CLASSNAMES: Record<StatTone, string> = {
-  primary: "bg-primary/10 text-primary",
-  muted: "bg-muted text-muted-foreground",
-  destructive: "bg-destructive/10 text-destructive",
-  success: "bg-emerald-100 text-emerald-700",
-};
-
-function StatBlock({
+function RatioCell({
   label,
   value,
-  icon,
-  tone = "muted",
+  denominator,
+  numerator,
 }: {
   label: string;
   value: number;
-  icon: ReactNode;
-  tone?: StatTone;
+  denominator: number;
+  numerator: number;
 }) {
   return (
-    <div className={cn("flex flex-col gap-1.5 rounded-2xl p-4", STAT_TONE_CLASSNAMES[tone])}>
-      <div className="flex items-center gap-1.5 text-xs font-medium opacity-80">
-        {icon}
-        <span>{label}</span>
-      </div>
-      <p className="text-2xl font-heading font-semibold">{formatCount(value)}</p>
+    <div className="flex min-w-0 flex-col items-center border-r border-border px-3 py-3 text-center last:border-r-0">
+      <p className="text-xs font-medium text-muted-foreground">{label}</p>
+      <p className="mt-1 font-heading text-xl font-semibold text-primary">{formatPct(value)}</p>
+      <p className="mt-1 text-[11px] tabular-nums text-muted-foreground">
+        {formatCount(numerator)} / {formatCount(denominator)}
+      </p>
     </div>
   );
 }
 
-function RatioPill({ label, value }: { label: string; value: number }) {
+function DataCell({ label, value, tone = "default" }: { label: string; value: number; tone?: CellTone }) {
   return (
-    <div className="flex flex-1 flex-col items-center gap-1 rounded-full border bg-card px-4 py-3 text-center shadow-sm">
-      <span className="text-xs text-muted-foreground">{label}</span>
-      <span className="font-heading text-lg font-semibold text-primary">{formatPct(value)}</span>
+    <div className={cn("flex min-w-0 flex-col justify-between gap-2 rounded-xl border p-3", CELL_TONE_CLASSNAMES[tone])}>
+      <p className="text-xs font-medium leading-snug opacity-75">{label}</p>
+      <p className="font-heading text-xl font-semibold tabular-nums">{formatCount(value)}</p>
     </div>
   );
 }
 
-function FunnelReportCard({
+function RatioGrid({
+  report,
+  ads,
+  totalAdsUrl = 0,
+}: {
+  report: GuestbookFunnelReport;
+  ads: boolean;
+  totalAdsUrl?: number;
+}) {
+  const visitCount = report.visitVenue;
+  const databaseCount = ads ? totalAdsUrl : report.database;
+  const databaseToVisitPct = databaseCount > 0 ? (visitCount / databaseCount) * 100 : 0;
+  const databaseToDealPct = databaseCount > 0 ? (report.deal / databaseCount) * 100 : 0;
+
+  return (
+    <div className="grid grid-cols-3 overflow-hidden rounded-xl border bg-muted/30">
+      <RatioCell
+        label={ads ? "Ads URL → Visit Venue" : "Database → Visit"}
+        value={databaseToVisitPct}
+        denominator={databaseCount}
+        numerator={visitCount}
+      />
+      <RatioCell
+        label="Visit → Deal"
+        value={report.visitToDealPct}
+        denominator={visitCount}
+        numerator={report.deal}
+      />
+      <RatioCell
+        label={ads ? "Ads URL → Deal" : "Database → Deal"}
+        value={databaseToDealPct}
+        denominator={databaseCount}
+        numerator={report.deal}
+      />
+    </div>
+  );
+}
+
+function FunnelCells({ report, includeDatabase }: { report: GuestbookFunnelReport; includeDatabase: boolean }) {
+  return (
+    <div className={cn("grid grid-cols-2 gap-2 sm:grid-cols-4", includeDatabase && "2xl:grid-cols-7")}>
+      {includeDatabase ? <DataCell label="Database" value={report.database} tone="primary" /> : null}
+      <DataCell label="Online Meeting" value={report.onlineMeeting} tone="secondary" />
+      <DataCell label="Belum Visit" value={report.belumVisit} />
+      <DataCell label="Visit Venue" value={report.visitVenue} tone="secondary" />
+      <DataCell label="Tidak Jadi Visit (Lost)" value={report.tidakJadiVisitLost} tone="destructive" />
+      <DataCell label="Deal" value={report.deal} tone="primary" />
+      <DataCell label="No Deal (Lost)" value={report.noDealLost} tone="destructive" />
+    </div>
+  );
+}
+
+function AdsDatabaseBreakdown({ breakdown, total }: { breakdown: GuestbookProspectBreakdown; total: number }) {
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Database</p>
+        <p className="text-xs text-muted-foreground">Status prospek sesuai filter tanggal</p>
+      </div>
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+        <DataCell label="Cold Prospek" value={breakdown.cold} />
+        <DataCell label="Warm Prospek" value={breakdown.warm} />
+        <DataCell label="Hot Prospek" value={breakdown.hot} />
+        <DataCell label="No Response" value={breakdown.noResponse} />
+        <DataCell label="Total Ads URL" value={total} tone="primary" />
+      </div>
+    </div>
+  );
+}
+
+function PerformanceCard({
   title,
   description,
   report,
+  ads = false,
   prospectBreakdown,
+  totalAdsUrl = 0,
 }: {
   title: string;
   description: string;
   report: GuestbookFunnelReport;
+  ads?: boolean;
   prospectBreakdown?: GuestbookProspectBreakdown;
+  totalAdsUrl?: number;
 }) {
   return (
     <Card className="rounded-2xl shadow-sm">
-      <CardHeader>
-        <CardTitle>{title}</CardTitle>
+      <CardHeader className="pb-4">
+        <CardTitle className="font-heading text-lg">{title}</CardTitle>
         <CardDescription>{description}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        <StatBlock label="Database" value={report.database} icon={<ChartSquare weight="BoldDuotone" className="h-4 w-4" />} tone="primary" />
-
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-          <StatBlock label="Online Meeting" value={report.onlineMeeting} icon={<Videocamera weight="BoldDuotone" className="h-4 w-4" />} />
-          <StatBlock label="Belum Visit" value={report.belumVisit} icon={<UsersGroupRounded weight="BoldDuotone" className="h-4 w-4" />} />
-          <StatBlock label="Visit Venue" value={report.visitVenue} icon={<Buildings2 weight="BoldDuotone" className="h-4 w-4" />} />
-          <StatBlock
-            label="Tidak Jadi Visit (Lost)"
-            value={report.tidakJadiVisitLost}
-            icon={<TrashBinTrash weight="BoldDuotone" className="h-4 w-4" />}
-            tone="destructive"
-          />
-          <StatBlock
-            label="No Deal (Lost)"
-            value={report.noDealLost}
-            icon={<TrashBinTrash weight="BoldDuotone" className="h-4 w-4" />}
-            tone="destructive"
-          />
-          <StatBlock label="Deal" value={report.deal} icon={<MedalStar weight="BoldDuotone" className="h-4 w-4" />} tone="success" />
-        </div>
-
-        {prospectBreakdown && (
-          <div className="grid grid-cols-3 gap-3">
-            <StatBlock label="Cold" value={prospectBreakdown.cold} icon={<Snowflake weight="BoldDuotone" className="h-4 w-4" />} />
-            <StatBlock label="Warm" value={prospectBreakdown.warm} icon={<Flame weight="BoldDuotone" className="h-4 w-4" />} />
-            <StatBlock label="Hot" value={prospectBreakdown.hot} icon={<Fire weight="BoldDuotone" className="h-4 w-4" />} tone="destructive" />
-          </div>
-        )}
-
-        <div className="flex flex-col gap-2 sm:flex-row">
-          <RatioPill label="Database → Visit" value={report.databaseToVisitPct} />
-          <RatioPill label="Visit → Deal" value={report.visitToDealPct} />
-          <RatioPill label="Database → Deal" value={report.databaseToDealPct} />
-        </div>
+        <RatioGrid report={report} ads={ads} totalAdsUrl={totalAdsUrl} />
+        {prospectBreakdown ? <AdsDatabaseBreakdown breakdown={prospectBreakdown} total={totalAdsUrl} /> : null}
+        <FunnelCells report={report} includeDatabase={!ads} />
       </CardContent>
     </Card>
   );
@@ -136,19 +166,14 @@ function FunnelReportSkeleton() {
   return (
     <Card className="rounded-2xl shadow-sm">
       <CardHeader>
-        <Skeleton className="h-5 w-40" />
-        <Skeleton className="h-4 w-56" />
+        <Skeleton className="h-6 w-44" />
+        <Skeleton className="h-4 w-64" />
       </CardHeader>
       <CardContent className="space-y-4">
-        <Skeleton className="h-20 w-full rounded-2xl" />
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-          {Array.from({ length: 6 }).map((_, i) => (
-            <Skeleton key={i} className="h-20 rounded-2xl" />
-          ))}
-        </div>
-        <div className="flex flex-col gap-2 sm:flex-row">
-          {Array.from({ length: 3 }).map((_, i) => (
-            <Skeleton key={i} className="h-16 flex-1 rounded-full" />
+        <Skeleton className="h-24 w-full rounded-xl" />
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {Array.from({ length: 7 }).map((_, i) => (
+            <Skeleton key={i} className="h-20 rounded-xl" />
           ))}
         </div>
       </CardContent>
@@ -166,7 +191,7 @@ export function GuestbookFunnelReportSection({ dateRange, venueIds, hostId }: Gu
 
   if (isLoading || !data) {
     return (
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
         <FunnelReportSkeleton />
         <FunnelReportSkeleton />
       </div>
@@ -174,33 +199,20 @@ export function GuestbookFunnelReportSection({ dateRange, venueIds, hostId }: Gu
   }
 
   return (
-    <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-      <FunnelReportCard
-        title="Database Ratio"
-        description="Funnel konversi seluruh database tamu sesuai filter aktif"
+    <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+      <PerformanceCard
+        title="Database Performance"
+        description="Konversi seluruh database tamu sesuai filter aktif"
         report={data.overall}
       />
-      <FunnelReportCard
-        title="Ads Ratio Performance"
-        description="Funnel konversi khusus tamu yang datang lewat iklan"
-        report={data.ads}
-        prospectBreakdown={data.adsProspectBreakdown}
+      <PerformanceCard
+        title="Ads Performance"
+        description="Status mengikuti filter tanggal; Total Ads URL dihitung terpisah"
+        report={data.overall}
+        ads
+        prospectBreakdown={data.prospectBreakdown}
+        totalAdsUrl={data.totalAdsUrl}
       />
-      <Card className="rounded-2xl shadow-sm lg:col-span-2">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <GraphUp weight="BoldDuotone" className="h-4 w-4 text-primary" />
-            Catatan
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-sm text-muted-foreground">
-            &ldquo;Tidak Jadi Visit (Lost)&rdquo; adalah tamu yang hilang sebelum sempat visit venue,
-            sedangkan &ldquo;No Deal (Lost)&rdquo; adalah tamu yang sudah visit venue tapi tidak deal.
-            Laporan ini memakai filter tanggal, venue, dan PIC yang sama dengan tab Data Tamu.
-          </p>
-        </CardContent>
-      </Card>
     </div>
   );
 }

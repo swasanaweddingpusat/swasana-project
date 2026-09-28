@@ -768,10 +768,6 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
       toast.error("Segmen wajib dipilih");
       return false;
     }
-    if (form.eventCategory !== "MICE" && !form.packageId) {
-      toast.error("Paket wajib dipilih");
-      return false;
-    }
     if (isBitrixSource && !form.bitrixContactId.trim()) {
       toast.error("Bitrix ID wajib dipilih");
       return false;
@@ -1157,7 +1153,7 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
               {form.eventCategory !== "MICE" && (
                 <div className="space-y-1.5">
                   <Label className="text-sm font-medium">
-                    Paket <span className="text-destructive">*</span>
+                    Paket <span className="font-normal text-muted-foreground">(Opsional)</span>
                   </Label>
                   <SearchableSelect
                     options={packages.map((p) => {
@@ -1180,7 +1176,7 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
                         ? "Pilih venue terlebih dahulu"
                         : !form.eventCategory
                           ? "Pilih kategori event"
-                          : "Pilih paket"
+                          : "Pilih paket (opsional)"
                     }
                     searchPlaceholder="Cari paket..."
                     emptyText="Tidak ada paket"

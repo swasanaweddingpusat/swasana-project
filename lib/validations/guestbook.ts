@@ -59,13 +59,7 @@ export const createGuestbookEntrySchema = z
       });
     }
 
-    if (val.eventCategory !== 'MICE' && !val.packageId?.trim()) {
-      ctx.addIssue({
-        path: ['packageId'],
-        code: z.ZodIssueCode.custom,
-        message: 'Paket wajib dipilih',
-      });
-    }
+    // Paket bersifat opsional untuk create maupun edit guestbook.
 
     // Dulu aturan ini bercabang per interactionType. Setelah field itu dihapus,
     // medium/link meeting hanya divalidasi kalau user memang mengisinya.
@@ -123,13 +117,7 @@ export const updateGuestbookEntrySchema = z.object({
     });
   }
 
-  if (val.eventCategory !== 'MICE' && !val.packageId?.trim()) {
-    ctx.addIssue({
-      path: ['packageId'],
-      code: z.ZodIssueCode.custom,
-      message: 'Paket wajib dipilih',
-    });
-  }
+  // Paket bersifat opsional untuk create maupun edit guestbook.
 });
 
 export type UpdateGuestbookEntryInput = z.infer<typeof updateGuestbookEntrySchema>;

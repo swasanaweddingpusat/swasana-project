@@ -119,6 +119,13 @@ export function GuestbookOverviewClient() {
         </CardContent>
       </Card>
 
+      {/* Ratio funnel jadi insight utama halaman, langsung setelah kontrol filter. */}
+      <GuestbookFunnelReportSection
+        dateRange={dateRange}
+        venueIds={filterVenueIds}
+        hostId={filterHostId !== "all" ? filterHostId : undefined}
+      />
+
       {isLoading ? (
         <div className="space-y-3">
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -147,14 +154,6 @@ export function GuestbookOverviewClient() {
           onHostClick={(key) => setFilterHostId((p) => (p === key ? "all" : key))}
         />
       )}
-
-      {/* Funnel report — ikut date range/venue/PIC yang sama, tapi punya
-          endpoint sendiri sehingga tidak terpengaruh filter status/kategori. */}
-      <GuestbookFunnelReportSection
-        dateRange={dateRange}
-        venueIds={filterVenueIds}
-        hostId={filterHostId !== "all" ? filterHostId : undefined}
-      />
     </div>
   );
 }

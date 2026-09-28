@@ -419,12 +419,15 @@ export interface GuestbookProspectBreakdown {
   cold: number;
   warm: number;
   hot: number;
+  noResponse: number;
 }
 
 export interface GuestbookFunnelReportResult {
   overall: GuestbookFunnelReport;
-  ads: GuestbookFunnelReport;
-  adsProspectBreakdown: GuestbookProspectBreakdown;
+  /** Jumlah entry pada filter aktif yang benar-benar memiliki Bitrix Ads URL. */
+  totalAdsUrl: number;
+  /** Breakdown status hanya mengikuti filter aktif (tanggal/venue/PIC), bukan Ads URL. */
+  prospectBreakdown: GuestbookProspectBreakdown;
 }
 
 /** Hitung jumlah entry per nama status dalam satu query, lalu baca nilainya
@@ -446,9 +449,11 @@ async function countByStatusName(
   return result;
 }
 
-/** Shared funnel bucket math for both the overall and ads-only report tables. */
+/** Shared funnel bucket math. Baik Database maupun Ads Performance memakai
+ *  Visit Venue sebagai titik visit. Ads hanya membatasi dataset ke entry yang
+ *  memiliki bitrixAdsUrl, bukan mengubah definisi visit. */
 async function computeFunnelReport(
-  where: Prisma.GuestbookEntryWhereInput
+  where: Prisma.GuestbookEntryWhereInput,
 ): Promise<GuestbookFunnelReport> {
   const [database, counts] = await Promise.all([
     db.guestbookEntry.count({ where }),
@@ -456,15 +461,22 @@ async function computeFunnelReport(
   ]);
   const at = (name: string) => counts.get(name) ?? 0;
 
-  const onlineMeeting = at(PROSPECT_STATUS.ONLINE_MEETING);
-  const visitVenue = at(PROSPECT_STATUS.VISIT_VENUE);
+  const rawOnlineMeeting = at(PROSPECT_STATUS.ONLINE_MEETING);
+  const rawVisitVenue = at(PROSPECT_STATUS.VISIT_VENUE);
   const tidakJadiVisitLost = at(PROSPECT_STATUS.TIDAK_JADI_VISIT_LOST);
   const noDealLost = at(PROSPECT_STATUS.NO_DEAL_LOST);
   const deal = at(PROSPECT_STATUS.DEAL);
-  // Belum Visit tetap diturunkan lewat pengurangan supaya seluruh entry —
-  // termasuk yang berstatus Cold/Warm/Hot atau belum berstatus — tetap
-  // terhitung dan kelima bucket menjumlah persis ke `database`.
-  const belumVisit = Math.max(0, database - onlineMeeting - visitVenue - noDealLost - tidakJadiVisitLost - deal);
+
+  // Setiap status dihitung apa adanya karena ProspectStatus sekarang satu field
+  // eksklusif: Visit Venue tidak boleh ditambah Deal. Belum Visit menjadi sisa
+  // setelah seluruh status funnel eksplisit dikurangkan dari Database.
+  const onlineMeeting = rawOnlineMeeting;
+  const visitVenue = rawVisitVenue;
+  const belumVisit = Math.max(
+    0,
+    database - onlineMeeting - visitVenue - tidakJadiVisitLost - noDealLost - deal,
+  );
+  const visitCount = visitVenue;
 
   return {
     database,
@@ -474,8 +486,8 @@ async function computeFunnelReport(
     tidakJadiVisitLost,
     noDealLost,
     deal,
-    databaseToVisitPct: database > 0 ? (visitVenue / database) * 100 : 0,
-    visitToDealPct: visitVenue > 0 ? (deal / visitVenue) * 100 : 0,
+    databaseToVisitPct: database > 0 ? (visitCount / database) * 100 : 0,
+    visitToDealPct: visitCount > 0 ? (deal / visitCount) * 100 : 0,
     databaseToDealPct: database > 0 ? (deal / database) * 100 : 0,
   };
 }
@@ -488,12 +500,13 @@ async function computeProspectBreakdown(
     cold: counts.get(PROSPECT_STATUS.COLD) ?? 0,
     warm: counts.get(PROSPECT_STATUS.WARM) ?? 0,
     hot: counts.get(PROSPECT_STATUS.HOT) ?? 0,
+    noResponse: counts.get(PROSPECT_STATUS.NO_RESPONSE) ?? 0,
   };
 }
 
-/** Powers the "Laporan" tab in /guestbook: overall database funnel + the
- *  ads-sourced subset funnel (bitrixAdsUrl not null), both broken down the
- *  same way, plus a Cold/Warm/Hot prospek split for the ads subset only. */
+/** Powers Guestbook Overview performance cards. Semua status/funnel mengikuti
+ *  filter aktif tanpa filter Ads URL. `bitrixAdsUrl` hanya dipakai menghitung
+ *  Total Ads URL sebagai denominator rasio Ads Performance. */
 export async function getGuestbookFunnelReport(
   profileId: string | undefined,
   dataScope: DataScope | undefined,
@@ -501,13 +514,17 @@ export async function getGuestbookFunnelReport(
 ): Promise<GuestbookFunnelReportResult> {
   const scopeWhere = (await buildOwnerScopeWhere(profileId, dataScope, "salesId")) as Prisma.GuestbookEntryWhereInput;
   const where: Prisma.GuestbookEntryWhereInput = { ...scopeWhere, ...buildGuestbookWhere(filters ?? {}) };
-  const adsWhere: Prisma.GuestbookEntryWhereInput = { AND: [where, { bitrixAdsUrl: { not: null } }] };
+  // Total Ads URL hanya menghitung entry yang benar-benar punya URL iklan.
+  // `not: null` saja masih menerima string kosong dari data legacy.
+  const adsWhere: Prisma.GuestbookEntryWhereInput = {
+    AND: [where, { bitrixAdsUrl: { not: null } }, { bitrixAdsUrl: { not: "" } }],
+  };
 
-  const [overall, ads, adsProspectBreakdown] = await Promise.all([
+  const [overall, totalAdsUrl, prospectBreakdown] = await Promise.all([
     computeFunnelReport(where),
-    computeFunnelReport(adsWhere),
-    computeProspectBreakdown(adsWhere),
+    db.guestbookEntry.count({ where: adsWhere }),
+    computeProspectBreakdown(where),
   ]);
 
-  return { overall, ads, adsProspectBreakdown };
+  return { overall, totalAdsUrl, prospectBreakdown };
 }
