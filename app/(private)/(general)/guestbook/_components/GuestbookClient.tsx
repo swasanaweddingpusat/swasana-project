@@ -429,6 +429,9 @@ function GuestbookClientInner() {
       if (filterVenueIds.length > 0) params.set("venueIds", filterVenueIds.join(","));
       if (filterHostId !== "all") params.set("hostId", filterHostId);
       if (filterCategories.length > 0) params.set("categories", filterCategories.join(","));
+      if (filterStatusIds.length > 0) params.set("statusIds", filterStatusIds.join(","));
+      if (filterSourceIds.length > 0) params.set("sourceOfInformationIds", filterSourceIds.join(","));
+      if (filterFestivalIds.length > 0) params.set("festivalIds", filterFestivalIds.join(","));
 
       const res = await fetch(`/api/guestbook/export?${params.toString()}`);
       if (!res.ok) {
@@ -443,12 +446,13 @@ function GuestbookClientInner() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `Guestbook_${format(new Date(), "yyyy-MM-dd")}.xlsx`;
+      a.download = `Guestbook_Lengkap_${format(new Date(), "yyyy-MM-dd")}.xlsx`;
       document.body.appendChild(a);
       a.click();
       a.remove();
       URL.revokeObjectURL(url);
-      toast.success("Export berhasil diunduh.");
+      const exportedRows = res.headers.get("X-Exported-Rows");
+      toast.success(exportedRows ? `${exportedRows} data berhasil diekspor.` : "Export berhasil diunduh.");
     } catch {
       toast.error("Gagal mengekspor data guestbook.");
     } finally {
