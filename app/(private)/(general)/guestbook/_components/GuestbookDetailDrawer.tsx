@@ -55,7 +55,7 @@ const VISIT_STATUS_LABELS: Record<string, { label: string; className: string }> 
 const INTERACTION_TYPE_LABELS: Record<string, string> = {
   client_visit: "Database",
   online_meeting: "Online Meeting",
-  jemput_bola: "Jemput Bola",
+  jemput_bola: "Survey",
 };
 
 const EVENT_CATEGORY_LABELS: Record<string, string> = {

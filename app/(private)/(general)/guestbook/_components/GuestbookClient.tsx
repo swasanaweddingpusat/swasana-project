@@ -782,7 +782,7 @@ function GuestbookClientInner() {
                 <Input
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Cari nama tamu, kode, atau PIC..."
+                  placeholder="Cari nama, kode, telepon, atau PIC..."
                   className="rounded-xl pl-8 h-8 text-xs"
                 />
               </div>
@@ -1117,7 +1117,7 @@ function GuestbookClientInner() {
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Cari nama tamu, kode, atau PIC..."
+            placeholder="Cari nama, kode, telepon, atau PIC..."
             className="rounded-xl pl-9 h-10 text-sm w-full"
           />
         </div>

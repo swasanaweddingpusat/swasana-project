@@ -32,7 +32,7 @@ const EVENT_CATEGORY_OPTIONS = [
 const INTERACTION_TYPE_OPTIONS = [
   { value: "client_visit", label: "Database" },
   { value: "online_meeting", label: "Online Meeting" },
-  { value: "jemput_bola", label: "Jemput Bola" },
+  { value: "jemput_bola", label: "Survey" },
 ] as const;
 
 const STATUS_OPTIONS = [
@@ -119,7 +119,7 @@ export function GuestbookFilterDrawer({
               <Input
                 value={search}
                 onChange={(e) => onSearchChange(e.target.value)}
-                placeholder="Nama tamu / kode / host"
+                placeholder="Nama / kode / telepon / host"
                 className="rounded-xl pl-9"
               />
             </div>
