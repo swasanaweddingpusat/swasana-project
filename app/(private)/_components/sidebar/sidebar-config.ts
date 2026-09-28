@@ -179,6 +179,7 @@ export const GENERAL_NAV: NavItem[] = [
     ] },
   { name: "Guestbook", href: "/guestbook", icon: Notebook, subtitle: "Catat kunjungan tamu, vendor, dan client ke kantor", permission: { module: "guestbook", action: "view" },
     submenu: [
+      { name: "Overview", href: "/guestbook/overview", icon: PieChart, title: "Overview Guestbook", subtitle: "Ringkasan kunjungan tamu, vendor, dan client ke kantor", permission: { module: "guestbook", action: "view" } },
       { name: "Daftar Tamu", href: "/guestbook", icon: Notebook, title: "Guest Book", subtitle: "Catat kunjungan tamu, vendor, dan client ke kantor", permission: { module: "guestbook", action: "view" } },
       { name: "Scan Kehadiran", href: "/guestbook/scan", icon: QrCode, title: "Scan Kehadiran Expo", subtitle: "Konfirmasi kehadiran tamu expo lewat scan QR code", permission: { module: "guestbook", action: "view" } },
     ] },
