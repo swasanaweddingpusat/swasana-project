@@ -6,10 +6,6 @@ export type ValidatedOnboardingFormLink = {
   name: string;
   status: string;
   expiresAt: Date | null;
-  divisi: string | null;
-  jabatan: string | null;
-  venueId: string | null;
-  joinDate: Date | null;
 };
 
 export async function validateOnboardingFormToken(
@@ -24,10 +20,6 @@ export async function validateOnboardingFormToken(
       status: true,
       expiresAt: true,
       accessCode: true,
-      divisi: true,
-      jabatan: true,
-      venueId: true,
-      joinDate: true,
       submission: { select: { id: true } },
     },
   });
@@ -45,9 +37,5 @@ export async function validateOnboardingFormToken(
     name: link.name,
     status: link.status,
     expiresAt: link.expiresAt,
-    divisi: link.divisi,
-    jabatan: link.jabatan,
-    venueId: link.venueId,
-    joinDate: link.joinDate,
   };
 }

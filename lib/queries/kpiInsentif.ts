@@ -1,6 +1,5 @@
 // FILE: lib/queries/kpiInsentif.ts
 import { cacheTag, cacheLife } from "next/cache";
-import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 
 // Prisma Decimal objects can't cross the Server→Client boundary.
@@ -18,15 +17,14 @@ function toPlain<T>(obj: T): T {
 const targetItemSelect = {
   id: true,
   name: true,
-  dealingQty: true,
-  dealingQtyReguler: true,
-  dealingQtyHadjatan: true,
-  omsetPrice: true,
-  omsetPriceReguler: true,
-  omsetPriceHadjatan: true,
-  homebaseQty: true,
-  homebaseQtyReguler: true,
-  homebaseQtyHadjatan: true,
+  indicatorType: true,
+  type: true,
+  qty: true,
+  price: true,
+  qtyReguler: true,
+  qtyHadjatan: true,
+  priceReguler: true,
+  priceHadjatan: true,
   regulerCategory: true,
   hadjatanCategory: true,
   createdAt: true,
@@ -60,11 +58,6 @@ const achievementSchemaRowSelect = {
   businessRole: true,
   isDraft: true,
   gatingMinIndicators: true,
-  stagedPaymentEnabled: true,
-  stage1PayoutPct: true,
-  stage2PayoutPct: true,
-  stage1MinClientPayment: true,
-  stage2PayoutMonthOffset: true,
   createdAt: true,
   updatedAt: true,
 };
@@ -80,15 +73,7 @@ const kpiMasterRowSelect = {
   achievementSchemaId: true,
   createdAt: true,
   updatedAt: true,
-  targetItem: {
-    select: {
-      id: true,
-      name: true,
-      dealingQty: true,
-      omsetPrice: true,
-      homebaseQty: true,
-    },
-  },
+  targetItem: { select: { id: true, name: true, indicatorType: true, type: true } },
   achievementSchema: { select: { id: true, name: true, businessRole: true } },
   createdBy: { select: { id: true, fullName: true } },
 };
@@ -110,9 +95,7 @@ const assignmentRowSelect = {
       id: true,
       name: true,
       businessRole: true,
-      targetItem: {
-        select: { name: true, dealingQty: true, omsetPrice: true, homebaseQty: true },
-      },
+      targetItem: { select: { name: true, indicatorType: true, type: true } },
     },
   },
   profile: { select: { id: true, fullName: true } },
@@ -130,8 +113,6 @@ const commissionPolicyRowSelect = {
   packageCategory: true,
   effectiveFrom: true,
   effectiveTo: true,
-  overAchievementNominalPerExtraDeal: true,
-  overAchievementPctOfExtraRevenue: true,
   approvedAt: true,
   createdAt: true,
   updatedAt: true,
@@ -164,23 +145,9 @@ const resultRowSelect = {
   finalizedAt: true,
   createdAt: true,
   updatedAt: true,
-  // ── Over-achievement bonus (additive, null = policy tidak dikonfigurasi) ────
-  overAchievementDealingBonus: true,
-  overAchievementOmsetBonus: true,
-  overAchievementTotal: true,
-  // ── Pembayaran bertahap (additive, null = fitur tidak aktif) ────────────────
-  stage1Total: true,
-  stage2Total: true,
-  stage1EligibleAmount: true,
-  stage2AdjustedAmount: true,
-  stage2ClawbackAmount: true,
-  stage1PaidAt: true,
-  stage2PaidAt: true,
   profile: { select: { id: true, fullName: true } },
   venue: { select: { id: true, name: true } },
   finalizedBy: { select: { id: true, fullName: true } },
-  stage1PaidBy: { select: { id: true, fullName: true } },
-  stage2PaidBy: { select: { id: true, fullName: true } },
 };
 
 const calculationDetailSelect = {
@@ -412,33 +379,21 @@ export async function getCalculationResults(filters: {
   period?: Date;
   status?: string;
   venueId?: string;
-  businessRole?: string;
 }) {
   "use cache";
   cacheTag("kpi-insentif");
   cacheLife("seconds");
 
-  const where: Prisma.KpiCalculationResultWhereInput = {
+  const where: {
+    profileId?: string;
+    period?: Date;
+    status?: "DRAFT" | "SIMULATED" | "PENDING_REVIEW" | "FINALIZED";
+    venueId?: string;
+  } = {
     ...(filters.profileId ? { profileId: filters.profileId } : {}),
     ...(filters.period ? { period: filters.period } : {}),
     ...(filters.status ? { status: filters.status as "DRAFT" | "SIMULATED" | "PENDING_REVIEW" | "FINALIZED" } : {}),
     ...(filters.venueId ? { venueId: filters.venueId } : {}),
-    // businessRole (sales/manager) isn't stored on the result itself — it's
-    // resolved per (profile, period) via the KpiAssignment → KpiMaster chain,
-    // the same path runAutoCalculation uses. Only meaningful with a period set.
-    ...(filters.businessRole && filters.period
-      ? {
-          profile: {
-            kpiAssignments: {
-              some: {
-                period: filters.period,
-                isDraft: false,
-                kpiMaster: { businessRole: filters.businessRole as "sales" | "manager" },
-              },
-            },
-          },
-        }
-      : {}),
   };
 
   const rows = await db.kpiCalculationResult.findMany({
@@ -484,17 +439,6 @@ export async function getCalculationResultById(id: string) {
       policySnapshot: {
         select: { id: true, snapshotData: true, createdAt: true },
       },
-      dealLinks: {
-        select: {
-          id: true,
-          bookingId: true,
-          dealAmount: true,
-          category: true,
-          stage1Share: true,
-          stage2Share: true,
-          stage1Eligible: true,
-        },
-      },
     },
   });
   return toPlain(row);
@@ -504,15 +448,7 @@ export type ResultDetail = Awaited<ReturnType<typeof getCalculationResultById>>;
 
 // ─── Profile picker for KPI assignment ───────────────────────────────────────
 
-/**
- * Profile tidak punya kolom "businessRole" khusus — katalog role (lihat
- * prisma/seeders/roles-permissions.ts) memakai kata "sales" / "manager" di
- * nama role (mis. "sales", "sales-mice", "manager", "manager-mice"). Filter
- * ini adalah NARROWING di UI (bukan hard security gate) supaya profile-picker
- * di Penugasan Target & Award Winner otomatis menyempit sesuai businessRole
- * KpiMaster/KpiAward yang sedang dipilih.
- */
-export async function getProfilesForKpiAssignment(businessRole?: "sales" | "manager") {
+export async function getProfilesForKpiAssignment() {
   "use cache";
   cacheTag("kpi-insentif");
   cacheLife("minutes");
@@ -520,9 +456,9 @@ export async function getProfilesForKpiAssignment(businessRole?: "sales" | "mana
   const profiles = await db.profile.findMany({
     where: {
       status: "active",
-      role: businessRole
-        ? { name: { contains: businessRole, mode: "insensitive" } }
-        : { isNot: null },
+      role: {
+        isNot: null,
+      },
     },
     orderBy: { fullName: "asc" },
     take: 100,
@@ -540,257 +476,4 @@ export async function getProfilesForKpiAssignment(businessRole?: "sales" | "mana
     fullName: p.fullName,
     roleName: p.role?.name ?? "",
   }));
-}
-
-// ─── KpiAward ─────────────────────────────────────────────────────────────────
-
-const awardRowSelect = {
-  id: true,
-  name: true,
-  description: true,
-  businessRole: true,
-  isRanked: true,
-  rankingMetric: true,
-  defaultPrizeDescription: true,
-  isActive: true,
-  createdAt: true,
-  updatedAt: true,
-};
-
-export async function getKpiAwards(filters?: { businessRole?: "sales" | "manager"; isActive?: boolean }) {
-  "use cache";
-  cacheTag("kpi-insentif");
-  cacheLife("minutes");
-
-  const rows = await db.kpiAward.findMany({
-    where: {
-      ...(filters?.businessRole ? { businessRole: filters.businessRole } : {}),
-      ...(filters?.isActive !== undefined ? { isActive: filters.isActive } : {}),
-    },
-    orderBy: { createdAt: "desc" },
-    take: 100,
-    select: awardRowSelect,
-  });
-  return toPlain(rows);
-}
-
-export type KpiAwardRow = Awaited<ReturnType<typeof getKpiAwards>>[number];
-
-// ─── KpiAwardWinner ───────────────────────────────────────────────────────────
-
-const awardWinnerRowSelect = {
-  id: true,
-  awardId: true,
-  period: true,
-  profileId: true,
-  groupId: true,
-  prizeDescription: true,
-  rankValueSnapshot: true,
-  notes: true,
-  awardedAt: true,
-  createdAt: true,
-  updatedAt: true,
-  award: { select: { id: true, name: true, businessRole: true } },
-  profile: { select: { id: true, fullName: true, avatarUrl: true } },
-  group: { select: { id: true, name: true } },
-  awardedBy: { select: { id: true, fullName: true } },
-};
-
-export async function getAwardWinners(filters: { awardId?: string; period?: Date; profileId?: string }) {
-  "use cache";
-  cacheTag("kpi-insentif");
-  cacheLife("minutes");
-
-  const rows = await db.kpiAwardWinner.findMany({
-    where: {
-      ...(filters.awardId ? { awardId: filters.awardId } : {}),
-      ...(filters.period ? { period: filters.period } : {}),
-      ...(filters.profileId ? { profileId: filters.profileId } : {}),
-    },
-    orderBy: [{ period: "desc" }, { createdAt: "desc" }],
-    take: 100,
-    select: awardWinnerRowSelect,
-  });
-  return toPlain(rows);
-}
-
-export type AwardWinnerRow = Awaited<ReturnType<typeof getAwardWinners>>[number];
-
-// ─── KpiAward candidates (ranking suggestion, pola mirip getTopSalesByRecentBooking) ─
-
-export interface KpiAwardCandidateRow {
-  resultId: string;
-  profileId: string;
-  fullName: string | null;
-  rankValue: number | null;
-  totalBonus: number | null;
-  netAmount: number | null;
-  dealingAchievementPct: number | null;
-  omsetAchievementPct: number | null;
-}
-
-export async function getKpiAwardCandidates(awardId: string, period: Date): Promise<KpiAwardCandidateRow[]> {
-  "use cache";
-  cacheTag("kpi-insentif", "bookings");
-  cacheLife("seconds");
-
-  const award = await db.kpiAward.findUnique({
-    where: { id: awardId },
-    select: { businessRole: true, isRanked: true, rankingMetric: true },
-  });
-  if (!award || !award.isRanked || !award.rankingMetric || award.rankingMetric === "manual") {
-    return [];
-  }
-
-  // Scope candidates to the award's businessRole via active (non-draft) assignments
-  // for the period — KpiCalculationResult itself does not store businessRole.
-  let candidateProfileIds: string[] | undefined;
-  if (award.businessRole) {
-    const assignments = await db.kpiAssignment.findMany({
-      where: { period, isDraft: false, kpiMaster: { businessRole: award.businessRole } },
-      select: { profileId: true },
-    });
-    candidateProfileIds = [...new Set(assignments.map((a) => a.profileId))];
-    if (candidateProfileIds.length === 0) return [];
-  }
-
-  // Exclude profiles that already have a winner record for this award/period so
-  // the ranking list can't be used to confirm the same person twice.
-  const existingWinners = await db.kpiAwardWinner.findMany({
-    where: { awardId, period, profileId: { not: null } },
-    select: { profileId: true },
-  });
-  const alreadyWonProfileIds = new Set(existingWinners.map((w) => w.profileId));
-  if (candidateProfileIds) {
-    candidateProfileIds = candidateProfileIds.filter((id) => !alreadyWonProfileIds.has(id));
-    if (candidateProfileIds.length === 0) return [];
-  }
-
-  const orderBy =
-    award.rankingMetric === "totalBonus"
-      ? { totalBonus: "desc" as const }
-      : award.rankingMetric === "netAmount"
-      ? { netAmount: "desc" as const }
-      : award.rankingMetric === "dealingAchievementPct"
-      ? { dealingAchievementPct: "desc" as const }
-      : { omsetAchievementPct: "desc" as const };
-
-  const results = await db.kpiCalculationResult.findMany({
-    where: {
-      period,
-      ...(candidateProfileIds
-        ? { profileId: { in: candidateProfileIds } }
-        : alreadyWonProfileIds.size > 0
-        ? { profileId: { notIn: [...alreadyWonProfileIds].filter((id): id is string => id != null) } }
-        : {}),
-    },
-    orderBy,
-    take: 10,
-    select: {
-      id: true,
-      profileId: true,
-      totalBonus: true,
-      netAmount: true,
-      dealingAchievementPct: true,
-      omsetAchievementPct: true,
-      profile: { select: { fullName: true } },
-    },
-  });
-
-  const rankField = award.rankingMetric;
-  return toPlain(
-    results.map((r) => ({
-      resultId: r.id,
-      profileId: r.profileId,
-      fullName: r.profile.fullName,
-      rankValue: r[rankField as "totalBonus" | "netAmount" | "dealingAchievementPct" | "omsetAchievementPct"],
-      totalBonus: r.totalBonus,
-      netAmount: r.netAmount,
-      dealingAchievementPct: r.dealingAchievementPct,
-      omsetAchievementPct: r.omsetAchievementPct,
-    }))
-  ) as unknown as KpiAwardCandidateRow[];
-}
-
-// ─── KPI Saya Ringkas (Overview widget aggregator) ─────────────────────────────
-
-export interface KpiSayaSummary {
-  resultId: string;
-  status: "DRAFT" | "SIMULATED" | "PENDING_REVIEW" | "FINALIZED";
-  grade: string | null;
-  netAmount: number | null;
-  dealingAchievementPct: number | null;
-  omsetAchievementPct: number | null;
-  homebaseAchievementPct: number | null;
-  stage1Total: number | null;
-  stage1PaidAt: string | null;
-  stage2Total: number | null;
-  stage2PaidAt: string | null;
-  awardsWon: { id: string; name: string; prizeDescription: string | null }[];
-}
-
-export async function getKpiSayaSummary(profileId: string, period: Date): Promise<KpiSayaSummary | null> {
-  "use cache";
-  cacheTag("kpi-insentif");
-  cacheLife("seconds");
-
-  const result = await db.kpiCalculationResult.findFirst({
-    where: { profileId, period },
-    orderBy: { createdAt: "desc" },
-    select: {
-      id: true,
-      status: true,
-      grade: true,
-      netAmount: true,
-      dealingAchievementPct: true,
-      omsetAchievementPct: true,
-      homebaseAchievementPct: true,
-      stage1Total: true,
-      stage1PaidAt: true,
-      stage2Total: true,
-      stage2PaidAt: true,
-    },
-  });
-  if (!result) return null;
-
-  const awardsWon = await db.kpiAwardWinner.findMany({
-    where: { profileId, period },
-    select: { id: true, prizeDescription: true, award: { select: { name: true } } },
-    take: 10,
-  });
-
-  return toPlain({
-    resultId: result.id,
-    status: result.status,
-    grade: result.grade,
-    netAmount: result.netAmount,
-    dealingAchievementPct: result.dealingAchievementPct,
-    omsetAchievementPct: result.omsetAchievementPct,
-    homebaseAchievementPct: result.homebaseAchievementPct,
-    stage1Total: result.stage1Total,
-    stage1PaidAt: result.stage1PaidAt,
-    stage2Total: result.stage2Total,
-    stage2PaidAt: result.stage2PaidAt,
-    awardsWon: awardsWon.map((w) => ({
-      id: w.id,
-      name: w.award.name,
-      prizeDescription: w.prizeDescription,
-    })),
-  }) as unknown as KpiSayaSummary;
-}
-
-/**
- * Gates the Overview "KPI Saya Ringkas" widget — true only when the profile has
- * a non-draft KPI assignment for the given period (Finance/Purchase/etc without
- * any KPI assignment should not see the widget at all).
- */
-export async function hasActiveKpiAssignment(profileId: string, period: Date): Promise<boolean> {
-  "use cache";
-  cacheTag("kpi-insentif");
-  cacheLife("minutes");
-
-  const count = await db.kpiAssignment.count({
-    where: { profileId, period, isDraft: false },
-  });
-  return count > 0;
 }

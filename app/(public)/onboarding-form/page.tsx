@@ -40,10 +40,6 @@ import {
 
 interface OnboardingInfo {
   name: string;
-  divisi: string | null;
-  jabatan: string | null;
-  venueId: string | null;
-  joinDate: string | null;
 }
 
 interface VenueOption {
@@ -165,13 +161,6 @@ function OnboardingFormContent() {
   const ktpInputRef = useRef<HTMLInputElement>(null);
   const kkInputRef = useRef<HTMLInputElement>(null);
 
-  const jobInfoLocked = Boolean(
-    onboardingInfo?.divisi &&
-      onboardingInfo?.jabatan &&
-      onboardingInfo?.venueId &&
-      onboardingInfo?.joinDate
-  );
-
   // ── Helpers ────────────────────────────────────────────────────────────────
 
   function updateForm(field: keyof OnboardingFormState, value: string) {
@@ -250,15 +239,6 @@ function OnboardingFormContent() {
         const venueList = (data as Record<string, unknown>).venues as VenueOption[];
         setOnboardingInfo(info);
         setVenues(venueList ?? []);
-        if (info.divisi && info.jabatan && info.venueId && info.joinDate) {
-          setForm((prev) => ({
-            ...prev,
-            divisi: info.divisi ?? "",
-            jabatan: info.jabatan ?? "",
-            venueId: info.venueId ?? "",
-            joinDate: info.joinDate ?? "",
-          }));
-        }
       }
       setStep("form");
     } catch {
@@ -537,16 +517,9 @@ function OnboardingFormContent() {
           {/* ── Informasi Pekerjaan ──────────────────────────────────────── */}
           <Card className="rounded-2xl shadow-sm">
             <CardContent className="p-6">
-              <h2 className="font-heading text-lg font-semibold text-foreground">
+              <h2 className="mb-5 font-heading text-lg font-semibold text-foreground">
                 Informasi Pekerjaan
               </h2>
-              {jobInfoLocked ? (
-                <p className="mt-1 mb-5 text-sm text-muted-foreground">
-                  Ditentukan oleh HR — tidak dapat diubah.
-                </p>
-              ) : (
-                <div className="mb-5" />
-              )}
 
               <div className="space-y-5">
                 <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
@@ -565,7 +538,7 @@ function OnboardingFormContent() {
                     <Select
                       value={form.divisi}
                       onValueChange={(v) => updateForm("divisi", v)}
-                      disabled={submitting || jobInfoLocked}
+                      disabled={submitting}
                     >
                       <SelectTrigger id="divisi" className="rounded-xl">
                         <SelectValue placeholder="Pilih divisi" />
@@ -595,7 +568,7 @@ function OnboardingFormContent() {
                     <Select
                       value={form.jabatan}
                       onValueChange={(v) => updateForm("jabatan", v)}
-                      disabled={submitting || jobInfoLocked}
+                      disabled={submitting}
                     >
                       <SelectTrigger id="jabatan" className="rounded-xl">
                         <SelectValue placeholder="Pilih jabatan" />
@@ -626,7 +599,7 @@ function OnboardingFormContent() {
                   <Select
                     value={form.venueId}
                     onValueChange={(v) => updateForm("venueId", v)}
-                    disabled={submitting || jobInfoLocked}
+                    disabled={submitting}
                   >
                     <SelectTrigger id="venueId" className="rounded-xl">
                       <SelectValue placeholder="Pilih venue" />
@@ -659,7 +632,7 @@ function OnboardingFormContent() {
                     value={form.joinDate}
                     onChange={(e) => updateForm("joinDate", e.target.value)}
                     className="rounded-xl"
-                    disabled={submitting || jobInfoLocked}
+                    disabled={submitting}
                   />
                 </FormField>
               </div>

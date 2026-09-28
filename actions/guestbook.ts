@@ -2,7 +2,7 @@
 
 import { revalidateTag } from "next/cache";
 import { Prisma } from "@prisma/client";
-import { randomInt, randomBytes } from "crypto";
+import { randomInt } from "crypto";
 import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/permissions";
 import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
@@ -82,7 +82,6 @@ export async function createGuestbookEntry(data: unknown): Promise<{ success: bo
               ...rest,
               proofFiles: (proofFiles ?? undefined) as Prisma.InputJsonValue | undefined,
               guestCode,
-              rsvpToken: randomBytes(32).toString("hex"),
               checkInAt: checkInAt ? parseLocalDateTime(checkInAt) : undefined,
               scheduledAt: scheduledAt ? parseLocalDateTime(scheduledAt) : undefined,
               commitVisitDate: commitVisitDate ? parseLocalDateOnly(commitVisitDate) : undefined,
@@ -122,6 +121,56 @@ export async function createGuestbookEntry(data: unknown): Promise<{ success: bo
   }
 }
 
+const ALLOWED_CHECKOUT_STATUS = new Set(["deal", "to_be_discuss", "lost"]);
+
+export async function checkOutGuestbookEntry(
+  id: string,
+  visitStatus: "deal" | "to_be_discuss" | "lost"
+): Promise<{ success: boolean; error?: string }> {
+  const { session, error } = await requirePermission({ module: "guestbook", action: "edit" });
+  if (error) return { success: false, error };
+  if (!mutationLimiter.check(`guestbook-checkout:${session!.user.id}`)) return { success: false, ...rateLimitError() };
+
+  if (!ALLOWED_CHECKOUT_STATUS.has(visitStatus)) return { success: false, error: "Status checkout tidak valid." };
+
+  if (!session!.user.profileId) return { success: false, error: "Sesi tidak valid, silakan login ulang." };
+  const scope = session!.user.dataScope ?? "own";
+  if (!(await canAccessGuestbookEntry(session!.user.profileId, scope, id))) {
+    return { success: false, error: "Anda tidak memiliki akses ke data ini." };
+  }
+
+  try {
+    const existing = await db.guestbookEntry.findUnique({
+      where: { id },
+      select: { id: true, checkOutAt: true, visitorName: true },
+    });
+
+    if (!existing) return { success: false, error: "Data tidak ditemukan." };
+    if (existing.checkOutAt) return { success: false, error: "Tamu sudah melakukan check-out." };
+
+    await db.$transaction([
+      db.guestbookEntry.update({
+        where: { id },
+        data: { checkOutAt: new Date(), visitStatus },
+      }),
+    ]);
+
+    await logAudit({
+      userId: session!.user.profileId,
+      action: "guestbook_entry.checkout",
+      entityType: "GuestbookEntry",
+      entityId: id,
+      description: `Checked out guestbook entry for "${existing.visitorName}" as ${visitStatus}`,
+    });
+
+    revalidateTag("guestbook-entries", "max");
+    return { success: true };
+  } catch (e) {
+    console.error("[checkOutGuestbookEntry]", e);
+    return { success: false, error: "Terjadi kesalahan." };
+  }
+}
+
 export interface ConfirmAttendanceResult {
   success: boolean;
   error?: string;
@@ -129,14 +178,9 @@ export interface ConfirmAttendanceResult {
   companyName?: string | null;
   alreadyConfirmed?: boolean;
   confirmedAt?: string;
-  confirmedGuestCount?: number | null;
-  actualGuestCount?: number | null;
 }
 
-export async function confirmGuestbookAttendance(
-  guestCode: string,
-  actualGuestCount?: number
-): Promise<ConfirmAttendanceResult> {
+export async function confirmGuestbookAttendance(guestCode: string): Promise<ConfirmAttendanceResult> {
   const { session, error } = await requirePermission({ module: "guestbook", action: "edit" });
   if (error) return { success: false, error };
   if (!mutationLimiter.check(`guestbook-confirm-attendance:${session!.user.id}`)) {
@@ -145,21 +189,11 @@ export async function confirmGuestbookAttendance(
 
   const code = guestCode.trim();
   if (!code) return { success: false, error: "Kode tidak valid." };
-  if (actualGuestCount !== undefined && (!Number.isInteger(actualGuestCount) || actualGuestCount < 1 || actualGuestCount > 1000)) {
-    return { success: false, error: "Jumlah tamu tidak valid." };
-  }
 
   try {
     const existing = await db.guestbookEntry.findUnique({
       where: { guestCode: code },
-      select: {
-        id: true,
-        visitorName: true,
-        companyName: true,
-        attendanceConfirmedAt: true,
-        confirmedGuestCount: true,
-        actualGuestCount: true,
-      },
+      select: { id: true, visitorName: true, companyName: true, attendanceConfirmedAt: true },
     });
     if (!existing) return { success: false, error: "Kode tidak ditemukan." };
 
@@ -170,22 +204,14 @@ export async function confirmGuestbookAttendance(
         visitorName: existing.visitorName,
         companyName: existing.companyName,
         confirmedAt: existing.attendanceConfirmedAt.toISOString(),
-        confirmedGuestCount: existing.confirmedGuestCount,
-        actualGuestCount: existing.actualGuestCount,
       };
     }
 
     const now = new Date();
-    const resolvedActualGuestCount = actualGuestCount ?? existing.confirmedGuestCount ?? null;
     await db.$transaction([
       db.guestbookEntry.update({
         where: { id: existing.id },
-        data: {
-          attendanceConfirmedAt: now,
-          attendanceConfirmedById: session!.user.profileId,
-          visitStatus: "done_visit",
-          actualGuestCount: resolvedActualGuestCount,
-        },
+        data: { attendanceConfirmedAt: now, attendanceConfirmedById: session!.user.profileId, visitStatus: "done_visit" },
       }),
     ]);
 
@@ -204,62 +230,9 @@ export async function confirmGuestbookAttendance(
       visitorName: existing.visitorName,
       companyName: existing.companyName,
       confirmedAt: now.toISOString(),
-      confirmedGuestCount: existing.confirmedGuestCount,
-      actualGuestCount: resolvedActualGuestCount,
     };
   } catch (e) {
     console.error("[confirmGuestbookAttendance]", e);
-    return { success: false, error: "Terjadi kesalahan." };
-  }
-}
-
-export interface LookupGuestbookEntryResult {
-  success: boolean;
-  error?: string;
-  entryFound?: boolean;
-  visitorName?: string;
-  companyName?: string | null;
-  alreadyConfirmed?: boolean;
-  confirmedAt?: string;
-  confirmedGuestCount?: number | null;
-  actualGuestCount?: number | null;
-}
-
-export async function lookupGuestbookEntryByCode(guestCode: string): Promise<LookupGuestbookEntryResult> {
-  const { session, error } = await requirePermission({ module: "guestbook", action: "edit" });
-  if (error) return { success: false, error };
-  if (!mutationLimiter.check(`guestbook-lookup:${session!.user.id}`)) {
-    return { success: false, ...rateLimitError() };
-  }
-
-  const code = guestCode.trim();
-  if (!code) return { success: false, error: "Kode tidak valid." };
-
-  try {
-    const existing = await db.guestbookEntry.findUnique({
-      where: { guestCode: code },
-      select: {
-        visitorName: true,
-        companyName: true,
-        attendanceConfirmedAt: true,
-        confirmedGuestCount: true,
-        actualGuestCount: true,
-      },
-    });
-    if (!existing) return { success: false, error: "Kode tidak ditemukan." };
-
-    return {
-      success: true,
-      entryFound: true,
-      visitorName: existing.visitorName,
-      companyName: existing.companyName,
-      alreadyConfirmed: !!existing.attendanceConfirmedAt,
-      confirmedAt: existing.attendanceConfirmedAt?.toISOString(),
-      confirmedGuestCount: existing.confirmedGuestCount,
-      actualGuestCount: existing.actualGuestCount,
-    };
-  } catch (e) {
-    console.error("[lookupGuestbookEntryByCode]", e);
     return { success: false, error: "Terjadi kesalahan." };
   }
 }
@@ -303,7 +276,7 @@ export async function updateGuestbookEntry(
       }
     }
 
-    const { checkInAt, scheduledAt, commitVisitDate, commitPayDate, phoneNumber, proofFiles, ...rest } = parsed.data;
+    const { checkInAt, checkOutAt, scheduledAt, commitVisitDate, commitPayDate, phoneNumber, proofFiles, ...rest } = parsed.data;
     // Recompute the normalized index whenever phoneNumber is part of the payload —
     // otherwise phoneNumberNorm goes stale after an edit (bitrix/duplicate matching).
     const phoneNumberNorm = phoneNumber !== undefined ? normalizePhoneId(phoneNumber) : undefined;
@@ -317,6 +290,7 @@ export async function updateGuestbookEntry(
           phoneNumber,
           phoneNumberNorm,
           checkInAt: checkInAt ? parseLocalDateTime(checkInAt) : undefined,
+          checkOutAt: checkOutAt ? parseLocalDateTime(checkOutAt) : undefined,
           scheduledAt: scheduledAt ? parseLocalDateTime(scheduledAt) : undefined,
           commitVisitDate: commitVisitDate ? parseLocalDateOnly(commitVisitDate) : undefined,
           commitPayDate: commitPayDate ? parseLocalDateOnly(commitPayDate) : undefined,
@@ -416,6 +390,57 @@ export async function deleteBulkGuestbookEntries(
     return { success: true, count: accessibleIds.length };
   } catch (e) {
     console.error("[deleteBulkGuestbookEntries]", e);
+    return { success: false, error: "Terjadi kesalahan." };
+  }
+}
+
+export async function bulkCheckOutGuestbookEntries(
+  ids: string[],
+  visitStatus: "deal" | "to_be_discuss" | "lost"
+): Promise<{ success: boolean; error?: string; count?: number }> {
+  const { session, error } = await requirePermission({ module: "guestbook", action: "edit" });
+  if (error) return { success: false, error };
+  if (!mutationLimiter.check(`guestbook-bulk-checkout:${session!.user.id}`)) return { success: false, ...rateLimitError() };
+
+  if (!ALLOWED_CHECKOUT_STATUS.has(visitStatus)) return { success: false, error: "Status checkout tidak valid." };
+
+  const uniqueIds = Array.from(new Set(ids)).filter((id) => typeof id === "string" && id.trim().length > 0);
+  if (uniqueIds.length === 0) return { success: false, error: "Tidak ada data yang dipilih." };
+  if (uniqueIds.length > 100) return { success: false, error: "Maksimal 100 data sekaligus." };
+
+  if (!session!.user.profileId) return { success: false, error: "Sesi tidak valid, silakan login ulang." };
+  const scope = session!.user.dataScope ?? "own";
+  const scopeWhere = await buildOwnerScopeWhere(session!.user.profileId, scope, "salesId");
+
+  try {
+    const accessible = await db.guestbookEntry.findMany({
+      where: { id: { in: uniqueIds }, ...scopeWhere },
+      select: { id: true, checkOutAt: true },
+    });
+    if (accessible.length === 0) return { success: false, error: "Tidak ada data yang bisa di-checkout." };
+
+    const processableIds = accessible.filter((e) => !e.checkOutAt).map((e) => e.id);
+    if (processableIds.length === 0) return { success: false, error: "Tidak ada data yang bisa di-checkout." };
+
+    await db.$transaction([
+      db.guestbookEntry.updateMany({
+        where: { id: { in: processableIds } },
+        data: { checkOutAt: new Date(), visitStatus },
+      }),
+    ]);
+
+    await logAudit({
+      userId: session!.user.profileId,
+      action: "guestbook_entry.bulk_checkout",
+      entityType: "GuestbookEntry",
+      entityId: processableIds.join(","),
+      description: `Bulk checked out ${processableIds.length} guestbook entries as ${visitStatus}`,
+    });
+
+    revalidateTag("guestbook-entries", "max");
+    return { success: true, count: processableIds.length };
+  } catch (e) {
+    console.error("[bulkCheckOutGuestbookEntries]", e);
     return { success: false, error: "Terjadi kesalahan." };
   }
 }

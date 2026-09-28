@@ -1,3 +1,5 @@
+export type KpiTargetType = "qty" | "price";
+export type KpiIndicatorType = "dealing" | "omset" | "homebase";
 export type KpiBusinessRole = "sales" | "manager";
 export type KpiResultStatus = "DRAFT" | "SIMULATED" | "PENDING_REVIEW" | "FINALIZED";
 
@@ -15,9 +17,8 @@ export interface KpiMasterItem {
   targetItem: {
     id: string;
     name: string;
-    dealingQty: number | null;
-    omsetPrice: string | null;
-    homebaseQty: number | null;
+    indicatorType: KpiIndicatorType;
+    type: KpiTargetType;
   };
   achievementSchema: {
     id: string;
@@ -48,9 +49,8 @@ export interface KpiAssignmentItem {
     businessRole: KpiBusinessRole;
     targetItem: {
       name: string;
-      dealingQty: number | null;
-      omsetPrice: string | null;
-      homebaseQty: number | null;
+      indicatorType: KpiIndicatorType;
+      type: KpiTargetType;
     };
   };
   profile: {
@@ -89,18 +89,6 @@ export interface KpiCalculationResultItem {
   finalizedAt: string | null;
   createdAt: string;
   updatedAt: string;
-  // ── Over-achievement bonus (additive, null = policy tidak dikonfigurasi) ────
-  overAchievementDealingBonus: string | null;
-  overAchievementOmsetBonus: string | null;
-  overAchievementTotal: string | null;
-  // ── Pembayaran bertahap (additive, null = fitur tidak aktif) ────────────────
-  stage1Total: string | null;
-  stage2Total: string | null;
-  stage1EligibleAmount: string | null;
-  stage2AdjustedAmount: string | null;
-  stage2ClawbackAmount: string | null;
-  stage1PaidAt: string | null;
-  stage2PaidAt: string | null;
   profile: {
     id: string;
     fullName: string | null;
@@ -113,14 +101,6 @@ export interface KpiCalculationResultItem {
     id: string;
     fullName: string | null;
   } | null;
-  stage1PaidBy: {
-    id: string;
-    fullName: string | null;
-  } | null;
-  stage2PaidBy: {
-    id: string;
-    fullName: string | null;
-  } | null;
 }
 
 export interface ProfileForAssignment {
@@ -129,56 +109,4 @@ export interface ProfileForAssignment {
   roleName: string | null;
   venueId: string | null;
   venueName: string | null;
-}
-
-// ─── KpiAward / KpiAwardWinner ──────────────────────────────────────────────────
-
-export type KpiAwardRankingMetric =
-  | "totalBonus"
-  | "netAmount"
-  | "dealingAchievementPct"
-  | "omsetAchievementPct"
-  | "manual";
-
-export interface KpiAwardWinnerItem {
-  id: string;
-  awardId: string;
-  period: string;
-  profileId: string | null;
-  groupId: string | null;
-  prizeDescription: string | null;
-  rankValueSnapshot: string | null;
-  notes: string | null;
-  awardedAt: string;
-  createdAt: string;
-  updatedAt: string;
-  award: {
-    id: string;
-    name: string;
-    businessRole: KpiBusinessRole | null;
-  };
-  profile: {
-    id: string;
-    fullName: string | null;
-    avatarUrl: string | null;
-  } | null;
-  group: {
-    id: string;
-    name: string;
-  } | null;
-  awardedBy: {
-    id: string;
-    fullName: string | null;
-  } | null;
-}
-
-export interface KpiAwardCandidateItem {
-  resultId: string;
-  profileId: string;
-  fullName: string | null;
-  rankValue: number | null;
-  totalBonus: number | null;
-  netAmount: number | null;
-  dealingAchievementPct: number | null;
-  omsetAchievementPct: number | null;
 }

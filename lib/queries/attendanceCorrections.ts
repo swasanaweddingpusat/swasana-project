@@ -12,19 +12,22 @@ const correctionSelect = {
   id: true,
   profileId: true,
   date: true,
-  type: true,
   requestedClockInAt: true,
   requestedClockOutAt: true,
-  workShiftId: true,
-  workLocationId: true,
-  workType: true,
   reason: true,
   evidence: true,
   status: true,
-  reviewedBy: true,
-  reviewedAt: true,
-  reviewNote: true,
+  managerApprovedBy: true,
+  managerApprovedAt: true,
+  managerNote: true,
+  hrApprovedBy: true,
+  hrApprovedAt: true,
+  hrNote: true,
+  rejectedBy: true,
+  rejectedAt: true,
+  rejectionReason: true,
   cancelledAt: true,
+  cancellationReason: true,
   createdAt: true,
   profile: {
     select: {
@@ -36,9 +39,9 @@ const correctionSelect = {
       department: { select: { name: true } },
     },
   },
-  workShift: { select: { id: true, name: true, startTime: true, endTime: true } },
-  workLocation: { select: { id: true, name: true } },
-  reviewer: { select: { id: true, fullName: true } },
+  managerApprover: { select: { id: true, fullName: true } },
+  hrApprover: { select: { id: true, fullName: true } },
+  rejector: { select: { id: true, fullName: true } },
 } satisfies Prisma.AttendanceCorrectionSelect;
 
 export async function getAttendanceCorrections(params?: {
@@ -48,7 +51,7 @@ export async function getAttendanceCorrections(params?: {
 }) {
   const where: Prisma.AttendanceCorrectionWhereInput = {};
   if (params?.status) {
-    where.status = params.status as Prisma.EnumAttendanceCorrectionStatusFilter<"AttendanceCorrection">;
+    where.status = params.status as Prisma.EnumLeaveRequestStatusFilter<"AttendanceCorrection">;
   }
   if (params?.profileId) where.profileId = params.profileId;
   if (params?.departmentId) {
@@ -74,6 +77,23 @@ export async function getMyAttendanceCorrections(profileId: string) {
       where: { profileId },
       select: correctionSelect,
       orderBy: { createdAt: "desc" },
+      take: 100,
+    });
+  } catch (e) {
+    if (isTableMissing(e)) return [];
+    throw e;
+  }
+}
+
+export async function getPendingCorrectionsForManager(managerId: string) {
+  try {
+    return await db.attendanceCorrection.findMany({
+      where: {
+        status: "pending",
+        profile: { managerId },
+      },
+      select: correctionSelect,
+      orderBy: { createdAt: "asc" },
       take: 100,
     });
   } catch (e) {

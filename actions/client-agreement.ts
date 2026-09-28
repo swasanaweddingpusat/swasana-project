@@ -208,56 +208,6 @@ export async function uploadManualAgreement(input: {
   }
 }
 
-const updatePdfTemplateSchema = z.object({
-  bookingId: z.string().min(1),
-  pdfTemplate: z.enum(["V1", "V2"]),
-});
-
-/**
- * Switch which PO template the public client-agreement link renders (V1 "PO
- * Digital" / V2 "Kediaman"). Purely cosmetic — does NOT touch token,
- * accessCode, status, or signedAt, so staff can flip this at any time
- * (before or after the client has signed) without affecting the signature
- * or reissuing the link.
- */
-export async function updateAgreementPdfTemplate(input: { bookingId: string; pdfTemplate: "V1" | "V2" }) {
-  const { session, error } = await requirePermission({ module: "booking", action: "client-agreement" });
-  if (error) return { success: false as const, error };
-  if (!mutationLimiter.check(`agreement-pdf-template:${session!.user.id}`)) {
-    return { success: false as const, ...rateLimitError() };
-  }
-
-  const parsed = updatePdfTemplateSchema.safeParse(input);
-  if (!parsed.success) return { success: false as const, error: parsed.error.issues[0].message };
-  const { bookingId, pdfTemplate } = parsed.data;
-
-  const scope = session!.user.dataScope ?? "own";
-  if (!(await canAccessBooking(session!.user.profileId, scope, bookingId))) {
-    return { success: false as const, error: "Anda tidak memiliki akses ke booking ini." };
-  }
-
-  try {
-    await db.clientAgreement.update({
-      where: { bookingId },
-      data: { pdfTemplate },
-    });
-
-    await logAudit({
-      userId: session!.user.id,
-      action: "client_agreement.pdf_template_changed",
-      entityType: "booking",
-      entityId: bookingId,
-      description: `Template PDF agreement diganti ke ${pdfTemplate}`,
-    });
-
-    revalidateTag("bookings", "max");
-    return { success: true as const, pdfTemplate };
-  } catch (e) {
-    console.error("[updateAgreementPdfTemplate]", e);
-    return { success: false as const, error: "Gagal mengubah template PDF." };
-  }
-}
-
 export async function markAgreementSent(bookingId: string) {
   const { session, error } = await requirePermission({ module: "booking", action: "client-agreement" });
   if (error) return { success: false as const, error };

@@ -26,10 +26,8 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/shared/page-header";
-import { PermissionGate } from "@/components/shared/permission-gate";
 import { useAchievementSchemas, useDeleteAchievementSchema } from "@/hooks/useKpiInsentif";
 import { AchievementSchemaDrawer } from "./AchievementSchemaDrawer";
-import { EmptyState } from "../../_components/EmptyState";
 import type { AchievementSchemaRow } from "@/lib/queries/kpiInsentif";
 
 interface AchievementClientProps {
@@ -94,12 +92,10 @@ export function AchievementClient({ initialSchemas }: AchievementClientProps) {
         title="Skema Achievement"
         description="Konfigurasi matriks bonus dan potongan per role"
         action={
-          <PermissionGate module="kpi-master" action="create">
-            <Button onClick={handleAdd} className="rounded-full gap-2">
-              <AddCircle weight="BoldDuotone" className="h-4 w-4" />
-              Tambah Skema
-            </Button>
-          </PermissionGate>
+          <Button onClick={handleAdd} className="rounded-full gap-2">
+            <AddCircle weight="BoldDuotone" className="h-4 w-4" />
+            Tambah Skema
+          </Button>
         }
       />
 
@@ -125,160 +121,98 @@ export function AchievementClient({ initialSchemas }: AchievementClientProps) {
             ))}
           </div>
         ) : filtered.length === 0 ? (
-          <EmptyState
-            icon={<BoxMinimalistic weight="BoldDuotone" className="h-8 w-8 text-muted-foreground" />}
-            title="Belum ada skema achievement"
-            description="Buat skema achievement untuk mendefinisikan matriks bonus dan potongan"
-            action={
-              <PermissionGate module="kpi-master" action="create">
-                <Button onClick={handleAdd} className="rounded-full gap-2" size="sm">
-                  <AddCircle weight="BoldDuotone" className="h-4 w-4" />
-                  Tambah Skema
-                </Button>
-              </PermissionGate>
-            }
-          />
+          <div className="flex flex-col items-center justify-center gap-4 py-20 text-center">
+            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-muted">
+              <BoxMinimalistic weight="BoldDuotone" className="h-8 w-8 text-muted-foreground" />
+            </div>
+            <div>
+              <p className="font-semibold text-foreground">Belum ada skema achievement</p>
+              <p className="text-sm text-muted-foreground mt-1">
+                Buat skema achievement untuk mendefinisikan matriks bonus dan potongan
+              </p>
+            </div>
+            <Button onClick={handleAdd} className="rounded-full gap-2" size="sm">
+              <AddCircle weight="BoldDuotone" className="h-4 w-4" />
+              Tambah Skema
+            </Button>
+          </div>
         ) : (
-          <>
-            {/* Table — desktop (sm+) */}
-            <div className="hidden sm:block w-full overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="pl-5">Nama</TableHead>
-                    <TableHead>Role</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Gating</TableHead>
-                    <TableHead className="pr-5 text-right">Aksi</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filtered.map((schema) => (
-                    <TableRow key={schema.id}>
-                      <TableCell className="pl-5">
-                        <div>
-                          <p className="font-medium">{schema.name}</p>
-                          {schema.description && (
-                            <p className="text-xs text-muted-foreground mt-0.5 max-w-48 truncate">
-                              {schema.description}
-                            </p>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="secondary" className="rounded-full text-xs">
-                          {BUSINESS_ROLE_LABELS[schema.businessRole] ?? schema.businessRole}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        {schema.isDraft ? (
-                          <Badge
-                            variant="outline"
-                            className="rounded-full text-xs bg-muted text-muted-foreground"
-                          >
-                            Draft
-                          </Badge>
-                        ) : (
-                          <Badge
-                            variant="outline"
-                            className="rounded-full text-xs bg-primary/10 text-primary border-primary/30"
-                          >
-                            Aktif
-                          </Badge>
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="pl-5">Nama</TableHead>
+                  <TableHead>Role</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Gating</TableHead>
+                  <TableHead className="pr-5 text-right">Aksi</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filtered.map((schema) => (
+                  <TableRow key={schema.id}>
+                    <TableCell className="pl-5">
+                      <div>
+                        <p className="font-medium">{schema.name}</p>
+                        {schema.description && (
+                          <p className="text-xs text-muted-foreground mt-0.5 max-w-48 truncate">
+                            {schema.description}
+                          </p>
                         )}
-                      </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
-                        {schema.businessRole === "manager" && schema.gatingMinIndicators != null
-                          ? `Min. ${schema.gatingMinIndicators} indikator`
-                          : "—"}
-                      </TableCell>
-                      <TableCell className="pr-5">
-                        <div className="flex items-center justify-end gap-2">
-                          <PermissionGate module="kpi-master" action="edit">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8 rounded-xl"
-                              onClick={() => handleEdit(schema)}
-                            >
-                              <Pen weight="BoldDuotone" className="h-4 w-4 text-muted-foreground" />
-                            </Button>
-                          </PermissionGate>
-                          <PermissionGate module="kpi-master" action="delete">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8 rounded-xl text-destructive hover:text-destructive"
-                              onClick={() => confirmDelete(schema)}
-                            >
-                              <TrashBinTrash weight="BoldDuotone" className="h-4 w-4" />
-                            </Button>
-                          </PermissionGate>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-
-            {/* Card list — mobile (<sm) */}
-            <div className="block sm:hidden p-4 space-y-3">
-              {filtered.map((schema) => (
-                <div key={schema.id} className="rounded-xl border bg-card p-3 space-y-2">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <p className="font-medium text-foreground truncate">{schema.name}</p>
-                      {schema.description && (
-                        <p className="text-xs text-muted-foreground mt-0.5 truncate">
-                          {schema.description}
-                        </p>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="secondary" className="rounded-full text-xs">
+                        {BUSINESS_ROLE_LABELS[schema.businessRole] ?? schema.businessRole}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      {schema.isDraft ? (
+                        <Badge
+                          variant="outline"
+                          className="rounded-full text-xs bg-muted text-muted-foreground"
+                        >
+                          Draft
+                        </Badge>
+                      ) : (
+                        <Badge
+                          variant="outline"
+                          className="rounded-full text-xs bg-primary/10 text-primary border-primary/30"
+                        >
+                          Aktif
+                        </Badge>
                       )}
-                    </div>
-                    {schema.isDraft ? (
-                      <Badge variant="outline" className="shrink-0 rounded-full text-xs bg-muted text-muted-foreground">
-                        Draft
-                      </Badge>
-                    ) : (
-                      <Badge variant="outline" className="shrink-0 rounded-full text-xs bg-primary/10 text-primary border-primary/30">
-                        Aktif
-                      </Badge>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-1.5 flex-wrap text-xs text-muted-foreground">
-                    <Badge variant="secondary" className="rounded-full text-xs">
-                      {BUSINESS_ROLE_LABELS[schema.businessRole] ?? schema.businessRole}
-                    </Badge>
-                    {schema.businessRole === "manager" && schema.gatingMinIndicators != null && (
-                      <span>Min. {schema.gatingMinIndicators} indikator</span>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-1 pt-1 border-t border-border">
-                    <PermissionGate module="kpi-master" action="edit">
-                      <Button
-                        variant="outline"
-                        className="h-9 flex-1 text-xs"
-                        onClick={() => handleEdit(schema)}
-                      >
-                        <Pen weight="BoldDuotone" className="h-3.5 w-3.5 mr-1 text-muted-foreground" />
-                        Edit
-                      </Button>
-                    </PermissionGate>
-                    <PermissionGate module="kpi-master" action="delete">
-                      <Button
-                        variant="outline"
-                        className="h-9 flex-1 text-xs text-destructive border-destructive/30 hover:bg-destructive/5"
-                        onClick={() => confirmDelete(schema)}
-                      >
-                        <TrashBinTrash weight="BoldDuotone" className="h-3.5 w-3.5 mr-1" />
-                        Hapus
-                      </Button>
-                    </PermissionGate>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </>
+                    </TableCell>
+                    <TableCell className="text-sm text-muted-foreground">
+                      {schema.businessRole === "manager" && schema.gatingMinIndicators != null
+                        ? `Min. ${schema.gatingMinIndicators} indikator`
+                        : "—"}
+                    </TableCell>
+                    <TableCell className="pr-5">
+                      <div className="flex items-center justify-end gap-2">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 rounded-xl"
+                          onClick={() => handleEdit(schema)}
+                        >
+                          <Pen weight="BoldDuotone" className="h-4 w-4 text-muted-foreground" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 rounded-xl text-destructive hover:text-destructive"
+                          onClick={() => confirmDelete(schema)}
+                        >
+                          <TrashBinTrash weight="BoldDuotone" className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
         )}
       </div>
 

@@ -13,6 +13,7 @@ const PROFILE_SELECT = {
   dataScope: true,
   roleId: true,
   managerId: true,
+  homebaseVenueId: true,
   isEmailVerified: true,
   mustChangePassword: true,
   lastLoginAt: true,
@@ -34,6 +35,7 @@ const PROFILE_SELECT = {
   emergencyContactPhone: true,
   // Relations
   role: { select: { id: true, name: true } },
+  homebaseVenue: { select: { id: true, name: true } },
   dataGroupMemberships: {
     select: {
       group: { select: { id: true, name: true } },

@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useCallback, useEffect } from "react";
+import { useRef, useState } from "react";
 import Image from "next/image";
 import { toast } from "sonner";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -111,30 +111,6 @@ function SalesSignatureBody({
 
   // Sales PIC: must fill location + signature. Non-sales: location only.
   const canSave = !!signingLocation.trim() && (isSalesPIC ? !!finalSig : true);
-
-  // Canvas only renders when the sales PIC is drawing a fresh signature (not
-  // using the default or previewing an existing one).
-  const showCanvas = isSalesPIC && !(useDefault && defaultSignature) && !(existingSig && !redraw);
-
-  // Canvas defaults to its CSS-rendered size at 1x — on hi-DPI screens that
-  // produces a blurry/pixelated signature once exported to dataURL. Scale the
-  // backing store by devicePixelRatio so the signature embedded in the PO PDF stays crisp.
-  const resizeCanvas = useCallback(() => {
-    const canvas = sigRef.current?.getCanvas();
-    if (!canvas) return;
-    const ratio = Math.max(window.devicePixelRatio || 1, 1);
-    canvas.width = canvas.offsetWidth * ratio;
-    canvas.height = canvas.offsetHeight * ratio;
-    canvas.getContext("2d")?.scale(ratio, ratio);
-    sigRef.current?.clear();
-  }, []);
-
-  useEffect(() => {
-    if (!showCanvas) return;
-    resizeCanvas();
-    window.addEventListener("resize", resizeCanvas);
-    return () => window.removeEventListener("resize", resizeCanvas);
-  }, [showCanvas, resizeCanvas]);
 
   async function handleSave() {
     if (!canSave) return;

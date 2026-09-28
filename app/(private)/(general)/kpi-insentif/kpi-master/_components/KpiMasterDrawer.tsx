@@ -71,39 +71,20 @@ function SectionLabel({ text, icon: Icon }: { text: string; icon: typeof Target 
   );
 }
 
-/**
- * Target item indicators can be configured either as a single "total" value
- * or as a Reguler/Hadjatan split (see KpiTargetItem schema) — a target item
- * with only the R/H split filled in has a null "total" field, so we must
- * fall back to showing the R/H breakdown instead of a bare "—".
- */
-function formatQtySummary(
-  qty: number | null,
-  qtyReguler: number | null,
-  qtyHadjatan: number | null
-): string {
-  if (qty != null) return `${qty} qty`;
-  if (qtyReguler != null || qtyHadjatan != null) {
-    return `R: ${qtyReguler ?? "-"} · H: ${qtyHadjatan ?? "-"}`;
-  }
-  return "—";
-}
-
-function formatOmsetSummary(
-  price: TargetItemRow["omsetPrice"],
-  priceReguler: TargetItemRow["omsetPriceReguler"],
-  priceHadjatan: TargetItemRow["omsetPriceHadjatan"]
-): string {
-  if (price != null) return formatRupiah(Number(price));
-  if (priceReguler != null || priceHadjatan != null) {
-    const r = priceReguler != null ? formatRupiah(Number(priceReguler)) : "-";
-    const h = priceHadjatan != null ? formatRupiah(Number(priceHadjatan)) : "-";
-    return `R: ${r} · H: ${h}`;
-  }
-  return "—";
-}
-
 function TargetItemSummaryCard({ item }: { item: TargetItemRow }) {
+  function fmt(v: unknown): string {
+    if (v == null) return "—";
+    if (item.type === "qty") return `${v} qty`;
+    return formatRupiah(Number(v));
+  }
+
+  const mainTarget = item.type === "qty"
+    ? (item.qty != null ? `${item.qty} qty` : "—")
+    : (item.price != null ? formatRupiah(Number(item.price)) : "—");
+
+  const hasReguler = item.type === "qty" ? item.qtyReguler != null : item.priceReguler != null;
+  const hasHadjatan = item.type === "qty" ? item.qtyHadjatan != null : item.priceHadjatan != null;
+
   return (
     <div className="rounded-xl border bg-muted/40 p-3 space-y-2">
       <div className="flex items-center gap-2">
@@ -113,23 +94,33 @@ function TargetItemSummaryCard({ item }: { item: TargetItemRow }) {
         </span>
       </div>
       <div className="space-y-1">
-        <div className="flex items-center justify-between text-sm gap-3">
-          <span className="text-muted-foreground shrink-0">Dealing</span>
-          <span className="font-semibold font-mono text-right">
-            {formatQtySummary(item.dealingQty, item.dealingQtyReguler, item.dealingQtyHadjatan)}
-          </span>
+        <div className="flex items-center justify-between text-sm">
+          <span className="text-muted-foreground">Target Total</span>
+          <span className="font-semibold font-mono">{mainTarget}</span>
         </div>
-        <div className="flex items-center justify-between text-sm gap-3">
-          <span className="text-muted-foreground shrink-0">Omset</span>
-          <span className="font-semibold font-mono text-right">
-            {formatOmsetSummary(item.omsetPrice, item.omsetPriceReguler, item.omsetPriceHadjatan)}
-          </span>
-        </div>
-        <div className="flex items-center justify-between text-sm gap-3">
-          <span className="text-muted-foreground shrink-0">Homebase</span>
-          <span className="font-semibold font-mono text-right">
-            {formatQtySummary(item.homebaseQty, item.homebaseQtyReguler, item.homebaseQtyHadjatan)}
-          </span>
+        {(hasReguler || hasHadjatan) && (
+          <>
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-muted-foreground">Reguler</span>
+              <span className="font-mono text-muted-foreground">
+                {item.type === "qty" ? fmt(item.qtyReguler) : fmt(item.priceReguler)}
+              </span>
+            </div>
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-muted-foreground">Hadjatan</span>
+              <span className="font-mono text-muted-foreground">
+                {item.type === "qty" ? fmt(item.qtyHadjatan) : fmt(item.priceHadjatan)}
+              </span>
+            </div>
+          </>
+        )}
+        <div className="flex items-center gap-1.5 pt-0.5">
+          <Badge variant="outline" className="rounded-full text-xs capitalize">
+            {item.indicatorType}
+          </Badge>
+          <Badge variant="outline" className="rounded-full text-xs">
+            {item.type === "qty" ? "Qty" : "Harga"}
+          </Badge>
         </div>
       </div>
     </div>
@@ -434,7 +425,7 @@ export function KpiMasterDrawer({ isOpen, onClose, editMaster }: KpiMasterDrawer
                       ) : (
                         targetItems.map((item) => (
                           <SelectItem key={item.id} value={item.id}>
-                            {item.name}
+                            {item.name} ({item.indicatorType})
                           </SelectItem>
                         ))
                       )}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useCallback, useState } from "react";
 import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -28,37 +28,25 @@ import {
   useMyAttendanceCorrections,
   useCancelAttendanceCorrection,
 } from "@/hooks/use-attendance-corrections";
-import { CloseCircle, History2, Gallery } from "@solar-icons/react";
+import { CloseCircle, History } from "@solar-icons/react";
 import type { AttendanceCorrectionItem } from "@/lib/queries/attendanceCorrections";
-import { AttendancePhotoEvidenceModal } from "@/components/shared/AttendancePhotoEvidenceModal";
 
 type BadgeVariant = "default" | "secondary" | "destructive" | "outline";
 
 function getStatusBadge(status: string): { label: string; variant: BadgeVariant } {
   switch (status) {
     case "pending":
-      return { label: "Menunggu HRD", variant: "secondary" };
+      return { label: "Menunggu Manager", variant: "secondary" };
+    case "manager_approved":
+      return { label: "Menunggu HR", variant: "secondary" };
     case "approved":
       return { label: "Disetujui", variant: "default" };
     case "rejected":
       return { label: "Ditolak", variant: "destructive" };
     case "cancelled":
-      return { label: "Dibatalkan", variant: "secondary" };
+      return { label: "Dibatalkan", variant: "outline" };
     default:
       return { label: status, variant: "secondary" };
-  }
-}
-
-function getTypeLabel(type: string): string {
-  switch (type) {
-    case "CLOCK_IN":
-      return "Clock In";
-    case "CLOCK_OUT":
-      return "Clock Out";
-    case "BOTH":
-      return "Clock In & Out";
-    default:
-      return type;
   }
 }
 
@@ -70,39 +58,21 @@ function formatDate(dateStr: string | Date): string {
   });
 }
 
-function formatTime(dateStr: string | Date | null): string {
-  if (!dateStr) return "-";
-  return new Date(dateStr).toLocaleTimeString("id-ID", {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+function formatTimeShort(date: string | Date | null): string {
+  if (!date) return "-";
+  return new Date(date).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" });
 }
 
-function getReviewInfo(correction: AttendanceCorrectionItem): string {
-  if (correction.status === "rejected" && correction.reviewer) {
-    return `Ditolak oleh ${correction.reviewer.fullName}${correction.reviewNote ? `: ${correction.reviewNote}` : ""}`;
-  }
-  if (correction.status === "approved" && correction.reviewer) {
-    return `Disetujui oleh ${correction.reviewer.fullName}`;
-  }
-  if (correction.status === "cancelled") {
-    return correction.cancelledAt ? `Dibatalkan ${formatDate(correction.cancelledAt)}` : "Dibatalkan";
-  }
-  if (correction.status === "pending") return "Menunggu persetujuan HRD";
-  return "-";
-}
-
-function canBeCancelled(correction: AttendanceCorrectionItem): boolean {
-  return correction.status === "pending";
+function canBeCancelled(request: AttendanceCorrectionItem): boolean {
+  return request.status === "pending" || request.status === "manager_approved";
 }
 
 export function AttendanceCorrectionHistory() {
-  const { data: corrections, isLoading } = useMyAttendanceCorrections();
+  const { data: requests, isLoading } = useMyAttendanceCorrections();
   const cancelMutation = useCancelAttendanceCorrection();
 
   const [cancelTarget, setCancelTarget] = useState<AttendanceCorrectionItem | null>(null);
   const [cancelReason, setCancelReason] = useState("");
-  const [evidenceTarget, setEvidenceTarget] = useState<AttendanceCorrectionItem | null>(null);
 
   const handleCancelConfirm = useCallback(() => {
     if (!cancelTarget) return;
@@ -126,7 +96,7 @@ export function AttendanceCorrectionHistory() {
           setCancelTarget(null);
           setCancelReason("");
         },
-      },
+      }
     );
   }, [cancelTarget, cancelReason, cancelMutation]);
 
@@ -141,9 +111,12 @@ export function AttendanceCorrectionHistory() {
     <>
       <Card className="rounded-2xl shadow-sm">
         <CardHeader className="pb-3">
-          <CardTitle className="font-heading text-lg">Riwayat Koreksi Absen</CardTitle>
+          <CardTitle className="flex items-center gap-2 font-heading text-lg">
+            <History weight="BoldDuotone" className="h-5 w-5" />
+            Riwayat Koreksi Absen
+          </CardTitle>
           <p className="text-sm text-muted-foreground">
-            Lihat status pengajuan koreksi absen yang pernah Anda kirim.
+            Pantau status pengajuan koreksi absen yang pernah Anda kirim.
           </p>
         </CardHeader>
         <CardContent>
@@ -155,67 +128,57 @@ export function AttendanceCorrectionHistory() {
             </div>
           )}
 
-          {!isLoading && (!corrections || corrections.length === 0) && (
+          {!isLoading && (!requests || requests.length === 0) && (
             <div className="flex flex-col items-center justify-center py-12 text-center">
-              <History2 weight="BoldDuotone" className="h-10 w-10 text-muted-foreground/40" />
+              <History weight="BoldDuotone" className="h-10 w-10 text-muted-foreground/40" />
               <p className="mt-3 text-sm text-muted-foreground">Belum ada pengajuan koreksi absen</p>
             </div>
           )}
 
-          {!isLoading && corrections && corrections.length > 0 && (
+          {!isLoading && requests && requests.length > 0 && (
             <div className="overflow-x-auto rounded-xl border">
               <Table>
                 <TableHeader>
                   <TableRow className="bg-muted/40 hover:bg-muted/40">
                     <TableHead>Tanggal</TableHead>
-                    <TableHead>Jenis</TableHead>
-                    <TableHead>Jam Diajukan</TableHead>
+                    <TableHead>Clock In Diminta</TableHead>
+                    <TableHead>Clock Out Diminta</TableHead>
+                    <TableHead>Alasan</TableHead>
                     <TableHead>Status</TableHead>
-                    <TableHead>Info</TableHead>
-                    <TableHead className="w-16">Bukti</TableHead>
                     <TableHead className="w-20">Aksi</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {corrections.map((c) => {
-                    const statusBadge = getStatusBadge(c.status);
+                  {requests.map((req) => {
+                    const statusBadge = getStatusBadge(req.status);
                     return (
-                      <TableRow key={c.id} className="group">
-                        <TableCell className="text-sm">{formatDate(c.date)}</TableCell>
-                        <TableCell className="font-medium">{getTypeLabel(c.type)}</TableCell>
-                        <TableCell className="text-sm">
-                          {c.requestedClockInAt && `Masuk ${formatTime(c.requestedClockInAt)}`}
-                          {c.requestedClockInAt && c.requestedClockOutAt && " / "}
-                          {c.requestedClockOutAt && `Keluar ${formatTime(c.requestedClockOutAt)}`}
+                      <TableRow key={req.id} className="group">
+                        <TableCell className="font-medium">{formatDate(req.date)}</TableCell>
+                        <TableCell>{formatTimeShort(req.requestedClockInAt)}</TableCell>
+                        <TableCell>{formatTimeShort(req.requestedClockOutAt)}</TableCell>
+                        <TableCell className="max-w-60 truncate text-sm text-muted-foreground" title={req.reason}>
+                          {req.reason}
                         </TableCell>
                         <TableCell>
-                          <Badge variant={statusBadge.variant} className="rounded-full text-xs">
-                            {statusBadge.label}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-xs text-muted-foreground max-w-48">
-                          {getReviewInfo(c)}
-                        </TableCell>
-                        <TableCell>
-                          {c.evidence && (
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-7 w-7 rounded-full"
-                              onClick={() => setEvidenceTarget(c)}
-                              title="Lihat bukti"
-                            >
-                              <Gallery weight="BoldDuotone" className="h-4 w-4" />
-                            </Button>
-                          )}
+                          <div className="flex flex-col gap-1">
+                            <Badge variant={statusBadge.variant} className="w-fit rounded-full text-xs">
+                              {statusBadge.label}
+                            </Badge>
+                            {req.status === "rejected" && req.rejectionReason && (
+                              <span className="max-w-48 text-xs text-muted-foreground">
+                                {req.rejectionReason}
+                              </span>
+                            )}
+                          </div>
                         </TableCell>
                         <TableCell>
-                          {canBeCancelled(c) && (
+                          {canBeCancelled(req) && (
                             <Button
                               variant="ghost"
                               size="icon"
                               className="h-7 w-7 rounded-full text-destructive hover:text-destructive"
-                              onClick={() => setCancelTarget(c)}
+                              onClick={() => setCancelTarget(req)}
+                              title="Batalkan"
                             >
                               <CloseCircle weight="BoldDuotone" className="h-4 w-4" />
                             </Button>
@@ -242,9 +205,9 @@ export function AttendanceCorrectionHistory() {
           </DialogHeader>
 
           <div className="grid gap-2 py-2">
-            <Label htmlFor="cancel-correction-reason">Alasan Pembatalan (opsional)</Label>
+            <Label htmlFor="correction-cancel-reason">Alasan Pembatalan (opsional)</Label>
             <Textarea
-              id="cancel-correction-reason"
+              id="correction-cancel-reason"
               value={cancelReason}
               onChange={(e) => setCancelReason(e.target.value)}
               placeholder="Tulis alasan pembatalan..."
@@ -273,12 +236,6 @@ export function AttendanceCorrectionHistory() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      <AttendancePhotoEvidenceModal
-        evidence={evidenceTarget?.evidence}
-        title={evidenceTarget ? `Bukti Koreksi Absen — ${formatDate(evidenceTarget.date)}` : undefined}
-        onClose={() => setEvidenceTarget(null)}
-      />
     </>
   );
 }

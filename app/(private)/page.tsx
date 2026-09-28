@@ -3,18 +3,14 @@ import { format } from "date-fns";
 import { id as localeId } from "date-fns/locale";
 import { ShieldCross } from "@solar-icons/react";
 import { cn } from "@/lib/utils";
-import { auth } from "@/lib/auth";
-import { hasPermission } from "@/lib/permissions";
 import { getDashboardData, resolveDealingRange, resolveEventRange, toIsoDay } from "@/lib/queries/dashboard";
 import { getDashboardCalendarEvents } from "@/lib/queries/calendar-events";
 import { getTopSalesByRecentBooking } from "@/lib/queries/salesPerformance";
 import { getActiveBanners } from "@/lib/queries/banners";
-import { getKpiSayaSummary, hasActiveKpiAssignment } from "@/lib/queries/kpiInsentif";
 import { SalesStatCards } from "./_components/sales-stat-cards";
 import { GroupAchievementSection } from "./_components/group-achievement-section";
 import { CalendarWidget } from "./_components/calendar-widget";
 import { SalesPerformanceSection } from "./_components/SalesPerformanceSection";
-import { KpiSayaRingkasSection } from "./_components/KpiSayaRingkasSection";
 import { CrmOverviewMetrics } from "./_components/crm-overview-metrics";
 import { DashboardFilterDrawer } from "./_components/dashboard-filter-drawer";
 import { DashboardBannerCarousel } from "./_components/dashboard-banner-carousel";
@@ -87,27 +83,6 @@ export default async function DashboardPage({
 
   const topSalesData = await getTopSalesByRecentBooking(undefined, currentMonthRange, undefined);
 
-  // KPI Saya Ringkas widget — gated on kpi-insentif:view permission AND an
-  // active (non-draft) KPI assignment for the current period. Roles without any
-  // KPI assignment (Finance, Purchase, etc.) simply don't render the widget,
-  // rather than showing an empty-state card.
-  const session = await auth();
-  let kpiSayaSummary = null;
-  if (session?.user?.profileId) {
-    const canViewKpi = await hasPermission(
-      session.user.roleId,
-      "kpi-insentif",
-      "view",
-      session.user.isSuperAdmin,
-    );
-    if (canViewKpi) {
-      const hasAssignment = await hasActiveKpiAssignment(session.user.profileId, currentMonthFrom);
-      if (hasAssignment) {
-        kpiSayaSummary = await getKpiSayaSummary(session.user.profileId, currentMonthFrom);
-      }
-    }
-  }
-
   // `fromDay` is always populated now (defaults to the current month above),
   // so this only falls back to "seluruh data" in the unreachable edge case
   // where `resolveDealingRange` still returns an empty day-string. Display
@@ -162,9 +137,6 @@ export default async function DashboardPage({
         eventFrom={eventFromDay}
         eventTo={eventToDay}
       />
-
-      {/* KPI Saya Ringkas — personal, only rendered when the viewer has an active KPI assignment */}
-      {kpiSayaSummary && <KpiSayaRingkasSection summary={kpiSayaSummary} />}
 
       {/* Achievement & Performance Sales — self-filtered (defaults to current month) */}
       <SalesPerformanceSection initialData={topSalesData} />

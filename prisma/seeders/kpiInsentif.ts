@@ -34,23 +34,51 @@ export async function seedKpiInsentif() {
   // Oktober 2026 Sales targets from source images.
   // Source dates stored as notes only — their per-row meaning is unconfirmed.
 
-  const kpiTargetItem = await findOrCreate(
-    () => prisma.kpiTargetItem.findFirst({ where: { name: "KPI Sales September 2026" } }),
+  const dealing = await findOrCreate(
+    () => prisma.kpiTargetItem.findFirst({ where: { name: "Jumlah Dealing" } }),
     () =>
       prisma.kpiTargetItem.create({
         data: {
-          name: "KPI Sales September 2026",
-          dealingQty: 9,
-          dealingQtyReguler: 2,
-          dealingQtyHadjatan: 7,
-          omsetPrice: "1340000000",
-          omsetPriceReguler: "500000000",
-          omsetPriceHadjatan: "840000000",
-          homebaseQty: 4,
+          name: "Jumlah Dealing",
+          indicatorType: "dealing",
+          type: "qty",
+          qty: 9,
+          qtyReguler: 2,
+          qtyHadjatan: 7,
         },
       })
   );
-  console.log("  TargetItem:", kpiTargetItem.name, "(id:", kpiTargetItem.id + ")");
+  console.log("  TargetItem:", dealing.name, "(id:", dealing.id + ")");
+
+  const omset = await findOrCreate(
+    () => prisma.kpiTargetItem.findFirst({ where: { name: "Jumlah Omset" } }),
+    () =>
+      prisma.kpiTargetItem.create({
+        data: {
+          name: "Jumlah Omset",
+          indicatorType: "omset",
+          type: "price",
+          price: "1340000000",
+          priceReguler: "500000000",
+          priceHadjatan: "840000000",
+        },
+      })
+  );
+  console.log("  TargetItem:", omset.name, "(id:", omset.id + ")");
+
+  const homebase = await findOrCreate(
+    () => prisma.kpiTargetItem.findFirst({ where: { name: "Mandatory Home Base Venue" } }),
+    () =>
+      prisma.kpiTargetItem.create({
+        data: {
+          name: "Mandatory Home Base Venue",
+          indicatorType: "homebase",
+          type: "qty",
+          qty: 4,
+        },
+      })
+  );
+  console.log("  TargetItem:", homebase.name, "(id:", homebase.id + ")");
 
   // ─── Achievement Schemas ───────────────────────────────────────────────────
   // Tier bounds seeded with isDraftBounds=true — normalization [0,70), [70,80), ...
@@ -110,7 +138,7 @@ export async function seedKpiInsentif() {
     await seedManagerTiers(created.id);
   }
 
-  // ─── KPI Master ─────────────────────────────────────────────────────────────
+  // ─── KPI Masters ────────────────────────────────────────────────────────────
   const salesMasterName = "KPI Sales September 2026";
   const master = await findOrCreate(
     () => prisma.kpiMaster.findFirst({ where: { name: salesMasterName } }),
@@ -118,16 +146,51 @@ export async function seedKpiInsentif() {
       prisma.kpiMaster.create({
         data: {
           name: salesMasterName,
-          description: "Target KPI Sales (dealing, omset, homebase) untuk bulan September 2026",
+          description: "Target KPI Sales untuk bulan September 2026",
           month: new Date("2026-09-01"),
           businessRole: "sales",
           isDraft: false,
-          targetItemId: kpiTargetItem.id,
+          targetItemId: dealing.id,
           achievementSchemaId: salesSchemaId,
         },
       })
   );
   console.log("  KpiMaster:", master.name, "(id:", master.id + ")");
+
+  // ─── KPI Omset & Homebase Masters ─────────────────────────────────────────
+  const omsetMaster = await findOrCreate(
+    () => prisma.kpiMaster.findFirst({ where: { name: "KPI Omset September 2026" } }),
+    () =>
+      prisma.kpiMaster.create({
+        data: {
+          name: "KPI Omset September 2026",
+          description: "Target omset Sales untuk bulan September 2026",
+          month: new Date("2026-09-01"),
+          businessRole: "sales",
+          isDraft: false,
+          targetItemId: omset.id,
+          achievementSchemaId: salesSchemaId,
+        },
+      })
+  );
+  console.log("  KpiMaster:", omsetMaster.name, "(id:", omsetMaster.id + ")");
+
+  const homebaseMaster = await findOrCreate(
+    () => prisma.kpiMaster.findFirst({ where: { name: "KPI Homebase September 2026" } }),
+    () =>
+      prisma.kpiMaster.create({
+        data: {
+          name: "KPI Homebase September 2026",
+          description: "Target mandatory homebase venue Sales untuk bulan September 2026",
+          month: new Date("2026-09-01"),
+          businessRole: "sales",
+          isDraft: false,
+          targetItemId: homebase.id,
+          achievementSchemaId: salesSchemaId,
+        },
+      })
+  );
+  console.log("  KpiMaster:", homebaseMaster.name, "(id:", homebaseMaster.id + ")");
 
   // ─── Commission Policies ──────────────────────────────────────────────────
   const commissionPolicy = await findOrCreate(
@@ -202,26 +265,28 @@ export async function seedKpiInsentif() {
   const period = new Date("2026-09-01");
 
   for (const profile of demoProfiles) {
-    await findOrCreate(
-      () =>
-        prisma.kpiAssignment.findFirst({
-          where: { kpiMasterId: master.id, profileId: profile.id, period },
-        }),
-      () =>
-        prisma.kpiAssignment.create({
-          data: {
-            kpiMasterId: master.id,
-            profileId: profile.id,
-            period,
-            venueId: venues[0]?.id ?? null,
-            targetQty: null,
-            targetPrice: null,
-            isDraft: false,
-            notes: `Auto-seeded assignment untuk ${profile.fullName}`,
-          },
-        })
-    );
-    console.log("  Assignment created for:", profile.fullName);
+    for (const m of [master, omsetMaster, homebaseMaster]) {
+      await findOrCreate(
+        () =>
+          prisma.kpiAssignment.findFirst({
+            where: { kpiMasterId: m.id, profileId: profile.id, period },
+          }),
+        () =>
+          prisma.kpiAssignment.create({
+            data: {
+              kpiMasterId: m.id,
+              profileId: profile.id,
+              period,
+              venueId: venues[0]?.id ?? null,
+              targetQty: m.targetItemId === dealing.id ? 9 : m.targetItemId === homebase.id ? 4 : null,
+              targetPrice: m.targetItemId === omset.id ? "1340000000" : null,
+              isDraft: false,
+              notes: `Auto-seeded assignment untuk ${profile.fullName}`,
+            },
+          })
+      );
+    }
+    console.log("  Assignments created for:", profile.fullName);
   }
 
   // ─── Calculation Results (sample simulated data) ──────────────────────────

@@ -8,15 +8,12 @@ import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
 import { Decimal } from "@prisma/client/runtime/client";
 import {
   computeKpiResult,
-  computeOverAchievementBonus,
-  computeStagedPayment,
   type KpiRealization,
   type KpiTarget,
   type AchievementSchemaInput,
   type KpiTierAction,
   type KpiBusinessRole,
   type CommissionPolicyInput,
-  type StagedPaymentDealInput,
 } from "@/lib/services/kpiCalculation";
 import { logAudit } from "@/lib/audit";
 import {
@@ -32,11 +29,6 @@ import {
   createCommissionPolicySchema,
   updateCommissionPolicySchema,
   finalizeResultSchema,
-  runStagePayoutSchema,
-  createAwardSchema,
-  updateAwardSchema,
-  createAwardWinnerSchema,
-  updateAwardWinnerSchema,
 } from "@/lib/validations/kpiInsentif";
 
 // ─── KpiCalculationOutput type (defined here; imported by calculation engine) ─
@@ -928,9 +920,10 @@ export async function finalizeResult(resultId: string) {
               select: {
                 id: true,
                 name: true,
-                dealingQty: true,
-                omsetPrice: true,
-                homebaseQty: true,
+                indicatorType: true,
+                type: true,
+                qty: true,
+                price: true,
               },
             },
           },
@@ -1070,7 +1063,6 @@ export async function runAutoCalculation(data: {
           eventDate: { gte: period, lt: periodEnd },
         },
         select: {
-          id: true,
           category: true,
           venueId: true,
           discountAmount: true,
@@ -1093,10 +1085,6 @@ export async function runAutoCalculation(data: {
                   businessRole: true,
                   isDraft: true,
                   gatingMinIndicators: true,
-                  stagedPaymentEnabled: true,
-                  stage1PayoutPct: true,
-                  stage2PayoutPct: true,
-                  stage1MinClientPayment: true,
                   tiers: {
                     select: {
                       id: true,
@@ -1118,7 +1106,7 @@ export async function runAutoCalculation(data: {
                 },
               },
               targetItem: {
-                select: { dealingQty: true, omsetPrice: true, homebaseQty: true },
+                select: { indicatorType: true, qty: true, price: true },
               },
             },
           },
@@ -1139,8 +1127,6 @@ export async function runAutoCalculation(data: {
           packageCategory: true,
           effectiveFrom: true,
           effectiveTo: true,
-          overAchievementNominalPerExtraDeal: true,
-          overAchievementPctOfExtraRevenue: true,
         },
       }),
     ]);
@@ -1165,7 +1151,6 @@ export async function runAutoCalculation(data: {
     let omsetReguler = new Decimal(0);
     let omsetHadjatan = new Decimal(0);
     let realHomebase = 0;
-    const bookingDeals: { bookingId: string; dealAmount: Decimal; category: "WEDDINGS" | "MICE" }[] = [];
 
     for (const b of bookings) {
       const rawPrice =
@@ -1176,7 +1161,6 @@ export async function runAutoCalculation(data: {
 
       dealingTotal++;
       omsetTotal = omsetTotal.add(price);
-      bookingDeals.push({ bookingId: b.id, dealAmount: price, category: b.category as "WEDDINGS" | "MICE" });
 
       if (b.category === "WEDDINGS") {
         dealingReguler++;
@@ -1188,24 +1172,6 @@ export async function runAutoCalculation(data: {
 
       if (homebaseVenueIds.length > 0 && homebaseVenueIds.includes(b.venueId ?? "")) {
         realHomebase++;
-      }
-    }
-
-    // Cumulative acked cash-in per booking (Ledger) — used to gate Tahap 1 eligibility.
-    const ackedCashInByBooking = new Map<string, Decimal>();
-    if (bookingDeals.length > 0) {
-      const ledgerSums = await db.ledger.groupBy({
-        by: ["bookingId"],
-        where: {
-          bookingId: { in: bookingDeals.map((d) => d.bookingId) },
-          direction: "in",
-          ackStatus: "acknowledged",
-          voidedAt: null,
-        },
-        _sum: { amount: true },
-      });
-      for (const l of ledgerSums) {
-        ackedCashInByBooking.set(l.bookingId, new Decimal(l._sum.amount ?? 0));
       }
     }
 
@@ -1225,24 +1191,12 @@ export async function runAutoCalculation(data: {
     let homebaseTarget: number | null = null;
     let businessRole: KpiBusinessRole = "sales";
     let schemaInput: AchievementSchemaInput | null = null;
-    let stagedPaymentConfig: {
-      stagedPaymentEnabled: boolean;
-      stage1PayoutPct: Decimal | null;
-      stage2PayoutPct: Decimal | null;
-      stage1MinClientPayment: number | null;
-    } | null = null;
 
     for (const asgn of assignments) {
       const ti = asgn.kpiMaster.targetItem;
       if (asgn.kpiMaster.achievementSchema && !schemaInput) {
         const s = asgn.kpiMaster.achievementSchema;
         businessRole = s.businessRole as KpiBusinessRole;
-        stagedPaymentConfig = {
-          stagedPaymentEnabled: s.stagedPaymentEnabled,
-          stage1PayoutPct: s.stage1PayoutPct ? new Decimal(s.stage1PayoutPct.toString()) : null,
-          stage2PayoutPct: s.stage2PayoutPct ? new Decimal(s.stage2PayoutPct.toString()) : null,
-          stage1MinClientPayment: s.stage1MinClientPayment,
-        };
         schemaInput = {
           id: s.id,
           businessRole: s.businessRole as KpiBusinessRole,
@@ -1266,12 +1220,14 @@ export async function runAutoCalculation(data: {
         };
       }
 
-      // NOTE: assignment-level targetQty/targetPrice override is no longer consulted —
-      // KpiTargetItem is now unified (one row = dealing+omset+homebase), so those two
-      // generic scalar overrides can't unambiguously map to a specific indicator anymore.
-      if (ti.dealingQty != null) dealingTarget = ti.dealingQty;
-      if (ti.omsetPrice != null) omsetTargetDecimal = new Decimal(ti.omsetPrice.toString());
-      if (ti.homebaseQty != null) homebaseTarget = ti.homebaseQty;
+      if (ti.indicatorType === "dealing") {
+        dealingTarget = asgn.targetQty ?? ti.qty ?? null;
+      } else if (ti.indicatorType === "omset") {
+        const raw = asgn.targetPrice ?? ti.price;
+        omsetTargetDecimal = raw != null ? new Decimal(raw.toString()) : null;
+      } else if (ti.indicatorType === "homebase") {
+        homebaseTarget = asgn.targetQty ?? ti.qty ?? null;
+      }
     }
 
     if (!schemaInput) {
@@ -1313,49 +1269,6 @@ export async function runAutoCalculation(data: {
         })
       ),
       period,
-    });
-
-    // ── Over-achievement bonus (additive) ────────────────────────────────────
-    const overAchievementPolicyRow =
-      commissionPolicies.find(
-        (p) =>
-          p.overAchievementNominalPerExtraDeal !== null ||
-          p.overAchievementPctOfExtraRevenue !== null
-      ) ?? null;
-    const overAchievement = computeOverAchievementBonus({
-      realDealingTotal: dealingTotal,
-      targetDealingTotal: dealingTarget,
-      realOmsetTotal: omsetTotal,
-      targetOmsetTotal: omsetTargetDecimal,
-      policy: overAchievementPolicyRow
-        ? {
-            overAchievementNominalPerExtraDeal: overAchievementPolicyRow.overAchievementNominalPerExtraDeal
-              ? new Decimal(overAchievementPolicyRow.overAchievementNominalPerExtraDeal.toString())
-              : null,
-            overAchievementPctOfExtraRevenue: overAchievementPolicyRow.overAchievementPctOfExtraRevenue
-              ? new Decimal(overAchievementPolicyRow.overAchievementPctOfExtraRevenue.toString())
-              : null,
-          }
-        : null,
-    });
-
-    // ── Staged payment (Tahap 1/2, additive) ─────────────────────────────────
-    const stagedPaymentDeals: StagedPaymentDealInput[] = bookingDeals.map((d) => ({
-      bookingId: d.bookingId,
-      dealAmount: d.dealAmount,
-      category: d.category,
-      cumulativeAckedCashIn: ackedCashInByBooking.get(d.bookingId) ?? new Decimal(0),
-      isCanceled: false, // bookings fetched here already exclude Canceled/Lost
-    }));
-    const stagedPayment = computeStagedPayment({
-      totalBonus: calcResult.totalBonus,
-      schema: stagedPaymentConfig ?? {
-        stagedPaymentEnabled: false,
-        stage1PayoutPct: null,
-        stage2PayoutPct: null,
-        stage1MinClientPayment: null,
-      },
-      deals: stagedPaymentDeals,
     });
 
     // ── Map to DB output format ──────────────────────────────────────────────
@@ -1487,32 +1400,7 @@ export async function runAutoCalculation(data: {
       grade: output.grade ?? null,
       missingDataReasons: output.missingDataReasons,
       calculatedAt: new Date(),
-      // ── Over-achievement bonus (additive, null = policy not configured) ──────
-      overAchievementDealingBonus: str(overAchievement.dealingBonus),
-      overAchievementOmsetBonus: str(overAchievement.omsetBonus),
-      overAchievementTotal: str(overAchievement.total),
-      // ── Staged payment (additive, null = feature not enabled on schema) ─────
-      stage1Total: str(stagedPayment.stage1Total),
-      stage2Total: str(stagedPayment.stage2Total),
-      stage1EligibleAmount: str(stagedPayment.stage1EligibleAmount),
-      stage2AdjustedAmount: str(stagedPayment.stage2AdjustedAmount),
-      stage2ClawbackAmount: str(stagedPayment.stage2ClawbackAmount),
     };
-
-    const dealLinkCreateOps = (resultId: string) =>
-      stagedPayment.dealLinks.map((d) =>
-        db.kpiCalculationDealLink.create({
-          data: {
-            resultId,
-            bookingId: d.bookingId,
-            dealAmount: d.dealAmount,
-            category: d.category,
-            stage1Share: d.stage1Share,
-            stage2Share: d.stage2Share,
-            stage1Eligible: d.stage1Eligible,
-          },
-        })
-      );
 
     let resultId: string;
 
@@ -1538,8 +1426,6 @@ export async function runAutoCalculation(data: {
             },
           })
         ),
-        db.kpiCalculationDealLink.deleteMany({ where: { resultId: existing.id } }),
-        ...dealLinkCreateOps(existing.id),
       ]);
       resultId = existing.id;
     } else {
@@ -1569,9 +1455,6 @@ export async function runAutoCalculation(data: {
           )
         );
       }
-      if (stagedPayment.dealLinks.length > 0) {
-        await db.$transaction(dealLinkCreateOps(resultId));
-      }
     }
 
     await logAudit({
@@ -1588,408 +1471,5 @@ export async function runAutoCalculation(data: {
   } catch (e) {
     console.error("[runAutoCalculation]", e);
     return { success: false, error: "Terjadi kesalahan saat kalkulasi otomatis." };
-  }
-}
-
-// ─── Staged payment: recompute clawback + mark-paid ────────────────────────────
-
-/**
- * Re-evaluate Tahap 2 clawback against LIVE booking status. Tahap 1 eligibility
- * (stage1Eligible per deal, frozen at calculation time) is never touched here —
- * only stage2AdjustedAmount/stage2ClawbackAmount are refreshed, since a booking
- * can be canceled any time after the initial KPI calculation (e.g. the month
- * after finalize, right before Tahap 2 payout).
- */
-export async function recomputeStagedPayment(resultId: string) {
-  const { session, error } = await requirePermission({
-    module: "kpi-simulation",
-    action: "run",
-  });
-  if (error) return { success: false, error };
-  if (!mutationLimiter.check(`kpi-stage-recompute:${session!.user.id}`))
-    return { success: false, ...rateLimitError() };
-
-  try {
-    const result = await db.kpiCalculationResult.findUnique({
-      where: { id: resultId },
-      select: {
-        id: true,
-        stage2Total: true,
-        dealLinks: { select: { bookingId: true, stage2Share: true } },
-      },
-    });
-    if (!result) return { success: false, error: "Hasil kalkulasi tidak ditemukan." };
-    if (result.stage2Total === null) {
-      return { success: false, error: "Pembayaran bertahap tidak dikonfigurasi untuk hasil ini." };
-    }
-
-    const bookingIds = result.dealLinks.map((d) => d.bookingId);
-    const bookings = await db.booking.findMany({
-      where: { id: { in: bookingIds } },
-      select: { id: true, bookingStatus: true },
-    });
-    const canceledSet = new Set(
-      bookings.filter((b) => b.bookingStatus === "Canceled").map((b) => b.id)
-    );
-
-    let stage2AdjustedAmount = new Decimal(0);
-    for (const d of result.dealLinks) {
-      if (d.stage2Share === null) continue;
-      if (!canceledSet.has(d.bookingId)) {
-        stage2AdjustedAmount = stage2AdjustedAmount.add(new Decimal(d.stage2Share.toString()));
-      }
-    }
-    const stage2Total = new Decimal(result.stage2Total.toString());
-    const stage2ClawbackAmount = stage2Total.sub(stage2AdjustedAmount);
-
-    await db.$transaction([
-      db.kpiCalculationResult.update({
-        where: { id: resultId },
-        data: {
-          stage2AdjustedAmount: stage2AdjustedAmount.toFixed(2),
-          stage2ClawbackAmount: stage2ClawbackAmount.toFixed(2),
-        },
-      }),
-    ]);
-
-    await logAudit({
-      userId: session!.user.id,
-      action: "kpi_calculation_result.recompute_staged_payment",
-      result: "success",
-      entityType: "kpi_calculation_result",
-      entityId: resultId,
-      description: `Re-evaluasi clawback Tahap 2 untuk hasil KPI ${resultId}`,
-    });
-
-    revalidateTag("kpi-insentif", "max");
-    return { success: true, data: { id: resultId } };
-  } catch (e) {
-    console.error("[recomputeStagedPayment]", e);
-    return { success: false, error: "Terjadi kesalahan saat re-evaluasi pembayaran bertahap." };
-  }
-}
-
-/**
- * Mark Tahap 1 or Tahap 2 as paid. Idempotent (blocks re-marking an already-paid
- * stage) and enforces payout order (Tahap 2 requires Tahap 1 paid first).
- */
-export async function markStagePaid(resultId: string, stage: 1 | 2) {
-  const { session, error } = await requirePermission({ module: "kpi-insentif", action: "pay" });
-  if (error) return { success: false, error };
-  if (!mutationLimiter.check(`kpi-stage-pay:${session!.user.id}`))
-    return { success: false, ...rateLimitError() };
-
-  const parsed = runStagePayoutSchema.safeParse({ resultId, stage });
-  if (!parsed.success) return { success: false, error: parsed.error.issues[0].message };
-
-  try {
-    const result = await db.kpiCalculationResult.findUnique({
-      where: { id: resultId },
-      select: { id: true, stage1Total: true, stage2Total: true, stage1PaidAt: true, stage2PaidAt: true },
-    });
-    if (!result) return { success: false, error: "Hasil kalkulasi tidak ditemukan." };
-
-    const paidById = session!.user.profileId ?? null;
-    const now = new Date();
-
-    if (parsed.data.stage === 1) {
-      if (result.stage1Total === null) {
-        return { success: false, error: "Tahap 1 tidak dikonfigurasi untuk hasil ini." };
-      }
-      if (result.stage1PaidAt !== null) {
-        return { success: false, error: "Tahap 1 sudah dibayar." };
-      }
-      await db.$transaction([
-        db.kpiCalculationResult.update({
-          where: { id: resultId },
-          data: { stage1PaidAt: now, stage1PaidById: paidById },
-        }),
-      ]);
-    } else {
-      if (result.stage2Total === null) {
-        return { success: false, error: "Tahap 2 tidak dikonfigurasi untuk hasil ini." };
-      }
-      if (result.stage1PaidAt === null) {
-        return { success: false, error: "Tahap 1 harus dibayar terlebih dahulu." };
-      }
-      if (result.stage2PaidAt !== null) {
-        return { success: false, error: "Tahap 2 sudah dibayar." };
-      }
-      await db.$transaction([
-        db.kpiCalculationResult.update({
-          where: { id: resultId },
-          data: { stage2PaidAt: now, stage2PaidById: paidById },
-        }),
-      ]);
-    }
-
-    await logAudit({
-      userId: session!.user.id,
-      action: "kpi_calculation_result.mark_stage_paid",
-      result: "success",
-      entityType: "kpi_calculation_result",
-      entityId: resultId,
-      description: `Menandai Tahap ${parsed.data.stage} lunas untuk hasil KPI ${resultId}`,
-    });
-
-    revalidateTag("kpi-insentif", "max");
-    return { success: true, data: { id: resultId, stage: parsed.data.stage } };
-  } catch (e) {
-    console.error("[markStagePaid]", e);
-    return { success: false, error: "Terjadi kesalahan saat menandai pembayaran." };
-  }
-}
-
-// ─── KpiAward ─────────────────────────────────────────────────────────────────
-
-export async function createAward(data: unknown) {
-  const { session, error } = await requirePermission({ module: "kpi-master", action: "create" });
-  if (error) return { success: false, error };
-  if (!mutationLimiter.check(`kpi-award-create:${session!.user.id}`))
-    return { success: false, ...rateLimitError() };
-
-  const parsed = createAwardSchema.safeParse(data);
-  if (!parsed.success) return { success: false, error: parsed.error.issues[0].message };
-
-  try {
-    const [award] = await db.$transaction([db.kpiAward.create({ data: parsed.data })]);
-
-    await logAudit({
-      userId: session!.user.id,
-      action: "kpi_award.create",
-      result: "success",
-      entityType: "kpi_award",
-      entityId: award.id,
-      description: `Membuat KPI Award "${award.name}"`,
-    });
-
-    revalidateTag("kpi-insentif", "max");
-    return { success: true, data: { id: award.id } };
-  } catch (e) {
-    console.error("[createAward]", e);
-    return { success: false, error: "Terjadi kesalahan saat menyimpan award." };
-  }
-}
-
-export async function updateAward(id: string, data: unknown) {
-  const { session, error } = await requirePermission({ module: "kpi-master", action: "edit" });
-  if (error) return { success: false, error };
-  if (!mutationLimiter.check(`kpi-award-update:${session!.user.id}`))
-    return { success: false, ...rateLimitError() };
-
-  const parsed = updateAwardSchema.safeParse(data);
-  if (!parsed.success) return { success: false, error: parsed.error.issues[0].message };
-
-  try {
-    const [award] = await db.$transaction([
-      db.kpiAward.update({ where: { id }, data: parsed.data }),
-    ]);
-
-    await logAudit({
-      userId: session!.user.id,
-      action: "kpi_award.update",
-      result: "success",
-      entityType: "kpi_award",
-      entityId: id,
-      description: `Memperbarui KPI Award "${award.name}"`,
-    });
-
-    revalidateTag("kpi-insentif", "max");
-    return { success: true, data: { id: award.id } };
-  } catch (e) {
-    console.error("[updateAward]", e);
-    return { success: false, error: "Terjadi kesalahan saat memperbarui award." };
-  }
-}
-
-export async function deleteAward(id: string) {
-  const { session, error } = await requirePermission({ module: "kpi-master", action: "delete" });
-  if (error) return { success: false, error };
-  if (!mutationLimiter.check(`kpi-award-delete:${session!.user.id}`))
-    return { success: false, ...rateLimitError() };
-
-  const refCount = await db.kpiAwardWinner.count({ where: { awardId: id } });
-  if (refCount > 0) {
-    return {
-      success: false,
-      error: `Award ini masih memiliki ${refCount} pemenang dan tidak dapat dihapus.`,
-    };
-  }
-
-  try {
-    const [award] = await db.$transaction([db.kpiAward.delete({ where: { id } })]);
-
-    await logAudit({
-      userId: session!.user.id,
-      action: "kpi_award.delete",
-      result: "success",
-      entityType: "kpi_award",
-      entityId: id,
-      description: `Menghapus KPI Award "${award.name}"`,
-    });
-
-    revalidateTag("kpi-insentif", "max");
-    return { success: true, data: { id } };
-  } catch (e) {
-    console.error("[deleteAward]", e);
-    return { success: false, error: "Terjadi kesalahan saat menghapus award." };
-  }
-}
-
-// ─── KpiAwardWinner ───────────────────────────────────────────────────────────
-
-export async function createAwardWinner(data: unknown) {
-  const { session, error } = await requirePermission({ module: "kpi-award", action: "create" });
-  if (error) return { success: false, error };
-  if (!mutationLimiter.check(`kpi-award-winner-create:${session!.user.id}`))
-    return { success: false, ...rateLimitError() };
-
-  const parsed = createAwardWinnerSchema.safeParse(data);
-  if (!parsed.success) return { success: false, error: parsed.error.issues[0].message };
-
-  const awardedById = session!.user.profileId ?? null;
-  const period = firstOfMonth(parsed.data.period);
-
-  // No unique constraint on (awardId, period, profileId/groupId) at the schema
-  // level (XOR winner target, same pattern as the rest of this project) — guard
-  // duplicate winners at the application layer instead.
-  const duplicate = await db.kpiAwardWinner.findFirst({
-    where: {
-      awardId: parsed.data.awardId,
-      period,
-      ...(parsed.data.profileId ? { profileId: parsed.data.profileId } : {}),
-      ...(parsed.data.groupId ? { groupId: parsed.data.groupId } : {}),
-    },
-    select: { id: true },
-  });
-  if (duplicate) {
-    return {
-      success: false,
-      error: "Profile/tim ini sudah ditetapkan sebagai pemenang award ini untuk periode yang sama.",
-    };
-  }
-
-  try {
-    const [winner] = await db.$transaction([
-      db.kpiAwardWinner.create({
-        data: {
-          awardId: parsed.data.awardId,
-          period,
-          profileId: parsed.data.profileId ?? null,
-          groupId: parsed.data.groupId ?? null,
-          prizeDescription: parsed.data.prizeDescription ?? null,
-          rankValueSnapshot: parsed.data.rankValueSnapshot ?? null,
-          notes: parsed.data.notes ?? null,
-          awardedById,
-        },
-      }),
-    ]);
-
-    await logAudit({
-      userId: session!.user.id,
-      action: "kpi_award_winner.create",
-      result: "success",
-      entityType: "kpi_award_winner",
-      entityId: winner.id,
-      description: `Menetapkan pemenang award ${winner.awardId} periode ${winner.period.toISOString().substring(0, 7)}`,
-    });
-
-    revalidateTag("kpi-insentif", "max");
-    return { success: true, data: { id: winner.id } };
-  } catch (e) {
-    console.error("[createAwardWinner]", e);
-    return { success: false, error: "Terjadi kesalahan saat menyimpan pemenang award." };
-  }
-}
-
-export async function updateAwardWinner(id: string, data: unknown) {
-  const { session, error } = await requirePermission({ module: "kpi-award", action: "edit" });
-  if (error) return { success: false, error };
-  if (!mutationLimiter.check(`kpi-award-winner-update:${session!.user.id}`))
-    return { success: false, ...rateLimitError() };
-
-  const parsed = updateAwardWinnerSchema.safeParse(data);
-  if (!parsed.success) return { success: false, error: parsed.error.issues[0].message };
-
-  const updateData = {
-    ...parsed.data,
-    ...(parsed.data.period ? { period: firstOfMonth(parsed.data.period) } : {}),
-  };
-
-  if (parsed.data.awardId || parsed.data.period || parsed.data.profileId || parsed.data.groupId) {
-    const existing = await db.kpiAwardWinner.findUnique({
-      where: { id },
-      select: { awardId: true, period: true, profileId: true, groupId: true },
-    });
-    if (!existing) return { success: false, error: "Data pemenang tidak ditemukan." };
-
-    const nextAwardId = parsed.data.awardId ?? existing.awardId;
-    const nextPeriod = updateData.period ?? existing.period;
-    const nextProfileId = parsed.data.profileId !== undefined ? parsed.data.profileId : existing.profileId;
-    const nextGroupId = parsed.data.groupId !== undefined ? parsed.data.groupId : existing.groupId;
-
-    const duplicate = await db.kpiAwardWinner.findFirst({
-      where: {
-        id: { not: id },
-        awardId: nextAwardId,
-        period: nextPeriod,
-        ...(nextProfileId ? { profileId: nextProfileId } : {}),
-        ...(nextGroupId ? { groupId: nextGroupId } : {}),
-      },
-      select: { id: true },
-    });
-    if (duplicate) {
-      return {
-        success: false,
-        error: "Profile/tim ini sudah ditetapkan sebagai pemenang award ini untuk periode yang sama.",
-      };
-    }
-  }
-
-  try {
-    const [winner] = await db.$transaction([
-      db.kpiAwardWinner.update({ where: { id }, data: updateData }),
-    ]);
-
-    await logAudit({
-      userId: session!.user.id,
-      action: "kpi_award_winner.update",
-      result: "success",
-      entityType: "kpi_award_winner",
-      entityId: id,
-      description: `Memperbarui pemenang award ${winner.awardId}`,
-    });
-
-    revalidateTag("kpi-insentif", "max");
-    return { success: true, data: { id: winner.id } };
-  } catch (e) {
-    console.error("[updateAwardWinner]", e);
-    return { success: false, error: "Terjadi kesalahan saat memperbarui pemenang award." };
-  }
-}
-
-export async function deleteAwardWinner(id: string) {
-  const { session, error } = await requirePermission({ module: "kpi-award", action: "delete" });
-  if (error) return { success: false, error };
-  if (!mutationLimiter.check(`kpi-award-winner-delete:${session!.user.id}`))
-    return { success: false, ...rateLimitError() };
-
-  try {
-    const [winner] = await db.$transaction([db.kpiAwardWinner.delete({ where: { id } })]);
-
-    await logAudit({
-      userId: session!.user.id,
-      action: "kpi_award_winner.delete",
-      result: "success",
-      entityType: "kpi_award_winner",
-      entityId: id,
-      description: `Menghapus pemenang award ${winner.awardId}`,
-    });
-
-    revalidateTag("kpi-insentif", "max");
-    return { success: true, data: { id } };
-  } catch (e) {
-    console.error("[deleteAwardWinner]", e);
-    return { success: false, error: "Terjadi kesalahan saat menghapus pemenang award." };
   }
 }

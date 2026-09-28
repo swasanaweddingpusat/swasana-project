@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { renderToStream } from "@react-pdf/renderer";
 import { db } from "@/lib/db";
 import { POPdfDocument } from "@/components/pdf/POPdfDocument";
-import { POPdfDocumentV2 } from "@/components/pdf/POPdfDocumentV2";
 import { getBaseUrl } from "@/lib/url";
 import { apiLimiter, rateLimitResponse } from "@/lib/rate-limit";
 import { humanizeRoleName } from "@/lib/approval-flows";
@@ -57,7 +56,6 @@ export async function POST(req: Request) {
         termOfPayments: { orderBy: { sortOrder: "asc" } },
         paymentMethod: true,
         sales: true,
-        manager: { select: { fullName: true } },
       },
     });
 
@@ -89,7 +87,6 @@ export async function POST(req: Request) {
       termOfPayments: booking.termOfPayments,
       paymentMethod: booking.paymentMethod,
       sales: booking.sales ? { fullName: booking.sales.fullName ?? "" } : null,
-      manager: booking.manager ? { fullName: booking.manager.fullName } : null,
       signatures: null, // will be populated from ApprovalRecordStep below
       createdAt: booking.createdAt,
       discountName: booking.discountName,
@@ -139,12 +136,7 @@ export async function POST(req: Request) {
       };
     }
 
-    const pdfElement =
-      agreement.pdfTemplate === "V2" ? (
-        <POPdfDocumentV2 booking={pdfBooking} logoBase64={logoBase64} />
-      ) : (
-        <POPdfDocument booking={pdfBooking} logoBase64={logoBase64} termAndConditionHtml={termAndConditionHtml} ematerai={emateraiData} />
-      );
+    const pdfElement = <POPdfDocument booking={pdfBooking} logoBase64={logoBase64} termAndConditionHtml={termAndConditionHtml} ematerai={emateraiData} />;
 
     const stream = await renderToStream(pdfElement);
 

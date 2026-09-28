@@ -19,16 +19,6 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import {
   RefreshCircle,
   Filter,
   DangerCircle,
@@ -38,13 +28,7 @@ import {
 } from "@solar-icons/react";
 import { PageHeader } from "@/components/shared/page-header";
 import { toast } from "sonner";
-import {
-  useCalculationResults,
-  useRunAutoCalculation,
-  useFinalizeResult,
-  useMarkStagePaid,
-  useRecomputeStagedPayment,
-} from "@/hooks/useKpiInsentif";
+import { useCalculationResults, useRunAutoCalculation, useFinalizeResult } from "@/hooks/useKpiInsentif";
 import { useVenues } from "@/hooks/use-venues";
 import {
   formatRupiah,
@@ -53,9 +37,11 @@ import {
 } from "@/lib/utils/kpiFormatters";
 import type { KpiCalculationResultItem } from "@/types/kpiInsentif";
 import { ResultDetailDrawer } from "./ResultDetailDrawer";
-import { SummaryCard } from "@/components/shared/SummaryCard";
-import { MONTHS, PeriodSelector } from "../../_components/PeriodSelector";
-import { EmptyState } from "../../_components/EmptyState";
+
+const MONTHS = [
+  "Januari", "Februari", "Maret", "April", "Mei", "Juni",
+  "Juli", "Agustus", "September", "Oktober", "November", "Desember",
+];
 
 const STATUS_OPTIONS: Array<{ value: string; label: string }> = [
   { value: "all", label: "Semua Status" },
@@ -64,6 +50,16 @@ const STATUS_OPTIONS: Array<{ value: string; label: string }> = [
   { value: "PENDING_REVIEW", label: "Menunggu Review" },
   { value: "FINALIZED", label: "Final" },
 ];
+
+function SummaryCard({ label, value, sub }: { label: string; value: string | number; sub?: string }) {
+  return (
+    <div className="rounded-2xl border bg-card p-5 shadow-sm space-y-1">
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <p className="text-2xl font-semibold font-heading text-foreground">{value}</p>
+      {sub && <p className="text-xs text-muted-foreground">{sub}</p>}
+    </div>
+  );
+}
 
 export function SimulasiClient() {
   const now = new Date();
@@ -74,7 +70,6 @@ export function SimulasiClient() {
   const [filterStatus, setFilterStatus] = useState("all");
   const [search, setSearch] = useState("");
   const [selectedResult, setSelectedResult] = useState<KpiCalculationResultItem | null>(null);
-  const [confirmFinalizeResult, setConfirmFinalizeResult] = useState<KpiCalculationResultItem | null>(null);
 
   const { data: venues = [] } = useVenues();
   const period = `${filterYear}-${String(filterMonth).padStart(2, "0")}`;
@@ -88,13 +83,13 @@ export function SimulasiClient() {
 
   const autoCalcMutation = useRunAutoCalculation();
   const finalizeMutation = useFinalizeResult();
-  const markStagePaidMutation = useMarkStagePaid();
-  const recomputeStagedMutation = useRecomputeStagedPayment();
 
   const filtered = results.filter((r) => {
     if (!search.trim()) return true;
     return (r.profile.fullName ?? "").toLowerCase().includes(search.toLowerCase());
   });
+  const yearOptions = Array.from({ length: 5 }, (_, i) => now.getFullYear() - 2 + i);
+
   // Summary stats
   const totalKaryawan = filtered.length;
   const totalBonus = filtered.reduce((sum, r) => {
@@ -128,24 +123,6 @@ export function SimulasiClient() {
     }
   }
 
-  async function handleMarkStagePaid(resultId: string, stage: 1 | 2) {
-    const res = await markStagePaidMutation.mutateAsync({ resultId, stage });
-    if (res.success) {
-      toast.success(`Tahap ${stage} berhasil ditandai lunas`);
-    } else {
-      toast.error(res.error ?? "Gagal menandai pembayaran");
-    }
-  }
-
-  async function handleRecomputeStagedPayment(resultId: string) {
-    const res = await recomputeStagedMutation.mutateAsync(resultId);
-    if (res.success) {
-      toast.success("Pembayaran bertahap berhasil dievaluasi ulang");
-    } else {
-      toast.error(res.error ?? "Gagal re-evaluasi pembayaran bertahap");
-    }
-  }
-
   return (
     <TooltipProvider>
       <div className="space-y-6">
@@ -159,12 +136,27 @@ export function SimulasiClient() {
           <div className="flex flex-wrap items-center gap-3">
             <Filter weight="BoldDuotone" className="h-4 w-4 text-muted-foreground shrink-0" />
 
-            <PeriodSelector
-              month={filterMonth}
-              year={filterYear}
-              onMonthChange={setFilterMonth}
-              onYearChange={setFilterYear}
-            />
+            <Select value={String(filterMonth)} onValueChange={(v) => setFilterMonth(Number(v))}>
+              <SelectTrigger className="rounded-full w-36">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {MONTHS.map((m, i) => (
+                  <SelectItem key={i + 1} value={String(i + 1)}>{m}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <Select value={String(filterYear)} onValueChange={(v) => setFilterYear(Number(v))}>
+              <SelectTrigger className="rounded-full w-28">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {yearOptions.map((y) => (
+                  <SelectItem key={y} value={String(y)}>{y}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
 
             <Select value={filterRole} onValueChange={setFilterRole}>
               <SelectTrigger className="rounded-full w-36">
@@ -271,12 +263,14 @@ export function SimulasiClient() {
                   </tr>
                 ) : filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={11} className="p-0">
-                      <EmptyState
-                        icon={<InfoCircle weight="BoldDuotone" className="h-8 w-8 text-muted-foreground" />}
-                        title="Belum ada data kalkulasi"
-                        description={`Tidak ada hasil untuk periode ${MONTHS[filterMonth - 1]} ${filterYear}`}
-                      />
+                    <td colSpan={11} className="py-16 text-center">
+                      <div className="flex flex-col items-center gap-2">
+                        <InfoCircle weight="BoldDuotone" className="h-10 w-10 text-muted-foreground/40" />
+                        <p className="text-sm text-muted-foreground">
+                          Belum ada data kalkulasi untuk periode{" "}
+                          {MONTHS[filterMonth - 1]} {filterYear}
+                        </p>
+                      </div>
                     </td>
                   </tr>
                 ) : (
@@ -345,7 +339,7 @@ export function SimulasiClient() {
                                     variant="ghost"
                                     size="icon"
                                     className="h-7 w-7 rounded-full hover:bg-primary/10 hover:text-primary"
-                                    onClick={() => setConfirmFinalizeResult(r)}
+                                    onClick={() => handleFinalize(r.id)}
                                     disabled={finalizeMutation.isPending}
                                   >
                                     <CheckCircle weight="BoldDuotone" className="h-3.5 w-3.5" />
@@ -376,44 +370,8 @@ export function SimulasiClient() {
           onRunCalc={handleRunCalc}
           isFinalizing={finalizeMutation.isPending}
           isRunningCalc={autoCalcMutation.isPending}
-          onMarkStagePaid={handleMarkStagePaid}
-          isMarkingStagePaid={markStagePaidMutation.isPending}
-          onRecomputeStagedPayment={handleRecomputeStagedPayment}
-          isRecomputing={recomputeStagedMutation.isPending}
         />
       )}
-
-      {/* Confirm: finalize from the inline table quick-action (one-way — locks the result) */}
-      <AlertDialog
-        open={!!confirmFinalizeResult}
-        onOpenChange={(open) => { if (!open) setConfirmFinalizeResult(null); }}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Finalisasi Hasil KPI</AlertDialogTitle>
-            <AlertDialogDescription>
-              Hasil kalkulasi {confirmFinalizeResult?.profile.fullName ?? "karyawan ini"} akan dikunci dan
-              tidak bisa dihitung ulang setelah difinalisasi. Lanjutkan?
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel className="rounded-full" disabled={finalizeMutation.isPending}>
-              Batal
-            </AlertDialogCancel>
-            <AlertDialogAction
-              className="rounded-full"
-              onClick={() => {
-                const id = confirmFinalizeResult?.id;
-                setConfirmFinalizeResult(null);
-                if (id) handleFinalize(id);
-              }}
-              disabled={finalizeMutation.isPending}
-            >
-              {finalizeMutation.isPending ? "Finalisasi..." : "Ya, Finalisasi"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </TooltipProvider>
   );
 }

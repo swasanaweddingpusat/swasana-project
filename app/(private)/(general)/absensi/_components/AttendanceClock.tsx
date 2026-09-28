@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import Image from "next/image";
-import { useAttendanceToday, useClockIn, useClockOut } from "@/hooks/use-attendance";
+import { useAttendanceToday, useAttendanceSettings, useClockIn, useClockOut } from "@/hooks/use-attendance";
 import { useWorkShifts } from "@/hooks/use-work-shifts";
 import { useWorkLocations } from "@/hooks/use-work-locations";
 import type { AttendanceStatusValue } from "@/lib/validations/attendance";
@@ -12,7 +12,6 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import { ClockCircle, Login3, Logout3, MapPoint, Camera, Restart } from "@solar-icons/react";
@@ -34,11 +33,6 @@ const WORK_TYPE_LABEL: Record<string, string> = {
   WFO: "WFO",
   WFH: "WFH",
   WFA: "WFA",
-};
-
-const WORK_TYPE_APPROVAL_BADGE: Record<string, { label: string; variant: "secondary" | "destructive" } | undefined> = {
-  pending: { label: "Menunggu Persetujuan", variant: "secondary" },
-  rejected: { label: "Ditolak", variant: "destructive" },
 };
 
 function formatTime(date: Date): string {
@@ -72,9 +66,9 @@ export function AttendanceClock() {
   const [selectedShiftId, setSelectedShiftId] = useState<string>("");
   const [selectedWorkType, setSelectedWorkType] = useState<string>("");
   const [selectedLocationId, setSelectedLocationId] = useState<string>("");
-  const [workTypeReason, setWorkTypeReason] = useState<string>("");
 
   const { data: todayData, isLoading: todayLoading } = useAttendanceToday();
+  const { data: settings } = useAttendanceSettings();
   const { data: workShifts } = useWorkShifts();
   const { data: workLocations } = useWorkLocations();
   const clockInMutation = useClockIn();
@@ -116,7 +110,6 @@ export function AttendanceClock() {
       setSelectedLocationId("");
       setSelectedIsPublicHoliday(false);
       setSelectedPublicHolidayId("");
-      setWorkTypeReason("");
     }
   }, []);
 
@@ -161,15 +154,24 @@ export function AttendanceClock() {
   // Clock-in tap: open the camera immediately — no field is required beforehand.
   // Status/shift/work-type/location are filled AFTER the photo, in the details step.
   const handleClockInTap = useCallback(() => {
+    if (!settings) {
+      toast.error("Settings absensi belum dikonfigurasi. Hubungi admin.");
+      return;
+    }
     setPendingAction("in");
     setCapturedPhoto(null);
     setGpsCoords(null);
     requestGps();
     setCameraOpen(true);
-  }, [requestGps]);
+  }, [settings, requestGps]);
 
   // Clock-out has no fields to fill, so it keeps the original GPS-then-camera order.
   const handleClockOutTap = useCallback(() => {
+    if (!settings) {
+      toast.error("Settings absensi belum dikonfigurasi. Hubungi admin.");
+      return;
+    }
+
     setGpsLoading(true);
     setPendingAction("out");
 
@@ -193,7 +195,7 @@ export function AttendanceClock() {
       },
       { enableHighAccuracy: true, timeout: 10000 },
     );
-  }, []);
+  }, [settings]);
 
   const handleRetakePhoto = useCallback(() => {
     setCameraOpen(true);
@@ -291,18 +293,13 @@ export function AttendanceClock() {
         workShiftId: selectedShiftId,
         workType: selectedWorkType as "WFO" | "WFH" | "WFA",
         workLocationId: selectedWorkType === "WFO" ? selectedLocationId : undefined,
-        workTypeReason: selectedWorkType !== "WFO" ? (workTypeReason || undefined) : undefined,
         // Nama hari besar tetap ditentukan HRD (master by-date); karyawan cuma menandai.
         isPublicHoliday: selectedIsPublicHoliday,
         publicHolidayId: selectedIsPublicHoliday ? (selectedPublicHolidayId || undefined) : undefined,
       },
       {
         onSuccess: () => {
-          if (selectedWorkType === "WFO") {
-            toast.success("Clock in berhasil!");
-          } else {
-            toast.success("Clock in berhasil! Menunggu persetujuan HR untuk tipe kerja WFH/WFA.");
-          }
+          toast.success("Clock in berhasil!");
           setPendingAction(null);
           setCapturedPhoto(null);
           setGpsCoords(null);
@@ -310,7 +307,7 @@ export function AttendanceClock() {
         onError: (err) => toast.error(err.message),
       },
     );
-  }, [capturedPhoto, selectedStatus, isWorkday, selectedShiftId, selectedWorkType, selectedLocationId, selectedIsPublicHoliday, selectedPublicHolidayId, workTypeReason, gpsLoading, gpsCoords, clockInMutation]);
+  }, [capturedPhoto, selectedStatus, isWorkday, selectedShiftId, selectedWorkType, selectedLocationId, selectedIsPublicHoliday, selectedPublicHolidayId, gpsLoading, gpsCoords, clockInMutation]);
 
   const handleCameraClose = useCallback(() => {
     setCameraOpen(false);
@@ -349,7 +346,7 @@ export function AttendanceClock() {
             <p className="text-2xl sm:text-3xl font-heading font-bold tabular-nums tracking-tight">
               {currentTime ? formatTime(currentTime) : "--:--:--"}
             </p>
-            <p className="text-sm text-muted-foreground">{currentTime ? formatDate(currentTime) : " "}</p>
+            <p className="text-sm text-muted-foreground">{currentTime ? formatDate(currentTime) : " "}</p>
           </div>
 
           <div className="flex items-center justify-center gap-3">
@@ -502,22 +499,6 @@ export function AttendanceClock() {
                   </div>
                 )}
 
-                {isWorkday && (selectedWorkType === "WFH" || selectedWorkType === "WFA") && (
-                  <div className="space-y-1.5 sm:col-span-2">
-                    <label className="text-xs font-medium text-muted-foreground">Alasan WFH/WFA (opsional)</label>
-                    <Textarea
-                      value={workTypeReason}
-                      onChange={(e) => setWorkTypeReason(e.target.value)}
-                      placeholder="Tulis alasan kerja dari luar kantor..."
-                      className="rounded-xl"
-                      rows={2}
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      Tipe kerja ini butuh persetujuan HR sebelum tercatat final.
-                    </p>
-                  </div>
-                )}
-
                 {isWorkday && (
                   <div className="flex items-center gap-2 sm:col-span-2">
                     <Checkbox
@@ -602,13 +583,6 @@ export function AttendanceClock() {
                 {attendance.workType && (
                   <Badge variant="outline">{WORK_TYPE_LABEL[attendance.workType] ?? attendance.workType}</Badge>
                 )}
-                {attendance.workType !== "WFO" &&
-                  attendance.workTypeApprovalStatus &&
-                  WORK_TYPE_APPROVAL_BADGE[attendance.workTypeApprovalStatus] && (
-                    <Badge variant={WORK_TYPE_APPROVAL_BADGE[attendance.workTypeApprovalStatus]!.variant}>
-                      {WORK_TYPE_APPROVAL_BADGE[attendance.workTypeApprovalStatus]!.label}
-                    </Badge>
-                  )}
                 {attendance.workLocation && (
                   <span className="flex items-center gap-1">
                     <MapPoint weight="BoldDuotone" className="h-4 w-4 shrink-0" />
@@ -619,12 +593,19 @@ export function AttendanceClock() {
             </div>
           )}
 
+          {!settings && !todayLoading && (
+            <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive text-center">
+              <MapPoint weight="BoldDuotone" className="inline h-4 w-4 mr-1" />
+              Settings absensi belum dikonfigurasi. Hubungi admin.
+            </div>
+          )}
+
           <div className="flex flex-col gap-2 sm:flex-row sm:gap-3 justify-center">
             {canClockIn && pendingAction !== "in" && (
               <Button
                 size="lg"
                 className="rounded-full px-8"
-                disabled={isMutating}
+                disabled={!settings || isMutating}
                 onClick={handleClockInTap}
               >
                 <Camera weight="BoldDuotone" className="h-5 w-5 mr-2" />

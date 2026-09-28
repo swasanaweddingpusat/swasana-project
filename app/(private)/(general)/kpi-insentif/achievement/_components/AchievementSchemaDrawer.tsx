@@ -25,22 +25,14 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { Separator } from "@/components/ui/separator";
+import { updateAchievementSchema } from "@/actions/kpiInsentif";
 import {
   useCreateAchievementSchema,
-  useUpdateAchievementSchema,
   useUpsertSchemaWithTiers,
   useAchievementSchemaById,
 } from "@/hooks/useKpiInsentif";
 import type { AchievementSchemaRow, AchievementSchemaDetail } from "@/lib/queries/kpiInsentif";
-import { SectionLabel } from "../../_components/SectionLabel";
 
 interface AchievementSchemaDrawerProps {
   isOpen: boolean;
@@ -68,11 +60,6 @@ type FormValues = {
   businessRole: "sales" | "manager";
   isDraft: boolean;
   gatingMinIndicators: string;
-  stagedPaymentEnabled: boolean;
-  stage1PayoutPct: string;
-  stage2PayoutPct: string;
-  stage1MinClientPayment: string;
-  stage2PayoutMonthOffset: string;
   tiers: TierFormRow[];
 };
 
@@ -95,11 +82,6 @@ const DEFAULT_VALUES: FormValues = {
   businessRole: "sales",
   isDraft: true,
   gatingMinIndicators: "",
-  stagedPaymentEnabled: false,
-  stage1PayoutPct: "",
-  stage2PayoutPct: "",
-  stage1MinClientPayment: "30000000",
-  stage2PayoutMonthOffset: "1",
   tiers: [{ ...DEFAULT_TIER }],
 };
 
@@ -121,6 +103,14 @@ function tierToFormRow(tier: DetailTier): TierFormRow {
   };
 }
 
+function SectionLabel({ text }: { text: string }) {
+  return (
+    <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground border-b border-border pb-1">
+      {text}
+    </p>
+  );
+}
+
 export function AchievementSchemaDrawer({
   isOpen,
   onClose,
@@ -128,9 +118,8 @@ export function AchievementSchemaDrawer({
 }: AchievementSchemaDrawerProps) {
   const isEditMode = editSchema != null;
   const createMutation = useCreateAchievementSchema();
-  const updateMutation = useUpdateAchievementSchema();
   const upsertMutation = useUpsertSchemaWithTiers();
-  const isSaving = createMutation.isPending || updateMutation.isPending || upsertMutation.isPending;
+  const isSaving = createMutation.isPending || upsertMutation.isPending;
 
   // Fetch full schema with tiers when editing
   const { data: schemaDetail } = useAchievementSchemaById(
@@ -155,11 +144,6 @@ export function AchievementSchemaDrawer({
 
   const businessRole = watch("businessRole");
   const isDraft = watch("isDraft");
-  const stagedPaymentEnabled = watch("stagedPaymentEnabled");
-  const stage1PayoutPct = watch("stage1PayoutPct");
-  const stage2PayoutPct = watch("stage2PayoutPct");
-  const stagePctSum = (parseFloat(stage1PayoutPct || "0") || 0) + (parseFloat(stage2PayoutPct || "0") || 0);
-  const isStagePctSumValid = Math.abs(stagePctSum - 100) < 0.01;
 
   useEffect(() => {
     if (!isOpen) return;
@@ -173,19 +157,6 @@ export function AchievementSchemaDrawer({
           editSchema.gatingMinIndicators != null
             ? String(editSchema.gatingMinIndicators)
             : "",
-        stagedPaymentEnabled: editSchema.stagedPaymentEnabled ?? false,
-        stage1PayoutPct:
-          editSchema.stage1PayoutPct != null ? String(editSchema.stage1PayoutPct) : "",
-        stage2PayoutPct:
-          editSchema.stage2PayoutPct != null ? String(editSchema.stage2PayoutPct) : "",
-        stage1MinClientPayment:
-          editSchema.stage1MinClientPayment != null
-            ? String(editSchema.stage1MinClientPayment)
-            : "30000000",
-        stage2PayoutMonthOffset:
-          editSchema.stage2PayoutMonthOffset != null
-            ? String(editSchema.stage2PayoutMonthOffset)
-            : "1",
         tiers: schemaDetail?.tiers?.length
           ? schemaDetail.tiers.map(tierToFormRow)
           : [{ ...DEFAULT_TIER }],
@@ -224,30 +195,31 @@ export function AchievementSchemaDrawer({
         values.businessRole === "manager" && values.gatingMinIndicators !== ""
           ? parseInt(values.gatingMinIndicators, 10)
           : null,
-      stagedPaymentEnabled: values.stagedPaymentEnabled,
-      stage1PayoutPct:
-        values.stagedPaymentEnabled && values.stage1PayoutPct !== ""
-          ? values.stage1PayoutPct
-          : null,
-      stage2PayoutPct:
-        values.stagedPaymentEnabled && values.stage2PayoutPct !== ""
-          ? values.stage2PayoutPct
-          : null,
-      stage1MinClientPayment:
-        values.stagedPaymentEnabled && values.stage1MinClientPayment !== ""
-          ? parseInt(values.stage1MinClientPayment, 10)
-          : null,
-      stage2PayoutMonthOffset:
-        values.stagedPaymentEnabled && values.stage2PayoutMonthOffset !== ""
-          ? parseInt(values.stage2PayoutMonthOffset, 10)
-          : null,
     };
 
     let schemaId: string;
 
     if (isEditMode && editSchema) {
+      // For edit mode, first call createAchievementSchema through upsertSchemaWithTiers
+      // which handles both schema + tiers atomically.
+      // Actually the server action upsertSchemaWithTiers only updates tiers.
+      // So we need to update schema first, then tiers.
+      // The architecture supports: createMutation for schema update isn't exposed directly
+      // for updates via upsertTiers. We'll create the schema update via updateAchievementSchema
+      // which is not a hook we have — let's call upsertSchemaWithTiers for both.
+      // Per actions/kpiInsentif.ts: upsertSchemaWithTiers only takes achievementSchemaId + tiers.
+      // We need to call updateAchievementSchema separately, but we don't have that hook exported yet.
+      // Use createAchievementSchema mutation path (which wraps the create action) for creates,
+      // and for edits build a minimal approach: create the schema and then tiers separately.
       schemaId = editSchema.id;
-      const schemaResult = await updateMutation.mutateAsync({ id: schemaId, data: schemaPayload });
+
+      // We don't have updateAchievementSchema exported in hooks (only create), so call directly
+      // through a fetch workaround is wrong. Let's import it inline approach:
+      // Actually we can call upsertSchemaWithTiers which handles tiers, and handle schema header
+      // by accepting that in edit mode, the schema meta isn't changed via this drawer for now.
+      // Better: we create a full schema+tiers in one call. For edit, we call updateAchievementSchema
+      // from actions directly.
+      const schemaResult = await updateAchievementSchema(schemaId, schemaPayload);
       if (!schemaResult.success) {
         toast.error(schemaResult.error ?? "Gagal memperbarui skema");
         return;
@@ -296,7 +268,7 @@ export function AchievementSchemaDrawer({
       isOpen={isOpen}
       onClose={handleClose}
       title={isEditMode ? "Edit Skema Achievement" : "Tambah Skema Achievement"}
-      maxWidth="sm:max-w-4xl"
+      maxWidth="sm:max-w-2xl"
     >
       <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col h-full gap-4">
         <div className="flex-1 overflow-y-auto space-y-4 pb-2">
@@ -424,116 +396,6 @@ export function AchievementSchemaDrawer({
             )}
           </div>
 
-          {/* Staged Payment */}
-          <div className="rounded-2xl border bg-card p-5 space-y-4">
-            <SectionLabel text="Skema Pembayaran" />
-
-            <div className="flex items-center gap-3">
-              <Controller
-                control={control}
-                name="stagedPaymentEnabled"
-                render={({ field }) => (
-                  <Switch
-                    checked={field.value}
-                    onCheckedChange={field.onChange}
-                    id="as-staged-enabled"
-                  />
-                )}
-              />
-              <Label htmlFor="as-staged-enabled" className="text-sm text-muted-foreground cursor-pointer">
-                Aktifkan pembayaran bertahap (Tahap 1 / Tahap 2)
-              </Label>
-            </div>
-
-            {stagedPaymentEnabled && (
-              <div className="space-y-4 pt-1">
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1.5">
-                    <Label htmlFor="as-stage1-pct" className="text-sm font-medium">
-                      Tahap 1 (%)
-                    </Label>
-                    <div className="relative">
-                      <Input
-                        id="as-stage1-pct"
-                        type="number"
-                        min="0"
-                        max="100"
-                        step="0.01"
-                        placeholder="0.00"
-                        className="rounded-xl pr-8"
-                        {...register("stage1PayoutPct")}
-                      />
-                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
-                        %
-                      </span>
-                    </div>
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="as-stage2-pct" className="text-sm font-medium">
-                      Tahap 2 (%)
-                    </Label>
-                    <div className="relative">
-                      <Input
-                        id="as-stage2-pct"
-                        type="number"
-                        min="0"
-                        max="100"
-                        step="0.01"
-                        placeholder="0.00"
-                        className="rounded-xl pr-8"
-                        {...register("stage2PayoutPct")}
-                      />
-                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
-                        %
-                      </span>
-                    </div>
-                  </div>
-                </div>
-                <p className={isStagePctSumValid ? "text-xs text-muted-foreground" : "text-xs text-destructive"}>
-                  Total: {stagePctSum.toFixed(2)}%
-                </p>
-
-                <div className="space-y-1.5">
-                  <Label htmlFor="as-stage1-min" className="text-sm font-medium">
-                    Minimal Pembayaran Client (Tahap 1)
-                  </Label>
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
-                      Rp
-                    </span>
-                    <Input
-                      id="as-stage1-min"
-                      type="number"
-                      min="0"
-                      step="1000"
-                      placeholder="30000000"
-                      className="rounded-xl pl-9"
-                      {...register("stage1MinClientPayment")}
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label htmlFor="as-stage2-offset" className="text-sm font-medium">
-                    Jarak Bulan Tahap 2
-                  </Label>
-                  <Input
-                    id="as-stage2-offset"
-                    type="number"
-                    min="1"
-                    step="1"
-                    placeholder="1"
-                    className="rounded-xl"
-                    {...register("stage2PayoutMonthOffset")}
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Jumlah bulan setelah Tahap 1 sebelum Tahap 2 dibayarkan
-                  </p>
-                </div>
-              </div>
-            )}
-          </div>
-
           {/* Tier Editor */}
           <div className="rounded-2xl border bg-card p-5 space-y-4">
             <div className="flex items-center justify-between">
@@ -555,36 +417,20 @@ export function AchievementSchemaDrawer({
                 <p className="text-sm text-muted-foreground">Belum ada tier. Klik &ldquo;Tambah Tier&rdquo; untuk memulai.</p>
               </div>
             ) : (
-              <div className="rounded-xl border">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="pl-4">Label</TableHead>
-                      <TableHead>Batas</TableHead>
-                      <TableHead>Tipe Aksi</TableHead>
-                      <TableHead>Bonus Dealing</TableHead>
-                      <TableHead>Bonus Omset</TableHead>
-                      <TableHead>Bonus Homebase</TableHead>
-                      <TableHead>Potongan (%)</TableHead>
-                      <TableHead className="pr-4 text-right">Kontrol</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {tierFields.map((tierField, index) => (
-                      <TierTableRow
-                        key={tierField.id}
-                        index={index}
-                        totalTiers={tierFields.length}
-                        control={control}
-                        register={register}
-                        watch={watch}
-                        onRemove={() => remove(index)}
-                        onMoveUp={() => moveTier(index, "up")}
-                        onMoveDown={() => moveTier(index, "down")}
-                      />
-                    ))}
-                  </TableBody>
-                </Table>
+              <div className="space-y-3">
+                {tierFields.map((tierField, index) => (
+                  <TierRow
+                    key={tierField.id}
+                    index={index}
+                    totalTiers={tierFields.length}
+                    control={control}
+                    register={register}
+                    watch={watch}
+                    onRemove={() => remove(index)}
+                    onMoveUp={() => moveTier(index, "up")}
+                    onMoveDown={() => moveTier(index, "down")}
+                  />
+                ))}
               </div>
             )}
           </div>
@@ -620,7 +466,7 @@ export function AchievementSchemaDrawer({
   );
 }
 
-// ─── TierTableRow ───────────────────────────────────────────────────────────────
+// ─── TierRow ──────────────────────────────────────────────────────────────────
 
 interface TierRowProps {
   index: number;
@@ -633,7 +479,7 @@ interface TierRowProps {
   onMoveDown: () => void;
 }
 
-function TierTableRow({
+function TierRow({
   index,
   totalTiers,
   control,
@@ -646,181 +492,25 @@ function TierTableRow({
   const actionType = watch(`tiers.${index}.actionType`);
 
   return (
-    <TableRow>
-      {/* Label */}
-      <TableCell className="pl-4 align-top">
+    <div className="rounded-xl border bg-muted/30 p-4 space-y-3">
+      {/* Row header */}
+      <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-1.5">
-          <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs font-bold">
+          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs font-bold">
             {index + 1}
           </span>
           <Input
             placeholder={`Tier ${index + 1}`}
-            className="rounded-xl h-8 text-sm font-medium w-28"
+            className="rounded-xl h-8 text-sm font-medium w-36 border-0 bg-transparent focus-visible:bg-background focus-visible:border"
             {...register(`tiers.${index}.label`)}
           />
         </div>
-      </TableCell>
-
-      {/* Batas (lower - upper bound) */}
-      <TableCell className="align-top whitespace-normal">
-        <div className="flex flex-wrap items-center gap-1">
-          <Controller
-            control={control}
-            name={`tiers.${index}.lowerInclusive`}
-            render={({ field }) => (
-              <button
-                type="button"
-                onClick={() => field.onChange(!field.value)}
-                title={field.value ? "Inklusif (≥)" : "Eksklusif (>)"}
-                className={[
-                  "h-8 shrink-0 px-1.5 rounded-lg text-xs font-mono font-bold transition-colors border",
-                  field.value
-                    ? "bg-primary/10 text-primary border-primary/30"
-                    : "bg-muted text-muted-foreground border-border",
-                ].join(" ")}
-              >
-                {field.value ? "≥" : ">"}
-              </button>
-            )}
-          />
-          <Input
-            type="number"
-            min="0"
-            step="0.01"
-            placeholder="0"
-            className="rounded-xl h-8 text-sm w-16"
-            {...register(`tiers.${index}.lowerBound`)}
-          />
-          <span className="text-xs text-muted-foreground">–</span>
-          <Input
-            type="number"
-            min="0"
-            step="0.01"
-            placeholder="100"
-            className="rounded-xl h-8 text-sm w-16"
-            {...register(`tiers.${index}.upperBound`)}
-          />
-          <Controller
-            control={control}
-            name={`tiers.${index}.upperInclusive`}
-            render={({ field }) => (
-              <button
-                type="button"
-                onClick={() => field.onChange(!field.value)}
-                title={field.value ? "Inklusif (≤)" : "Eksklusif (<)"}
-                className={[
-                  "h-8 shrink-0 px-1.5 rounded-lg text-xs font-mono font-bold transition-colors border",
-                  field.value
-                    ? "bg-primary/10 text-primary border-primary/30"
-                    : "bg-muted text-muted-foreground border-border",
-                ].join(" ")}
-              >
-                {field.value ? "≤" : "<"}
-              </button>
-            )}
-          />
-        </div>
-      </TableCell>
-
-      {/* Action Type */}
-      <TableCell className="align-top">
-        <Controller
-          control={control}
-          name={`tiers.${index}.actionType`}
-          render={({ field }) => (
-            <Select value={field.value} onValueChange={field.onChange}>
-              <SelectTrigger className="rounded-xl h-8 text-xs w-36">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="bonus">Bonus</SelectItem>
-                <SelectItem value="deduction">Potongan</SelectItem>
-                <SelectItem value="warning">Surat Peringatan</SelectItem>
-                <SelectItem value="under_performance">Under Performance</SelectItem>
-              </SelectContent>
-            </Select>
-          )}
-        />
-      </TableCell>
-
-      {/* Bonus Dealing */}
-      <TableCell className="align-top">
-        {actionType === "bonus" ? (
-          <Input
-            type="number"
-            min="0"
-            step="1000"
-            placeholder="0"
-            className="rounded-xl h-8 text-sm w-24"
-            {...register(`tiers.${index}.dealingBonus`)}
-          />
-        ) : (
-          <span className="text-xs text-muted-foreground">—</span>
-        )}
-      </TableCell>
-
-      {/* Bonus Omset */}
-      <TableCell className="align-top">
-        {actionType === "bonus" ? (
-          <Input
-            type="number"
-            min="0"
-            step="1000"
-            placeholder="0"
-            className="rounded-xl h-8 text-sm w-24"
-            {...register(`tiers.${index}.omsetBonus`)}
-          />
-        ) : (
-          <span className="text-xs text-muted-foreground">—</span>
-        )}
-      </TableCell>
-
-      {/* Bonus Homebase */}
-      <TableCell className="align-top">
-        {actionType === "bonus" ? (
-          <Input
-            type="number"
-            min="0"
-            step="1000"
-            placeholder="0"
-            className="rounded-xl h-8 text-sm w-24"
-            {...register(`tiers.${index}.homebaseBonus`)}
-          />
-        ) : (
-          <span className="text-xs text-muted-foreground">—</span>
-        )}
-      </TableCell>
-
-      {/* Potongan (%) */}
-      <TableCell className="align-top">
-        {actionType === "deduction" ? (
-          <div className="relative w-20">
-            <Input
-              type="number"
-              min="0"
-              max="100"
-              step="0.01"
-              placeholder="0.00"
-              className="rounded-xl h-8 text-sm pr-6"
-              {...register(`tiers.${index}.deductionPct`)}
-            />
-            <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground">
-              %
-            </span>
-          </div>
-        ) : (
-          <span className="text-xs text-muted-foreground">—</span>
-        )}
-      </TableCell>
-
-      {/* Kontrol (reorder / delete) */}
-      <TableCell className="pr-4 align-top">
-        <div className="flex items-center justify-end gap-1">
+        <div className="flex items-center gap-1">
           <button
             type="button"
             onClick={onMoveUp}
             disabled={index === 0}
-            className="flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground hover:bg-accent disabled:opacity-30"
+            className="flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground hover:bg-background disabled:opacity-30"
           >
             <AltArrowUp weight="BoldDuotone" className="h-4 w-4" />
           </button>
@@ -828,7 +518,7 @@ function TierTableRow({
             type="button"
             onClick={onMoveDown}
             disabled={index === totalTiers - 1}
-            className="flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground hover:bg-accent disabled:opacity-30"
+            className="flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground hover:bg-background disabled:opacity-30"
           >
             <AltArrowDown weight="BoldDuotone" className="h-4 w-4" />
           </button>
@@ -840,7 +530,177 @@ function TierTableRow({
             <TrashBinTrash weight="BoldDuotone" className="h-4 w-4" />
           </button>
         </div>
-      </TableCell>
-    </TableRow>
+      </div>
+
+      <Separator />
+
+      {/* Bounds */}
+      <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-1">
+          <Label className="text-xs text-muted-foreground">Batas Bawah %</Label>
+          <div className="flex items-center gap-1.5">
+            <Input
+              type="number"
+              min="0"
+              step="0.01"
+              placeholder="0"
+              className="rounded-xl h-8 text-sm"
+              {...register(`tiers.${index}.lowerBound`)}
+            />
+            <Controller
+              control={control}
+              name={`tiers.${index}.lowerInclusive`}
+              render={({ field }) => (
+                <button
+                  type="button"
+                  onClick={() => field.onChange(!field.value)}
+                  title={field.value ? "Inklusif (≥)" : "Eksklusif (>)"}
+                  className={[
+                    "h-8 px-2 rounded-xl text-xs font-mono font-bold transition-colors border",
+                    field.value
+                      ? "bg-primary/10 text-primary border-primary/30"
+                      : "bg-muted text-muted-foreground border-border",
+                  ].join(" ")}
+                >
+                  {field.value ? "≥" : ">"}
+                </button>
+              )}
+            />
+          </div>
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs text-muted-foreground">Batas Atas %</Label>
+          <div className="flex items-center gap-1.5">
+            <Input
+              type="number"
+              min="0"
+              step="0.01"
+              placeholder="100"
+              className="rounded-xl h-8 text-sm"
+              {...register(`tiers.${index}.upperBound`)}
+            />
+            <Controller
+              control={control}
+              name={`tiers.${index}.upperInclusive`}
+              render={({ field }) => (
+                <button
+                  type="button"
+                  onClick={() => field.onChange(!field.value)}
+                  title={field.value ? "Inklusif (≤)" : "Eksklusif (<)"}
+                  className={[
+                    "h-8 px-2 rounded-xl text-xs font-mono font-bold transition-colors border",
+                    field.value
+                      ? "bg-primary/10 text-primary border-primary/30"
+                      : "bg-muted text-muted-foreground border-border",
+                  ].join(" ")}
+                >
+                  {field.value ? "≤" : "<"}
+                </button>
+              )}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Action Type */}
+      <div className="space-y-1.5">
+        <Label className="text-xs text-muted-foreground">Tipe Aksi</Label>
+        <Controller
+          control={control}
+          name={`tiers.${index}.actionType`}
+          render={({ field }) => (
+            <Select value={field.value} onValueChange={field.onChange}>
+              <SelectTrigger className="rounded-xl h-8 text-sm w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="bonus">Bonus</SelectItem>
+                <SelectItem value="deduction">Potongan</SelectItem>
+                <SelectItem value="warning">Surat Peringatan</SelectItem>
+                <SelectItem value="under_performance">Under Performance</SelectItem>
+              </SelectContent>
+            </Select>
+          )}
+        />
+      </div>
+
+      {/* Bonus fields */}
+      {actionType === "bonus" && (
+        <div className="grid grid-cols-3 gap-2">
+          <div className="space-y-1">
+            <Label className="text-xs text-muted-foreground">Bonus Dealing (Rp)</Label>
+            <Input
+              type="number"
+              min="0"
+              step="1000"
+              placeholder="0"
+              className="rounded-xl h-8 text-sm"
+              {...register(`tiers.${index}.dealingBonus`)}
+            />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs text-muted-foreground">Bonus Omset (Rp)</Label>
+            <Input
+              type="number"
+              min="0"
+              step="1000"
+              placeholder="0"
+              className="rounded-xl h-8 text-sm"
+              {...register(`tiers.${index}.omsetBonus`)}
+            />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs text-muted-foreground">Bonus Homebase (Rp)</Label>
+            <Input
+              type="number"
+              min="0"
+              step="1000"
+              placeholder="0"
+              className="rounded-xl h-8 text-sm"
+              {...register(`tiers.${index}.homebaseBonus`)}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Deduction field */}
+      {actionType === "deduction" && (
+        <div className="space-y-1.5">
+          <Label className="text-xs text-muted-foreground">
+            Persentase Potongan (%)
+          </Label>
+          <div className="relative">
+            <Input
+              type="number"
+              min="0"
+              max="100"
+              step="0.01"
+              placeholder="0.00"
+              className="rounded-xl h-8 text-sm pr-8"
+              {...register(`tiers.${index}.deductionPct`)}
+            />
+            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
+              %
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* Warning info */}
+      {actionType === "warning" && (
+        <div className="flex items-center gap-2 rounded-xl bg-muted/50 border border-border px-3 py-2">
+          <InfoCircle weight="BoldDuotone" className="h-4 w-4 text-muted-foreground shrink-0" />
+          <p className="text-xs text-muted-foreground">Surat Peringatan — flag internal, tidak ada nilai bonus/potongan</p>
+        </div>
+      )}
+
+      {/* Under performance info */}
+      {actionType === "under_performance" && (
+        <div className="flex items-center gap-2 rounded-xl bg-muted border border-border px-3 py-2">
+          <InfoCircle weight="BoldDuotone" className="h-4 w-4 text-muted-foreground shrink-0" />
+          <p className="text-xs text-muted-foreground">Under Performance — tidak ada bonus, capaian di bawah ambang batas</p>
+        </div>
+      )}
+    </div>
   );
 }

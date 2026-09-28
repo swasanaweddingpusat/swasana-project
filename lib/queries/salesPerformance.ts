@@ -138,10 +138,9 @@ async function _queryTopSales(
         id: true,
         fullName: true,
         avatarUrl: true,
+        homebaseVenue: { select: { name: true } },
         dataGroupMemberships: {
-          select: {
-            group: { select: { name: true, homebases: { select: { venue: { select: { name: true } } } } } },
-          },
+          select: { group: { select: { name: true } } },
           take: 1,
         },
       },
@@ -210,11 +209,7 @@ async function _queryTopSales(
       hasTarget && target > 0 ? Math.round((revenue / target) * 100) : 0;
     const breakdown = computeBreakdown(bookings);
     const packageTypeBreakdown = computePackageTypeBreakdown(bookings);
-    const groupHomebases = profile?.dataGroupMemberships?.[0]?.group?.homebases ?? [];
-    const homebaseVenueName =
-      groupHomebases.length > 0
-        ? groupHomebases.map((h) => h.venue.name).join(", ")
-        : null;
+    const homebaseVenueName = profile?.homebaseVenue?.name ?? null;
 
     return {
       profileId,

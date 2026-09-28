@@ -61,10 +61,6 @@ export async function POST(req: Request): Promise<Response> {
     return NextResponse.json({
       onboardingInfo: {
         name: link.name,
-        divisi: link.divisi,
-        jabatan: link.jabatan,
-        venueId: link.venueId,
-        joinDate: link.joinDate ? link.joinDate.toISOString().slice(0, 10) : null,
       },
       venues,
     });

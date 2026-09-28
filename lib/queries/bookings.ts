@@ -35,7 +35,7 @@ const bookingListInclude = {
   manager: { select: { id: true, fullName: true } },
   paymentMethod: { select: { bankName: true } },
   sourceOfInformation: { select: { name: true } },
-  clientAgreement: { select: { token: true, accessCode: true, status: true, pdfTemplate: true } },
+  clientAgreement: { select: { token: true, accessCode: true, status: true } },
   // List rows only need the TOP base fields (table computes paid/total). The nested
   // partialPayments are NOT consumed from list items (the edit-finance drawer fetches
   // them via useBookingFinanceDetail), so they're dropped here to keep the list payload

@@ -81,17 +81,16 @@ export const moduleActions: Record<string, string[]> = {
   // Attendance — own permission so ALL roles can be granted `attendance:view`
   // (menu Absensi = GENERAL) without unlocking the whole HRD world (hr:view).
   attendance: ["view"],
-  // HR Attendance Management — CRUD for work locations, shifts, assignments, overrides.
-  // `approve` = review Koreksi Absen (attendance correction) requests.
-  "hr-attendance": ["view", "create", "edit", "delete", "approve"],
+  // HR Attendance Management — CRUD for work locations, shifts, assignments, overrides
+  "hr-attendance": ["view", "create", "edit", "delete"],
+  // Attendance Correction — employee self-service submit (create/delete own via
+  // cancel), Manager approval is ownership-based (no permission needed), HR
+  // final approval needs `approve`.
+  "attendance-correction": ["view", "create", "edit", "delete", "approve"],
   // HR Recruitment & Onboarding — seeded originally via migration 20260622180000.
   // Listed here so the seeder treats it as a valid module (else step 3b would
   // delete these permissions) and can assign them per the role matrix.
   "hr-recruitment": ["view", "create", "edit", "delete", "hire", "approve"],
-  // HR Leave Management — seeded originally via migration 20260622140000. Listed
-  // here so the seeder treats it as a valid module (else step 3b would delete
-  // these permissions, breaking leave types/balances/approvals + holiday tokens).
-  "hr-leave": ["view", "create", "edit", "delete", "approve"],
   // Finance AP — customer payout (cashback program + overpay refund)
   "finance-ap": ["view", "create", "edit", "delete"],
   // Internal FAQ / Memo — general knowledge-base module
@@ -106,14 +105,12 @@ export const moduleActions: Record<string, string[]> = {
   // KPI & Insentif — modul Sales/Manager KPI + komisi + bonus.
   // Terbagi per aksi: kpi-insentif = main view; kpi-master = CRUD master data;
   // kpi-assignment = penugasan target per orang; kpi-simulation = jalankan kalkulasi;
-  // kpi-report = laporan final (FINALIZED only); pay = mark-paid Tahap 1/2 staged bonus.
-  "kpi-insentif": ["view", "create", "edit", "delete", "finalize", "pay"],
+  // kpi-report = laporan final (FINALIZED only).
+  "kpi-insentif": ["view", "create", "edit", "delete", "finalize"],
   "kpi-master": ["view", "create", "edit", "delete"],
   "kpi-assignment": ["view", "create", "edit", "delete"],
   "kpi-simulation": ["view", "run"],
   "kpi-report": ["view"],
-  // KPI Awards — Best Performer Sales/Manager per periode.
-  "kpi-award": ["view", "create", "edit", "delete"],
 };
 
 // Modules removed (not used in code):
@@ -157,7 +154,6 @@ export const rolePermissionMap: Record<string, Record<string, string[]>> = {
     "kpi-assignment": ["view"],
     "kpi-simulation": ["view", "run"],
     "kpi-report": ["view"],
-    "kpi-award": ["view"],
   },
   // Manager: CRUD only on dashboard, calendar-event, groups, booking-weddings,
   // package, complimentary, vendors, and customers.
@@ -190,7 +186,6 @@ export const rolePermissionMap: Record<string, Record<string, string[]>> = {
     "kpi-assignment": ["view", "create", "edit"],
     "kpi-simulation": ["view", "run"],
     "kpi-report": ["view"],
-    "kpi-award": ["view"],
   },
   "direktur-operational": {
     booking: ["view", "create", "edit", "approve", "comment", "print"],
@@ -293,7 +288,6 @@ export const rolePermissionMap: Record<string, Record<string, string[]>> = {
     customers: ["view", "create", "edit", "delete"],
     // KPI Saya — sales bisa lihat target & pencapaian KPI sendiri.
     "kpi-insentif": ["view"],
-    "kpi-award": ["view"],
   },
   "vendor-specialist": {
     "vendor-specialist": ["view", "create", "edit", "delete"],
@@ -313,17 +307,17 @@ export const rolePermissionMap: Record<string, Record<string, string[]>> = {
   // sengaja DICABUT — tidak ada di spec menu HR.
   "human-resource": {
     hr: ["view", "create", "edit", "delete", "approve"],
-    "hr-attendance": ["view", "create", "edit", "delete", "approve"],
+    "hr-attendance": ["view", "create", "edit", "delete"],
+    "attendance-correction": ["view", "create", "edit", "delete", "approve"],
     "hr-recruitment": ["view", "create", "edit", "delete", "hire", "approve"],
     procurement: ["view"],
     "settings-public-holiday": ["view", "create", "edit", "delete"],
-    // KPI & Insentif — HR mengelola master data + assignment + finalisasi + payout
-    "kpi-insentif": ["view", "create", "edit", "delete", "finalize", "pay"],
+    // KPI & Insentif — HR mengelola master data + assignment + finalisasi
+    "kpi-insentif": ["view", "create", "edit", "delete", "finalize"],
     "kpi-master": ["view", "create", "edit", "delete"],
     "kpi-assignment": ["view", "create", "edit", "delete"],
     "kpi-simulation": ["view", "run"],
     "kpi-report": ["view"],
-    "kpi-award": ["view", "create", "edit", "delete"],
   },
   // Sales MICE — persis daftar menu yang disepakati (11 item):
   //   Groups · Daily Activity · Bookings MICE · Quotations · Mice Package ·
@@ -351,7 +345,6 @@ export const rolePermissionMap: Record<string, Record<string, string[]>> = {
     customers: ["view", "create"],
     // KPI Saya — sales-mice bisa lihat target & pencapaian KPI sendiri.
     "kpi-insentif": ["view"],
-    "kpi-award": ["view"],
   },
   "manager-mice": {
     "booking-mice": ["view", "create", "edit", "delete", "print", "approve", "mark-lost", "restore", "transfer", "reject", "comment", "client-agreement"],

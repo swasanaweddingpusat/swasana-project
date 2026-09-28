@@ -32,8 +32,7 @@ export async function GET(req: Request): Promise<Response> {
   const period = periodRaw ? new Date(periodRaw) : undefined;
   const status = searchParams.get("status") ?? undefined;
   const venueId = searchParams.get("venueId") ?? undefined;
-  const businessRole = searchParams.get("businessRole") ?? undefined;
 
-  const data = await getCalculationResults({ profileId, period, status, venueId, businessRole });
+  const data = await getCalculationResults({ profileId, period, status, venueId });
   return Response.json(data);
 }

@@ -1,6 +1,6 @@
 import { Metadata } from "next";
 import Link from "next/link";
-import { ChartSquare, ClipboardList, CupStar, MedalRibbonStar, UserHands } from "@solar-icons/react";
+import { ChartSquare, ClipboardList, CupStar, UserHands } from "@solar-icons/react";
 import { requirePagePermission } from "@/lib/require-page-permission";
 import { getCalculationResults, getKpiMasters } from "@/lib/queries/kpiInsentif";
 import { cn } from "@/lib/utils";
@@ -9,10 +9,9 @@ export const metadata: Metadata = { title: "Dashboard KPI & Insentif" };
 
 const shortcuts = [
   { href: "/kpi-insentif/kpi-saya", label: "KPI Saya", description: "Target dan hasil penilaian pribadi", icon: UserHands },
-  { href: "/kpi-insentif/konfigurasi", label: "Master & Template", description: "Target item, skema achievement, master KPI, dan komisi & bonus lanjutan", icon: ClipboardList },
+  { href: "/kpi-insentif/konfigurasi", label: "Master & Template", description: "Indikator, skema, dan master KPI", icon: ClipboardList },
   { href: "/kpi-insentif/penugasan", label: "Penugasan Target", description: "Assignment per karyawan dan periode", icon: CupStar },
-  { href: "/kpi-insentif/kalkulasi", label: "Kalkulasi & Laporan", description: "Simulasi, rekonsiliasi, dan laporan final", icon: ChartSquare },
-  { href: "/kpi-insentif/awards", label: "Awards & Best Performer", description: "Kelola award dan pemenang terbaik", icon: MedalRibbonStar },
+  { href: "/kpi-insentif/simulasi", label: "Review & Simulasi", description: "Kalkulasi dan pemeriksaan hasil", icon: ChartSquare },
 ];
 
 export default async function Page() {

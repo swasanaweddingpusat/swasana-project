@@ -17,6 +17,7 @@ import { PhoneInput } from "@/components/shared/PhoneInput";
 import { cn } from "@/lib/utils";
 import { useInviteUser, useUpdateUser } from "@/hooks/use-users";
 import { useGroups, useCreateGroup, useAddGroupMember, useRemoveGroupMember } from "@/hooks/use-groups";
+import { useVenues } from "@/hooks/use-venues";
 import type { UserQueryItem } from "@/lib/queries/users";
 import type { RolesQueryResult } from "@/lib/queries/roles";
 import type { ManagerProfile } from "@/lib/queries/users";
@@ -48,6 +49,7 @@ const initialFormData = {
   emergencyContactPhone: "",
   roleId: "",
   managerId: "",
+  homebaseVenueId: "",
   dataScope: "own" as DataScope,
 };
 
@@ -61,6 +63,7 @@ export function InviteDrawer({ open, onOpenChange, roles, editUser }: InviteDraw
   const updateUser = useUpdateUser();
   const { data: groupsResult } = useGroups();
   const groups = groupsResult?.data ?? [];
+  const { data: venues = [] } = useVenues();
   const { data: managers = [] } = useQuery<ManagerProfile[]>({
     queryKey: ["managers"],
     queryFn: async () => {
@@ -104,6 +107,7 @@ export function InviteDrawer({ open, onOpenChange, roles, editUser }: InviteDraw
           emergencyContactPhone: p.emergencyContactPhone ?? "",
           roleId: p.role?.id ?? "",
           managerId: p.managerId ?? "",
+          homebaseVenueId: p.homebaseVenueId ?? "",
           dataScope: (p.dataScope as DataScope) ?? "own",
         });
         setSelectedGroupIds(p.dataGroupMemberships?.map((m) => m.group.id) ?? []);
@@ -146,6 +150,7 @@ export function InviteDrawer({ open, onOpenChange, roles, editUser }: InviteDraw
         phoneNumber: formData.phoneNumber || undefined,
         roleId: formData.roleId,
         managerId: formData.managerId || undefined,
+        homebaseVenueId: formData.homebaseVenueId || undefined,
         dataScope: formData.dataScope,
         placeOfBirth: formData.placeOfBirth || undefined,
         dateOfBirth: formData.dateOfBirth || undefined,
@@ -186,6 +191,7 @@ export function InviteDrawer({ open, onOpenChange, roles, editUser }: InviteDraw
       fd.set("fullName", formData.fullName);
       fd.set("roleId", formData.roleId);
       if (formData.managerId) fd.set("managerId", formData.managerId);
+      if (formData.homebaseVenueId) fd.set("homebaseVenueId", formData.homebaseVenueId);
       fd.set("dataScope", formData.dataScope);
       selectedGroupIds.forEach((gid) => fd.append("groupIds", gid));
 
@@ -263,6 +269,21 @@ export function InviteDrawer({ open, onOpenChange, roles, editUser }: InviteDraw
             </Select>
             {errors.roleId && <p className="mt-1 text-sm text-destructive">{errors.roleId}</p>}
           </div>
+
+          {(roles.find((role) => role.id === formData.roleId)?.name.toLowerCase().includes("sales") ?? false) && (
+            <div>
+              <Label className="text-sm font-medium text-gray-700">Homebase Sales</Label>
+              <SearchableSelect
+                options={[{ id: "", name: "Tanpa homebase" }, ...venues.map((venue) => ({ id: venue.id, name: venue.name }))]}
+                value={formData.homebaseVenueId}
+                onChange={(value) => handleInput("homebaseVenueId", value ?? "")}
+                placeholder="Pilih homebase venue"
+                searchPlaceholder="Cari venue..."
+                emptyText="Venue tidak ditemukan"
+              />
+              <p className="mt-1 text-xs text-muted-foreground">Dipakai sebagai homebase utama sales untuk KPI dan performa.</p>
+            </div>
+          )}
 
           {/* Manager */}
           <div>
