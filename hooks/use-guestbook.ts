@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
-import { fetchGuestbookEntries, fetchGuestVisitHistory } from "@/services/guestbookService";
+import { fetchGuestbookEntries, fetchGuestVisitHistory, fetchGuestbookFunnelReport } from "@/services/guestbookService";
 import {
   createGuestbookEntry,
   updateGuestbookEntry,
@@ -101,5 +101,25 @@ export function useRefreshGuestbookAdsUrl() {
     onSuccess: (result) => {
       if (result.success && result.adsUrl) qc.invalidateQueries({ queryKey: ["guestbook-entries"] });
     },
+  });
+}
+
+export function useGuestbookFunnelReport(params?: GuestbookFilterOptions) {
+  return useQuery({
+    queryKey: [
+      "guestbook-funnel-report",
+      params?.search,
+      params?.venueIds,
+      params?.hostId,
+      params?.dateFrom,
+      params?.dateTo,
+      params?.categories,
+      params?.interactionTypes,
+      params?.statuses,
+      params?.sourceOfInformationIds,
+      params?.festivalIds,
+    ],
+    queryFn: () => fetchGuestbookFunnelReport(params),
+    staleTime: 5 * 60 * 1000,
   });
 }
