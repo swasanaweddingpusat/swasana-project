@@ -17,8 +17,7 @@ export async function fetchGuestbookEntries(
   if (params?.dateFrom) searchParams.set("dateFrom", params.dateFrom);
   if (params?.dateTo) searchParams.set("dateTo", params.dateTo);
   if (params?.categories?.length) searchParams.set("categories", params.categories.join(","));
-  if (params?.interactionTypes?.length) searchParams.set("interactionTypes", params.interactionTypes.join(","));
-  if (params?.statuses?.length) searchParams.set("statuses", params.statuses.join(","));
+  if (params?.statusIds?.length) searchParams.set("statusIds", params.statusIds.join(","));
   if (params?.sourceOfInformationIds?.length) searchParams.set("sourceOfInformationIds", params.sourceOfInformationIds.join(","));
   if (params?.festivalIds?.length) searchParams.set("festivalIds", params.festivalIds.join(","));
   const qs = searchParams.toString();
@@ -45,8 +44,7 @@ export async function fetchGuestbookFunnelReport(
   if (params?.dateFrom) searchParams.set("dateFrom", params.dateFrom);
   if (params?.dateTo) searchParams.set("dateTo", params.dateTo);
   if (params?.categories?.length) searchParams.set("categories", params.categories.join(","));
-  if (params?.interactionTypes?.length) searchParams.set("interactionTypes", params.interactionTypes.join(","));
-  if (params?.statuses?.length) searchParams.set("statuses", params.statuses.join(","));
+  if (params?.statusIds?.length) searchParams.set("statusIds", params.statusIds.join(","));
   if (params?.sourceOfInformationIds?.length) searchParams.set("sourceOfInformationIds", params.sourceOfInformationIds.join(","));
   if (params?.festivalIds?.length) searchParams.set("festivalIds", params.festivalIds.join(","));
   const qs = searchParams.toString();

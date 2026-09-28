@@ -91,6 +91,7 @@ export const SETTINGS_MODULES = [
   "settings-education-level",
   "settings-event-types",
   "settings-order-status",
+  "settings-prospect-status",
   "settings-payment-methods",
   "settings-role-permission",
   "settings-source-of-information",

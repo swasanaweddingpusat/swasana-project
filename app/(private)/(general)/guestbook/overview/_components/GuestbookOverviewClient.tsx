@@ -12,7 +12,6 @@ import { Calendar } from "@/components/ui/calendar";
 import { CalendarDate, Restart } from "@solar-icons/react";
 import { useGuestbookEntries } from "@/hooks/use-guestbook";
 import type { GuestbookCategoryFilter } from "@/lib/queries/guestbookEntries";
-import type { GuestVisitStatus } from "@prisma/client";
 import { GuestbookOverviewCards } from "../../_components/GuestbookOverviewCards";
 import { GuestbookFunnelReportSection } from "../../_components/GuestbookFunnelReportSection";
 
@@ -50,7 +49,7 @@ function toggleArrayValue<T>(arr: T[], value: T): T[] {
 
 export function GuestbookOverviewClient() {
   const [dateRange, setDateRange] = useState<DateRange | undefined>(todayRange);
-  const [filterStatuses, setFilterStatuses] = useState<GuestVisitStatus[]>([]);
+  const [filterStatusIds, setFilterStatusIds] = useState<string[]>([]);
   const [filterCategories, setFilterCategories] = useState<GuestbookCategoryFilter[]>([]);
   const [filterSourceIds, setFilterSourceIds] = useState<string[]>([]);
   const [filterVenueIds, setFilterVenueIds] = useState<string[]>([]);
@@ -63,7 +62,7 @@ export function GuestbookOverviewClient() {
     pageSize: 1,
     dateFrom: dateRange?.from ? format(dateRange.from, "yyyy-MM-dd") : undefined,
     dateTo: dateRange?.to ? format(dateRange.to, "yyyy-MM-dd") : undefined,
-    statuses: filterStatuses.length > 0 ? filterStatuses : undefined,
+    statusIds: filterStatusIds.length > 0 ? filterStatusIds : undefined,
     categories: filterCategories.length > 0 ? filterCategories : undefined,
     sourceOfInformationIds: filterSourceIds.length > 0 ? filterSourceIds : undefined,
     venueIds: filterVenueIds.length > 0 ? filterVenueIds : undefined,
@@ -71,7 +70,7 @@ export function GuestbookOverviewClient() {
   });
 
   const activeFilterCount =
-    filterStatuses.length +
+    filterStatusIds.length +
     filterCategories.length +
     filterSourceIds.length +
     filterVenueIds.length +
@@ -79,7 +78,7 @@ export function GuestbookOverviewClient() {
 
   function resetFilters() {
     setDateRange(todayRange());
-    setFilterStatuses([]);
+    setFilterStatusIds([]);
     setFilterCategories([]);
     setFilterSourceIds([]);
     setFilterVenueIds([]);
@@ -136,8 +135,8 @@ export function GuestbookOverviewClient() {
       ) : (
         <GuestbookOverviewCards
           overview={data?.overview ?? EMPTY_OVERVIEW}
-          activeStatuses={filterStatuses}
-          onStatusClick={(key) => setFilterStatuses((p) => toggleArrayValue(p, key as GuestVisitStatus))}
+          activeStatuses={filterStatusIds}
+          onStatusClick={(key) => setFilterStatusIds((p) => toggleArrayValue(p, key))}
           activeCategories={filterCategories}
           onCategoryClick={(key) => setFilterCategories((p) => toggleArrayValue(p, key as GuestbookCategoryFilter))}
           activeSourceIds={filterSourceIds}

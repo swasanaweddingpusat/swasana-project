@@ -10,9 +10,9 @@ import { Label } from "@/components/ui/label";
 import { Calendar } from "@/components/ui/calendar";
 import { ComplimentarySelect } from "@/components/shared/ComplimentarySelect";
 import { MultiSelect } from "@/components/shared/multi-select";
+import { useProspectStatuses } from "@/hooks/use-prospect-status";
 import { Magnifer } from "@solar-icons/react";
 import type { GuestbookCategoryFilter } from "@/lib/queries/guestbookEntries";
-import type { GuestInteractionType, GuestVisitStatus } from "@prisma/client";
 
 type SourceOption = { id: string; name: string };
 type FestivalOption = { id: string; name: string };
@@ -29,22 +29,6 @@ const EVENT_CATEGORY_OPTIONS = [
   { value: "no_package", label: "Belum Ada Paket" },
 ] as const;
 
-const INTERACTION_TYPE_OPTIONS = [
-  { value: "client_visit", label: "Database" },
-  { value: "online_meeting", label: "Online Meeting" },
-  { value: "jemput_bola", label: "Survey" },
-] as const;
-
-const STATUS_OPTIONS = [
-  { value: "cold", label: "Cold" },
-  { value: "warm", label: "Warm" },
-  { value: "hot", label: "Hot" },
-  { value: "done_visit", label: "Done Visit" },
-  { value: "to_be_discuss", label: "To Be Discuss" },
-  { value: "deal", label: "Deal" },
-  { value: "lost", label: "Lost" },
-] as const;
-
 interface GuestbookFilterDrawerProps {
   open: boolean;
   onClose: () => void;
@@ -58,10 +42,8 @@ interface GuestbookFilterDrawerProps {
   onHostIdChange: (value: string) => void;
   categories: GuestbookCategoryFilter[];
   onCategoriesChange: (value: GuestbookCategoryFilter[]) => void;
-  interactionTypes: GuestInteractionType[];
-  onInteractionTypesChange: (value: GuestInteractionType[]) => void;
-  statuses: GuestVisitStatus[];
-  onStatusesChange: (value: GuestVisitStatus[]) => void;
+  statusIds: string[];
+  onStatusIdsChange: (value: string[]) => void;
   sourceOfInformationIds: string[];
   onSourceOfInformationIdsChange: (value: string[]) => void;
   festivalIds: string[];
@@ -84,10 +66,8 @@ export function GuestbookFilterDrawer({
   onHostIdChange,
   categories,
   onCategoriesChange,
-  interactionTypes,
-  onInteractionTypesChange,
-  statuses,
-  onStatusesChange,
+  statusIds,
+  onStatusIdsChange,
   sourceOfInformationIds,
   onSourceOfInformationIdsChange,
   festivalIds,
@@ -104,6 +84,7 @@ export function GuestbookFilterDrawer({
     queryKey: ["festivals"],
     queryFn: () => fetchJson<FestivalOption[]>("/api/festivals"),
   });
+  const { data: prospectStatuses = [] } = useProspectStatuses();
 
   return (
     <Drawer isOpen={open} onClose={onClose} title="Filter Guestbook" maxWidth="sm:max-w-sm">
@@ -178,24 +159,11 @@ export function GuestbookFilterDrawer({
           </div>
 
           <div className="space-y-1.5">
-            <Label className="text-sm font-medium">Jenis Interaksi</Label>
+            <Label className="text-sm font-medium">Status Prospek</Label>
             <MultiSelect
-              options={INTERACTION_TYPE_OPTIONS.map((opt) => ({ id: opt.value, name: opt.label }))}
-              value={interactionTypes}
-              onChange={(v) => onInteractionTypesChange(v as GuestInteractionType[])}
-              placeholder="Semua Interaksi"
-              searchPlaceholder="Cari jenis interaksi..."
-              emptyText="Jenis interaksi tidak ditemukan"
-              className="rounded-xl"
-            />
-          </div>
-
-          <div className="space-y-1.5">
-            <Label className="text-sm font-medium">Status</Label>
-            <MultiSelect
-              options={STATUS_OPTIONS.map((opt) => ({ id: opt.value, name: opt.label }))}
-              value={statuses}
-              onChange={(v) => onStatusesChange(v as GuestVisitStatus[])}
+              options={prospectStatuses.map((opt) => ({ id: opt.id, name: opt.name }))}
+              value={statusIds}
+              onChange={onStatusIdsChange}
               placeholder="Semua Status"
               searchPlaceholder="Cari status..."
               emptyText="Status tidak ditemukan"

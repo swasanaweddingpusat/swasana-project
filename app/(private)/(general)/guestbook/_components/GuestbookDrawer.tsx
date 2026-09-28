@@ -44,7 +44,6 @@ import {
   Gallery,
   CloseCircle,
   Pen,
-  ChatRoundDots,
   User,
   MapPoint,
   UsersGroupRounded,
@@ -60,6 +59,8 @@ import { computeFullPrice } from "@/lib/package-prices";
 import { toast } from "sonner";
 import { useCreateGuestbookEntry, useUpdateGuestbookEntry, useRefreshGuestbookAdsUrl } from "@/hooks/use-guestbook";
 import { useVenues } from "@/hooks/use-venues";
+import { useProspectStatuses } from "@/hooks/use-prospect-status";
+import { PROSPECT_STATUS } from "@/lib/prospect-status";
 import { useSalesUsers } from "@/hooks/use-sales-users";
 import { usePermissions } from "@/hooks/use-permissions";
 import { useCurrentUser } from "@/hooks/use-current-user";
@@ -134,14 +135,13 @@ type GuestbookForm = {
   email: string;
   phoneNumber: string;
   venueId: string;
-  interactionType: string;
   onlineMedium: string;
   meetingUrl: string;
   meetingLocation: string;
   scheduledAt: string;
   hostId: string;
   notes: string;
-  visitStatus: string;
+  prospectStatusId: string;
   sourceOfInformationId: string;
   festivalId: string;
   packageId: string;
@@ -170,14 +170,13 @@ const EMPTY_FORM: GuestbookForm = {
   email: "",
   phoneNumber: "",
   venueId: "",
-  interactionType: "",
   onlineMedium: "",
   meetingUrl: "",
   meetingLocation: "",
   scheduledAt: "",
   hostId: "",
   notes: "",
-  visitStatus: "cold",
+  prospectStatusId: "",
   sourceOfInformationId: "",
   festivalId: "",
   packageId: "",
@@ -199,12 +198,6 @@ const EMPTY_FORM: GuestbookForm = {
   bitrixSourceInfo: "",
   bitrixAdsUrl: "",
 };
-
-const INTERACTION_TYPE_OPTIONS = [
-  { value: "client_visit", label: "Database" },
-  { value: "online_meeting", label: "Online Meeting" },
-  { value: "jemput_bola", label: "Survey" },
-] as const;
 
 const ONLINE_MEDIUM_OPTIONS = [
   { value: "zoom", label: "Zoom" },
@@ -520,6 +513,10 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
   const isSaving = createMutation.isPending || updateMutation.isPending || isSubmitting;
   const { data: venues = [] } = useVenues();
   const { users: salesUsers } = useSalesUsers();
+  const { data: prospectStatuses = [] } = useProspectStatuses();
+  // Dipakai untuk memicu checklist konfirmasi saat status di-set manual ke
+  // "Visit Venue" — dicari by name karena ID-nya dinamis dari DB.
+  const visitVenueStatusId = prospectStatuses.find((s) => s.name === PROSPECT_STATUS.VISIT_VENUE)?.id;
   const salesOptions = salesUsers.map((u) => ({ id: u.id, name: u.fullName ?? u.id }));
   const { can } = usePermissions();
   const { user: currentUser } = useCurrentUser();
@@ -600,14 +597,13 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
         email: editEntry.email ?? "",
         phoneNumber: editEntry.phoneNumber ?? "",
         venueId: editEntry.venueId ?? "",
-        interactionType: editEntry.interactionType ?? "",
         onlineMedium: editEntry.onlineMedium ?? "",
         meetingUrl: editEntry.meetingUrl ?? "",
         meetingLocation: editEntry.meetingLocation ?? "",
         scheduledAt: formatDateTimeForInput(editEntry.scheduledAt),
         hostId: editEntry.host?.id ?? "",
         notes: editEntry.notes ?? "",
-        visitStatus: editEntry.visitStatus ?? "",
+        prospectStatusId: editEntry.prospectStatusId ?? "",
         sourceOfInformationId: editEntry.sourceOfInformationId ?? "",
         festivalId: editEntry.festivalId ?? "",
         packageId: editEntry.packageId ?? "",
@@ -661,17 +657,19 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
   // light confirmation checklist. Re-selecting the same value (or picking any
   // other status) keeps the direct setField behavior — no dialog needed.
   function handleVisitStatusChange(value: string) {
-    if (value === "done_visit" && form.visitStatus !== "done_visit") {
+    // Menandai "Visit Venue" manual tidak punya bukti check-in QR, jadi tetap
+    // lewat checklist konfirmasi seperti sebelumnya.
+    if (value === visitVenueStatusId && form.prospectStatusId !== visitVenueStatusId) {
       setChecklistVisited(false);
       setChecklistProofFilled(false);
       setDoneVisitDialogOpen(true);
       return;
     }
-    setField("visitStatus", value);
+    setField("prospectStatusId", value);
   }
 
   function confirmDoneVisit() {
-    setField("visitStatus", "done_visit");
+    if (visitVenueStatusId) setField("prospectStatusId", visitVenueStatusId);
     setDoneVisitDialogOpen(false);
     setChecklistVisited(false);
     setChecklistProofFilled(false);
@@ -703,17 +701,6 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
     } finally {
       setIsCreatingFestival(false);
     }
-  }
-
-  function setInteractionType(value: string) {
-    setForm((prev) => ({
-      ...prev,
-      interactionType: value,
-      onlineMedium: "",
-      meetingUrl: "",
-      meetingLocation: "",
-      scheduledAt: "",
-    }));
   }
 
   function handlePhotoChange(field: PhotoFieldKey, previewField: PreviewFieldKey, file: File | null) {
@@ -765,10 +752,6 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
       toast.error("Nama tamu wajib diisi");
       return false;
     }
-    if (!form.interactionType) {
-      toast.error("Pilih tipe interaksi");
-      return false;
-    }
     if (!form.notes.trim()) {
       toast.error("Catatan wajib diisi");
       return false;
@@ -797,16 +780,12 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
       toast.error("No. Telepon wajib diisi");
       return false;
     }
-    if (form.interactionType === "online_meeting") {
-      if (!form.onlineMedium) { toast.error("Pilih medium online meeting"); return false; }
-      if (form.onlineMedium !== "whatsapp_call" && !form.meetingUrl.trim()) { toast.error("Link meeting wajib diisi"); return false; }
-    }
-    if (form.interactionType === "jemput_bola" && !form.meetingLocation.trim()) {
-      toast.error("Lokasi kunjungan wajib diisi");
+    if (form.onlineMedium && form.onlineMedium !== "whatsapp_call" && !form.meetingUrl.trim()) {
+      toast.error("Link meeting wajib diisi");
       return false;
     }
-    if (form.interactionType === "client_visit" && !form.venueId) {
-      toast.error("Pilih venue");
+    if (!form.venueId && !form.meetingLocation.trim()) {
+      toast.error("Pilih venue atau isi lokasi kunjungan");
       return false;
     }
     if (!isEditMode && !form.proofChatFile && !form.proofChatPreview) {
@@ -850,14 +829,13 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
       email: form.email.trim() || null,
       phoneNumber: form.phoneNumber.trim() || null,
       venueId: form.venueId || null,
-      interactionType: form.interactionType,
       onlineMedium: form.onlineMedium || null,
       meetingUrl: form.meetingUrl.trim() || null,
       meetingLocation: form.meetingLocation.trim() || null,
       scheduledAt: form.scheduledAt || null,
       hostId: form.hostId || null,
       notes: form.notes.trim() || null,
-      visitStatus: form.visitStatus || null,
+      prospectStatusId: form.prospectStatusId || null,
       sourceOfInformationId: form.sourceOfInformationId || null,
       festivalId: form.festivalId || null,
       packageId: form.packageId || null,
@@ -914,38 +892,8 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
     >
       <div className="flex flex-col h-full">
         <div className="flex-1 overflow-y-auto space-y-4 pb-2">
-          {/* Section: Jenis Interaksi */}
+          {/* Section: Data Tamu */}
           <div className="rounded-2xl border bg-card p-5 flex flex-col gap-4">
-            <SectionHeader icon={ChatRoundDots} title="Jenis Interaksi" required />
-            <div className="grid grid-cols-3 gap-2">
-              {INTERACTION_TYPE_OPTIONS.map((opt) => {
-                const active = form.interactionType === opt.value;
-                return (
-                  <button
-                    key={opt.value}
-                    type="button"
-                    onClick={() => setInteractionType(opt.value)}
-                    className={cn(
-                      "flex items-center justify-center gap-2 min-h-11 rounded-full px-3 py-2.5 text-xs font-semibold leading-tight text-center transition-colors",
-                      active
-                        ? "bg-primary text-primary-foreground shadow-sm"
-                        : "bg-muted text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-                    )}
-                  >
-                    <span
-                      className={cn(
-                        "flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2",
-                        active ? "border-primary-foreground" : "border-muted-foreground/40"
-                      )}
-                    >
-                      {active && <span className="h-1.5 w-1.5 rounded-full bg-primary-foreground" />}
-                    </span>
-                    {opt.label}
-                  </button>
-                );
-              })}
-            </div>
-
             {/* Kategori Event (Wedding/MICE) — muncul kalau user punya akses wedding & mice */}
             {canWedding && canMice && (
               <div className="space-y-1.5">
@@ -1185,8 +1133,7 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
               {/* Venue — semua tipe interaksi */}
               <div className="space-y-1.5">
                 <Label htmlFor="gb-venue" className="text-sm font-medium">
-                  Venue{" "}
-                  {form.interactionType === "client_visit" && <span className="text-destructive">*</span>}
+                  Venue
                 </Label>
                 <Select
                   value={form.venueId}
@@ -1242,9 +1189,8 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
                 </div>
               )}
 
-              {/* Detail per tipe interaksi */}
-              {form.interactionType === "online_meeting" && (
-                <>
+              {/* Detail meeting — opsional, diisi saat tamu ditemui online. */}
+              <>
                   <div className="space-y-1.5">
                     <Label htmlFor="gb-onlineMedium" className="text-sm font-medium">
                       Medium <span className="text-destructive">*</span>
@@ -1277,19 +1223,7 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
                       className="rounded-xl"
                     />
                   </div>
-                </>
-              )}
-
-              {form.interactionType === "jemput_bola" && (
-                <>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="gb-meetingLocation-jemput" className="text-sm font-medium">
-                      Lokasi <span className="text-destructive">*</span>
-                    </Label>
-                    <Input id="gb-meetingLocation-jemput" placeholder="Lokasi kunjungan" value={form.meetingLocation} onChange={(e) => setField("meetingLocation", e.target.value)} className="rounded-xl" />
-                  </div>
-                </>
-              )}
+              </>
           </div>
 
           {/* Section: Tindak Lanjut */}
@@ -1317,19 +1251,15 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor="gb-visitStatus" className="text-sm font-medium">Status</Label>
-              <Select value={form.visitStatus} onValueChange={handleVisitStatusChange}>
-                <SelectTrigger id="gb-visitStatus" className="rounded-xl w-full">
+              <Label htmlFor="gb-prospectStatus" className="text-sm font-medium">Status Prospek</Label>
+              <Select value={form.prospectStatusId} onValueChange={handleVisitStatusChange}>
+                <SelectTrigger id="gb-prospectStatus" className="rounded-xl w-full">
                   <SelectValue placeholder="Pilih status" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="cold">Cold</SelectItem>
-                  <SelectItem value="warm">Warm</SelectItem>
-                  <SelectItem value="hot">Hot</SelectItem>
-                  <SelectItem value="done_visit">Done Visit</SelectItem>
-                  <SelectItem value="to_be_discuss">To Be Discuss</SelectItem>
-                  <SelectItem value="deal">Deal</SelectItem>
-                  <SelectItem value="lost">Lost</SelectItem>
+                  {prospectStatuses.map((opt) => (
+                    <SelectItem key={opt.id} value={opt.id}>{opt.name}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
@@ -1428,7 +1358,7 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
             type="button"
             className="flex-1 rounded-full gap-1.5"
             onClick={handleSubmitClick}
-            disabled={isSaving || !form.visitorName.trim() || !form.interactionType || !form.notes.trim()}
+            disabled={isSaving || !form.visitorName.trim() || !form.notes.trim()}
           >
             {isEditMode ? (
               <><Pen weight="BoldDuotone" className="h-4 w-4" />{isSaving ? "Menyimpan..." : "Simpan"}</>

@@ -2,11 +2,8 @@ import { requirePermissionForRoute } from "@/lib/permissions";
 import { apiLimiter, rateLimitResponse } from "@/lib/rate-limit";
 import { getGuestbookFunnelReport, type GuestbookCategoryFilter } from "@/lib/queries/guestbookEntries";
 import type { DataScope } from "@/types/user";
-import type { GuestInteractionType, GuestVisitStatus } from "@prisma/client";
 
 const ALLOWED_CATEGORY = new Set<GuestbookCategoryFilter>(["WEDDINGS", "MICE", "no_package"]);
-const ALLOWED_INTERACTION = new Set<GuestInteractionType>(["client_visit", "online_meeting", "jemput_bola"]);
-const ALLOWED_STATUS = new Set<GuestVisitStatus>(["cold", "warm", "hot", "done_visit", "to_be_discuss", "deal", "lost"]);
 
 /** Parses a comma-separated query param into a trimmed, non-empty string array. */
 function parseListParam(raw: string | null): string[] | undefined {
@@ -35,13 +32,8 @@ export async function GET(request: Request): Promise<Response> {
     ALLOWED_CATEGORY.has(v as GuestbookCategoryFilter)
   );
 
-  const interactionTypes = parseListParam(searchParams.get("interactionTypes"))?.filter(
-    (v): v is GuestInteractionType => ALLOWED_INTERACTION.has(v as GuestInteractionType)
-  );
-
-  const statuses = parseListParam(searchParams.get("statuses"))?.filter((v): v is GuestVisitStatus =>
-    ALLOWED_STATUS.has(v as GuestVisitStatus)
-  );
+  // Status kini berupa ID ProspectStatus; validitasnya dijamin relasi DB.
+  const statusIds = parseListParam(searchParams.get("statusIds"));
 
   const sourceOfInformationIds = parseListParam(searchParams.get("sourceOfInformationIds"));
   const festivalIds = parseListParam(searchParams.get("festivalIds"));
@@ -60,8 +52,7 @@ export async function GET(request: Request): Promise<Response> {
       dateFrom,
       dateTo,
       categories,
-      interactionTypes,
-      statuses,
+      statusIds,
       sourceOfInformationIds,
       festivalIds,
     });

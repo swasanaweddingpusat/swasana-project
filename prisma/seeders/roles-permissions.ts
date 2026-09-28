@@ -38,6 +38,7 @@ export const moduleActions: Record<string, string[]> = {
   "settings-package-category": ["view", "create", "edit", "delete"],
   "settings-public-holiday": ["view", "create", "edit", "delete"],
   "settings-order-status": ["view", "create", "edit", "delete"],
+  "settings-prospect-status": ["view", "create", "edit", "delete"],
   "settings-payment-methods": ["view", "create", "edit", "delete"],
   "settings-quotation-templates": ["view", "create", "edit", "delete"],
   "settings-role-permission": ["view", "create", "edit", "delete"],

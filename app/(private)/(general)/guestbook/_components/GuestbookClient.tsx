@@ -70,7 +70,7 @@ import type {
   GuestbookEntryItem,
   GuestbookCategoryFilter,
 } from "@/lib/queries/guestbookEntries";
-import type { GuestInteractionType, GuestVisitStatus } from "@prisma/client";
+
 import { guestbookSourceLabel, type ProofFiles } from "@/lib/validations/guestbook";
 import { GuestbookDrawer } from "./GuestbookDrawer";
 import { GuestbookDetailDrawer } from "./GuestbookDetailDrawer";
@@ -78,16 +78,7 @@ import { GuestbookFilterDrawer } from "./GuestbookFilterDrawer";
 import { ActivityLogModal } from "./activity-log-modal";
 import { resolveGuestbookProofThumb } from "./photo-url";
 import { PaginationBar } from "@/components/shared/pagination-bar";
-
-const STATUS_LABELS: Record<string, { label: string; className: string }> = {
-  cold: { label: "Cold", className: "bg-sky-100 text-sky-700 border-0" },
-  warm: { label: "Warm", className: "bg-amber-100 text-amber-700 border-0" },
-  hot: { label: "Hot", className: "bg-orange-100 text-orange-700 border-0" },
-  done_visit: { label: "Done Visit", className: "bg-emerald-100 text-emerald-700 border-0" },
-  to_be_discuss: { label: "To Be Discuss", className: "bg-yellow-100 text-yellow-700 border-0" },
-  deal: { label: "Deal", className: "bg-green-100 text-green-700 border-0" },
-  lost: { label: "Lost", className: "bg-red-100 text-red-700 border-0" },
-};
+import { prospectStatusClass } from "@/lib/prospect-status";
 
 const EVENT_CATEGORY_LABELS: Record<string, string> = {
   WEDDINGS: "Wedding",
@@ -165,7 +156,7 @@ function MobileCard({
   onActivityClick: (entry: GuestbookEntryItem) => void;
 }) {
   const sourceLabel = guestbookSourceLabel(entry.sourceOfInformation?.name, entry.bitrixAdsUrl);
-  const statusInfo = entry.visitStatus ? STATUS_LABELS[entry.visitStatus] : null;
+  const status = entry.prospectStatus;
   const photoSrc = resolveGuestbookProofThumb((entry.proofFiles ?? null) as ProofFiles | null);
 
   return (
@@ -193,18 +184,18 @@ function MobileCard({
                 </span>
               )}
             </p>
-            {statusInfo && (
+            {status && (
               <Badge
                 className={cn(
                   "rounded-full text-[10px] mt-0.5 cursor-pointer transition-opacity hover:opacity-80",
-                  statusInfo.className
+                  prospectStatusClass(status.name)
                 )}
                 onClick={(e) => {
                   e.stopPropagation();
-                  onStatusClick?.(entry.visitStatus as string);
+                  onStatusClick?.(status.id);
                 }}
               >
-                {statusInfo.label}
+                {status.name}
               </Badge>
             )}
           </div>
@@ -316,8 +307,7 @@ function GuestbookClientInner() {
   const [filterVenueIds, setFilterVenueIds] = useState<string[]>([]);
   const [filterHostId, setFilterHostId] = useState<string>("all");
   const [filterCategories, setFilterCategories] = useState<GuestbookCategoryFilter[]>([]);
-  const [filterInteractionTypes, setFilterInteractionTypes] = useState<GuestInteractionType[]>([]);
-  const [filterStatuses, setFilterStatuses] = useState<GuestVisitStatus[]>([]);
+  const [filterStatusIds, setFilterStatusIds] = useState<string[]>([]);
   const [filterSourceIds, setFilterSourceIds] = useState<string[]>([]);
   const [filterFestivalIds, setFilterFestivalIds] = useState<string[]>([]);
   const [search, setSearch] = useState("");
@@ -351,13 +341,13 @@ function GuestbookClientInner() {
   // Any other filter change also resets page to 1.
   useEffect(() => {
     setCurrentPage(1);
-  }, [dateRange, filterVenueIds, filterHostId, filterCategories, filterInteractionTypes, filterStatuses, filterSourceIds, filterFestivalIds]);
+  }, [dateRange, filterVenueIds, filterHostId, filterCategories, filterStatusIds, filterSourceIds, filterFestivalIds]);
 
   // Clear selection whenever the visible page/filter set changes, so bulk
   // actions never act on rows the user can no longer see.
   useEffect(() => {
     setSelectedIds([]);
-  }, [currentPage, debouncedSearch, filterVenueIds, filterHostId, filterCategories, filterInteractionTypes, filterStatuses, filterSourceIds, filterFestivalIds]);
+  }, [currentPage, debouncedSearch, filterVenueIds, filterHostId, filterCategories, filterStatusIds, filterSourceIds, filterFestivalIds]);
 
   const queryClient = useQueryClient();
   const { data: guestbookData, isLoading } = useGuestbookEntries({
@@ -369,8 +359,7 @@ function GuestbookClientInner() {
     dateFrom: dateRange?.from ? format(dateRange.from, "yyyy-MM-dd") : undefined,
     dateTo: dateRange?.to ? format(dateRange.to, "yyyy-MM-dd") : undefined,
     categories: filterCategories.length > 0 ? filterCategories : undefined,
-    interactionTypes: filterInteractionTypes.length > 0 ? filterInteractionTypes : undefined,
-    statuses: filterStatuses.length > 0 ? filterStatuses : undefined,
+    statusIds: filterStatusIds.length > 0 ? filterStatusIds : undefined,
     sourceOfInformationIds: filterSourceIds.length > 0 ? filterSourceIds : undefined,
     festivalIds: filterFestivalIds.length > 0 ? filterFestivalIds : undefined,
   });
@@ -387,7 +376,7 @@ function GuestbookClientInner() {
   }
 
   function handleStatusBucketClick(key: string) {
-    setFilterStatuses((prev) => toggleArrayValue(prev, key as GuestVisitStatus));
+    setFilterStatusIds((prev) => toggleArrayValue(prev, key));
   }
 
   function handleEditClick(entry: GuestbookEntryItem) {
@@ -440,7 +429,6 @@ function GuestbookClientInner() {
       if (filterVenueIds.length > 0) params.set("venueIds", filterVenueIds.join(","));
       if (filterHostId !== "all") params.set("hostId", filterHostId);
       if (filterCategories.length > 0) params.set("categories", filterCategories.join(","));
-      if (filterInteractionTypes.length > 0) params.set("interactionTypes", filterInteractionTypes.join(","));
 
       const res = await fetch(`/api/guestbook/export?${params.toString()}`);
       if (!res.ok) {
@@ -474,8 +462,7 @@ function GuestbookClientInner() {
     (filterHostId !== "all" ? 1 : 0) +
     (search.trim() !== "" ? 1 : 0) +
     (filterCategories.length > 0 ? 1 : 0) +
-    (filterInteractionTypes.length > 0 ? 1 : 0) +
-    (filterStatuses.length > 0 ? 1 : 0) +
+    (filterStatusIds.length > 0 ? 1 : 0) +
     (filterSourceIds.length > 0 ? 1 : 0) +
     (filterFestivalIds.length > 0 ? 1 : 0);
 
@@ -484,8 +471,7 @@ function GuestbookClientInner() {
     setFilterVenueIds([]);
     setFilterHostId("all");
     setFilterCategories([]);
-    setFilterInteractionTypes([]);
-    setFilterStatuses([]);
+    setFilterStatusIds([]);
     setFilterSourceIds([]);
     setFilterFestivalIds([]);
     setSearch("");
@@ -667,7 +653,7 @@ function GuestbookClientInner() {
                 <TableBody>
                   {entries.map((entry) => {
                     const sourceLabel = guestbookSourceLabel(entry.sourceOfInformation?.name, entry.bitrixAdsUrl);
-                    const statusInfo = entry.visitStatus ? STATUS_LABELS[entry.visitStatus] : null;
+                    const status = entry.prospectStatus;
                     const totalVisit = entry.visitHistoryCount;
                     const festivalLabel = entry.festival?.name ?? "-";
 
@@ -706,18 +692,18 @@ function GuestbookClientInner() {
                                   </span>
                                 )}
                               </p>
-                              {statusInfo && (
+                              {status && (
                                 <Badge
                                   className={cn(
                                     "rounded-full text-[10px] mt-0.5 cursor-pointer transition-opacity hover:opacity-80",
-                                    statusInfo.className
+                                    prospectStatusClass(status.name)
                                   )}
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    handleStatusBucketClick(entry.visitStatus as string);
+                                    handleStatusBucketClick(status.id);
                                   }}
                                 >
-                                  {statusInfo.label}
+                                  {status.name}
                                 </Badge>
                               )}
                             </div>
@@ -1020,10 +1006,8 @@ function GuestbookClientInner() {
         onHostIdChange={setFilterHostId}
         categories={filterCategories}
         onCategoriesChange={setFilterCategories}
-        interactionTypes={filterInteractionTypes}
-        onInteractionTypesChange={setFilterInteractionTypes}
-        statuses={filterStatuses}
-        onStatusesChange={setFilterStatuses}
+        statusIds={filterStatusIds}
+        onStatusIdsChange={setFilterStatusIds}
         sourceOfInformationIds={filterSourceIds}
         onSourceOfInformationIdsChange={setFilterSourceIds}
         festivalIds={filterFestivalIds}

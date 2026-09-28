@@ -5,10 +5,9 @@ import { buildOwnerScopeWhere } from "@/lib/access-control";
 import { buildGuestbookWhere, type GuestbookCategoryFilter } from "@/lib/queries/guestbookEntries";
 import { resolveGuestbookPhotoUrl } from "@/app/(private)/(general)/guestbook/_components/photo-url";
 import type { ProofFiles } from "@/lib/validations/guestbook";
-import type { Prisma, GuestInteractionType } from "@prisma/client";
+import type { Prisma } from "@prisma/client";
 
 const ALLOWED_CATEGORY = new Set<GuestbookCategoryFilter>(["WEDDINGS", "MICE", "no_package"]);
-const ALLOWED_INTERACTION = new Set<GuestInteractionType>(["client_visit", "online_meeting", "jemput_bola"]);
 
 /** Parses a comma-separated query param into a trimmed, non-empty string array. */
 function parseListParam(raw: string | null): string[] | undefined {
@@ -16,23 +15,6 @@ function parseListParam(raw: string | null): string[] | undefined {
   const values = raw.split(",").map((v) => v.trim()).filter(Boolean);
   return values.length > 0 ? values : undefined;
 }
-
-// Mirrors GuestbookClient.tsx / GuestbookDetailDrawer.tsx — keep labels in sync.
-const VISIT_STATUS_LABELS: Record<string, string> = {
-  cold: "Cold",
-  warm: "Warm",
-  hot: "Hot",
-  done_visit: "Done Visit",
-  to_be_discuss: "To Be Discuss",
-  deal: "Deal",
-  lost: "Lost",
-};
-
-const INTERACTION_TYPE_LABELS: Record<string, string> = {
-  client_visit: "Database",
-  online_meeting: "Online Meeting",
-  jemput_bola: "Jemput Bola",
-};
 
 const EVENT_CATEGORY_LABELS: Record<string, string> = {
   WEDDINGS: "Wedding",
@@ -68,8 +50,7 @@ const guestbookExportSelect = {
   guestCode: true,
   phoneNumber: true,
   email: true,
-  interactionType: true,
-  visitStatus: true,
+  prospectStatus: { select: { name: true } },
   checkInAt: true,
   commitVisitDate: true,
   commitPayDate: true,
@@ -104,10 +85,6 @@ export async function GET(req: Request): Promise<Response> {
     ALLOWED_CATEGORY.has(v as GuestbookCategoryFilter)
   );
 
-  const interactionTypes = parseListParam(searchParams.get("interactionTypes"))?.filter(
-    (v): v is GuestInteractionType => ALLOWED_INTERACTION.has(v as GuestInteractionType)
-  );
-
   try {
     const scopeWhere = (await buildOwnerScopeWhere(
       session.user.profileId,
@@ -117,7 +94,7 @@ export async function GET(req: Request): Promise<Response> {
 
     const where: Prisma.GuestbookEntryWhereInput = {
       ...scopeWhere,
-      ...buildGuestbookWhere({ search, venueIds, hostId, dateFrom, dateTo, categories, interactionTypes }),
+      ...buildGuestbookWhere({ search, venueIds, hostId, dateFrom, dateTo, categories }),
     };
 
     const rows = await db.guestbookEntry.findMany({
@@ -135,12 +112,11 @@ export async function GET(req: Request): Promise<Response> {
       "Guest Code",
       "Telepon",
       "Email",
-      "Tipe Interaksi",
       "Venue",
       "Bertemu",
       "Sumber",
       "Paket",
-      "Visit Status",
+      "Status Prospek",
       "Check-in",
       "Tanggal Commit Visit",
       "Tanggal Commit Bayar",
@@ -173,12 +149,11 @@ export async function GET(req: Request): Promise<Response> {
         r.guestCode ?? "",
         r.phoneNumber ?? "",
         r.email ?? "",
-        r.interactionType ? INTERACTION_TYPE_LABELS[r.interactionType] ?? r.interactionType : "",
         r.venue?.name ?? "",
         r.host?.fullName ?? "",
         r.sourceOfInformation?.name ?? "",
         r.package?.packageName ?? "",
-        r.visitStatus ? VISIT_STATUS_LABELS[r.visitStatus] ?? r.visitStatus : "",
+        r.prospectStatus?.name ?? "",
         fmtDateTime(r.checkInAt),
         fmtDate(r.commitVisitDate),
         fmtDate(r.commitPayDate),
