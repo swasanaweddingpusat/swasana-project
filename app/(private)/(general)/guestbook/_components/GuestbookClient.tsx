@@ -46,7 +46,6 @@ import {
   Download,
   Eye,
   Filter,
-  Logout,
   Magnifer,
   Pen,
   QrCode,
@@ -69,9 +68,7 @@ import { computeFullPrice } from "@/lib/package-prices";
 import {
   useGuestbookEntries,
   useDeleteGuestbookEntry,
-  useCheckOutGuestbookEntry,
   useDeleteBulkGuestbookEntries,
-  useBulkCheckOutGuestbookEntries,
 } from "@/hooks/use-guestbook";
 import { useVenues } from "@/hooks/use-venues";
 import { useSalesUsers } from "@/hooks/use-sales-users";
@@ -105,13 +102,7 @@ const EVENT_CATEGORY_LABELS: Record<string, string> = {
   MICE: "MICE",
 };
 
-const CHECKOUT_STATUS_OPTIONS: { value: "deal" | "to_be_discuss" | "lost"; label: string }[] = [
-  { value: "deal", label: "Deal" },
-  { value: "to_be_discuss", label: "To Be Discuss" },
-  { value: "lost", label: "Lost" },
-];
-
-// checkInAt/checkOutAt are stored as naive local wall-clock values anchored to UTC on the
+// checkInAt is stored as a naive local wall-clock value anchored to UTC on the
 // server — display must read them back with timeZone: "UTC" to avoid double-converting.
 function formatDate(dateStr: string | Date): string {
   return new Date(dateStr).toLocaleDateString("id-ID", {
@@ -264,7 +255,7 @@ function GuestbookOverview({
     // Alur kunjungan: direncanakan → tuntas → batal, lalu Online Meeting yang
     // berdiri sendiri karena bukan kunjungan ke venue.
     { label: "Rencana Visit", value: overview.total, icon: UsersGroupRounded },
-    { label: "Sudah Visit", value: overview.checkedOut, icon: Buildings2 },
+    { label: "Sudah Visit", value: overview.doneVisit, icon: Buildings2 },
     { label: "Tidak Jadi Visit (Lost)", value: overview.lost, icon: ChartSquare },
     { label: "Online Meeting", value: overview.onlineMeetings, icon: Videocamera },
   ];
@@ -385,7 +376,6 @@ function MobileCard({
   onEditClick,
   onDeleteClick,
   onStatusClick,
-  onCheckoutSelect,
   onActivityClick,
 }: {
   entry: GuestbookEntryItem;
@@ -394,7 +384,6 @@ function MobileCard({
   onEditClick: (entry: GuestbookEntryItem) => void;
   onDeleteClick: (entry: GuestbookEntryItem) => void;
   onStatusClick?: (status: string) => void;
-  onCheckoutSelect: (entry: GuestbookEntryItem, visitStatus: "deal" | "to_be_discuss" | "lost") => void;
   onActivityClick: (entry: GuestbookEntryItem) => void;
 }) {
   const sourceLabel = guestbookSourceLabel(entry.sourceOfInformation?.name, entry.bitrixAdsUrl);
@@ -477,19 +466,12 @@ function MobileCard({
         </span>
       </div>
 
-      {/* Row 4: check-in / check-out */}
+      {/* Row 4: waktu kunjungan */}
       <div className="flex items-center gap-2 flex-wrap text-[11px] text-muted-foreground">
         <span className="flex items-center gap-1">
           <CalendarMinimalistic weight="BoldDuotone" className="h-3.5 w-3.5 shrink-0" />
-          <span className="text-muted-foreground/60">in</span>
           <span className="text-foreground">{formatDate(entry.checkInAt)} {formatTime(entry.checkInAt)}</span>
         </span>
-        {entry.checkOutAt && (
-          <span className="flex items-center gap-1">
-            <span className="text-muted-foreground/60">out</span>
-            <span className="text-foreground">{formatDate(entry.checkOutAt)} {formatTime(entry.checkOutAt)}</span>
-          </span>
-        )}
       </div>
 
       {/* Footer: action tile bar */}
@@ -529,26 +511,6 @@ function MobileCard({
           <ClockCircle weight="BoldDuotone" className="h-5 w-5 text-primary" />
           <span className="text-[10px] font-medium text-muted-foreground leading-none">Aktivitas</span>
         </button>
-        {!entry.checkOutAt && (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button
-                type="button"
-                className="flex flex-col items-center justify-center gap-0.5 w-14 rounded-xl py-1.5 px-1 cursor-pointer transition-colors hover:bg-accent"
-              >
-                <Logout weight="BoldDuotone" className="h-5 w-5 text-primary" />
-                <span className="text-[10px] font-medium text-muted-foreground leading-none">Checkout</span>
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              {CHECKOUT_STATUS_OPTIONS.map((opt) => (
-                <DropdownMenuItem key={opt.value} onClick={() => onCheckoutSelect(entry, opt.value)}>
-                  {opt.label}
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )}
       </div>
     </div>
   );
@@ -640,9 +602,7 @@ function GuestbookClientInner() {
   const { users: salesUsers } = useSalesUsers();
   const salesOptions = salesUsers.map((u) => ({ id: u.id, name: u.fullName ?? u.id }));
   const deleteMutation = useDeleteGuestbookEntry();
-  const checkoutMutation = useCheckOutGuestbookEntry();
   const bulkDeleteMutation = useDeleteBulkGuestbookEntries();
-  const bulkCheckoutMutation = useBulkCheckOutGuestbookEntries();
 
   function toggleArrayValue<T>(arr: T[], value: T): T[] {
     return arr.includes(value) ? arr.filter((v) => v !== value) : [...arr, value];
@@ -666,18 +626,6 @@ function GuestbookClientInner() {
 
   function handleHostBucketClick(key: string) {
     setFilterHostId((prev) => (prev === key ? "all" : key));
-  }
-
-  async function handleCheckoutSelect(
-    entry: GuestbookEntryItem,
-    visitStatus: "deal" | "to_be_discuss" | "lost"
-  ): Promise<void> {
-    const result = await checkoutMutation.mutateAsync({ id: entry.id, visitStatus });
-    if (result.success) {
-      toast.success(`"${entry.visitorName}" berhasil di-checkout sebagai ${CHECKOUT_STATUS_OPTIONS.find((o) => o.value === visitStatus)?.label ?? visitStatus}`);
-    } else {
-      toast.error(result.error ?? "Gagal melakukan checkout.");
-    }
   }
 
   function handleEditClick(entry: GuestbookEntryItem) {
@@ -718,16 +666,6 @@ function GuestbookClientInner() {
       toast.error(result.error ?? "Gagal menghapus data");
     }
     setConfirmBulkDelete(false);
-  }
-
-  async function handleBulkCheckout(visitStatus: "deal" | "to_be_discuss" | "lost"): Promise<void> {
-    const result = await bulkCheckoutMutation.mutateAsync({ ids: selectedIds, visitStatus });
-    if (result.success) {
-      toast.success(`${result.count ?? selectedIds.length} data berhasil di-checkout`);
-      setSelectedIds([]);
-    } else {
-      toast.error(result.error ?? "Gagal melakukan checkout");
-    }
   }
 
   async function handleExport(): Promise<void> {
@@ -797,7 +735,7 @@ function GuestbookClientInner() {
       <GuestbookOverview
         overview={guestbookData?.overview ?? {
           total: 0,
-          checkedOut: 0,
+          doneVisit: 0,
           lost: 0,
           onlineMeetings: 0,
           byStatus: [],
@@ -913,21 +851,6 @@ function GuestbookClientInner() {
                 <span className="font-semibold">{selectedIds.length}</span> tamu dipilih
               </span>
               <div className="flex items-center gap-2">
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="outline" size="sm" className="rounded-full text-xs h-8 gap-1.5">
-                      <Logout weight="BoldDuotone" className="h-3.5 w-3.5" />
-                      Checkout
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    {CHECKOUT_STATUS_OPTIONS.map((opt) => (
-                      <DropdownMenuItem key={opt.value} onClick={() => { void handleBulkCheckout(opt.value); }}>
-                        {opt.label}
-                      </DropdownMenuItem>
-                    ))}
-                  </DropdownMenuContent>
-                </DropdownMenu>
                 <Button
                   variant="outline"
                   size="sm"
@@ -962,7 +885,7 @@ function GuestbookClientInner() {
                   <TableHead>Festival</TableHead>
                   <TableHead>Venue</TableHead>
                   <TableHead>PIC</TableHead>
-                  <TableHead>In / Out</TableHead>
+                  <TableHead>Waktu Kunjungan</TableHead>
                   <TableHead className="hidden lg:table-cell text-center">Aktivitas</TableHead>
                   <TableHead className="hidden xl:table-cell">Sumber</TableHead>
                   <TableHead className="hidden xl:table-cell">Dicatat oleh</TableHead>
@@ -997,7 +920,7 @@ function GuestbookClientInner() {
                     <TableHead>Festival</TableHead>
                     <TableHead>Venue</TableHead>
                     <TableHead>PIC</TableHead>
-                    <TableHead>In / Out</TableHead>
+                    <TableHead>Waktu Kunjungan</TableHead>
                     <TableHead className="hidden lg:table-cell text-center">Aktivitas</TableHead>
                     <TableHead className="hidden xl:table-cell">Sumber</TableHead>
                     <TableHead className="hidden xl:table-cell">Dicatat oleh</TableHead>
@@ -1095,30 +1018,12 @@ function GuestbookClientInner() {
                           {entry.host?.fullName ?? "-"}
                         </TableCell>
                         <TableCell className="text-muted-foreground whitespace-nowrap">
-                          <div className="flex flex-col gap-1">
-                            <span className="flex items-baseline gap-1.5">
-                              <span className="w-6 shrink-0 text-[10px] font-medium text-muted-foreground/60">in</span>
-                              <span>
-                                {formatDate(entry.checkInAt)}{" "}
-                                <span className="text-foreground font-medium">
-                                  {formatTime(entry.checkInAt)}
-                                </span>
-                              </span>
+                          <span>
+                            {formatDate(entry.checkInAt)}{" "}
+                            <span className="text-foreground font-medium">
+                              {formatTime(entry.checkInAt)}
                             </span>
-                            <span className="flex items-baseline gap-1.5">
-                              <span className="w-6 shrink-0 text-[10px] font-medium text-muted-foreground/60">out</span>
-                              {entry.checkOutAt ? (
-                                <span>
-                                  {formatDate(entry.checkOutAt)}{" "}
-                                  <span className="text-foreground font-medium">
-                                    {formatTime(entry.checkOutAt)}
-                                  </span>
-                                </span>
-                              ) : (
-                                <span className="text-muted-foreground/50">—</span>
-                              )}
-                            </span>
-                          </div>
+                          </span>
                         </TableCell>
                         <TableCell className="hidden lg:table-cell text-center" onClick={(e) => e.stopPropagation()}>
                           <Tooltip>
@@ -1173,20 +1078,6 @@ function GuestbookClientInner() {
                                   <ClockCircle weight="BoldDuotone" className="h-4 w-4" />
                                   Lihat Aktivitas
                                 </DropdownMenuItem>
-                                {!entry.checkOutAt && (
-                                  <>
-                                    <DropdownMenuSeparator />
-                                    {CHECKOUT_STATUS_OPTIONS.map((opt) => (
-                                      <DropdownMenuItem
-                                        key={opt.value}
-                                        onClick={() => { void handleCheckoutSelect(entry, opt.value); }}
-                                      >
-                                        <Logout weight="BoldDuotone" className="h-4 w-4" />
-                                        {opt.label}
-                                      </DropdownMenuItem>
-                                    ))}
-                                  </>
-                                )}
                                 <DropdownMenuSeparator />
                                 <DropdownMenuItem
                                   variant="destructive"
@@ -1348,7 +1239,6 @@ function GuestbookClientInner() {
               onEditClick={handleEditClick}
               onDeleteClick={setConfirmDelete}
               onStatusClick={handleStatusBucketClick}
-              onCheckoutSelect={(e, visitStatus) => { void handleCheckoutSelect(e, visitStatus); }}
               onActivityClick={setActivityLogTarget}
             />
           ))}

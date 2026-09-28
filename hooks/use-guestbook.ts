@@ -4,13 +4,11 @@ import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tansta
 import { fetchGuestbookEntries, fetchGuestVisitHistory } from "@/services/guestbookService";
 import {
   createGuestbookEntry,
-  checkOutGuestbookEntry,
   updateGuestbookEntry,
   deleteGuestbookEntry,
   confirmGuestbookAttendance,
   lookupGuestbookEntryByCode,
   deleteBulkGuestbookEntries,
-  bulkCheckOutGuestbookEntries,
   refreshGuestbookAdsUrl,
 } from "@/actions/guestbook";
 import type { GuestbookFilterOptions } from "@/lib/queries/guestbookEntries";
@@ -48,15 +46,6 @@ export function useCreateGuestbookEntry() {
   });
 }
 
-export function useCheckOutGuestbookEntry() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: ({ id, visitStatus }: { id: string; visitStatus: "deal" | "to_be_discuss" | "lost" }) =>
-      checkOutGuestbookEntry(id, visitStatus),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["guestbook-entries"] }),
-  });
-}
-
 export function useUpdateGuestbookEntry() {
   const qc = useQueryClient();
   return useMutation({
@@ -77,15 +66,6 @@ export function useDeleteBulkGuestbookEntries() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (ids: string[]) => deleteBulkGuestbookEntries(ids),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["guestbook-entries"] }),
-  });
-}
-
-export function useBulkCheckOutGuestbookEntries() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: ({ ids, visitStatus }: { ids: string[]; visitStatus: "deal" | "to_be_discuss" | "lost" }) =>
-      bulkCheckOutGuestbookEntries(ids, visitStatus),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["guestbook-entries"] }),
   });
 }

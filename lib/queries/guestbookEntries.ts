@@ -101,8 +101,8 @@ export interface GuestbookOverviewBucket {
 export interface GuestbookOverview {
   /** Rencana Visit — semua entry yang tercatat. */
   total: number;
-  /** Sudah Visit — kunjungan yang tuntas, ditandai lewat checkOutAt. */
-  checkedOut: number;
+  /** Sudah Visit — kunjungan yang tuntas, ditandai lewat status `done_visit`. */
+  doneVisit: number;
   /** Tidak Jadi Visit — entry yang berakhir Lost. */
   lost: number;
   /** Online Meeting — pertemuan daring, bukan kunjungan ke venue. */
@@ -129,7 +129,6 @@ const guestbookEntrySelect = {
   meetingLocation: true,
   scheduledAt: true,
   checkInAt: true,
-  checkOutAt: true,
   notes: true,
   guestCode: true,
   phoneNumberNorm: true,
@@ -228,7 +227,7 @@ export async function getGuestbookEntries(
     .slice(0, 10)
     .map((row) => ({ key: row.key as string, label: labels.get(row.key as string) ?? fallback, count: row.count }));
 
-  const [statusGroups, categoryGroups, sourceGroups, venueGroups, hostGroups, adsUrlGroups, sourceAdsGroups, checkedOut, lost, onlineMeetings] = await Promise.all([
+  const [statusGroups, categoryGroups, sourceGroups, venueGroups, hostGroups, adsUrlGroups, sourceAdsGroups, doneVisit, lost, onlineMeetings] = await Promise.all([
     db.guestbookEntry.groupBy({ by: ["visitStatus"], where, _count: { _all: true } }),
     db.guestbookEntry.groupBy({ by: ["eventCategory"], where, _count: { _all: true } }),
     db.guestbookEntry.groupBy({ by: ["sourceOfInformationId"], where, _count: { _all: true } }),
@@ -242,7 +241,7 @@ export async function getGuestbookEntries(
       where: { ...where, bitrixAdsUrl: { not: null } },
       _count: { _all: true },
     }),
-    db.guestbookEntry.count({ where: { ...where, checkOutAt: { not: null } } }),
+    db.guestbookEntry.count({ where: { ...where, visitStatus: "done_visit" } }),
     db.guestbookEntry.count({ where: { ...where, visitStatus: "lost" } }),
     db.guestbookEntry.count({ where: { ...where, interactionType: "online_meeting" } }),
   ]);
@@ -266,7 +265,7 @@ export async function getGuestbookEntries(
   );
   const overview: GuestbookOverview = {
     total: await db.guestbookEntry.count({ where }),
-    checkedOut,
+    doneVisit,
     lost,
     onlineMeetings,
     byStatus: buildBuckets(statusGroups.map((row) => ({ key: row.visitStatus, count: row._count._all })), new Map([
@@ -353,7 +352,6 @@ export type GuestbookEntryItem = GuestbookEntryRow & { visitHistoryCount: number
 export interface GuestVisitHistoryItem {
   id: string;
   checkInAt: Date;
-  checkOutAt: Date | null;
   visitStatus: GuestVisitStatus | null;
   guestCode: string | null;
   festival: { id: string; name: string } | null;
@@ -389,7 +387,6 @@ export async function getGuestVisitHistory(
     select: {
       id: true,
       checkInAt: true,
-      checkOutAt: true,
       visitStatus: true,
       guestCode: true,
       festival: { select: { id: true, name: true } },
