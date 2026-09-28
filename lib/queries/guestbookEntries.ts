@@ -99,7 +99,7 @@ export interface GuestbookOverviewBucket {
 }
 
 export interface GuestbookOverview {
-  /** Rencana Visit — semua entry yang tercatat. */
+  /** Database — semua entry guestbook yang tercatat. */
   total: number;
   /** Sudah Visit — kunjungan yang tuntas, ditandai lewat status `done_visit`. */
   doneVisit: number;

@@ -252,9 +252,9 @@ function GuestbookOverview({
   onHostClick: (key: string) => void;
 }) {
   const metrics = [
-    // Alur kunjungan: direncanakan → tuntas → batal, lalu Online Meeting yang
-    // berdiri sendiri karena bukan kunjungan ke venue.
-    { label: "Rencana Visit", value: overview.total, icon: UsersGroupRounded },
+    // Total database guestbook, kunjungan tuntas, kunjungan batal, dan Online
+    // Meeting yang berdiri sendiri karena bukan kunjungan ke venue.
+    { label: "Database", value: overview.total, icon: UsersGroupRounded },
     { label: "Sudah Visit", value: overview.doneVisit, icon: Buildings2 },
     { label: "Tidak Jadi Visit (Lost)", value: overview.lost, icon: ChartSquare },
     { label: "Online Meeting", value: overview.onlineMeetings, icon: Videocamera },

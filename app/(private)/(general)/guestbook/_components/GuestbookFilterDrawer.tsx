@@ -30,7 +30,7 @@ const EVENT_CATEGORY_OPTIONS = [
 ] as const;
 
 const INTERACTION_TYPE_OPTIONS = [
-  { value: "client_visit", label: "Kunjungan Client" },
+  { value: "client_visit", label: "Database" },
   { value: "online_meeting", label: "Online Meeting" },
   { value: "jemput_bola", label: "Jemput Bola" },
 ] as const;

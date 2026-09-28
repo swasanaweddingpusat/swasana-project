@@ -29,7 +29,7 @@ const VISIT_STATUS_LABELS: Record<string, string> = {
 };
 
 const INTERACTION_TYPE_LABELS: Record<string, string> = {
-  client_visit: "Kunjungan Client",
+  client_visit: "Database",
   online_meeting: "Online Meeting",
   jemput_bola: "Jemput Bola",
 };
