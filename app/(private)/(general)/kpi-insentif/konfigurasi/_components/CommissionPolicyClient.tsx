@@ -189,7 +189,7 @@ export function CommissionPolicyClient({ initialPolicies }: CommissionPolicyClie
             }
           />
         ) : (
-          <
+          <>
             {/* Table — desktop (sm+) */}
             <div className="hidden sm:block w-full overflow-x-auto">
               <Table>
