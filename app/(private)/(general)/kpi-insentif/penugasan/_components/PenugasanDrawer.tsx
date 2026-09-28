@@ -3,8 +3,6 @@
 
 import { useState, useEffect } from "react";
 import { Drawer } from "@/components/shared/drawer";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -19,7 +17,10 @@ import { AddCircle, Pen, InfoCircle } from "@solar-icons/react";
 import { toast } from "sonner";
 import { useCreateAssignment, useUpdateAssignment, useKpiMasters, useProfilesForAssignment } from "@/hooks/useKpiInsentif";
 import { useVenues } from "@/hooks/use-venues";
+import { formatRupiah } from "@/lib/utils/kpiFormatters";
 import type { KpiAssignmentItem, KpiMasterItem } from "@/types/kpiInsentif";
+import { SectionLabel } from "../../_components/SectionLabel";
+import { DrawerFooter } from "../../_components/DrawerFooter";
 
 const MONTHS = [
   "Januari", "Februari", "Maret", "April", "Mei", "Juni",
@@ -40,11 +41,11 @@ type FormState = {
   periodMonth: string;
   periodYear: string;
   venueId: string;
-  targetQty: string;
-  targetPrice: string;
   notes: string;
   isDraft: boolean;
 };
+
+type FormErrors = Partial<Record<"profileId" | "kpiMasterId" | "period", string>>;
 
 const EMPTY: FormState = {
   profileId: "",
@@ -52,8 +53,6 @@ const EMPTY: FormState = {
   periodMonth: "",
   periodYear: "",
   venueId: "all",
-  targetQty: "",
-  targetPrice: "",
   notes: "",
   isDraft: false,
 };
@@ -67,13 +66,18 @@ export function PenugasanDrawer({
 }: PenugasanDrawerProps) {
   const isEdit = editItem != null;
   const [form, setForm] = useState<FormState>(EMPTY);
+  const [errors, setErrors] = useState<FormErrors>({});
   const [selectedMaster, setSelectedMaster] = useState<KpiMasterItem | null>(null);
 
   const createMutation = useCreateAssignment();
   const updateMutation = useUpdateAssignment();
   const isSaving = createMutation.isPending || updateMutation.isPending;
 
-  const { data: profiles = [] } = useProfilesForAssignment();
+  // Profile picker menyempit sesuai businessRole KPI Master yang dipilih —
+  // Profile tidak punya kolom businessRole sendiri, jadi ini narrowing di UI
+  // (lihat catatan di lib/queries/kpiInsentif.ts#getProfilesForKpiAssignment),
+  // bukan validasi keras di server.
+  const { data: profiles = [] } = useProfilesForAssignment(selectedMaster?.businessRole);
   const { data: masters = [] } = useKpiMasters();
   const { data: venues = [] } = useVenues();
 
@@ -81,17 +85,16 @@ export function PenugasanDrawer({
 
   useEffect(() => {
     if (!isOpen) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setErrors({});
     if (isEdit && editItem) {
       const d = new Date(editItem.period);
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setForm({
         profileId: editItem.profileId,
         kpiMasterId: editItem.kpiMasterId,
         periodMonth: String(d.getMonth() + 1),
         periodYear: String(d.getFullYear()),
         venueId: editItem.venueId ?? "all",
-        targetQty: editItem.targetQty != null ? String(editItem.targetQty) : "",
-        targetPrice: editItem.targetPrice != null ? String(editItem.targetPrice) : "",
         notes: editItem.notes ?? "",
         isDraft: editItem.isDraft,
       });
@@ -112,19 +115,34 @@ export function PenugasanDrawer({
 
   function handleMasterSelect(masterId: string) {
     setField("kpiMasterId", masterId);
+    setErrors((prev) => ({ ...prev, kpiMasterId: undefined }));
     const master = masters.find((m) => m.id === masterId) ?? null;
     setSelectedMaster(master as KpiMasterItem | null);
     if (master) {
       const d = new Date(master.month);
       setField("periodMonth", String(d.getMonth() + 1));
       setField("periodYear", String(d.getFullYear()));
+      // KPI Master baru bisa punya businessRole beda dari sebelumnya — reset
+      // pilihan karyawan supaya tidak ada Sales ter-assign ke KPI Manager (atau
+      // sebaliknya) hanya karena karyawan dipilih sebelum master diganti.
+      setField("profileId", "");
     }
   }
 
+  function validate(): boolean {
+    const next: FormErrors = {};
+    if (!form.profileId) next.profileId = "Pilih karyawan terlebih dahulu";
+    if (!form.kpiMasterId) next.kpiMasterId = "Pilih KPI Master terlebih dahulu";
+    if (!form.periodMonth || !form.periodYear) next.period = "Periode wajib diisi";
+    setErrors(next);
+    return Object.keys(next).length === 0;
+  }
+
   async function handleSubmit() {
-    if (!form.profileId) { toast.error("Pilih karyawan terlebih dahulu"); return; }
-    if (!form.kpiMasterId) { toast.error("Pilih KPI Master terlebih dahulu"); return; }
-    if (!form.periodMonth || !form.periodYear) { toast.error("Periode wajib diisi"); return; }
+    if (!validate()) {
+      toast.error("Lengkapi data yang wajib diisi terlebih dahulu");
+      return;
+    }
 
     const payload = {
       profileId: form.profileId,
@@ -132,8 +150,6 @@ export function PenugasanDrawer({
       periodMonth: Number(form.periodMonth),
       periodYear: Number(form.periodYear),
       venueId: form.venueId === "all" ? null : form.venueId || null,
-      targetQty: form.targetQty ? Number(form.targetQty) : null,
-      targetPrice: form.targetPrice ? Number(form.targetPrice) : null,
       notes: form.notes.trim() || null,
       isDraft: form.isDraft,
     };
@@ -164,39 +180,24 @@ export function PenugasanDrawer({
       title={isEdit ? "Edit Penugasan KPI" : "Tambah Penugasan KPI"}
       maxWidth="sm:max-w-lg"
     >
-      <div className="flex flex-col h-full">
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          void handleSubmit();
+        }}
+        className="flex flex-col h-full"
+      >
         <div className="flex-1 space-y-4 overflow-y-auto pb-2">
-          {/* Karyawan */}
+          {/* KPI Master & Karyawan */}
           <div className="rounded-2xl border bg-card p-5 space-y-4">
-            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground border-b border-border pb-1">
-              Data Penugasan
-            </p>
-
-            <div className="space-y-1.5">
-              <Label className="text-sm font-medium">
-                Karyawan <span className="text-destructive">*</span>
-              </Label>
-              <Select value={form.profileId} onValueChange={(v) => setField("profileId", v)}>
-                <SelectTrigger className="rounded-xl w-full">
-                  <SelectValue placeholder="Pilih karyawan" />
-                </SelectTrigger>
-                <SelectContent>
-                  {profiles.map((p) => (
-                    <SelectItem key={p.id} value={p.id}>
-                      {p.fullName ?? p.id}
-                      {p.roleName ? ` — ${p.roleName}` : ""}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            <SectionLabel text="Data Penugasan" />
 
             <div className="space-y-1.5">
               <Label className="text-sm font-medium">
                 KPI Master <span className="text-destructive">*</span>
               </Label>
               <Select value={form.kpiMasterId} onValueChange={handleMasterSelect}>
-                <SelectTrigger className="rounded-xl w-full">
+                <SelectTrigger className="rounded-xl w-full" aria-invalid={!!errors.kpiMasterId}>
                   <SelectValue placeholder="Pilih KPI Master" />
                 </SelectTrigger>
                 <SelectContent>
@@ -212,6 +213,9 @@ export function PenugasanDrawer({
                   )}
                 </SelectContent>
               </Select>
+              {errors.kpiMasterId && (
+                <p className="text-xs text-destructive">{errors.kpiMasterId}</p>
+              )}
             </div>
 
             {selectedMaster && (
@@ -221,7 +225,7 @@ export function PenugasanDrawer({
                   Info KPI Master
                 </div>
                 <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
-                  <span className="text-muted-foreground">Indikator</span>
+                  <span className="text-muted-foreground">Target Item</span>
                   <span className="font-medium">{selectedMaster.targetItem?.name ?? "-"}</span>
                   <span className="text-muted-foreground">Periode</span>
                   <span className="font-medium">
@@ -229,18 +233,61 @@ export function PenugasanDrawer({
                   </span>
                   <span className="text-muted-foreground">Role</span>
                   <span className="font-medium capitalize">{selectedMaster.businessRole}</span>
-                  <span className="text-muted-foreground">Tipe Target</span>
-                  <span className="font-medium capitalize">{selectedMaster.targetItem?.type === "qty" ? "Jumlah (Qty)" : "Omset (Rp)"}</span>
+                  <span className="text-muted-foreground">Dealing</span>
+                  <span className="font-medium">
+                    {selectedMaster.targetItem?.dealingQty != null ? `${selectedMaster.targetItem.dealingQty} qty` : "-"}
+                  </span>
+                  <span className="text-muted-foreground">Omset</span>
+                  <span className="font-medium">{formatRupiah(selectedMaster.targetItem?.omsetPrice)}</span>
+                  <span className="text-muted-foreground">Homebase</span>
+                  <span className="font-medium">
+                    {selectedMaster.targetItem?.homebaseQty != null ? `${selectedMaster.targetItem.homebaseQty} qty` : "-"}
+                  </span>
                 </div>
               </div>
             )}
+
+            <div className="space-y-1.5">
+              <Label className="text-sm font-medium">
+                Karyawan <span className="text-destructive">*</span>
+              </Label>
+              <Select
+                value={form.profileId}
+                onValueChange={(v) => {
+                  setField("profileId", v);
+                  setErrors((prev) => ({ ...prev, profileId: undefined }));
+                }}
+              >
+                <SelectTrigger className="rounded-xl w-full" aria-invalid={!!errors.profileId}>
+                  <SelectValue placeholder="Pilih karyawan" />
+                </SelectTrigger>
+                <SelectContent>
+                  {profiles.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.fullName ?? p.id}
+                      {p.roleName ? ` — ${p.roleName}` : ""}
+                    </SelectItem>
+                  ))}
+                  {profiles.length === 0 && (
+                    <SelectItem value="__empty__" disabled>
+                      Tidak ada karyawan yang cocok
+                    </SelectItem>
+                  )}
+                </SelectContent>
+              </Select>
+              {errors.profileId ? (
+                <p className="text-xs text-destructive">{errors.profileId}</p>
+              ) : selectedMaster ? (
+                <p className="text-xs text-muted-foreground">
+                  Menampilkan karyawan dengan role &ldquo;{selectedMaster.businessRole}&rdquo;
+                </p>
+              ) : null}
+            </div>
           </div>
 
           {/* Periode */}
           <div className="rounded-2xl border bg-card p-5 space-y-4">
-            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground border-b border-border pb-1">
-              Periode & Venue
-            </p>
+            <SectionLabel text="Periode & Venue" />
 
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
@@ -270,6 +317,7 @@ export function PenugasanDrawer({
                 </Select>
               </div>
             </div>
+            {errors.period && <p className="text-xs text-destructive">{errors.period}</p>}
 
             <div className="space-y-1.5">
               <Label className="text-sm font-medium">Venue (opsional)</Label>
@@ -287,48 +335,9 @@ export function PenugasanDrawer({
             </div>
           </div>
 
-          {/* Target Override */}
-          <div className="rounded-2xl border bg-card p-5 space-y-4">
-            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground border-b border-border pb-1">
-              Target Override (opsional)
-            </p>
-
-            {selectedMaster?.targetItem?.type === "qty" ? (
-              <div className="space-y-1.5">
-                <Label className="text-sm font-medium">Target Jumlah (Qty)</Label>
-                <Input
-                  type="number"
-                  min={0}
-                  placeholder="Kosongkan untuk pakai target master"
-                  value={form.targetQty}
-                  onChange={(e) => setField("targetQty", e.target.value)}
-                  className="rounded-xl"
-                />
-                <p className="text-xs text-muted-foreground">Kosongkan untuk pakai target master</p>
-              </div>
-            ) : selectedMaster?.targetItem?.type === "price" ? (
-              <div className="space-y-1.5">
-                <Label className="text-sm font-medium">Target Omset (Rp)</Label>
-                <Input
-                  type="number"
-                  min={0}
-                  placeholder="Kosongkan untuk pakai target master"
-                  value={form.targetPrice}
-                  onChange={(e) => setField("targetPrice", e.target.value)}
-                  className="rounded-xl"
-                />
-                <p className="text-xs text-muted-foreground">Kosongkan untuk pakai target master</p>
-              </div>
-            ) : (
-              <p className="text-sm text-muted-foreground">Pilih KPI Master untuk mengatur target override</p>
-            )}
-          </div>
-
           {/* Catatan & Draft */}
           <div className="rounded-2xl border bg-card p-5 space-y-4">
-            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground border-b border-border pb-1">
-              Catatan & Status
-            </p>
+            <SectionLabel text="Catatan & Status" />
 
             <div className="space-y-1.5">
               <Label className="text-sm font-medium">Catatan (opsional)</Label>
@@ -358,31 +367,19 @@ export function PenugasanDrawer({
           </div>
         </div>
 
-        {/* Footer */}
-        <div className="sticky bottom-0 bg-background border-t border-border pt-4 mt-4 flex items-center gap-3">
-          <Button
-            type="button"
-            variant="outline"
-            className="flex-1 rounded-full"
-            onClick={onClose}
-            disabled={isSaving}
-          >
-            Batal
-          </Button>
-          <Button
-            type="button"
-            className="flex-1 rounded-full gap-1.5"
-            onClick={handleSubmit}
-            disabled={isSaving || !form.profileId || !form.kpiMasterId}
-          >
-            {isEdit ? (
-              <><Pen weight="BoldDuotone" className="h-4 w-4" />{isSaving ? "Menyimpan..." : "Simpan"}</>
+        <DrawerFooter
+          onCancel={onClose}
+          isSaving={isSaving}
+          submitLabel={isEdit ? "Simpan" : "Tambah Penugasan"}
+          submitIcon={
+            isEdit ? (
+              <Pen weight="BoldDuotone" className="h-4 w-4" />
             ) : (
-              <><AddCircle weight="BoldDuotone" className="h-4 w-4" />{isSaving ? "Menyimpan..." : "Tambah Penugasan"}</>
-            )}
-          </Button>
-        </div>
-      </div>
+              <AddCircle weight="BoldDuotone" className="h-4 w-4" />
+            )
+          }
+        />
+      </form>
     </Drawer>
   );
 }

@@ -11,7 +11,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { CalendarDate, UsersGroupRounded, CheckCircle, ClipboardText, Wallet, DocumentText } from "@solar-icons/react";
+import { CalendarDate, UsersGroupRounded, CheckCircle, ClipboardText, Wallet, DocumentText, Ticket } from "@solar-icons/react";
 import { usePermissions } from "@/hooks/use-permissions";
 import { usePendingForManager } from "@/hooks/use-leave-requests";
 import { LeaveBalanceCards } from "./LeaveBalanceCards";
@@ -21,6 +21,7 @@ import { LeaveTeamCalendar } from "./LeaveTeamCalendar";
 import { LeaveApprovalTable } from "./LeaveApprovalTable";
 import { LeaveTypeManager } from "./LeaveTypeManager";
 import { LeaveBalanceManager } from "./LeaveBalanceManager";
+import { HolidayTokenManager } from "./HolidayTokenManager";
 
 interface LeaveManagementProps {
   mode?: "self-service" | "hr";
@@ -78,6 +79,8 @@ export function LeaveManagement({ mode = "hr" }: LeaveManagementProps) {
   const showLeaveTypes =
     can("hr-leave", "create") || can("hr-leave", "edit");
   const showBalanceManager = can("hr-leave", "edit");
+  const showTokenManager =
+    can("hr-leave", "create") || can("hr-leave", "edit");
 
   return (
     <Tabs defaultValue="my-leave">
@@ -108,6 +111,12 @@ export function LeaveManagement({ mode = "hr" }: LeaveManagementProps) {
             Saldo
           </TabsTrigger>
         )}
+        {showTokenManager && (
+          <TabsTrigger value="tokens" className="rounded-xl gap-2">
+            <Ticket weight="BoldDuotone" className="h-4 w-4" />
+            Token Hari Besar
+          </TabsTrigger>
+        )}
       </TabsList>
 
       <TabsContent value="my-leave" className="space-y-6">
@@ -135,6 +144,12 @@ export function LeaveManagement({ mode = "hr" }: LeaveManagementProps) {
       {showBalanceManager && (
         <TabsContent value="balances">
           <LeaveBalanceManager />
+        </TabsContent>
+      )}
+
+      {showTokenManager && (
+        <TabsContent value="tokens">
+          <HolidayTokenManager />
         </TabsContent>
       )}
     </Tabs>

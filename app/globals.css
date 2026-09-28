@@ -272,6 +272,14 @@ input[type="text"]::-webkit-credentials-auto-fill-button {
   scrollbar-color: #4b5563 transparent;
 }
 
+@utility no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
 /* Calendar availability indicators
    gold dot  = partially booked (some sessions still open)
    green dot = fully booked (date disabled)

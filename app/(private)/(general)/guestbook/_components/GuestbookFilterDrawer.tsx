@@ -7,15 +7,9 @@ import { Drawer } from "@/components/shared/drawer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Calendar } from "@/components/ui/calendar";
 import { ComplimentarySelect } from "@/components/shared/ComplimentarySelect";
+import { MultiSelect } from "@/components/shared/multi-select";
 import { Magnifer } from "@solar-icons/react";
 import type { GuestbookCategoryFilter } from "@/lib/queries/guestbookEntries";
 import type { GuestInteractionType, GuestVisitStatus } from "@prisma/client";
@@ -36,7 +30,7 @@ const EVENT_CATEGORY_OPTIONS = [
 ] as const;
 
 const INTERACTION_TYPE_OPTIONS = [
-  { value: "client_visit", label: "Kunjungan Client" },
+  { value: "client_visit", label: "Database" },
   { value: "online_meeting", label: "Online Meeting" },
   { value: "jemput_bola", label: "Jemput Bola" },
 ] as const;
@@ -58,20 +52,20 @@ interface GuestbookFilterDrawerProps {
   onSearchChange: (value: string) => void;
   dateRange: DateRange | undefined;
   onDateRangeChange: (range: DateRange | undefined) => void;
-  venueId: string;
-  onVenueIdChange: (value: string) => void;
+  venueIds: string[];
+  onVenueIdsChange: (value: string[]) => void;
   hostId: string;
   onHostIdChange: (value: string) => void;
-  category: "all" | GuestbookCategoryFilter;
-  onCategoryChange: (value: "all" | GuestbookCategoryFilter) => void;
-  interactionType: "all" | GuestInteractionType;
-  onInteractionTypeChange: (value: "all" | GuestInteractionType) => void;
-  status: "all" | GuestVisitStatus;
-  onStatusChange: (value: "all" | GuestVisitStatus) => void;
-  sourceOfInformationId: string;
-  onSourceOfInformationIdChange: (value: string) => void;
-  festivalId: string;
-  onFestivalIdChange: (value: string) => void;
+  categories: GuestbookCategoryFilter[];
+  onCategoriesChange: (value: GuestbookCategoryFilter[]) => void;
+  interactionTypes: GuestInteractionType[];
+  onInteractionTypesChange: (value: GuestInteractionType[]) => void;
+  statuses: GuestVisitStatus[];
+  onStatusesChange: (value: GuestVisitStatus[]) => void;
+  sourceOfInformationIds: string[];
+  onSourceOfInformationIdsChange: (value: string[]) => void;
+  festivalIds: string[];
+  onFestivalIdsChange: (value: string[]) => void;
   venues: { id: string; name: string }[];
   salesOptions: { id: string; name: string }[];
   onReset: () => void;
@@ -84,20 +78,20 @@ export function GuestbookFilterDrawer({
   onSearchChange,
   dateRange,
   onDateRangeChange,
-  venueId,
-  onVenueIdChange,
+  venueIds,
+  onVenueIdsChange,
   hostId,
   onHostIdChange,
-  category,
-  onCategoryChange,
-  interactionType,
-  onInteractionTypeChange,
-  status,
-  onStatusChange,
-  sourceOfInformationId,
-  onSourceOfInformationIdChange,
-  festivalId,
-  onFestivalIdChange,
+  categories,
+  onCategoriesChange,
+  interactionTypes,
+  onInteractionTypesChange,
+  statuses,
+  onStatusesChange,
+  sourceOfInformationIds,
+  onSourceOfInformationIdsChange,
+  festivalIds,
+  onFestivalIdsChange,
   venues,
   salesOptions,
   onReset,
@@ -159,101 +153,80 @@ export function GuestbookFilterDrawer({
 
           <div className="space-y-1.5">
             <Label className="text-sm font-medium">Venue</Label>
-            <Select value={venueId} onValueChange={onVenueIdChange}>
-              <SelectTrigger className="rounded-xl w-full">
-                <SelectValue placeholder="Semua Venue" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Semua Venue</SelectItem>
-                {venues.map((v) => (
-                  <SelectItem key={v.id} value={v.id}>{v.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <MultiSelect
+              options={venues}
+              value={venueIds}
+              onChange={onVenueIdsChange}
+              placeholder="Semua Venue"
+              searchPlaceholder="Cari venue..."
+              emptyText="Venue tidak ditemukan"
+              className="rounded-xl"
+            />
           </div>
 
           <div className="space-y-1.5">
             <Label className="text-sm font-medium">Event</Label>
-            <Select
-              value={category}
-              onValueChange={(v) => onCategoryChange(v as "all" | GuestbookCategoryFilter)}
-            >
-              <SelectTrigger className="rounded-xl w-full">
-                <SelectValue placeholder="Semua Event" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Semua Event</SelectItem>
-                {EVENT_CATEGORY_OPTIONS.map((opt) => (
-                  <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <MultiSelect
+              options={EVENT_CATEGORY_OPTIONS.map((opt) => ({ id: opt.value, name: opt.label }))}
+              value={categories}
+              onChange={(v) => onCategoriesChange(v as GuestbookCategoryFilter[])}
+              placeholder="Semua Event"
+              searchPlaceholder="Cari event..."
+              emptyText="Event tidak ditemukan"
+              className="rounded-xl"
+            />
           </div>
 
           <div className="space-y-1.5">
             <Label className="text-sm font-medium">Jenis Interaksi</Label>
-            <Select
-              value={interactionType}
-              onValueChange={(v) => onInteractionTypeChange(v as "all" | GuestInteractionType)}
-            >
-              <SelectTrigger className="rounded-xl w-full">
-                <SelectValue placeholder="Semua Interaksi" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Semua Interaksi</SelectItem>
-                {INTERACTION_TYPE_OPTIONS.map((opt) => (
-                  <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <MultiSelect
+              options={INTERACTION_TYPE_OPTIONS.map((opt) => ({ id: opt.value, name: opt.label }))}
+              value={interactionTypes}
+              onChange={(v) => onInteractionTypesChange(v as GuestInteractionType[])}
+              placeholder="Semua Interaksi"
+              searchPlaceholder="Cari jenis interaksi..."
+              emptyText="Jenis interaksi tidak ditemukan"
+              className="rounded-xl"
+            />
           </div>
 
           <div className="space-y-1.5">
             <Label className="text-sm font-medium">Status</Label>
-            <Select
-              value={status}
-              onValueChange={(v) => onStatusChange(v as "all" | GuestVisitStatus)}
-            >
-              <SelectTrigger className="rounded-xl w-full">
-                <SelectValue placeholder="Semua Status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Semua Status</SelectItem>
-                {STATUS_OPTIONS.map((opt) => (
-                  <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <MultiSelect
+              options={STATUS_OPTIONS.map((opt) => ({ id: opt.value, name: opt.label }))}
+              value={statuses}
+              onChange={(v) => onStatusesChange(v as GuestVisitStatus[])}
+              placeholder="Semua Status"
+              searchPlaceholder="Cari status..."
+              emptyText="Status tidak ditemukan"
+              className="rounded-xl"
+            />
           </div>
 
           <div className="space-y-1.5">
             <Label className="text-sm font-medium">Sumber Data</Label>
-            <Select value={sourceOfInformationId} onValueChange={onSourceOfInformationIdChange}>
-              <SelectTrigger className="rounded-xl w-full">
-                <SelectValue placeholder="Semua Sumber" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Semua Sumber</SelectItem>
-                {sourceOptions.map((opt) => (
-                  <SelectItem key={opt.id} value={opt.id}>{opt.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <MultiSelect
+              options={sourceOptions}
+              value={sourceOfInformationIds}
+              onChange={onSourceOfInformationIdsChange}
+              placeholder="Semua Sumber"
+              searchPlaceholder="Cari sumber..."
+              emptyText="Sumber tidak ditemukan"
+              className="rounded-xl"
+            />
           </div>
 
           <div className="space-y-1.5">
             <Label className="text-sm font-medium">Festival</Label>
-            <Select value={festivalId} onValueChange={onFestivalIdChange}>
-              <SelectTrigger className="rounded-xl w-full">
-                <SelectValue placeholder="Semua Festival" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Semua Festival</SelectItem>
-                {festivalOptions.map((opt) => (
-                  <SelectItem key={opt.id} value={opt.id}>{opt.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <MultiSelect
+              options={festivalOptions}
+              value={festivalIds}
+              onChange={onFestivalIdsChange}
+              placeholder="Semua Festival"
+              searchPlaceholder="Cari festival..."
+              emptyText="Festival tidak ditemukan"
+              className="rounded-xl"
+            />
           </div>
         </div>
 

@@ -19,9 +19,3 @@ export async function fetchMyAttendanceCorrections(): Promise<AttendanceCorrecti
   if (!res.ok) throw new Error("Failed to fetch my attendance corrections");
   return res.json() as Promise<AttendanceCorrectionItem[]>;
 }
-
-export async function fetchPendingCorrectionsForManager(): Promise<AttendanceCorrectionItem[]> {
-  const res = await fetch("/api/hr/attendance-corrections/pending");
-  if (!res.ok) throw new Error("Failed to fetch pending attendance corrections");
-  return res.json() as Promise<AttendanceCorrectionItem[]>;
-}

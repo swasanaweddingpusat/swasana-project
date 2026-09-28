@@ -14,7 +14,8 @@ export async function GET(): Promise<Response> {
   try {
     const result = await getMyAttendanceCorrections(profileId);
     return Response.json(result);
-  } catch {
+  } catch (e) {
+    console.error(e);
     return Response.json({ error: "Failed to fetch my attendance corrections" }, { status: 500 });
   }
 }

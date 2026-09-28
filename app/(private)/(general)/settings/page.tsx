@@ -195,7 +195,7 @@ const GROUPS: SettingGroup[] = [
         title: "Master KPI",
         description: "Kelola target item, skema achievement, dan master KPI.",
         icon: Wallet,
-        href: "/kpi-insentif/kpi-master",
+        href: "/kpi-insentif/konfigurasi",
         module: "kpi-master",
       },
       {
@@ -209,7 +209,7 @@ const GROUPS: SettingGroup[] = [
         title: "Laporan KPI & Insentif",
         description: "Lihat hasil KPI, simulasi, dan laporan insentif.",
         icon: ChartSquare,
-        href: "/kpi-insentif/laporan",
+        href: "/kpi-insentif/kalkulasi",
         module: "kpi-report",
       },
     ],

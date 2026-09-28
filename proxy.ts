@@ -36,6 +36,8 @@ const PUBLIC_PREFIXES = [
   "/api/apply/", // public job application API (no auth required)
   "/apply-invite/",     // personal candidate invite form pages (access-code auth, not session auth)
   "/api/apply-invite/", // personal candidate invite API (access-code auth, not session auth)
+  "/guestbook-rsvp/",     // public guest-count RSVP form (token auth, not session auth)
+  "/api/guestbook-rsvp/", // public guest-count RSVP API (token auth, not session auth)
 ];
 
 function isPublicPath(pathname: string): boolean {
