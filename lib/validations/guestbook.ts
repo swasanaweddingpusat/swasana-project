@@ -33,7 +33,6 @@ export const createGuestbookEntrySchema = z
     bitrixName: z.string().optional().nullable(),
     bitrixSourceInfo: z.string().optional().nullable(),
     bitrixAdsUrl: z.string().optional().nullable(),
-    interactionType: z.enum(['client_visit', 'online_meeting', 'jemput_bola']),
     onlineMedium: z.enum(['zoom', 'google_meet', 'whatsapp_call', 'microsoft_teams', 'other']).optional().nullable(),
     meetingUrl: z.string().optional().nullable(),
     meetingLocation: z.string().optional().nullable(),
@@ -42,7 +41,7 @@ export const createGuestbookEntrySchema = z
     venueId: z.string().optional().nullable(),
     checkInAt: z.string().optional().nullable(),
     notes: z.string().optional().nullable(),
-    visitStatus: z.enum(['cold', 'warm', 'hot', 'done_visit', 'to_be_discuss', 'deal', 'lost']).optional().nullable(),
+    prospectStatusId: z.string().optional().nullable(),
     sourceOfInformationId: z.string().optional().nullable(),
     packageId: z.string().optional().nullable(),
     segmentId: z.string().optional().nullable(),
@@ -60,40 +59,19 @@ export const createGuestbookEntrySchema = z
       });
     }
 
-    if (val.eventCategory !== 'MICE' && !val.packageId?.trim()) {
+    // Paket bersifat opsional untuk create maupun edit guestbook.
+
+    // Dulu aturan ini bercabang per interactionType. Setelah field itu dihapus,
+    // medium/link meeting hanya divalidasi kalau user memang mengisinya.
+    if (val.onlineMedium && val.onlineMedium !== 'whatsapp_call' && !val.meetingUrl?.trim()) {
       ctx.addIssue({
-        path: ['packageId'],
+        path: ['meetingUrl'],
         code: z.ZodIssueCode.custom,
-        message: 'Paket wajib dipilih',
+        message: 'Link meeting wajib diisi',
       });
     }
 
-    if (val.interactionType === 'online_meeting') {
-      if (!val.onlineMedium) {
-        ctx.addIssue({
-          path: ['onlineMedium'],
-          code: z.ZodIssueCode.custom,
-          message: 'Medium online meeting wajib diisi',
-        });
-      }
-      if (val.onlineMedium !== 'whatsapp_call' && !val.meetingUrl?.trim()) {
-        ctx.addIssue({
-          path: ['meetingUrl'],
-          code: z.ZodIssueCode.custom,
-          message: 'Link meeting wajib diisi',
-        });
-      }
-    }
-
-    if (val.interactionType === 'jemput_bola' && !val.meetingLocation?.trim()) {
-      ctx.addIssue({
-        path: ['meetingLocation'],
-        code: z.ZodIssueCode.custom,
-        message: 'Lokasi kunjungan wajib diisi',
-      });
-    }
-
-    if (val.interactionType === 'client_visit' && !val.venueId && !val.meetingLocation?.trim()) {
+    if (!val.venueId && !val.meetingLocation?.trim()) {
       ctx.addIssue({
         path: ['venueId'],
         code: z.ZodIssueCode.custom,
@@ -105,7 +83,7 @@ export const createGuestbookEntrySchema = z
 export type CreateGuestbookEntryInput = z.infer<typeof createGuestbookEntrySchema>;
 
 export const updateGuestbookEntrySchema = z.object({
-  visitStatus: z.enum(['cold', 'warm', 'hot', 'done_visit', 'to_be_discuss', 'deal', 'lost']).optional().nullable(),
+  prospectStatusId: z.string().optional().nullable(),
   notes: z.string().optional().nullable(),
   sourceOfInformationId: z.string().optional().nullable(),
   packageId: z.string().optional().nullable(),
@@ -120,7 +98,6 @@ export const updateGuestbookEntrySchema = z.object({
   bitrixName: z.string().optional().nullable(),
   bitrixSourceInfo: z.string().optional().nullable(),
   bitrixAdsUrl: z.string().optional().nullable(),
-  interactionType: z.enum(['client_visit', 'online_meeting', 'jemput_bola']).optional(),
   onlineMedium: z.enum(['zoom', 'google_meet', 'whatsapp_call', 'microsoft_teams', 'other']).optional().nullable(),
   meetingUrl: z.string().optional().nullable(),
   meetingLocation: z.string().optional().nullable(),
@@ -140,13 +117,7 @@ export const updateGuestbookEntrySchema = z.object({
     });
   }
 
-  if (val.eventCategory !== 'MICE' && !val.packageId?.trim()) {
-    ctx.addIssue({
-      path: ['packageId'],
-      code: z.ZodIssueCode.custom,
-      message: 'Paket wajib dipilih',
-    });
-  }
+  // Paket bersifat opsional untuk create maupun edit guestbook.
 });
 
 export type UpdateGuestbookEntryInput = z.infer<typeof updateGuestbookEntrySchema>;

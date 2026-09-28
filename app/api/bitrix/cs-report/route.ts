@@ -31,11 +31,12 @@ interface RawDeal {
  * CS currently compiles by hand into a WhatsApp recap:
  *   • Total/Sumber Chat Masuk — every Open Lines session opened that day (all
  *     channels), same source `crm.activity.list` Percakapan reads.
- *   • Chat Jadi Database / Database Respon / No Respon — deals whose "Tanggal
- *     Database" (UF_DB_DATE) falls that day, response status via the same
- *     linked-session metrics Response Sales / Overview use.
- *   • Spam/Prank / Sumber Iklan Spam / Organik — deals flagged Spam/Prank
- *     (UF_ISSUE), bucketed by ad URL (UF_ADS_URL); no ad URL → Organik.
+ *   • Chat Jadi Database — deals whose "Tanggal Database" (UF_DB_DATE) falls
+ *     that day. Database Respon / No Respon remain its diagnostic breakdown.
+ *   • Spam/Prank / Sumber Iklan Spam / Organik — deals CREATED that day and
+ *     flagged Spam/Prank (UF_ISSUE), bucketed by ad URL (UF_ADS_URL); no ad
+ *     URL → Organik. Spam must not use UF_DB_DATE because it never becomes a
+ *     database entry.
  *
  * Defaults to "yesterday" when no `date` given. Also returns `message`, the
  * exact WhatsApp text CS can copy/send in place of the manual recap.
@@ -53,7 +54,7 @@ export async function GET(request: Request) {
     const enums = await getBitrixDealEnums([UF_ISSUE]);
     const issueEnum = enums[UF_ISSUE] ?? {};
 
-    const [{ items: activities }, { items: deals }] = await Promise.all([
+    const [{ items: activities }, { items: databaseDeals }, { items: dailyDeals }] = await Promise.all([
       bitrixListAll<RawActivity>("crm.activity.list", {
         select: ["ID", "SUBJECT", "RESULT_SOURCE_ID"],
         filter: {
@@ -63,11 +64,23 @@ export async function GET(request: Request) {
         },
         order: { ID: "DESC" },
       }),
+      // Hanya Chat Jadi Database (+ diagnostic response breakdown) yang memakai
+      // Tanggal Database. Spam tidak masuk database, jadi jangan dicari di sini.
       bitrixListAll<RawDeal>("crm.deal.list", {
-        select: ["ID", UF_ADS_URL, UF_ISSUE],
+        select: ["ID"],
         filter: {
           [`>=${UF_DB_DATE}`]: date,
           [`<=${UF_DB_DATE}`]: date,
+        },
+        order: { ID: "DESC" },
+      }),
+      // Spam mengikuti tanggal deal/chat dibuat. Bitrix stores DATE_CREATE with
+      // a +03:00 offset; bare date-time bounds match its calendar-day UI.
+      bitrixListAll<RawDeal>("crm.deal.list", {
+        select: ["ID", UF_ADS_URL, UF_ISSUE],
+        filter: {
+          ">=DATE_CREATE": `${date}T00:00:00`,
+          "<DATE_CREATE": `${nextDay(date)}T00:00:00`,
         },
         order: { ID: "DESC" },
       }),
@@ -82,12 +95,12 @@ export async function GET(request: Request) {
       return channel ?? channelFromSourceId(a.RESULT_SOURCE_ID);
     });
 
-    // Spam/Prank + Sumber Iklan Spam — deals whose issue enum label mentions
-    // "spam"/"prank", bucketed by ad URL; no ad URL → Organik.
+    // Spam/Prank + Sumber Iklan Spam — daily deals whose issue enum label
+    // mentions "spam"/"prank", bucketed by ad URL; no ad URL → Organik.
     let spamPrank = 0;
     const adCounts = new Map<string, number>();
     let organikSpam = 0;
-    for (const d of deals) {
+    for (const d of dailyDeals) {
       const issueId = d[UF_ISSUE];
       const label = issueId ? (issueEnum[issueId]?.toLowerCase() ?? "") : "";
       if (!label.includes("spam") && !label.includes("prank")) continue;
@@ -100,13 +113,11 @@ export async function GET(request: Request) {
       .map(([url, count]) => ({ key: url, url, count }))
       .sort((a, b) => b.count - a.count);
 
-    const chatJadiDatabase = deals.length;
+    const chatJadiDatabase = databaseDeals.length;
 
-    // Database Respon / No Respon — a deal counts as "no respon" if ANY of
-    // its linked Open Lines sessions still has a pending anchor, mirroring
-    // the Overview report's per-deal response classification. Deals with no
-    // linked session (created without a chat trail) default to "respon".
-    const dealIds = deals.map((d) => d.ID);
+    // Database Respon / No Respon — diagnostic breakdown dari kumpulan Chat
+    // Jadi Database. Angka ini tidak masuk template copy WhatsApp.
+    const dealIds = databaseDeals.map((d) => d.ID);
     let databaseRespon = 0;
     let databaseNoRespon = 0;
 

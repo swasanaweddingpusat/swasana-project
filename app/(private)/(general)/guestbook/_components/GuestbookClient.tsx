@@ -53,12 +53,6 @@ import {
   Repeat,
   TrashBinTrash,
   UserCircle,
-  ChartSquare,
-  Buildings2,
-  VolumeLoud,
-  Leaf,
-  Videocamera,
-  Link as LinkIcon,
   MenuDotsCircle,
 } from "@solar-icons/react";
 import { toast } from "sonner";
@@ -75,10 +69,8 @@ import { useSalesUsers } from "@/hooks/use-sales-users";
 import type {
   GuestbookEntryItem,
   GuestbookCategoryFilter,
-  GuestbookOverview,
-  GuestbookOverviewBucket,
 } from "@/lib/queries/guestbookEntries";
-import type { GuestInteractionType, GuestVisitStatus } from "@prisma/client";
+
 import { guestbookSourceLabel, type ProofFiles } from "@/lib/validations/guestbook";
 import { GuestbookDrawer } from "./GuestbookDrawer";
 import { GuestbookDetailDrawer } from "./GuestbookDetailDrawer";
@@ -86,16 +78,7 @@ import { GuestbookFilterDrawer } from "./GuestbookFilterDrawer";
 import { ActivityLogModal } from "./activity-log-modal";
 import { resolveGuestbookProofThumb } from "./photo-url";
 import { PaginationBar } from "@/components/shared/pagination-bar";
-
-const STATUS_LABELS: Record<string, { label: string; className: string }> = {
-  cold: { label: "Cold", className: "bg-sky-100 text-sky-700 border-0" },
-  warm: { label: "Warm", className: "bg-amber-100 text-amber-700 border-0" },
-  hot: { label: "Hot", className: "bg-orange-100 text-orange-700 border-0" },
-  done_visit: { label: "Done Visit", className: "bg-emerald-100 text-emerald-700 border-0" },
-  to_be_discuss: { label: "To Be Discuss", className: "bg-yellow-100 text-yellow-700 border-0" },
-  deal: { label: "Deal", className: "bg-green-100 text-green-700 border-0" },
-  lost: { label: "Lost", className: "bg-red-100 text-red-700 border-0" },
-};
+import { prospectStatusClass } from "@/lib/prospect-status";
 
 const EVENT_CATEGORY_LABELS: Record<string, string> = {
   WEDDINGS: "Wedding",
@@ -132,220 +115,6 @@ function getPackagePrice(pkg: NonNullable<GuestbookEntryItem["package"]>): numbe
   return computeFullPrice([{ basePrice: base }], pkg.margin ?? 0);
 }
 
-// Shorten an ad URL for display (drop protocol + trailing slash).
-function shortUrl(url: string): string {
-  return url.replace(/^https?:\/\//i, "").replace(/\/$/, "");
-}
-
-// Progress-bar row used by the "Sumber Iklan" card — label + count + percentage.
-function AdsSourceBarRow({
-  label,
-  count,
-  total,
-}: {
-  label: React.ReactNode;
-  count: number;
-  total: number;
-}) {
-  const pct = total > 0 ? Math.round((count / total) * 100) : 0;
-  return (
-    <div className="space-y-1">
-      <div className="flex items-center justify-between gap-3 text-xs">
-        <span className="min-w-0 truncate">{label}</span>
-        <span className="shrink-0 font-medium tabular-nums text-foreground">
-          {count.toLocaleString("id-ID")}
-          <span className="ml-1 text-muted-foreground">({pct}%)</span>
-        </span>
-      </div>
-      <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
-        <div className="h-full rounded-full bg-primary" style={{ width: `${pct}%` }} />
-      </div>
-    </div>
-  );
-}
-
-// Dedicated card for the ad-source breakdown — needs clickable URLs + an
-// "Organik" fallback row, which the generic `lists` item renderer below
-// doesn't support.
-function GuestbookAdsSourceCard({
-  buckets,
-  organik,
-  total,
-}: {
-  buckets: GuestbookOverviewBucket[];
-  organik: number;
-  total: number;
-}) {
-  const isEmpty = buckets.length === 0 && organik === 0;
-  return (
-    <Card className="rounded-2xl shadow-sm">
-      <CardContent className="p-4">
-        <div className="mb-3 flex items-center gap-2">
-          <VolumeLoud weight="BoldDuotone" className="h-4 w-4 text-muted-foreground" />
-          <p className="text-sm font-semibold text-foreground">Sumber Iklan</p>
-        </div>
-        {isEmpty ? (
-          <p className="text-xs text-muted-foreground">Tidak ada data.</p>
-        ) : (
-          <div className="space-y-3">
-            {buckets.map((b) => (
-              <AdsSourceBarRow
-                key={b.key}
-                total={total}
-                count={b.count}
-                label={
-                  <a
-                    href={b.label}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1.5 text-primary hover:underline"
-                  >
-                    <LinkIcon weight="BoldDuotone" className="h-3.5 w-3.5 shrink-0" />
-                    <span className="truncate">{shortUrl(b.label)}</span>
-                  </a>
-                }
-              />
-            ))}
-            {organik > 0 && (
-              <AdsSourceBarRow
-                key="__organik__"
-                total={total}
-                count={organik}
-                label={
-                  <span className="inline-flex items-center gap-1.5 text-muted-foreground">
-                    <Leaf weight="BoldDuotone" className="h-3.5 w-3.5 shrink-0" />
-                    Organik (tanpa iklan)
-                  </span>
-                }
-              />
-            )}
-          </div>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
-function GuestbookOverview({
-  overview,
-  activeStatuses,
-  onStatusClick,
-  activeCategories,
-  onCategoryClick,
-  activeSourceIds,
-  onSourceClick,
-  activeVenueIds,
-  onVenueClick,
-  activeHostId,
-  onHostClick,
-}: {
-  overview: GuestbookOverview;
-  activeStatuses: string[];
-  onStatusClick: (key: string) => void;
-  activeCategories: string[];
-  onCategoryClick: (key: string) => void;
-  activeSourceIds: string[];
-  onSourceClick: (key: string) => void;
-  activeVenueIds: string[];
-  onVenueClick: (key: string) => void;
-  activeHostId: string | undefined;
-  onHostClick: (key: string) => void;
-}) {
-  const metrics = [
-    // Total database guestbook, kunjungan tuntas, kunjungan batal, dan Online
-    // Meeting yang berdiri sendiri karena bukan kunjungan ke venue.
-    { label: "Database", value: overview.total, icon: UsersGroupRounded },
-    { label: "Sudah Visit", value: overview.doneVisit, icon: Buildings2 },
-    { label: "Tidak Jadi Visit (Lost)", value: overview.lost, icon: ChartSquare },
-    { label: "Online Meeting", value: overview.onlineMeetings, icon: Videocamera },
-  ];
-
-  const lists: {
-    title: string;
-    items: GuestbookOverviewBucket[];
-    activeKeys: string[];
-    onItemClick: (key: string) => void;
-  }[] = [
-    { title: "Status", items: overview.byStatus, activeKeys: activeStatuses, onItemClick: onStatusClick },
-    { title: "Kategori Event", items: overview.byCategory, activeKeys: activeCategories, onItemClick: onCategoryClick },
-    { title: "Sumber Data", items: overview.bySource, activeKeys: activeSourceIds, onItemClick: onSourceClick },
-    { title: "Venue Teratas", items: overview.byVenue, activeKeys: activeVenueIds, onItemClick: onVenueClick },
-    { title: "PIC Teratas", items: overview.byHost, activeKeys: activeHostId ? [activeHostId] : [], onItemClick: onHostClick },
-  ];
-
-  return (
-    <div className="space-y-3">
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-      {metrics.map(({ label, value, icon: Icon }) => (
-        <Card key={label} className="rounded-2xl shadow-sm">
-          <CardContent className="flex items-center gap-3 p-4">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-              <Icon weight="BoldDuotone" className="h-5 w-5" />
-            </div>
-            <div>
-              <p className="text-xs font-medium text-muted-foreground">{label}</p>
-              <p className="font-heading text-2xl font-semibold tabular-nums text-foreground">{value}</p>
-            </div>
-          </CardContent>
-        </Card>
-      ))}
-      </div>
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-        {lists.map(({ title, items, activeKeys, onItemClick }) => (
-          <Card key={title} className="rounded-2xl shadow-sm">
-            <CardContent className="p-4">
-              <p className="mb-3 text-sm font-semibold text-foreground">{title}</p>
-              {items.length === 0 ? (
-                <p className="text-xs text-muted-foreground">Belum ada data</p>
-              ) : (
-                <div className="space-y-1">
-                  {items.slice(0, 5).map((item) => {
-                    const isActive = activeKeys.includes(item.key);
-                    return (
-                      <div
-                        key={item.key}
-                        role="button"
-                        tabIndex={0}
-                        onClick={() => onItemClick(item.key)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter" || e.key === " ") {
-                            e.preventDefault();
-                            onItemClick(item.key);
-                          }
-                        }}
-                        className={cn(
-                          "flex cursor-pointer items-center justify-between gap-3 rounded-lg px-2 py-1.5 -mx-2 text-xs transition-colors hover:bg-accent",
-                          isActive && "bg-accent ring-1 ring-ring"
-                        )}
-                      >
-                        <span className="min-w-0 truncate text-muted-foreground">{item.label}</span>
-                        <span className="flex shrink-0 items-center gap-1.5">
-                          {/* Bitrix bisa datang organik atau lewat iklan; pecah
-                              jumlahnya biar ketahuan tanpa membuka detail. */}
-                          {item.adsCount ? (
-                            <Badge variant="outline" className="rounded-full font-normal">
-                              Iklan ({item.adsCount})
-                            </Badge>
-                          ) : null}
-                          <Badge variant="secondary" className="rounded-full">{item.count}</Badge>
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-      <GuestbookAdsSourceCard
-        buckets={overview.adsUrlBuckets}
-        organik={overview.adsUrlOrganik}
-        total={overview.total}
-      />
-    </div>
-  );
-}
 
 function SkeletonRows() {
   return (
@@ -387,7 +156,7 @@ function MobileCard({
   onActivityClick: (entry: GuestbookEntryItem) => void;
 }) {
   const sourceLabel = guestbookSourceLabel(entry.sourceOfInformation?.name, entry.bitrixAdsUrl);
-  const statusInfo = entry.visitStatus ? STATUS_LABELS[entry.visitStatus] : null;
+  const status = entry.prospectStatus;
   const photoSrc = resolveGuestbookProofThumb((entry.proofFiles ?? null) as ProofFiles | null);
 
   return (
@@ -415,18 +184,18 @@ function MobileCard({
                 </span>
               )}
             </p>
-            {statusInfo && (
+            {status && (
               <Badge
                 className={cn(
                   "rounded-full text-[10px] mt-0.5 cursor-pointer transition-opacity hover:opacity-80",
-                  statusInfo.className
+                  prospectStatusClass(status.name)
                 )}
                 onClick={(e) => {
                   e.stopPropagation();
-                  onStatusClick?.(entry.visitStatus as string);
+                  onStatusClick?.(status.id);
                 }}
               >
-                {statusInfo.label}
+                {status.name}
               </Badge>
             )}
           </div>
@@ -538,8 +307,7 @@ function GuestbookClientInner() {
   const [filterVenueIds, setFilterVenueIds] = useState<string[]>([]);
   const [filterHostId, setFilterHostId] = useState<string>("all");
   const [filterCategories, setFilterCategories] = useState<GuestbookCategoryFilter[]>([]);
-  const [filterInteractionTypes, setFilterInteractionTypes] = useState<GuestInteractionType[]>([]);
-  const [filterStatuses, setFilterStatuses] = useState<GuestVisitStatus[]>([]);
+  const [filterStatusIds, setFilterStatusIds] = useState<string[]>([]);
   const [filterSourceIds, setFilterSourceIds] = useState<string[]>([]);
   const [filterFestivalIds, setFilterFestivalIds] = useState<string[]>([]);
   const [search, setSearch] = useState("");
@@ -573,13 +341,13 @@ function GuestbookClientInner() {
   // Any other filter change also resets page to 1.
   useEffect(() => {
     setCurrentPage(1);
-  }, [dateRange, filterVenueIds, filterHostId, filterCategories, filterInteractionTypes, filterStatuses, filterSourceIds, filterFestivalIds]);
+  }, [dateRange, filterVenueIds, filterHostId, filterCategories, filterStatusIds, filterSourceIds, filterFestivalIds]);
 
   // Clear selection whenever the visible page/filter set changes, so bulk
   // actions never act on rows the user can no longer see.
   useEffect(() => {
     setSelectedIds([]);
-  }, [currentPage, debouncedSearch, filterVenueIds, filterHostId, filterCategories, filterInteractionTypes, filterStatuses, filterSourceIds, filterFestivalIds]);
+  }, [currentPage, debouncedSearch, filterVenueIds, filterHostId, filterCategories, filterStatusIds, filterSourceIds, filterFestivalIds]);
 
   const queryClient = useQueryClient();
   const { data: guestbookData, isLoading } = useGuestbookEntries({
@@ -591,8 +359,7 @@ function GuestbookClientInner() {
     dateFrom: dateRange?.from ? format(dateRange.from, "yyyy-MM-dd") : undefined,
     dateTo: dateRange?.to ? format(dateRange.to, "yyyy-MM-dd") : undefined,
     categories: filterCategories.length > 0 ? filterCategories : undefined,
-    interactionTypes: filterInteractionTypes.length > 0 ? filterInteractionTypes : undefined,
-    statuses: filterStatuses.length > 0 ? filterStatuses : undefined,
+    statusIds: filterStatusIds.length > 0 ? filterStatusIds : undefined,
     sourceOfInformationIds: filterSourceIds.length > 0 ? filterSourceIds : undefined,
     festivalIds: filterFestivalIds.length > 0 ? filterFestivalIds : undefined,
   });
@@ -609,23 +376,7 @@ function GuestbookClientInner() {
   }
 
   function handleStatusBucketClick(key: string) {
-    setFilterStatuses((prev) => toggleArrayValue(prev, key as GuestVisitStatus));
-  }
-
-  function handleSourceBucketClick(key: string) {
-    setFilterSourceIds((prev) => toggleArrayValue(prev, key));
-  }
-
-  function handleCategoryBucketClick(key: string) {
-    setFilterCategories((prev) => toggleArrayValue(prev, key as GuestbookCategoryFilter));
-  }
-
-  function handleVenueBucketClick(key: string) {
-    setFilterVenueIds((prev) => toggleArrayValue(prev, key));
-  }
-
-  function handleHostBucketClick(key: string) {
-    setFilterHostId((prev) => (prev === key ? "all" : key));
+    setFilterStatusIds((prev) => toggleArrayValue(prev, key));
   }
 
   function handleEditClick(entry: GuestbookEntryItem) {
@@ -678,7 +429,9 @@ function GuestbookClientInner() {
       if (filterVenueIds.length > 0) params.set("venueIds", filterVenueIds.join(","));
       if (filterHostId !== "all") params.set("hostId", filterHostId);
       if (filterCategories.length > 0) params.set("categories", filterCategories.join(","));
-      if (filterInteractionTypes.length > 0) params.set("interactionTypes", filterInteractionTypes.join(","));
+      if (filterStatusIds.length > 0) params.set("statusIds", filterStatusIds.join(","));
+      if (filterSourceIds.length > 0) params.set("sourceOfInformationIds", filterSourceIds.join(","));
+      if (filterFestivalIds.length > 0) params.set("festivalIds", filterFestivalIds.join(","));
 
       const res = await fetch(`/api/guestbook/export?${params.toString()}`);
       if (!res.ok) {
@@ -693,12 +446,13 @@ function GuestbookClientInner() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `Guestbook_${format(new Date(), "yyyy-MM-dd")}.xlsx`;
+      a.download = `Guestbook_Lengkap_${format(new Date(), "yyyy-MM-dd")}.xlsx`;
       document.body.appendChild(a);
       a.click();
       a.remove();
       URL.revokeObjectURL(url);
-      toast.success("Export berhasil diunduh.");
+      const exportedRows = res.headers.get("X-Exported-Rows");
+      toast.success(exportedRows ? `${exportedRows} data berhasil diekspor.` : "Export berhasil diunduh.");
     } catch {
       toast.error("Gagal mengekspor data guestbook.");
     } finally {
@@ -712,8 +466,7 @@ function GuestbookClientInner() {
     (filterHostId !== "all" ? 1 : 0) +
     (search.trim() !== "" ? 1 : 0) +
     (filterCategories.length > 0 ? 1 : 0) +
-    (filterInteractionTypes.length > 0 ? 1 : 0) +
-    (filterStatuses.length > 0 ? 1 : 0) +
+    (filterStatusIds.length > 0 ? 1 : 0) +
     (filterSourceIds.length > 0 ? 1 : 0) +
     (filterFestivalIds.length > 0 ? 1 : 0);
 
@@ -722,8 +475,7 @@ function GuestbookClientInner() {
     setFilterVenueIds([]);
     setFilterHostId("all");
     setFilterCategories([]);
-    setFilterInteractionTypes([]);
-    setFilterStatuses([]);
+    setFilterStatusIds([]);
     setFilterSourceIds([]);
     setFilterFestivalIds([]);
     setSearch("");
@@ -732,31 +484,6 @@ function GuestbookClientInner() {
 
   return (
     <div className="flex flex-col gap-3">
-      <GuestbookOverview
-        overview={guestbookData?.overview ?? {
-          total: 0,
-          doneVisit: 0,
-          lost: 0,
-          onlineMeetings: 0,
-          byStatus: [],
-          byCategory: [],
-          bySource: [],
-          byVenue: [],
-          byHost: [],
-          adsUrlBuckets: [],
-          adsUrlOrganik: 0,
-        }}
-        activeStatuses={filterStatuses}
-        onStatusClick={handleStatusBucketClick}
-        activeCategories={filterCategories}
-        onCategoryClick={handleCategoryBucketClick}
-        activeSourceIds={filterSourceIds}
-        onSourceClick={handleSourceBucketClick}
-        activeVenueIds={filterVenueIds}
-        onVenueClick={handleVenueBucketClick}
-        activeHostId={filterHostId !== "all" ? filterHostId : undefined}
-        onHostClick={handleHostBucketClick}
-      />
       {/* Table — desktop */}
       <Card className="rounded-2xl shadow-sm hidden sm:block py-0">
         <CardContent className="p-0">
@@ -930,7 +657,7 @@ function GuestbookClientInner() {
                 <TableBody>
                   {entries.map((entry) => {
                     const sourceLabel = guestbookSourceLabel(entry.sourceOfInformation?.name, entry.bitrixAdsUrl);
-                    const statusInfo = entry.visitStatus ? STATUS_LABELS[entry.visitStatus] : null;
+                    const status = entry.prospectStatus;
                     const totalVisit = entry.visitHistoryCount;
                     const festivalLabel = entry.festival?.name ?? "-";
 
@@ -969,18 +696,18 @@ function GuestbookClientInner() {
                                   </span>
                                 )}
                               </p>
-                              {statusInfo && (
+                              {status && (
                                 <Badge
                                   className={cn(
                                     "rounded-full text-[10px] mt-0.5 cursor-pointer transition-opacity hover:opacity-80",
-                                    statusInfo.className
+                                    prospectStatusClass(status.name)
                                   )}
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    handleStatusBucketClick(entry.visitStatus as string);
+                                    handleStatusBucketClick(status.id);
                                   }}
                                 >
-                                  {statusInfo.label}
+                                  {status.name}
                                 </Badge>
                               )}
                             </div>
@@ -1283,10 +1010,8 @@ function GuestbookClientInner() {
         onHostIdChange={setFilterHostId}
         categories={filterCategories}
         onCategoriesChange={setFilterCategories}
-        interactionTypes={filterInteractionTypes}
-        onInteractionTypesChange={setFilterInteractionTypes}
-        statuses={filterStatuses}
-        onStatusesChange={setFilterStatuses}
+        statusIds={filterStatusIds}
+        onStatusIdsChange={setFilterStatusIds}
         sourceOfInformationIds={filterSourceIds}
         onSourceOfInformationIdsChange={setFilterSourceIds}
         festivalIds={filterFestivalIds}

@@ -38,16 +38,13 @@ export function formatCsReportWhatsApp(data: CsReportData, now: Date = new Date(
   lines.push("");
   lines.push(`Total Chat Masuk : ${data.totalChatMasuk}`);
   lines.push(`Chat Jadi Database : ${data.chatJadiDatabase}`);
-  lines.push(`Database Respon : ${data.databaseRespon}`);
-  lines.push(`Database No Respon : ${data.databaseNoRespon}`);
   lines.push(`Spam/Prank : ${data.spamPrank}`);
   lines.push("");
-  lines.push("Sumber Iklan Spam");
+  lines.push("_*Sumber Iklan Spam*_");
   for (const ad of data.adsSpam) lines.push(`${ad.url}  :  ${ad.count}`);
   lines.push(`Organik : ${data.organikSpam}`);
   lines.push("");
-  lines.push("");
-  lines.push("Sumber Chat Masuk");
+  lines.push("_*Sumber Chat Masuk*_");
   for (const s of data.sources) lines.push(`${s.label}  :  ${s.count}`);
   lines.push("");
   lines.push(`TOTAL CHAT MASUK : ${data.totalChatMasuk}`);

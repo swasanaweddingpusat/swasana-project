@@ -1,6 +1,6 @@
 import { requirePermissionForRoute } from "@/lib/permissions";
 import { apiLimiter, rateLimitResponse } from "@/lib/rate-limit";
-import { getGuestbookEntries, type GuestbookCategoryFilter } from "@/lib/queries/guestbookEntries";
+import { getGuestbookFunnelReport, type GuestbookCategoryFilter } from "@/lib/queries/guestbookEntries";
 import type { DataScope } from "@/types/user";
 
 const ALLOWED_CATEGORY = new Set<GuestbookCategoryFilter>(["WEDDINGS", "MICE", "no_package"]);
@@ -19,12 +19,9 @@ export async function GET(request: Request): Promise<Response> {
   });
   if (response) return response;
 
-  if (!apiLimiter.check(`guestbook-list:${session.user.id}`)) return rateLimitResponse();
+  if (!apiLimiter.check(`guestbook-funnel-report:${session.user.id}`)) return rateLimitResponse();
 
   const { searchParams } = new URL(request.url);
-  const page = Math.max(1, Number(searchParams.get("page")) || 1);
-  const pageSize = Math.min(100, Math.max(1, Number(searchParams.get("pageSize")) || 50));
-
   const search = searchParams.get("search")?.trim() || undefined;
   const venueIds = parseListParam(searchParams.get("venueIds"));
   const hostId = searchParams.get("hostId")?.trim() || undefined;
@@ -48,9 +45,7 @@ export async function GET(request: Request): Promise<Response> {
   const dataScope: DataScope = session.user.dataScope ?? "own";
 
   try {
-    const result = await getGuestbookEntries(profileId, dataScope, {
-      page,
-      pageSize,
+    const result = await getGuestbookFunnelReport(profileId, dataScope, {
       search,
       venueIds,
       hostId,
@@ -63,7 +58,7 @@ export async function GET(request: Request): Promise<Response> {
     });
     return Response.json(result);
   } catch (error) {
-    console.error("[GET /api/guestbook]", error);
-    return Response.json({ error: "Failed to fetch guestbook entries" }, { status: 500 });
+    console.error("[GET /api/guestbook/funnel-report]", error);
+    return Response.json({ error: "Failed to fetch guestbook funnel report" }, { status: 500 });
   }
 }

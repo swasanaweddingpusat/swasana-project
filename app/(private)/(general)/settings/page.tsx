@@ -151,6 +151,13 @@ const GROUPS: SettingGroup[] = [
         module: "settings-order-status",
       },
       {
+        title: "Status Prospek",
+        description: "Kelola status prospek guestbook (Cold, Warm, Hot, Deal, dll).",
+        icon: List,
+        href: "/settings/prospect-status",
+        module: "settings-prospect-status",
+      },
+      {
         title: "Event Types",
         description: "Kelola tipe acara (Resepsi, Akad & Resepsi, dll) untuk nomor PO.",
         icon: CalendarMark,
@@ -261,6 +268,7 @@ export default async function SettingsHubPage() {
     "settings-role-permission", "settings-payment-methods",
     "settings-source-of-information", "settings-education-level",
     "settings-event-types", "settings-public-holiday", "settings-order-status",
+    "settings-prospect-status",
     "settings-quotation-templates", "settings-tutorial",
     "settings-role-permission",
     "settings-maintenance-category",

@@ -2,15 +2,6 @@ import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import type { GuestbookEntryItem } from "@/lib/queries/guestbookEntries";
 
-const STATUS_LABEL: Record<string, string> = {
-  cold: "Cold",
-  warm: "Warm",
-  hot: "Hot",
-  to_be_discuss: "To Be Discuss",
-  deal: "Deal",
-  lost: "Lost",
-};
-
 function formatDateID(value: string | Date): string {
   return new Date(value).toLocaleDateString("id-ID", {
     day: "2-digit",
@@ -27,7 +18,7 @@ function buildRows(data: GuestbookEntryItem[]): (string | number)[][] {
     r.host?.fullName ?? "-",
     r.sourceOfInformation?.name ?? "-",
     r.package?.packageName ?? "-",
-    r.visitStatus ? (STATUS_LABEL[r.visitStatus] ?? r.visitStatus) : "-",
+    r.prospectStatus?.name ?? "-",
     r.createdBy?.fullName ?? "-",
     formatDateID(r.createdAt),
   ]);
