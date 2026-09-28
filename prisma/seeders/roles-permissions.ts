@@ -113,6 +113,7 @@ export const moduleActions: Record<string, string[]> = {
   "kpi-assignment": ["view", "create", "edit", "delete"],
   "kpi-simulation": ["view", "run"],
   "kpi-report": ["view"],
+  // KPI Awards — Best Performer Sales/Manager per periode.
   "kpi-award": ["view", "create", "edit", "delete"],
 };
 

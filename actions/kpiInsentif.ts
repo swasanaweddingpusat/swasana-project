@@ -928,10 +928,9 @@ export async function finalizeResult(resultId: string) {
               select: {
                 id: true,
                 name: true,
-                indicatorType: true,
-                type: true,
-                qty: true,
-                price: true,
+                dealingQty: true,
+                omsetPrice: true,
+                homebaseQty: true,
               },
             },
           },
@@ -1119,7 +1118,7 @@ export async function runAutoCalculation(data: {
                 },
               },
               targetItem: {
-                select: { indicatorType: true, qty: true, price: true },
+                select: { dealingQty: true, omsetPrice: true, homebaseQty: true },
               },
             },
           },
@@ -1267,14 +1266,12 @@ export async function runAutoCalculation(data: {
         };
       }
 
-      if (ti.indicatorType === "dealing") {
-        dealingTarget = asgn.targetQty ?? ti.qty ?? null;
-      } else if (ti.indicatorType === "omset") {
-        const raw = asgn.targetPrice ?? ti.price;
-        omsetTargetDecimal = raw != null ? new Decimal(raw.toString()) : null;
-      } else if (ti.indicatorType === "homebase") {
-        homebaseTarget = asgn.targetQty ?? ti.qty ?? null;
-      }
+      // NOTE: assignment-level targetQty/targetPrice override is no longer consulted —
+      // KpiTargetItem is now unified (one row = dealing+omset+homebase), so those two
+      // generic scalar overrides can't unambiguously map to a specific indicator anymore.
+      if (ti.dealingQty != null) dealingTarget = ti.dealingQty;
+      if (ti.omsetPrice != null) omsetTargetDecimal = new Decimal(ti.omsetPrice.toString());
+      if (ti.homebaseQty != null) homebaseTarget = ti.homebaseQty;
     }
 
     if (!schemaInput) {
@@ -1851,13 +1848,33 @@ export async function createAwardWinner(data: unknown) {
   if (!parsed.success) return { success: false, error: parsed.error.issues[0].message };
 
   const awardedById = session!.user.profileId ?? null;
+  const period = firstOfMonth(parsed.data.period);
+
+  // No unique constraint on (awardId, period, profileId/groupId) at the schema
+  // level (XOR winner target, same pattern as the rest of this project) — guard
+  // duplicate winners at the application layer instead.
+  const duplicate = await db.kpiAwardWinner.findFirst({
+    where: {
+      awardId: parsed.data.awardId,
+      period,
+      ...(parsed.data.profileId ? { profileId: parsed.data.profileId } : {}),
+      ...(parsed.data.groupId ? { groupId: parsed.data.groupId } : {}),
+    },
+    select: { id: true },
+  });
+  if (duplicate) {
+    return {
+      success: false,
+      error: "Profile/tim ini sudah ditetapkan sebagai pemenang award ini untuk periode yang sama.",
+    };
+  }
 
   try {
     const [winner] = await db.$transaction([
       db.kpiAwardWinner.create({
         data: {
           awardId: parsed.data.awardId,
-          period: firstOfMonth(parsed.data.period),
+          period,
           profileId: parsed.data.profileId ?? null,
           groupId: parsed.data.groupId ?? null,
           prizeDescription: parsed.data.prizeDescription ?? null,
@@ -1898,6 +1915,36 @@ export async function updateAwardWinner(id: string, data: unknown) {
     ...parsed.data,
     ...(parsed.data.period ? { period: firstOfMonth(parsed.data.period) } : {}),
   };
+
+  if (parsed.data.awardId || parsed.data.period || parsed.data.profileId || parsed.data.groupId) {
+    const existing = await db.kpiAwardWinner.findUnique({
+      where: { id },
+      select: { awardId: true, period: true, profileId: true, groupId: true },
+    });
+    if (!existing) return { success: false, error: "Data pemenang tidak ditemukan." };
+
+    const nextAwardId = parsed.data.awardId ?? existing.awardId;
+    const nextPeriod = updateData.period ?? existing.period;
+    const nextProfileId = parsed.data.profileId !== undefined ? parsed.data.profileId : existing.profileId;
+    const nextGroupId = parsed.data.groupId !== undefined ? parsed.data.groupId : existing.groupId;
+
+    const duplicate = await db.kpiAwardWinner.findFirst({
+      where: {
+        id: { not: id },
+        awardId: nextAwardId,
+        period: nextPeriod,
+        ...(nextProfileId ? { profileId: nextProfileId } : {}),
+        ...(nextGroupId ? { groupId: nextGroupId } : {}),
+      },
+      select: { id: true },
+    });
+    if (duplicate) {
+      return {
+        success: false,
+        error: "Profile/tim ini sudah ditetapkan sebagai pemenang award ini untuk periode yang sama.",
+      };
+    }
+  }
 
   try {
     const [winner] = await db.$transaction([

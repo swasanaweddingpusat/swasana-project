@@ -304,10 +304,10 @@ export function useFinalizeResult() {
 
 // ─── Profiles ────────────────────────────────────────────────────────────────
 
-export function useProfilesForAssignment() {
+export function useProfilesForAssignment(businessRole?: "sales" | "manager") {
   return useQuery({
-    queryKey: ["kpi-insentif", "profiles-for-assignment"],
-    queryFn: () => fetchProfilesForAssignment(),
+    queryKey: ["kpi-insentif", "profiles-for-assignment", businessRole ?? "all"],
+    queryFn: () => fetchProfilesForAssignment(businessRole),
     staleTime: 10 * 60_000,
   });
 }

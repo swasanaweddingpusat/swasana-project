@@ -80,7 +80,7 @@ function formatDateForInput(value: string | Date | null | undefined): string {
   return `${date.getUTCFullYear()}-${pad(date.getUTCMonth() + 1)}-${pad(date.getUTCDate())}`;
 }
 
-// checkInAt/checkOutAt/commit dates are stored as naive local wall-clock values anchored to
+// checkInAt/commit dates are stored as naive local wall-clock values anchored to
 // UTC on the server (see parseLocalDateTime in actions/guestbook.ts) — reading them back with
 // UTC getters here keeps the typed numbers stable across server/browser timezone, avoiding drift.
 function formatDateTimeForInput(value: string | Date | null | undefined): string {
@@ -148,7 +148,6 @@ type GuestbookForm = {
   segmentId: string;
   eventCategory: string;
   checkInAt: string;
-  checkOutAt: string;
   commitVisitDate: string;
   commitPayDate: string;
   proofChatFile: File | null;
@@ -185,7 +184,6 @@ const EMPTY_FORM: GuestbookForm = {
   segmentId: "",
   eventCategory: "",
   checkInAt: "",
-  checkOutAt: "",
   commitVisitDate: "",
   commitPayDate: "",
   proofChatFile: null,
@@ -203,7 +201,7 @@ const EMPTY_FORM: GuestbookForm = {
 };
 
 const INTERACTION_TYPE_OPTIONS = [
-  { value: "client_visit", label: "Kunjungan Client" },
+  { value: "client_visit", label: "Database" },
   { value: "online_meeting", label: "Online Meeting" },
   { value: "jemput_bola", label: "Jemput Bola" },
 ] as const;
@@ -616,7 +614,6 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
         segmentId: editEntry.segmentId ?? "",
         eventCategory: editEntry.eventCategory ?? editEntry.package?.category ?? (canWedding ? "WEDDINGS" : "MICE"),
         checkInAt: formatDateTimeForInput(editEntry.checkInAt),
-        checkOutAt: formatDateTimeForInput(editEntry.checkOutAt),
         commitVisitDate: formatDateForInput(editEntry.commitVisitDate),
         commitPayDate: formatDateForInput(editEntry.commitPayDate),
         proofChatFile: null,
@@ -870,7 +867,6 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
       packageId: form.packageId || null,
       segmentId: form.segmentId || null,
       checkInAt: form.checkInAt || null,
-      checkOutAt: form.checkOutAt || null,
       proofFiles: {
         ...(proofPhoto ? { photo: proofPhoto } : {}),
         ...(proofChat ? { chat: proofChat } : {}),
@@ -1189,20 +1185,6 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
                     className="rounded-xl"
                   />
                 </div>
-                {isEditMode && (
-                  <div className="space-y-1.5 sm:col-span-2">
-                    <Label htmlFor="gb-checkOutAt" className="text-sm font-medium">
-                      Tanggal Checkout
-                    </Label>
-                    <Input
-                      id="gb-checkOutAt"
-                      type="datetime-local"
-                      value={form.checkOutAt}
-                      onChange={(e) => setField("checkOutAt", e.target.value)}
-                      className="rounded-xl"
-                    />
-                  </div>
-                )}
               </div>
 
               {/* Venue — semua tipe interaksi */}

@@ -28,29 +28,48 @@ interface TargetItemDrawerProps {
   editItem?: TargetItemRow | null;
 }
 
+type EventCategoryOption = "none" | "WEDDINGS" | "MICE";
+
 type FormValues = {
   name: string;
-  indicatorType: "dealing" | "omset" | "homebase";
-  type: "qty" | "price";
-  qty: string;
-  qtyReguler: string;
-  qtyHadjatan: string;
-  price: string;
-  priceReguler: string;
-  priceHadjatan: string;
+  dealingQty: string;
+  dealingQtyReguler: string;
+  dealingQtyHadjatan: string;
+  omsetPrice: string;
+  omsetPriceReguler: string;
+  omsetPriceHadjatan: string;
+  homebaseQty: string;
+  homebaseQtyReguler: string;
+  homebaseQtyHadjatan: string;
+  regulerCategory: EventCategoryOption;
+  hadjatanCategory: EventCategoryOption;
 };
 
 const DEFAULT_VALUES: FormValues = {
   name: "",
-  indicatorType: "dealing",
-  type: "qty",
-  qty: "",
-  qtyReguler: "",
-  qtyHadjatan: "",
-  price: "",
-  priceReguler: "",
-  priceHadjatan: "",
+  dealingQty: "",
+  dealingQtyReguler: "",
+  dealingQtyHadjatan: "",
+  omsetPrice: "",
+  omsetPriceReguler: "",
+  omsetPriceHadjatan: "",
+  homebaseQty: "",
+  homebaseQtyReguler: "",
+  homebaseQtyHadjatan: "",
+  regulerCategory: "none",
+  hadjatanCategory: "none",
 };
+
+function toIntOrNull(value: string): number | null {
+  if (value.trim() === "") return null;
+  const parsed = parseInt(value, 10);
+  return Number.isNaN(parsed) ? null : parsed;
+}
+
+function toDecimalStringOrNull(value: string): string | null {
+  if (value.trim() === "") return null;
+  return value;
+}
 
 export function TargetItemDrawer({ isOpen, onClose, editItem }: TargetItemDrawerProps) {
   const isEditMode = editItem != null;
@@ -61,7 +80,6 @@ export function TargetItemDrawer({ isOpen, onClose, editItem }: TargetItemDrawer
   const {
     register,
     handleSubmit,
-    watch,
     control,
     reset,
     formState: { errors },
@@ -69,21 +87,28 @@ export function TargetItemDrawer({ isOpen, onClose, editItem }: TargetItemDrawer
     defaultValues: DEFAULT_VALUES,
   });
 
-  const targetType = watch("type");
-
   useEffect(() => {
     if (!isOpen) return;
     if (isEditMode && editItem) {
       reset({
         name: editItem.name,
-        indicatorType: editItem.indicatorType as "dealing" | "omset" | "homebase",
-        type: editItem.type as "qty" | "price",
-        qty: editItem.qty != null ? String(editItem.qty) : "",
-        qtyReguler: editItem.qtyReguler != null ? String(editItem.qtyReguler) : "",
-        qtyHadjatan: editItem.qtyHadjatan != null ? String(editItem.qtyHadjatan) : "",
-        price: editItem.price != null ? String(editItem.price) : "",
-        priceReguler: editItem.priceReguler != null ? String(editItem.priceReguler) : "",
-        priceHadjatan: editItem.priceHadjatan != null ? String(editItem.priceHadjatan) : "",
+        dealingQty: editItem.dealingQty != null ? String(editItem.dealingQty) : "",
+        dealingQtyReguler:
+          editItem.dealingQtyReguler != null ? String(editItem.dealingQtyReguler) : "",
+        dealingQtyHadjatan:
+          editItem.dealingQtyHadjatan != null ? String(editItem.dealingQtyHadjatan) : "",
+        omsetPrice: editItem.omsetPrice != null ? String(editItem.omsetPrice) : "",
+        omsetPriceReguler:
+          editItem.omsetPriceReguler != null ? String(editItem.omsetPriceReguler) : "",
+        omsetPriceHadjatan:
+          editItem.omsetPriceHadjatan != null ? String(editItem.omsetPriceHadjatan) : "",
+        homebaseQty: editItem.homebaseQty != null ? String(editItem.homebaseQty) : "",
+        homebaseQtyReguler:
+          editItem.homebaseQtyReguler != null ? String(editItem.homebaseQtyReguler) : "",
+        homebaseQtyHadjatan:
+          editItem.homebaseQtyHadjatan != null ? String(editItem.homebaseQtyHadjatan) : "",
+        regulerCategory: (editItem.regulerCategory as EventCategoryOption | null) ?? "none",
+        hadjatanCategory: (editItem.hadjatanCategory as EventCategoryOption | null) ?? "none",
       });
     } else {
       reset(DEFAULT_VALUES);
@@ -98,25 +123,18 @@ export function TargetItemDrawer({ isOpen, onClose, editItem }: TargetItemDrawer
   async function onSubmit(values: FormValues) {
     const payload: Record<string, unknown> = {
       name: values.name.trim(),
-      indicatorType: values.indicatorType,
-      type: values.type,
+      dealingQty: toIntOrNull(values.dealingQty),
+      dealingQtyReguler: toIntOrNull(values.dealingQtyReguler),
+      dealingQtyHadjatan: toIntOrNull(values.dealingQtyHadjatan),
+      omsetPrice: toDecimalStringOrNull(values.omsetPrice),
+      omsetPriceReguler: toDecimalStringOrNull(values.omsetPriceReguler),
+      omsetPriceHadjatan: toDecimalStringOrNull(values.omsetPriceHadjatan),
+      homebaseQty: toIntOrNull(values.homebaseQty),
+      homebaseQtyReguler: toIntOrNull(values.homebaseQtyReguler),
+      homebaseQtyHadjatan: toIntOrNull(values.homebaseQtyHadjatan),
+      regulerCategory: values.regulerCategory === "none" ? null : values.regulerCategory,
+      hadjatanCategory: values.hadjatanCategory === "none" ? null : values.hadjatanCategory,
     };
-
-    if (values.type === "qty") {
-      if (values.qty !== "") payload.qty = parseInt(values.qty, 10);
-      else payload.qty = null;
-      if (values.qtyReguler !== "") payload.qtyReguler = parseInt(values.qtyReguler, 10);
-      else payload.qtyReguler = null;
-      if (values.qtyHadjatan !== "") payload.qtyHadjatan = parseInt(values.qtyHadjatan, 10);
-      else payload.qtyHadjatan = null;
-    } else {
-      if (values.price !== "") payload.price = values.price;
-      else payload.price = null;
-      if (values.priceReguler !== "") payload.priceReguler = values.priceReguler;
-      else payload.priceReguler = null;
-      if (values.priceHadjatan !== "") payload.priceHadjatan = values.priceHadjatan;
-      else payload.priceHadjatan = null;
-    }
 
     if (isEditMode && editItem) {
       const result = await updateMutation.mutateAsync({ id: editItem.id, data: payload });
@@ -166,21 +184,19 @@ export function TargetItemDrawer({ isOpen, onClose, editItem }: TargetItemDrawer
 
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <Label className="text-sm font-medium">
-                  Tipe Indikator <span className="text-destructive">*</span>
-                </Label>
+                <Label className="text-sm font-medium">Kategori Reguler</Label>
                 <Controller
                   control={control}
-                  name="indicatorType"
+                  name="regulerCategory"
                   render={({ field }) => (
                     <Select value={field.value} onValueChange={field.onChange}>
                       <SelectTrigger className="rounded-xl w-full">
-                        <SelectValue placeholder="Pilih tipe" />
+                        <SelectValue placeholder="Pilih kategori" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="dealing">Dealing</SelectItem>
-                        <SelectItem value="omset">Omset</SelectItem>
-                        <SelectItem value="homebase">Homebase</SelectItem>
+                        <SelectItem value="none">Tidak ditentukan</SelectItem>
+                        <SelectItem value="WEDDINGS">Weddings</SelectItem>
+                        <SelectItem value="MICE">MICE</SelectItem>
                       </SelectContent>
                     </Select>
                   )}
@@ -188,160 +204,200 @@ export function TargetItemDrawer({ isOpen, onClose, editItem }: TargetItemDrawer
               </div>
 
               <div className="space-y-1.5">
-                <Label className="text-sm font-medium">
-                  Tipe Target <span className="text-destructive">*</span>
-                </Label>
+                <Label className="text-sm font-medium">Kategori Hadjatan</Label>
                 <Controller
                   control={control}
-                  name="type"
+                  name="hadjatanCategory"
                   render={({ field }) => (
-                    <div className="grid grid-cols-2 gap-1.5">
-                      {(["qty", "price"] as const).map((opt) => {
-                        const active = field.value === opt;
-                        return (
-                          <button
-                            key={opt}
-                            type="button"
-                            onClick={() => field.onChange(opt)}
-                            className={[
-                              "flex items-center justify-center py-2 text-xs font-semibold rounded-full transition-colors",
-                              active
-                                ? "bg-primary text-primary-foreground shadow-sm"
-                                : "bg-muted text-muted-foreground hover:bg-accent",
-                            ].join(" ")}
-                          >
-                            {opt === "qty" ? "Qty" : "Harga"}
-                          </button>
-                        );
-                      })}
-                    </div>
+                    <Select value={field.value} onValueChange={field.onChange}>
+                      <SelectTrigger className="rounded-xl w-full">
+                        <SelectValue placeholder="Pilih kategori" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">Tidak ditentukan</SelectItem>
+                        <SelectItem value="WEDDINGS">Weddings</SelectItem>
+                        <SelectItem value="MICE">MICE</SelectItem>
+                      </SelectContent>
+                    </Select>
                   )}
+                />
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Kategori ini dipakai bersama untuk rincian Reguler/Hadjatan di semua indikator
+              di bawah.
+            </p>
+          </div>
+
+          {/* Dealing */}
+          <div className="rounded-2xl border bg-card p-5 space-y-4">
+            <SectionLabel text="Dealing (Qty)" />
+
+            <div className="space-y-1.5">
+              <Label htmlFor="ti-dealingQty" className="text-sm font-medium">
+                Target Dealing (Total)
+              </Label>
+              <Input
+                id="ti-dealingQty"
+                type="number"
+                min="0"
+                placeholder="Contoh: 10"
+                className="rounded-xl"
+                {...register("dealingQty")}
+              />
+              <p className="text-xs text-muted-foreground">
+                Isi target total atau isi Reguler + Hadjatan di bawah
+              </p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="ti-dealingQtyReguler" className="text-sm font-medium">
+                  Dealing Reguler
+                </Label>
+                <Input
+                  id="ti-dealingQtyReguler"
+                  type="number"
+                  min="0"
+                  placeholder="0"
+                  className="rounded-xl"
+                  {...register("dealingQtyReguler")}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="ti-dealingQtyHadjatan" className="text-sm font-medium">
+                  Dealing Hadjatan
+                </Label>
+                <Input
+                  id="ti-dealingQtyHadjatan"
+                  type="number"
+                  min="0"
+                  placeholder="0"
+                  className="rounded-xl"
+                  {...register("dealingQtyHadjatan")}
                 />
               </div>
             </div>
           </div>
 
-          {/* Target Values */}
+          {/* Omset */}
           <div className="rounded-2xl border bg-card p-5 space-y-4">
-            <SectionLabel
-              text={targetType === "qty" ? "Nilai Target (Qty)" : "Nilai Target (Harga)"}
-            />
+            <SectionLabel text="Omset (Harga)" />
 
-            {targetType === "qty" ? (
-              <>
-                <div className="space-y-1.5">
-                  <Label htmlFor="ti-qty" className="text-sm font-medium">
-                    Target Qty (Total)
-                  </Label>
+            <div className="space-y-1.5">
+              <Label htmlFor="ti-omsetPrice" className="text-sm font-medium">
+                Target Omset (Total)
+              </Label>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
+                  Rp
+                </span>
+                <Input
+                  id="ti-omsetPrice"
+                  type="number"
+                  min="0"
+                  step="1000"
+                  placeholder="0"
+                  className="rounded-xl pl-9"
+                  {...register("omsetPrice")}
+                />
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Isi target total atau isi Reguler + Hadjatan di bawah
+              </p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="ti-omsetPriceReguler" className="text-sm font-medium">
+                  Omset Reguler
+                </Label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
+                    Rp
+                  </span>
                   <Input
-                    id="ti-qty"
+                    id="ti-omsetPriceReguler"
                     type="number"
                     min="0"
-                    placeholder="Contoh: 10"
-                    className="rounded-xl"
-                    {...register("qty")}
+                    step="1000"
+                    placeholder="0"
+                    className="rounded-xl pl-9"
+                    {...register("omsetPriceReguler")}
                   />
-                  <p className="text-xs text-muted-foreground">
-                    Isi target total atau isi Reguler + Hadjatan di bawah
-                  </p>
                 </div>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="ti-omsetPriceHadjatan" className="text-sm font-medium">
+                  Omset Hadjatan
+                </Label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
+                    Rp
+                  </span>
+                  <Input
+                    id="ti-omsetPriceHadjatan"
+                    type="number"
+                    min="0"
+                    step="1000"
+                    placeholder="0"
+                    className="rounded-xl pl-9"
+                    {...register("omsetPriceHadjatan")}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
 
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1.5">
-                    <Label htmlFor="ti-qtyReguler" className="text-sm font-medium">
-                      Qty Reguler
-                    </Label>
-                    <Input
-                      id="ti-qtyReguler"
-                      type="number"
-                      min="0"
-                      placeholder="0"
-                      className="rounded-xl"
-                      {...register("qtyReguler")}
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="ti-qtyHadjatan" className="text-sm font-medium">
-                      Qty Hadjatan
-                    </Label>
-                    <Input
-                      id="ti-qtyHadjatan"
-                      type="number"
-                      min="0"
-                      placeholder="0"
-                      className="rounded-xl"
-                      {...register("qtyHadjatan")}
-                    />
-                  </div>
-                </div>
-              </>
-            ) : (
-              <>
-                <div className="space-y-1.5">
-                  <Label htmlFor="ti-price" className="text-sm font-medium">
-                    Target Omset (Total)
-                  </Label>
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
-                      Rp
-                    </span>
-                    <Input
-                      id="ti-price"
-                      type="number"
-                      min="0"
-                      step="1000"
-                      placeholder="0"
-                      className="rounded-xl pl-9"
-                      {...register("price")}
-                    />
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    Isi target total atau isi Reguler + Hadjatan di bawah
-                  </p>
-                </div>
+          {/* Homebase */}
+          <div className="rounded-2xl border bg-card p-5 space-y-4">
+            <SectionLabel text="Homebase (Qty)" />
 
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1.5">
-                    <Label htmlFor="ti-priceReguler" className="text-sm font-medium">
-                      Omset Reguler
-                    </Label>
-                    <div className="relative">
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
-                        Rp
-                      </span>
-                      <Input
-                        id="ti-priceReguler"
-                        type="number"
-                        min="0"
-                        step="1000"
-                        placeholder="0"
-                        className="rounded-xl pl-9"
-                        {...register("priceReguler")}
-                      />
-                    </div>
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="ti-priceHadjatan" className="text-sm font-medium">
-                      Omset Hadjatan
-                    </Label>
-                    <div className="relative">
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
-                        Rp
-                      </span>
-                      <Input
-                        id="ti-priceHadjatan"
-                        type="number"
-                        min="0"
-                        step="1000"
-                        placeholder="0"
-                        className="rounded-xl pl-9"
-                        {...register("priceHadjatan")}
-                      />
-                    </div>
-                  </div>
-                </div>
-              </>
-            )}
+            <div className="space-y-1.5">
+              <Label htmlFor="ti-homebaseQty" className="text-sm font-medium">
+                Target Homebase (Total)
+              </Label>
+              <Input
+                id="ti-homebaseQty"
+                type="number"
+                min="0"
+                placeholder="Contoh: 10"
+                className="rounded-xl"
+                {...register("homebaseQty")}
+              />
+              <p className="text-xs text-muted-foreground">
+                Isi target total atau isi Reguler + Hadjatan di bawah
+              </p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="ti-homebaseQtyReguler" className="text-sm font-medium">
+                  Homebase Reguler
+                </Label>
+                <Input
+                  id="ti-homebaseQtyReguler"
+                  type="number"
+                  min="0"
+                  placeholder="0"
+                  className="rounded-xl"
+                  {...register("homebaseQtyReguler")}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="ti-homebaseQtyHadjatan" className="text-sm font-medium">
+                  Homebase Hadjatan
+                </Label>
+                <Input
+                  id="ti-homebaseQtyHadjatan"
+                  type="number"
+                  min="0"
+                  placeholder="0"
+                  className="rounded-xl"
+                  {...register("homebaseQtyHadjatan")}
+                />
+              </div>
+            </div>
           </div>
         </div>
 

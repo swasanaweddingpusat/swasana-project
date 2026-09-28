@@ -75,12 +75,15 @@ export function AwardWinnerDrawer({
 }: AwardWinnerDrawerProps) {
   const isEditMode = editItem != null;
   const [form, setForm] = useState<FormState>(() => buildEmptyForm(month, year));
+  const [winnerError, setWinnerError] = useState<string | null>(null);
 
   const createMutation = useCreateAwardWinner();
   const updateMutation = useUpdateAwardWinner();
   const isSaving = createMutation.isPending || updateMutation.isPending;
 
-  const { data: profiles = [] } = useProfilesForAssignment();
+  // Profile picker menyempit sesuai businessRole award (null = semua role,
+  // tidak difilter) — lihat catatan di getProfilesForKpiAssignment.
+  const { data: profiles = [] } = useProfilesForAssignment(award?.businessRole ?? undefined);
   const { data: groupsResult } = useGroups();
   const groups = groupsResult?.data ?? [];
 
@@ -134,6 +137,7 @@ export function AwardWinnerDrawer({
 
   function handleClose() {
     setForm(buildEmptyForm(month, year));
+    setWinnerError(null);
     onClose();
   }
 
@@ -143,13 +147,14 @@ export function AwardWinnerDrawer({
       return;
     }
     if (form.mode === "individual" && !form.profileId) {
-      toast.error("Pilih pemenang individu terlebih dahulu");
+      setWinnerError("Pilih pemenang individu terlebih dahulu");
       return;
     }
     if (form.mode === "team" && !form.groupId) {
-      toast.error("Pilih tim pemenang terlebih dahulu");
+      setWinnerError("Pilih tim pemenang terlebih dahulu");
       return;
     }
+    setWinnerError(null);
 
     const payload = {
       awardId: award.id,
@@ -250,7 +255,7 @@ export function AwardWinnerDrawer({
                   <button
                     key={opt}
                     type="button"
-                    onClick={() => setField("mode", opt)}
+                    onClick={() => { setField("mode", opt); setWinnerError(null); }}
                     className={[
                       "flex items-center justify-center gap-1.5 py-2 text-xs font-semibold rounded-full transition-colors",
                       active
@@ -274,8 +279,8 @@ export function AwardWinnerDrawer({
                 <Label className="text-sm font-medium">
                   Karyawan <span className="text-destructive">*</span>
                 </Label>
-                <Select value={form.profileId} onValueChange={(v) => setField("profileId", v)}>
-                  <SelectTrigger className="rounded-xl w-full">
+                <Select value={form.profileId} onValueChange={(v) => { setField("profileId", v); setWinnerError(null); }}>
+                  <SelectTrigger className="rounded-xl w-full" aria-invalid={!!winnerError}>
                     <SelectValue placeholder="Pilih karyawan" />
                   </SelectTrigger>
                   <SelectContent>
@@ -285,16 +290,27 @@ export function AwardWinnerDrawer({
                         {p.roleName ? ` — ${p.roleName}` : ""}
                       </SelectItem>
                     ))}
+                    {profiles.length === 0 && (
+                      <SelectItem value="__empty__" disabled>
+                        Tidak ada karyawan yang cocok
+                      </SelectItem>
+                    )}
                   </SelectContent>
                 </Select>
+                {winnerError && <p className="text-xs text-destructive">{winnerError}</p>}
+                {!winnerError && award?.businessRole && (
+                  <p className="text-xs text-muted-foreground">
+                    Menampilkan karyawan dengan role &ldquo;{award.businessRole}&rdquo;
+                  </p>
+                )}
               </div>
             ) : (
               <div className="space-y-1.5">
                 <Label className="text-sm font-medium">
                   Tim / Grup <span className="text-destructive">*</span>
                 </Label>
-                <Select value={form.groupId} onValueChange={(v) => setField("groupId", v)}>
-                  <SelectTrigger className="rounded-xl w-full">
+                <Select value={form.groupId} onValueChange={(v) => { setField("groupId", v); setWinnerError(null); }}>
+                  <SelectTrigger className="rounded-xl w-full" aria-invalid={!!winnerError}>
                     <SelectValue placeholder="Pilih tim" />
                   </SelectTrigger>
                   <SelectContent>
@@ -308,6 +324,7 @@ export function AwardWinnerDrawer({
                     )}
                   </SelectContent>
                 </Select>
+                {winnerError && <p className="text-xs text-destructive">{winnerError}</p>}
               </div>
             )}
           </div>

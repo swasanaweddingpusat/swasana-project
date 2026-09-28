@@ -8,15 +8,15 @@ export type GuestbookCategoryFilter = "WEDDINGS" | "MICE" | "no_package";
 
 export interface GuestbookFilterOptions {
   search?: string;
-  venueId?: string;
+  venueIds?: string[];
   hostId?: string;
   dateFrom?: string; // yyyy-MM-dd
   dateTo?: string; // yyyy-MM-dd
-  category?: GuestbookCategoryFilter;
-  interactionType?: GuestInteractionType;
-  status?: GuestVisitStatus;
-  sourceOfInformationId?: string;
-  festivalId?: string;
+  categories?: GuestbookCategoryFilter[];
+  interactionTypes?: GuestInteractionType[];
+  statuses?: GuestVisitStatus[];
+  sourceOfInformationIds?: string[];
+  festivalIds?: string[];
 }
 
 export interface GuestbookEntriesOptions extends GuestbookFilterOptions {
@@ -38,7 +38,7 @@ export function buildGuestbookWhere(filters: GuestbookFilterOptions): Prisma.Gue
     ];
   }
 
-  if (filters.venueId) where.venueId = filters.venueId;
+  if (filters.venueIds?.length) where.venueId = { in: filters.venueIds };
   if (filters.hostId) where.hostId = filters.hostId;
 
   if (filters.dateFrom || filters.dateTo) {
@@ -48,27 +48,37 @@ export function buildGuestbookWhere(filters: GuestbookFilterOptions): Prisma.Gue
     };
   }
 
-  if (filters.category === "WEDDINGS" || filters.category === "MICE") {
-    // Cocokkan pilihan langsung (eventCategory) ATAU kategori paket yang ke-link.
-    // Pakai AND agar tidak bentrok dengan where.OR milik filter pencarian.
+  const eventCategories = (filters.categories ?? []).filter(
+    (c): c is "WEDDINGS" | "MICE" => c === "WEDDINGS" || c === "MICE"
+  );
+  const wantsNoPackage = (filters.categories ?? []).includes("no_package");
+  if (eventCategories.length > 0 || wantsNoPackage) {
+    // Cocokkan pilihan langsung (eventCategory) ATAU kategori paket yang ke-link,
+    // ATAU "belum ada paket". Pakai AND agar tidak bentrok dengan where.OR milik
+    // filter pencarian.
+    const categoryOr: Prisma.GuestbookEntryWhereInput[] = [];
+    if (eventCategories.length > 0) {
+      categoryOr.push({ OR: [{ eventCategory: { in: eventCategories } }, { package: { category: { in: eventCategories } } }] });
+    }
+    if (wantsNoPackage) {
+      categoryOr.push({ packageId: null });
+    }
     where.AND = [
       ...(Array.isArray(where.AND) ? where.AND : where.AND ? [where.AND] : []),
-      { OR: [{ eventCategory: filters.category }, { package: { category: filters.category } }] },
+      { OR: categoryOr },
     ];
-  } else if (filters.category === "no_package") {
-    where.packageId = null;
   }
 
-  if (filters.interactionType) where.interactionType = filters.interactionType;
-  if (filters.status) where.visitStatus = filters.status;
-  if (filters.sourceOfInformationId) where.sourceOfInformationId = filters.sourceOfInformationId;
-  if (filters.festivalId) where.festivalId = filters.festivalId;
+  if (filters.interactionTypes?.length) where.interactionType = { in: filters.interactionTypes };
+  if (filters.statuses?.length) where.visitStatus = { in: filters.statuses };
+  if (filters.sourceOfInformationIds?.length) where.sourceOfInformationId = { in: filters.sourceOfInformationIds };
+  if (filters.festivalIds?.length) where.festivalId = { in: filters.festivalIds };
 
   return where;
 }
 
 export interface PaginatedGuestbookEntries {
-  data: GuestbookEntryRow[];
+  data: GuestbookEntryItem[];
   total: number;
   weddingCount: number;
   miceCount: number;
@@ -89,10 +99,10 @@ export interface GuestbookOverviewBucket {
 }
 
 export interface GuestbookOverview {
-  /** Rencana Visit — semua entry yang tercatat. */
+  /** Database — semua entry guestbook yang tercatat. */
   total: number;
-  /** Sudah Visit — kunjungan yang tuntas, ditandai lewat checkOutAt. */
-  checkedOut: number;
+  /** Sudah Visit — kunjungan yang tuntas, ditandai lewat status `done_visit`. */
+  doneVisit: number;
   /** Tidak Jadi Visit — entry yang berakhir Lost. */
   lost: number;
   /** Online Meeting — pertemuan daring, bukan kunjungan ke venue. */
@@ -119,7 +129,6 @@ const guestbookEntrySelect = {
   meetingLocation: true,
   scheduledAt: true,
   checkInAt: true,
-  checkOutAt: true,
   notes: true,
   guestCode: true,
   phoneNumberNorm: true,
@@ -129,6 +138,10 @@ const guestbookEntrySelect = {
   bitrixAdsUrl: true,
   visitStatus: true,
   proofFiles: true,
+  rsvpToken: true,
+  confirmedGuestCount: true,
+  confirmedGuestCountAt: true,
+  actualGuestCount: true,
   commitVisitDate: true,
   commitPayDate: true,
   sourceOfInformationId: true,
@@ -173,6 +186,19 @@ const guestbookEntrySelect = {
 
 type GuestbookEntryRow = Prisma.GuestbookEntryGetPayload<{ select: typeof guestbookEntrySelect }>;
 
+/** Candidate cap for the guest-grouping pass in getGuestbookEntries — mirrors the
+ *  bounded take() used by app/api/guestbook/export/route.ts for bulk reads. */
+const GUEST_GROUPING_CANDIDATE_CAP = 5000;
+
+/** Guests are grouped by normalized phone + lowercased name (mirrors the matching
+ *  rule previously used client-side in GuestbookClient/GuestbookDetailDrawer).
+ *  Entries without a phoneNumberNorm can't be reliably matched to anyone else,
+ *  so each is kept as its own singleton group keyed by its own id. */
+function guestGroupKey(entry: { id: string; visitorName: string; phoneNumberNorm: string | null }): string {
+  if (!entry.phoneNumberNorm) return `id:${entry.id}`;
+  return `norm:${entry.phoneNumberNorm}|${entry.visitorName.trim().toLowerCase()}`;
+}
+
 export async function getGuestbookEntries(
   profileId: string | undefined,
   dataScope: DataScope | undefined,
@@ -201,7 +227,7 @@ export async function getGuestbookEntries(
     .slice(0, 10)
     .map((row) => ({ key: row.key as string, label: labels.get(row.key as string) ?? fallback, count: row.count }));
 
-  const [statusGroups, categoryGroups, sourceGroups, venueGroups, hostGroups, adsUrlGroups, sourceAdsGroups, checkedOut, lost, onlineMeetings] = await Promise.all([
+  const [statusGroups, categoryGroups, sourceGroups, venueGroups, hostGroups, adsUrlGroups, sourceAdsGroups, doneVisit, lost, onlineMeetings] = await Promise.all([
     db.guestbookEntry.groupBy({ by: ["visitStatus"], where, _count: { _all: true } }),
     db.guestbookEntry.groupBy({ by: ["eventCategory"], where, _count: { _all: true } }),
     db.guestbookEntry.groupBy({ by: ["sourceOfInformationId"], where, _count: { _all: true } }),
@@ -215,7 +241,7 @@ export async function getGuestbookEntries(
       where: { ...where, bitrixAdsUrl: { not: null } },
       _count: { _all: true },
     }),
-    db.guestbookEntry.count({ where: { ...where, checkOutAt: { not: null } } }),
+    db.guestbookEntry.count({ where: { ...where, visitStatus: "done_visit" } }),
     db.guestbookEntry.count({ where: { ...where, visitStatus: "lost" } }),
     db.guestbookEntry.count({ where: { ...where, interactionType: "online_meeting" } }),
   ]);
@@ -239,7 +265,7 @@ export async function getGuestbookEntries(
   );
   const overview: GuestbookOverview = {
     total: await db.guestbookEntry.count({ where }),
-    checkedOut,
+    doneVisit,
     lost,
     onlineMeetings,
     byStatus: buildBuckets(statusGroups.map((row) => ({ key: row.visitStatus, count: row._count._all })), new Map([
@@ -261,18 +287,57 @@ export async function getGuestbookEntries(
     adsUrlOrganik: adsUrlGroups.find((row) => row.bitrixAdsUrl === null)?._count._all ?? 0,
   };
 
-  const [data, total, weddingCount, miceCount] = await Promise.all([
+  // Grouped pagination: one row per unique guest (same normalized phone + name),
+  // shown across festivals/venues. Candidates are fetched lightweight & capped,
+  // grouped in JS, then the current page's representatives are hydrated with the
+  // full select. Overview stats and weddingCount/miceCount stay entry-level (not
+  // guest-level) — they describe raw activity volume, not unique-guest counts.
+  const [candidates, weddingCount, miceCount] = await Promise.all([
     db.guestbookEntry.findMany({
       where,
-      select: guestbookEntrySelect,
+      select: { id: true, visitorName: true, phoneNumberNorm: true, checkInAt: true },
       orderBy: { checkInAt: "desc" },
-      skip: (page - 1) * pageSize,
-      take: pageSize,
+      take: GUEST_GROUPING_CANDIDATE_CAP,
     }),
-    db.guestbookEntry.count({ where }),
     db.guestbookEntry.count({ where: categoryCountWhere("WEDDINGS") }),
     db.guestbookEntry.count({ where: categoryCountWhere("MICE") }),
   ]);
+
+  const groups = new Map<string, { representativeId: string; representativeCheckInAt: Date; visitCount: number }>();
+  for (const candidate of candidates) {
+    const key = guestGroupKey(candidate);
+    const existing = groups.get(key);
+    if (existing) {
+      existing.visitCount += 1;
+    } else {
+      // candidates are ordered by checkInAt desc, so the first entry seen per
+      // key is already the most recent visit — keep it as the representative.
+      groups.set(key, {
+        representativeId: candidate.id,
+        representativeCheckInAt: candidate.checkInAt,
+        visitCount: 1,
+      });
+    }
+  }
+
+  const groupedList = Array.from(groups.values()).sort(
+    (a, b) => b.representativeCheckInAt.getTime() - a.representativeCheckInAt.getTime()
+  );
+
+  const total = groupedList.length;
+  const pageGroups = groupedList.slice((page - 1) * pageSize, (page - 1) * pageSize + pageSize);
+  const visitCountByRepresentativeId = new Map(pageGroups.map((g) => [g.representativeId, g.visitCount]));
+  const pageIds = pageGroups.map((g) => g.representativeId);
+
+  const rows = pageIds.length > 0
+    ? await db.guestbookEntry.findMany({ where: { id: { in: pageIds } }, select: guestbookEntrySelect })
+    : [];
+  const rowById = new Map(rows.map((row) => [row.id, row]));
+  const data: GuestbookEntryItem[] = pageIds.flatMap((id) => {
+    const row = rowById.get(id);
+    if (!row) return [];
+    return [{ ...row, visitHistoryCount: visitCountByRepresentativeId.get(id) ?? 1 }];
+  });
 
   overview.byCategory = [
     { key: "WEDDINGS", label: "Wedding", count: weddingCount },
@@ -282,4 +347,52 @@ export async function getGuestbookEntries(
   return { data, total, weddingCount, miceCount, overview, page, pageSize };
 }
 
-export type GuestbookEntryItem = GuestbookEntryRow;
+export type GuestbookEntryItem = GuestbookEntryRow & { visitHistoryCount: number };
+
+export interface GuestVisitHistoryItem {
+  id: string;
+  checkInAt: Date;
+  visitStatus: GuestVisitStatus | null;
+  guestCode: string | null;
+  festival: { id: string; name: string } | null;
+  venue: { id: string; name: string } | null;
+}
+
+/** Full cross-festival visit history for the guest behind `entryId` (matched by
+ *  normalized phone + name, same rule as getGuestbookEntries' grouping) — used by
+ *  the Detail drawer instead of only scanning the current page's fetched rows. */
+export async function getGuestVisitHistory(
+  profileId: string | undefined,
+  dataScope: DataScope | undefined,
+  entryId: string
+): Promise<GuestVisitHistoryItem[]> {
+  const scopeWhere = (await buildOwnerScopeWhere(profileId, dataScope, "salesId")) as Prisma.GuestbookEntryWhereInput;
+
+  const anchor = await db.guestbookEntry.findFirst({
+    where: { ...scopeWhere, id: entryId },
+    select: { id: true, visitorName: true, phoneNumberNorm: true },
+  });
+  if (!anchor) return [];
+
+  const matchWhere: Prisma.GuestbookEntryWhereInput = anchor.phoneNumberNorm
+    ? {
+        ...scopeWhere,
+        phoneNumberNorm: anchor.phoneNumberNorm,
+        visitorName: { equals: anchor.visitorName, mode: "insensitive" },
+      }
+    : { ...scopeWhere, id: anchor.id };
+
+  return db.guestbookEntry.findMany({
+    where: matchWhere,
+    select: {
+      id: true,
+      checkInAt: true,
+      visitStatus: true,
+      guestCode: true,
+      festival: { select: { id: true, name: true } },
+      venue: { select: { id: true, name: true } },
+    },
+    orderBy: { checkInAt: "desc" },
+    take: 50,
+  });
+}

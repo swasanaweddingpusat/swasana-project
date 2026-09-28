@@ -3,8 +3,6 @@ import { z } from "zod";
 
 // ─── Enums ────────────────────────────────────────────────────────────────────
 
-export const kpiTargetTypeEnum = z.enum(["qty", "price"]);
-export const kpiIndicatorTypeEnum = z.enum(["dealing", "omset", "homebase"]);
 export const kpiBusinessRoleEnum = z.enum(["sales", "manager"]);
 export const kpiTierActionEnum = z.enum(["bonus", "deduction", "warning", "under_performance"]);
 export const kpiResultStatusEnum = z.enum(["DRAFT", "SIMULATED", "PENDING_REVIEW", "FINALIZED"]);
@@ -53,40 +51,34 @@ const percentageDecimalString = z
 
 const targetItemBaseSchema = z.object({
   name: z.string().min(1, "Nama target wajib diisi"),
-  indicatorType: kpiIndicatorTypeEnum,
-  type: kpiTargetTypeEnum,
-  qty: z.number().int().positive().optional().nullable(),
-  price: positiveDecimalString.optional().nullable(),
-  qtyReguler: z.number().int().positive().optional().nullable(),
-  qtyHadjatan: z.number().int().positive().optional().nullable(),
-  priceReguler: positiveDecimalString.optional().nullable(),
-  priceHadjatan: positiveDecimalString.optional().nullable(),
+  dealingQty: z.number().int().positive().optional().nullable(),
+  dealingQtyReguler: z.number().int().positive().optional().nullable(),
+  dealingQtyHadjatan: z.number().int().positive().optional().nullable(),
+  omsetPrice: positiveDecimalString.optional().nullable(),
+  omsetPriceReguler: positiveDecimalString.optional().nullable(),
+  omsetPriceHadjatan: positiveDecimalString.optional().nullable(),
+  homebaseQty: z.number().int().positive().optional().nullable(),
+  homebaseQtyReguler: z.number().int().positive().optional().nullable(),
+  homebaseQtyHadjatan: z.number().int().positive().optional().nullable(),
   regulerCategory: z.enum(["WEDDINGS", "MICE"]).optional().nullable(),
   hadjatanCategory: z.enum(["WEDDINGS", "MICE"]).optional().nullable(),
 });
 
 export const createTargetItemSchema = targetItemBaseSchema.superRefine((data, ctx) => {
-  if (data.type === "qty") {
-    const hasFlat = data.qty != null && data.qty > 0;
-    const hasSplit = data.qtyReguler != null && data.qtyHadjatan != null;
-    if (!hasFlat && !hasSplit) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "Qty wajib diisi (flat atau reguler+hadjatan)",
-        path: ["qty"],
-      });
-    }
-  }
-  if (data.type === "price") {
-    const hasFlat = data.price != null;
-    const hasSplit = data.priceReguler != null && data.priceHadjatan != null;
-    if (!hasFlat && !hasSplit) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "Harga wajib diisi (flat atau reguler+hadjatan)",
-        path: ["price"],
-      });
-    }
+  const hasDealing =
+    (data.dealingQty != null && data.dealingQty > 0) ||
+    (data.dealingQtyReguler != null && data.dealingQtyHadjatan != null);
+  const hasOmset =
+    data.omsetPrice != null || (data.omsetPriceReguler != null && data.omsetPriceHadjatan != null);
+  const hasHomebase =
+    (data.homebaseQty != null && data.homebaseQty > 0) ||
+    (data.homebaseQtyReguler != null && data.homebaseQtyHadjatan != null);
+  if (!hasDealing && !hasOmset && !hasHomebase) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Minimal satu target indikator (dealing/omset/homebase) wajib diisi",
+      path: ["dealingQty"],
+    });
   }
 });
 
@@ -239,15 +231,13 @@ const assignmentBaseSchema = z.object({
   notes: z.string().optional().nullable(),
 });
 
-export const createAssignmentSchema = assignmentBaseSchema.superRefine((data, ctx) => {
-  if (data.targetQty == null && data.targetPrice == null) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: "Minimal targetQty atau targetPrice harus diisi",
-      path: ["targetQty"],
-    });
-  }
-});
+// NOTE: targetQty/targetPrice are no longer required here — with a unified
+// KpiTargetItem (dealing+omset+homebase on one row), a single generic
+// targetQty/targetPrice override can no longer unambiguously map to "which
+// indicator is this overriding". These columns are kept for backward
+// compatibility but are not consulted by the calculation engine anymore
+// (see actions/kpiInsentif.ts runAutoCalculation).
+export const createAssignmentSchema = assignmentBaseSchema;
 
 export const updateAssignmentSchema = assignmentBaseSchema.partial();
 
