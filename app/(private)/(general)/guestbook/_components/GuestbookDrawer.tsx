@@ -203,7 +203,7 @@ const EMPTY_FORM: GuestbookForm = {
 const INTERACTION_TYPE_OPTIONS = [
   { value: "client_visit", label: "Database" },
   { value: "online_meeting", label: "Online Meeting" },
-  { value: "jemput_bola", label: "Jemput Bola" },
+  { value: "jemput_bola", label: "Survey" },
 ] as const;
 
 const ONLINE_MEDIUM_OPTIONS = [
@@ -773,10 +773,6 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
       toast.error("Catatan wajib diisi");
       return false;
     }
-    if (!form.checkInAt) {
-      toast.error("Tanggal berkunjung wajib diisi");
-      return false;
-    }
     if (!form.sourceOfInformationId) {
       toast.error("Sumber wajib dipilih");
       return false;
@@ -1174,12 +1170,11 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1.5 sm:col-span-2">
                   <Label htmlFor="gb-checkInAt" className="text-sm font-medium">
-                    Tanggal Berkunjung <span className="text-destructive">*</span>
+                    Tanggal Berkunjung
                   </Label>
                   <Input
                     id="gb-checkInAt"
                     type="datetime-local"
-                    required
                     value={form.checkInAt}
                     onChange={(e) => setField("checkInAt", e.target.value)}
                     className="rounded-xl"

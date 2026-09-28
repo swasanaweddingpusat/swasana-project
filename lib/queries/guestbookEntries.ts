@@ -34,6 +34,7 @@ export function buildGuestbookWhere(filters: GuestbookFilterOptions): Prisma.Gue
     where.OR = [
       { visitorName: { contains: search, mode: "insensitive" } },
       { guestCode: { contains: search, mode: "insensitive" } },
+      { phoneNumber: { contains: search, mode: "insensitive" } },
       { host: { fullName: { contains: search, mode: "insensitive" } } },
     ];
   }
@@ -395,4 +396,116 @@ export async function getGuestVisitHistory(
     orderBy: { checkInAt: "desc" },
     take: 50,
   });
+}
+
+export interface GuestbookFunnelReport {
+  database: number;
+  onlineMeeting: number;
+  belumVisit: number;
+  visitVenue: number;
+  tidakJadiVisitLost: number;
+  noDealLost: number;
+  deal: number;
+  databaseToVisitPct: number;
+  visitToDealPct: number;
+  databaseToDealPct: number;
+}
+
+export interface GuestbookProspectBreakdown {
+  cold: number;
+  warm: number;
+  hot: number;
+}
+
+export interface GuestbookFunnelReportResult {
+  overall: GuestbookFunnelReport;
+  ads: GuestbookFunnelReport;
+  adsProspectBreakdown: GuestbookProspectBreakdown;
+}
+
+/** Interaction types that, when a `lost` entry never went through them, count as
+ *  "Tidak Jadi Visit Lost" (lost before reaching a venue visit). Null
+ *  interactionType is treated the same way (never reached a visit either). */
+const PRE_VISIT_INTERACTION_TYPES: GuestInteractionType[] = ["client_visit", "online_meeting"];
+
+/** Shared funnel bucket math for both the overall and ads-only report tables.
+ *  Belum Visit is derived by subtraction (not a direct query) so the five
+ *  buckets always partition `database` exactly, sidestepping the null-handling
+ *  pitfalls of a sixth "not any of the above" Prisma where-clause. */
+async function computeFunnelReport(
+  where: Prisma.GuestbookEntryWhereInput
+): Promise<GuestbookFunnelReport> {
+  const [database, onlineMeeting, visitVenue, noDealLost, tidakJadiVisitLost, deal] = await Promise.all([
+    db.guestbookEntry.count({ where }),
+    db.guestbookEntry.count({ where: { AND: [where, { interactionType: "online_meeting" }] } }),
+    db.guestbookEntry.count({
+      where: {
+        AND: [
+          where,
+          { interactionType: "client_visit" },
+          { OR: [{ visitStatus: { not: "lost" } }, { visitStatus: null }] },
+        ],
+      },
+    }),
+    db.guestbookEntry.count({
+      where: { AND: [where, { interactionType: "client_visit" }, { visitStatus: "lost" }] },
+    }),
+    db.guestbookEntry.count({
+      where: {
+        AND: [
+          where,
+          { visitStatus: "lost" },
+          { OR: [{ interactionType: { notIn: PRE_VISIT_INTERACTION_TYPES } }, { interactionType: null }] },
+        ],
+      },
+    }),
+    db.guestbookEntry.count({ where: { AND: [where, { visitStatus: "deal" }] } }),
+  ]);
+
+  const belumVisit = Math.max(0, database - onlineMeeting - visitVenue - noDealLost - tidakJadiVisitLost);
+
+  return {
+    database,
+    onlineMeeting,
+    belumVisit,
+    visitVenue,
+    tidakJadiVisitLost,
+    noDealLost,
+    deal,
+    databaseToVisitPct: database > 0 ? (visitVenue / database) * 100 : 0,
+    visitToDealPct: visitVenue > 0 ? (deal / visitVenue) * 100 : 0,
+    databaseToDealPct: database > 0 ? (deal / database) * 100 : 0,
+  };
+}
+
+async function computeProspectBreakdown(
+  where: Prisma.GuestbookEntryWhereInput
+): Promise<GuestbookProspectBreakdown> {
+  const [cold, warm, hot] = await Promise.all([
+    db.guestbookEntry.count({ where: { AND: [where, { visitStatus: "cold" }] } }),
+    db.guestbookEntry.count({ where: { AND: [where, { visitStatus: "warm" }] } }),
+    db.guestbookEntry.count({ where: { AND: [where, { visitStatus: "hot" }] } }),
+  ]);
+  return { cold, warm, hot };
+}
+
+/** Powers the "Laporan" tab in /guestbook: overall database funnel + the
+ *  ads-sourced subset funnel (bitrixAdsUrl not null), both broken down the
+ *  same way, plus a Cold/Warm/Hot prospek split for the ads subset only. */
+export async function getGuestbookFunnelReport(
+  profileId: string | undefined,
+  dataScope: DataScope | undefined,
+  filters?: GuestbookFilterOptions
+): Promise<GuestbookFunnelReportResult> {
+  const scopeWhere = (await buildOwnerScopeWhere(profileId, dataScope, "salesId")) as Prisma.GuestbookEntryWhereInput;
+  const where: Prisma.GuestbookEntryWhereInput = { ...scopeWhere, ...buildGuestbookWhere(filters ?? {}) };
+  const adsWhere: Prisma.GuestbookEntryWhereInput = { AND: [where, { bitrixAdsUrl: { not: null } }] };
+
+  const [overall, ads, adsProspectBreakdown] = await Promise.all([
+    computeFunnelReport(where),
+    computeFunnelReport(adsWhere),
+    computeProspectBreakdown(adsWhere),
+  ]);
+
+  return { overall, ads, adsProspectBreakdown };
 }
