@@ -104,9 +104,10 @@ export const moduleActions: Record<string, string[]> = {
   // View-only: no mutation surface (dashboard reads getGroupsWithPerformance).
   "performance-sales": ["view"],
   // KPI & Insentif — modul Sales/Manager KPI + komisi + bonus.
-  // Terbagi per aksi: kpi-insentif = main view; kpi-master = CRUD master data;
-  // kpi-assignment = penugasan target per orang; kpi-simulation = jalankan kalkulasi;
-  // kpi-report = laporan final (FINALIZED only); pay = mark-paid Tahap 1/2 staged bonus.
+  // Terbagi per aksi: kpi-insentif = main view + "pay" (mark-paid Tahap 1/2 staged
+  // bonus); kpi-master = CRUD master data; kpi-assignment = penugasan target per
+  // orang; kpi-simulation = jalankan kalkulasi; kpi-report = laporan final
+  // (FINALIZED only); kpi-award = hadiah non-cash / best-performer.
   "kpi-insentif": ["view", "create", "edit", "delete", "finalize", "pay"],
   "kpi-master": ["view", "create", "edit", "delete"],
   "kpi-assignment": ["view", "create", "edit", "delete"],
