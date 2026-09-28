@@ -1,11 +1,12 @@
 "use client";
 
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import Image from "next/image";
 import { format } from "date-fns";
 import { useReactToPrint } from "react-to-print";
 import { id as idLocale } from "date-fns/locale";
-import { Printer, CloseCircle } from "@solar-icons/react";
+import { toast } from "sonner";
+import { Printer, CloseCircle, DownloadMinimalistic, Refresh } from "@solar-icons/react";
 import {
   Dialog,
   DialogContent,
@@ -23,6 +24,38 @@ interface QuotationPreviewProps {
 }
 
 const PRINT_AREA_ID = "quotation-print-area";
+
+/**
+ * Tailwind v4 mendefinisikan token warna dengan `oklch()`, sementara html2canvas
+ * 1.4.1 (dipakai internal oleh jsPDF.html()) belum bisa mem-parsing fungsi warna
+ * tersebut dan akan melempar error saat rasterisasi. Dokumen quotation ini pada
+ * dasarnya hitam-putih, jadi saat proses clone kita timpa token-nya dengan nilai
+ * rgb/hex setara supaya hasil PDF identik dengan yang tampil di layar.
+ */
+const PDF_COLOR_OVERRIDE = `
+  #${PRINT_AREA_ID}, #${PRINT_AREA_ID} * {
+    --background: #ffffff;
+    --foreground: #0a0a0a;
+    --card: #ffffff;
+    --card-foreground: #0a0a0a;
+    --muted: #f5f5f5;
+    --muted-foreground: #737373;
+    --border: #e5e5e5;
+    --primary: #171717;
+    --primary-foreground: #fafafa;
+    --secondary: #f5f5f5;
+    --secondary-foreground: #171717;
+    --accent: #f5f5f5;
+    --accent-foreground: #171717;
+    --destructive: #e7000b;
+    --ring: #a1a1a1;
+    color: #0a0a0a;
+  }
+
+  #${PRINT_AREA_ID} {
+    box-shadow: none !important;
+  }
+`;
 
 // Editable-clause fallbacks — used when the quotation's corresponding field is
 // null (legacy rows / not yet customized via the drawer's Step 5 form).
@@ -161,6 +194,55 @@ export function QuotationPreview({
     `,
   });
 
+  const [downloading, setDownloading] = useState(false);
+
+  /**
+   * Unduh langsung sebagai file PDF tanpa membuka dialog print.
+   * jsPDF di-import dinamis supaya bundle-nya (+ html2canvas) tidak ikut
+   * terbawa pada initial load modal.
+   */
+  async function handleDownload(): Promise<void> {
+    const element = printRef.current;
+    if (!element || downloading) return;
+
+    setDownloading(true);
+    try {
+      const { jsPDF } = await import("jspdf");
+      const doc = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait" });
+
+      const marginMm = 12;
+      const pageWidthMm = doc.internal.pageSize.getWidth();
+      // html2canvas memakai satuan px, jadi lebar konten dikonversi ke skala
+      // yang pas dengan area cetak A4 dikurangi margin kiri-kanan.
+      const contentWidthMm = pageWidthMm - marginMm * 2;
+      const scale = (contentWidthMm / element.offsetWidth) * (96 / 25.4);
+
+      await doc.html(element, {
+        x: marginMm,
+        y: marginMm,
+        html2canvas: {
+          scale,
+          useCORS: true,
+          backgroundColor: "#ffffff",
+          onclone: (clonedDoc: Document) => {
+            const style = clonedDoc.createElement("style");
+            style.textContent = PDF_COLOR_OVERRIDE;
+            clonedDoc.head.appendChild(style);
+          },
+        },
+        autoPaging: "text",
+        margin: [marginMm, 0, marginMm, 0],
+      });
+
+      doc.save(`${documentTitle}.pdf`);
+    } catch (error) {
+      console.error("Gagal mengunduh PDF quotation:", error);
+      toast.error("Gagal mengunduh PDF. Coba gunakan Cetak / Simpan PDF.");
+    } finally {
+      setDownloading(false);
+    }
+  }
+
   if (!quotation) return null;
 
   const q = quotation;
@@ -195,6 +277,27 @@ export function QuotationPreview({
             Preview Quotation
           </p>
           <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleDownload}
+              disabled={downloading}
+              title="Unduh PDF"
+              className="h-8 rounded-full px-4 text-xs cursor-pointer"
+            >
+              {downloading ? (
+                <Refresh
+                  weight="BoldDuotone"
+                  className="h-3.5 w-3.5 mr-1.5 animate-spin"
+                />
+              ) : (
+                <DownloadMinimalistic
+                  weight="BoldDuotone"
+                  className="h-3.5 w-3.5 mr-1.5"
+                />
+              )}
+              {downloading ? "Menyiapkan…" : "Download PDF"}
+            </Button>
             <Button
               size="sm"
               onClick={handlePrint}
