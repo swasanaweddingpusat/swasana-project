@@ -1097,22 +1097,6 @@ enum RecruitmentRequestPriority {
   urgent
 }
 
-enum GuestVisitStatus {
-  cold
-  warm
-  hot
-  done_visit
-  to_be_discuss
-  deal
-  lost
-}
-
-enum GuestInteractionType {
-  client_visit
-  online_meeting
-  jemput_bola
-}
-
 enum OnlineMeetingMedium {
   zoom
   google_meet
@@ -4204,6 +4188,21 @@ model BlacklistEntry {
 
 // --- Guestbook ---------------------------------------------------------------
 
+/// Status prospek guestbook — menggantikan enum GuestVisitStatus + GuestInteractionType
+/// yang sebelumnya hardcoded, sehingga daftar status bisa dikelola lewat
+/// Settings tanpa migrasi. `sortOrder` menentukan urutan tampil di UI.
+model ProspectStatus {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  guestbookEntries GuestbookEntry[]
+
+  @@map("prospect_statuses")
+}
+
 model GuestbookEntry {
   id                    String                @id @default(uuid())
   visitorName           String
@@ -4211,7 +4210,6 @@ model GuestbookEntry {
   eventCategory         EventCategory?        // Kategori event (Wedding/MICE) — pilihan langsung, independen dari paket
   email                 String?
   phoneNumber           String?
-  interactionType       GuestInteractionType?
   onlineMedium          OnlineMeetingMedium?
   meetingUrl            String?
   meetingLocation       String?
@@ -4221,7 +4219,7 @@ model GuestbookEntry {
   checkInAt             DateTime              @default(now())
   notes                 String?
   guestCode             String?               @unique
-  visitStatus           GuestVisitStatus?
+  prospectStatusId      String?
   createdById           String?
   salesId               String?
   phoneNumberNorm       String?
@@ -4254,12 +4252,13 @@ model GuestbookEntry {
   package             Package?              @relation(fields: [packageId], references: [id], onDelete: SetNull)
   segment             DailyActivitySegment? @relation(fields: [segmentId], references: [id], onDelete: SetNull)
   festival            Festival?             @relation(fields: [festivalId], references: [id], onDelete: SetNull)
+  prospectStatus      ProspectStatus?       @relation(fields: [prospectStatusId], references: [id], onDelete: SetNull)
 
   @@index([checkInAt])
   @@index([hostId])
   @@index([venueId])
   @@index([salesId])
-  @@index([interactionType])
+  @@index([prospectStatusId])
   @@index([phoneNumberNorm])
   @@index([sourceOfInformationId])
   @@index([packageId])

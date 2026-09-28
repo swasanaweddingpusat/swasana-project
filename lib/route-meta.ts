@@ -58,6 +58,7 @@ const DYNAMIC_ROUTE_META: Record<string, RouteMeta> = {
   "/settings/source-of-information": { title: "Source of Information", subtitle: "Sumber informasi customer untuk tracking lead", parent: "/settings" },
   "/settings/education-level": { title: "Tingkat Pendidikan", subtitle: "Kelola daftar tingkat pendidikan karyawan", parent: "/settings" },
   "/settings/order-status": { title: "Order Status", subtitle: "Kelola status order vendor", parent: "/settings" },
+  "/settings/prospect-status": { title: "Status Prospek", subtitle: "Kelola status prospek guestbook", parent: "/settings" },
   "/settings/event-types": { title: "Event Types", subtitle: "Kelola tipe acara untuk nomor PO", parent: "/settings" },
   "/settings/approval-flow": { title: "Approval Flow", subtitle: "Konfigurasi step dan role approver per modul", parent: "/settings" },
   "/settings/modules": { title: "Module Registry", subtitle: "Kelola module grup sidebar dan pemetaan permission-nya", parent: "/settings" },

@@ -4,6 +4,7 @@ import { revalidateTag } from "next/cache";
 import { Prisma } from "@prisma/client";
 import { randomInt, randomBytes } from "crypto";
 import { db } from "@/lib/db";
+import { PROSPECT_STATUS } from "@/lib/prospect-status";
 import { requirePermission } from "@/lib/permissions";
 import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
 import { logAudit } from "@/lib/audit";
@@ -177,13 +178,20 @@ export async function confirmGuestbookAttendance(
 
     const now = new Date();
     const resolvedActualGuestCount = actualGuestCount ?? existing.confirmedGuestCount ?? null;
+    // Scan kehadiran menandai tamu benar-benar datang. Statusnya dicari by name
+    // karena daftar status kini dikelola lewat Settings — kalau status "Visit
+    // Venue" dihapus/diganti nama, status entry dibiarkan apa adanya.
+    const visitVenueStatus = await db.prospectStatus.findUnique({
+      where: { name: PROSPECT_STATUS.VISIT_VENUE },
+      select: { id: true },
+    });
     await db.$transaction([
       db.guestbookEntry.update({
         where: { id: existing.id },
         data: {
           attendanceConfirmedAt: now,
           attendanceConfirmedById: session!.user.profileId,
-          visitStatus: "done_visit",
+          ...(visitVenueStatus ? { prospectStatusId: visitVenueStatus.id } : {}),
           actualGuestCount: resolvedActualGuestCount,
         },
       }),

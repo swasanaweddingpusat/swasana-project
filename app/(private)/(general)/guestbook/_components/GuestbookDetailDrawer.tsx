@@ -33,6 +33,8 @@ import type { GuestbookEntryItem } from "@/lib/queries/guestbookEntries";
 import { BitrixDealDetail } from "@/components/shared/BitrixDealDetail";
 import type { ProofFiles } from "@/lib/validations/guestbook";
 import { useGuestVisitHistory } from "@/hooks/use-guestbook";
+import { prospectStatusClass } from "@/lib/prospect-status";
+import { cn } from "@/lib/utils";
 import { resolveGuestbookPhotoUrl } from "./photo-url";
 import { generateGuestbookTicketBlob } from "./guestbook-ticket";
 
@@ -41,22 +43,6 @@ interface GuestbookDetailDrawerProps {
   onOpenChange: (open: boolean) => void;
   entry: GuestbookEntryItem | null;
 }
-
-const VISIT_STATUS_LABELS: Record<string, { label: string; className: string }> = {
-  cold: { label: "Cold", className: "bg-sky-100 text-sky-700 border-0" },
-  warm: { label: "Warm", className: "bg-amber-100 text-amber-700 border-0" },
-  hot: { label: "Hot", className: "bg-orange-100 text-orange-700 border-0" },
-  done_visit: { label: "Done Visit", className: "bg-emerald-100 text-emerald-700 border-0" },
-  to_be_discuss: { label: "To Be Discuss", className: "bg-yellow-100 text-yellow-700 border-0" },
-  deal: { label: "Deal", className: "bg-green-100 text-green-700 border-0" },
-  lost: { label: "Lost", className: "bg-red-100 text-red-700 border-0" },
-};
-
-const INTERACTION_TYPE_LABELS: Record<string, string> = {
-  client_visit: "Database",
-  online_meeting: "Online Meeting",
-  jemput_bola: "Survey",
-};
 
 const EVENT_CATEGORY_LABELS: Record<string, string> = {
   WEDDINGS: "Wedding",
@@ -343,17 +329,6 @@ export function GuestbookDetailDrawer({
         {/* Visit info */}
         <div className="bg-muted/30 rounded-2xl p-4 space-y-4">
           <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Informasi Kunjungan</p>
-          {entry.interactionType && (
-            <InfoRow
-              icon={<ClipboardText weight="BoldDuotone" className="h-4 w-4 text-muted-foreground" />}
-              label="Tipe Interaksi"
-              value={
-                <Badge variant="secondary" className="rounded-full text-xs font-medium">
-                  {INTERACTION_TYPE_LABELS[entry.interactionType] ?? entry.interactionType}
-                </Badge>
-              }
-            />
-          )}
           {eventCategory && (
             <InfoRow
               icon={<ConfettiMinimalistic weight="BoldDuotone" className="h-4 w-4 text-muted-foreground" />}
@@ -476,17 +451,13 @@ export function GuestbookDetailDrawer({
         {/* Visit status */}
         <div className="bg-muted/30 rounded-2xl p-4 space-y-4">
           <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Status</p>
-          {entry.visitStatus && (() => {
-            const statusInfo = VISIT_STATUS_LABELS[entry.visitStatus];
-            if (!statusInfo) return null;
-            return (
-              <div className="flex items-center gap-2">
-                <Badge className={`rounded-full text-xs ${statusInfo.className}`}>
-                  {statusInfo.label}
-                </Badge>
-              </div>
-            );
-          })()}
+          {entry.prospectStatus && (
+            <div className="flex items-center gap-2">
+              <Badge className={cn("rounded-full text-xs", prospectStatusClass(entry.prospectStatus.name))}>
+                {entry.prospectStatus.name}
+              </Badge>
+            </div>
+          )}
           <div className="space-y-1">
             <p className="text-xs text-muted-foreground">Total Kunjungan</p>
             <p className="text-sm font-medium text-foreground">{totalVisit}x</p>
@@ -501,7 +472,7 @@ export function GuestbookDetailDrawer({
             </p>
             <div className="space-y-2">
               {pastVisits.slice(0, 10).map((past) => {
-                const pastStatus = past.visitStatus ? VISIT_STATUS_LABELS[past.visitStatus] : null;
+                const pastStatus = past.prospectStatus;
                 const place = [past.festival?.name, past.venue?.name].filter(Boolean).join(" • ");
                 return (
                   <div key={past.id} className="flex items-center justify-between gap-2 text-sm border-b border-border/50 pb-2 last:border-0 last:pb-0">
@@ -510,8 +481,8 @@ export function GuestbookDetailDrawer({
                       <p className="text-xs text-muted-foreground">{place || "—"}</p>
                     </div>
                     {pastStatus && (
-                      <Badge className={`rounded-full text-[11px] shrink-0 ${pastStatus.className}`}>
-                        {pastStatus.label}
+                      <Badge className={cn("rounded-full text-[11px] shrink-0", prospectStatusClass(pastStatus.name))}>
+                        {pastStatus.name}
                       </Badge>
                     )}
                   </div>

@@ -1,8 +1,9 @@
 import { db } from "@/lib/db";
 import { buildOwnerScopeWhere } from "@/lib/access-control";
 import type { DataScope } from "@/types/user";
-import type { Prisma, GuestInteractionType, GuestVisitStatus } from "@prisma/client";
+import type { Prisma } from "@prisma/client";
 import { isBitrixSourceName } from "@/lib/validations/guestbook";
+import { PROSPECT_STATUS } from "@/lib/prospect-status";
 
 export type GuestbookCategoryFilter = "WEDDINGS" | "MICE" | "no_package";
 
@@ -13,8 +14,8 @@ export interface GuestbookFilterOptions {
   dateFrom?: string; // yyyy-MM-dd
   dateTo?: string; // yyyy-MM-dd
   categories?: GuestbookCategoryFilter[];
-  interactionTypes?: GuestInteractionType[];
-  statuses?: GuestVisitStatus[];
+  /** ID ProspectStatus — menggantikan filter enum status + interaction type. */
+  statusIds?: string[];
   sourceOfInformationIds?: string[];
   festivalIds?: string[];
 }
@@ -70,8 +71,7 @@ export function buildGuestbookWhere(filters: GuestbookFilterOptions): Prisma.Gue
     ];
   }
 
-  if (filters.interactionTypes?.length) where.interactionType = { in: filters.interactionTypes };
-  if (filters.statuses?.length) where.visitStatus = { in: filters.statuses };
+  if (filters.statusIds?.length) where.prospectStatusId = { in: filters.statusIds };
   if (filters.sourceOfInformationIds?.length) where.sourceOfInformationId = { in: filters.sourceOfInformationIds };
   if (filters.festivalIds?.length) where.festivalId = { in: filters.festivalIds };
 
@@ -102,11 +102,11 @@ export interface GuestbookOverviewBucket {
 export interface GuestbookOverview {
   /** Database — semua entry guestbook yang tercatat. */
   total: number;
-  /** Sudah Visit — kunjungan yang tuntas, ditandai lewat status `done_visit`. */
+  /** Sudah Visit — entry berstatus "Visit Venue". */
   doneVisit: number;
-  /** Tidak Jadi Visit — entry yang berakhir Lost. */
+  /** Tidak Jadi Visit — entry berstatus "Tidak Jadi Visit (Lost)". */
   lost: number;
-  /** Online Meeting — pertemuan daring, bukan kunjungan ke venue. */
+  /** Online Meeting — entry berstatus "Online Meeting". */
   onlineMeetings: number;
   byStatus: GuestbookOverviewBucket[];
   byCategory: GuestbookOverviewBucket[];
@@ -124,7 +124,6 @@ const guestbookEntrySelect = {
   eventCategory: true,
   email: true,
   phoneNumber: true,
-  interactionType: true,
   onlineMedium: true,
   meetingUrl: true,
   meetingLocation: true,
@@ -137,7 +136,8 @@ const guestbookEntrySelect = {
   bitrixName: true,
   bitrixSourceInfo: true,
   bitrixAdsUrl: true,
-  visitStatus: true,
+  prospectStatusId: true,
+  prospectStatus: { select: { id: true, name: true, sortOrder: true } },
   proofFiles: true,
   rsvpToken: true,
   confirmedGuestCount: true,
@@ -229,7 +229,7 @@ export async function getGuestbookEntries(
     .map((row) => ({ key: row.key as string, label: labels.get(row.key as string) ?? fallback, count: row.count }));
 
   const [statusGroups, categoryGroups, sourceGroups, venueGroups, hostGroups, adsUrlGroups, sourceAdsGroups, doneVisit, lost, onlineMeetings] = await Promise.all([
-    db.guestbookEntry.groupBy({ by: ["visitStatus"], where, _count: { _all: true } }),
+    db.guestbookEntry.groupBy({ by: ["prospectStatusId"], where, _count: { _all: true } }),
     db.guestbookEntry.groupBy({ by: ["eventCategory"], where, _count: { _all: true } }),
     db.guestbookEntry.groupBy({ by: ["sourceOfInformationId"], where, _count: { _all: true } }),
     db.guestbookEntry.groupBy({ by: ["venueId"], where, _count: { _all: true } }),
@@ -242,10 +242,16 @@ export async function getGuestbookEntries(
       where: { ...where, bitrixAdsUrl: { not: null } },
       _count: { _all: true },
     }),
-    db.guestbookEntry.count({ where: { ...where, visitStatus: "done_visit" } }),
-    db.guestbookEntry.count({ where: { ...where, visitStatus: "lost" } }),
-    db.guestbookEntry.count({ where: { ...where, interactionType: "online_meeting" } }),
+    db.guestbookEntry.count({ where: { ...where, prospectStatus: { name: PROSPECT_STATUS.VISIT_VENUE } } }),
+    db.guestbookEntry.count({ where: { ...where, prospectStatus: { name: PROSPECT_STATUS.TIDAK_JADI_VISIT_LOST } } }),
+    db.guestbookEntry.count({ where: { ...where, prospectStatus: { name: PROSPECT_STATUS.ONLINE_MEETING } } }),
   ]);
+
+  // Label status dibaca dari tabel — daftar status dikelola admin lewat
+  // Settings, jadi tidak boleh di-hardcode seperti enum sebelumnya.
+  const statusLabels = new Map(
+    (await db.prospectStatus.findMany({ select: { id: true, name: true } })).map((row) => [row.id, row.name]),
+  );
 
   const sourceIds = sourceGroups.flatMap((row) => row.sourceOfInformationId ? [row.sourceOfInformationId] : []);
   const venueIds = venueGroups.flatMap((row) => row.venueId ? [row.venueId] : []);
@@ -269,9 +275,7 @@ export async function getGuestbookEntries(
     doneVisit,
     lost,
     onlineMeetings,
-    byStatus: buildBuckets(statusGroups.map((row) => ({ key: row.visitStatus, count: row._count._all })), new Map([
-      ["cold", "Cold"], ["warm", "Warm"], ["hot", "Hot"], ["done_visit", "Done Visit"], ["to_be_discuss", "To Be Discuss"], ["deal", "Deal"], ["lost", "Lost"],
-    ]), "Tanpa status"),
+    byStatus: buildBuckets(statusGroups.map((row) => ({ key: row.prospectStatusId, count: row._count._all })), statusLabels, "Tanpa status"),
     byCategory: buildBuckets(categoryGroups.map((row) => ({ key: row.eventCategory, count: row._count._all })), new Map([["WEDDINGS", "Wedding"], ["MICE", "MICE"]]), "Tanpa kategori"),
     bySource: buildBuckets(sourceGroups.map((row) => ({ key: row.sourceOfInformationId, count: row._count._all })), sourceLabels, "Tanpa sumber")
       .map((bucket) => {
@@ -353,7 +357,7 @@ export type GuestbookEntryItem = GuestbookEntryRow & { visitHistoryCount: number
 export interface GuestVisitHistoryItem {
   id: string;
   checkInAt: Date;
-  visitStatus: GuestVisitStatus | null;
+  prospectStatus: { id: string; name: string } | null;
   guestCode: string | null;
   festival: { id: string; name: string } | null;
   venue: { id: string; name: string } | null;
@@ -388,7 +392,7 @@ export async function getGuestVisitHistory(
     select: {
       id: true,
       checkInAt: true,
-      visitStatus: true,
+      prospectStatus: { select: { id: true, name: true } },
       guestCode: true,
       festival: { select: { id: true, name: true } },
       venue: { select: { id: true, name: true } },
@@ -415,54 +419,64 @@ export interface GuestbookProspectBreakdown {
   cold: number;
   warm: number;
   hot: number;
+  noResponse: number;
 }
 
 export interface GuestbookFunnelReportResult {
   overall: GuestbookFunnelReport;
-  ads: GuestbookFunnelReport;
-  adsProspectBreakdown: GuestbookProspectBreakdown;
+  /** Jumlah entry pada filter aktif yang benar-benar memiliki Bitrix Ads URL. */
+  totalAdsUrl: number;
+  /** Breakdown status hanya mengikuti filter aktif (tanggal/venue/PIC), bukan Ads URL. */
+  prospectBreakdown: GuestbookProspectBreakdown;
 }
 
-/** Interaction types that, when a `lost` entry never went through them, count as
- *  "Tidak Jadi Visit Lost" (lost before reaching a venue visit). Null
- *  interactionType is treated the same way (never reached a visit either). */
-const PRE_VISIT_INTERACTION_TYPES: GuestInteractionType[] = ["client_visit", "online_meeting"];
-
-/** Shared funnel bucket math for both the overall and ads-only report tables.
- *  Belum Visit is derived by subtraction (not a direct query) so the five
- *  buckets always partition `database` exactly, sidestepping the null-handling
- *  pitfalls of a sixth "not any of the above" Prisma where-clause. */
-async function computeFunnelReport(
+/** Hitung jumlah entry per nama status dalam satu query, lalu baca nilainya
+ *  lewat helper. Menggantikan kombinasi interactionType + visitStatus yang lama:
+ *  sekarang tiap bucket funnel dipetakan langsung ke satu status prospek. */
+async function countByStatusName(
   where: Prisma.GuestbookEntryWhereInput
-): Promise<GuestbookFunnelReport> {
-  const [database, onlineMeeting, visitVenue, noDealLost, tidakJadiVisitLost, deal] = await Promise.all([
-    db.guestbookEntry.count({ where }),
-    db.guestbookEntry.count({ where: { AND: [where, { interactionType: "online_meeting" }] } }),
-    db.guestbookEntry.count({
-      where: {
-        AND: [
-          where,
-          { interactionType: "client_visit" },
-          { OR: [{ visitStatus: { not: "lost" } }, { visitStatus: null }] },
-        ],
-      },
-    }),
-    db.guestbookEntry.count({
-      where: { AND: [where, { interactionType: "client_visit" }, { visitStatus: "lost" }] },
-    }),
-    db.guestbookEntry.count({
-      where: {
-        AND: [
-          where,
-          { visitStatus: "lost" },
-          { OR: [{ interactionType: { notIn: PRE_VISIT_INTERACTION_TYPES } }, { interactionType: null }] },
-        ],
-      },
-    }),
-    db.guestbookEntry.count({ where: { AND: [where, { visitStatus: "deal" }] } }),
+): Promise<Map<string, number>> {
+  const [groups, statuses] = await Promise.all([
+    db.guestbookEntry.groupBy({ by: ["prospectStatusId"], where, _count: { _all: true } }),
+    db.prospectStatus.findMany({ select: { id: true, name: true } }),
   ]);
+  const nameById = new Map(statuses.map((row) => [row.id, row.name]));
+  const result = new Map<string, number>();
+  for (const row of groups) {
+    const name = row.prospectStatusId ? nameById.get(row.prospectStatusId) : undefined;
+    if (name) result.set(name, (result.get(name) ?? 0) + row._count._all);
+  }
+  return result;
+}
 
-  const belumVisit = Math.max(0, database - onlineMeeting - visitVenue - noDealLost - tidakJadiVisitLost);
+/** Shared funnel bucket math. Baik Database maupun Ads Performance memakai
+ *  Visit Venue sebagai titik visit. Ads hanya membatasi dataset ke entry yang
+ *  memiliki bitrixAdsUrl, bukan mengubah definisi visit. */
+async function computeFunnelReport(
+  where: Prisma.GuestbookEntryWhereInput,
+): Promise<GuestbookFunnelReport> {
+  const [database, counts] = await Promise.all([
+    db.guestbookEntry.count({ where }),
+    countByStatusName(where),
+  ]);
+  const at = (name: string) => counts.get(name) ?? 0;
+
+  const rawOnlineMeeting = at(PROSPECT_STATUS.ONLINE_MEETING);
+  const rawVisitVenue = at(PROSPECT_STATUS.VISIT_VENUE);
+  const tidakJadiVisitLost = at(PROSPECT_STATUS.TIDAK_JADI_VISIT_LOST);
+  const noDealLost = at(PROSPECT_STATUS.NO_DEAL_LOST);
+  const deal = at(PROSPECT_STATUS.DEAL);
+
+  // Setiap status dihitung apa adanya karena ProspectStatus sekarang satu field
+  // eksklusif: Visit Venue tidak boleh ditambah Deal. Belum Visit menjadi sisa
+  // setelah seluruh status funnel eksplisit dikurangkan dari Database.
+  const onlineMeeting = rawOnlineMeeting;
+  const visitVenue = rawVisitVenue;
+  const belumVisit = Math.max(
+    0,
+    database - onlineMeeting - visitVenue - tidakJadiVisitLost - noDealLost - deal,
+  );
+  const visitCount = visitVenue;
 
   return {
     database,
@@ -472,8 +486,8 @@ async function computeFunnelReport(
     tidakJadiVisitLost,
     noDealLost,
     deal,
-    databaseToVisitPct: database > 0 ? (visitVenue / database) * 100 : 0,
-    visitToDealPct: visitVenue > 0 ? (deal / visitVenue) * 100 : 0,
+    databaseToVisitPct: database > 0 ? (visitCount / database) * 100 : 0,
+    visitToDealPct: visitCount > 0 ? (deal / visitCount) * 100 : 0,
     databaseToDealPct: database > 0 ? (deal / database) * 100 : 0,
   };
 }
@@ -481,17 +495,18 @@ async function computeFunnelReport(
 async function computeProspectBreakdown(
   where: Prisma.GuestbookEntryWhereInput
 ): Promise<GuestbookProspectBreakdown> {
-  const [cold, warm, hot] = await Promise.all([
-    db.guestbookEntry.count({ where: { AND: [where, { visitStatus: "cold" }] } }),
-    db.guestbookEntry.count({ where: { AND: [where, { visitStatus: "warm" }] } }),
-    db.guestbookEntry.count({ where: { AND: [where, { visitStatus: "hot" }] } }),
-  ]);
-  return { cold, warm, hot };
+  const counts = await countByStatusName(where);
+  return {
+    cold: counts.get(PROSPECT_STATUS.COLD) ?? 0,
+    warm: counts.get(PROSPECT_STATUS.WARM) ?? 0,
+    hot: counts.get(PROSPECT_STATUS.HOT) ?? 0,
+    noResponse: counts.get(PROSPECT_STATUS.NO_RESPONSE) ?? 0,
+  };
 }
 
-/** Powers the "Laporan" tab in /guestbook: overall database funnel + the
- *  ads-sourced subset funnel (bitrixAdsUrl not null), both broken down the
- *  same way, plus a Cold/Warm/Hot prospek split for the ads subset only. */
+/** Powers Guestbook Overview performance cards. Semua status/funnel mengikuti
+ *  filter aktif tanpa filter Ads URL. `bitrixAdsUrl` hanya dipakai menghitung
+ *  Total Ads URL sebagai denominator rasio Ads Performance. */
 export async function getGuestbookFunnelReport(
   profileId: string | undefined,
   dataScope: DataScope | undefined,
@@ -499,13 +514,17 @@ export async function getGuestbookFunnelReport(
 ): Promise<GuestbookFunnelReportResult> {
   const scopeWhere = (await buildOwnerScopeWhere(profileId, dataScope, "salesId")) as Prisma.GuestbookEntryWhereInput;
   const where: Prisma.GuestbookEntryWhereInput = { ...scopeWhere, ...buildGuestbookWhere(filters ?? {}) };
-  const adsWhere: Prisma.GuestbookEntryWhereInput = { AND: [where, { bitrixAdsUrl: { not: null } }] };
+  // Total Ads URL hanya menghitung entry yang benar-benar punya URL iklan.
+  // `not: null` saja masih menerima string kosong dari data legacy.
+  const adsWhere: Prisma.GuestbookEntryWhereInput = {
+    AND: [where, { bitrixAdsUrl: { not: null } }, { bitrixAdsUrl: { not: "" } }],
+  };
 
-  const [overall, ads, adsProspectBreakdown] = await Promise.all([
+  const [overall, totalAdsUrl, prospectBreakdown] = await Promise.all([
     computeFunnelReport(where),
-    computeFunnelReport(adsWhere),
-    computeProspectBreakdown(adsWhere),
+    db.guestbookEntry.count({ where: adsWhere }),
+    computeProspectBreakdown(where),
   ]);
 
-  return { overall, ads, adsProspectBreakdown };
+  return { overall, totalAdsUrl, prospectBreakdown };
 }
