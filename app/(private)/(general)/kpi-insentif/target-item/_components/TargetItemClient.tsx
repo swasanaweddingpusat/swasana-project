@@ -4,7 +4,6 @@ import { useState } from "react";
 import { AddCircle, Pen, TrashBinTrash, BoxMinimalistic, Magnifer } from "@solar-icons/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import {
   Table,
   TableBody,
@@ -26,32 +25,57 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/shared/page-header";
+import { PermissionGate } from "@/components/shared/permission-gate";
 import { useTargetItems, useDeleteTargetItem } from "@/hooks/useKpiInsentif";
 import { TargetItemDrawer } from "./TargetItemDrawer";
 import { formatRupiah } from "@/lib/utils";
 import type { TargetItemRow } from "@/lib/queries/kpiInsentif";
+import { EmptyState } from "../../_components/EmptyState";
 
 interface TargetItemClientProps {
   initialItems: TargetItemRow[];
 }
 
-const INDICATOR_LABELS: Record<string, string> = {
-  dealing: "Dealing",
-  omset: "Omset",
-  homebase: "Homebase",
-};
-
-const INDICATOR_VARIANT: Record<string, "default" | "secondary" | "outline"> = {
-  dealing: "default",
-  omset: "secondary",
-  homebase: "outline",
-};
-
-function IndicatorBadge({ type }: { type: string }) {
+function formatQtyColumn(
+  qty: number | null,
+  qtyReguler: number | null,
+  qtyHadjatan: number | null
+) {
+  if (qty == null && qtyReguler == null && qtyHadjatan == null) {
+    return <span className="text-muted-foreground">-</span>;
+  }
   return (
-    <Badge variant={INDICATOR_VARIANT[type] ?? "secondary"} className="rounded-full text-xs">
-      {INDICATOR_LABELS[type] ?? type}
-    </Badge>
+    <div className="space-y-0.5">
+      <p className="font-mono text-sm">{qty != null ? `${qty} qty` : "-"}</p>
+      {(qtyReguler != null || qtyHadjatan != null) && (
+        <p className="font-mono text-xs text-muted-foreground">
+          R: {qtyReguler ?? "-"} &middot; H: {qtyHadjatan ?? "-"}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function formatOmsetColumn(
+  price: TargetItemRow["omsetPrice"],
+  priceReguler: TargetItemRow["omsetPriceReguler"],
+  priceHadjatan: TargetItemRow["omsetPriceHadjatan"]
+) {
+  if (price == null && priceReguler == null && priceHadjatan == null) {
+    return <span className="text-muted-foreground">-</span>;
+  }
+  return (
+    <div className="space-y-0.5">
+      <p className="font-mono text-sm">
+        {price != null ? formatRupiah(Number(price)) : "-"}
+      </p>
+      {(priceReguler != null || priceHadjatan != null) && (
+        <p className="font-mono text-xs text-muted-foreground">
+          R: {priceReguler != null ? formatRupiah(Number(priceReguler)) : "-"} &middot; H:{" "}
+          {priceHadjatan != null ? formatRupiah(Number(priceHadjatan)) : "-"}
+        </p>
+      )}
+    </div>
   );
 }
 
@@ -102,43 +126,18 @@ export function TargetItemClient({ initialItems }: TargetItemClientProps) {
     setDeleteItemName("");
   }
 
-  function formatTargetValue(item: TargetItemRow): string {
-    if (item.type === "qty") {
-      if (item.qty != null) return `${item.qty} qty`;
-      return "—";
-    }
-    if (item.price != null) return formatRupiah(Number(item.price));
-    return "—";
-  }
-
-  function formatSplitReguler(item: TargetItemRow): string {
-    if (item.type === "qty") {
-      if (item.qtyReguler != null) return `${item.qtyReguler}`;
-      return "—";
-    }
-    if (item.priceReguler != null) return formatRupiah(Number(item.priceReguler));
-    return "—";
-  }
-
-  function formatSplitHadjatan(item: TargetItemRow): string {
-    if (item.type === "qty") {
-      if (item.qtyHadjatan != null) return `${item.qtyHadjatan}`;
-      return "—";
-    }
-    if (item.priceHadjatan != null) return formatRupiah(Number(item.priceHadjatan));
-    return "—";
-  }
-
   return (
     <div className="space-y-6">
       <PageHeader
         title="Master Target Item"
         description="Kelola item target KPI (dealing, omset, homebase)"
         action={
-          <Button onClick={handleAdd} className="rounded-full gap-2">
-            <AddCircle weight="BoldDuotone" className="h-4 w-4" />
-            Tambah Target Item
-          </Button>
+          <PermissionGate module="kpi-master" action="create">
+            <Button onClick={handleAdd} className="rounded-full gap-2">
+              <AddCircle weight="BoldDuotone" className="h-4 w-4" />
+              Tambah Target Item
+            </Button>
+          </PermissionGate>
         }
       />
 
@@ -164,81 +163,133 @@ export function TargetItemClient({ initialItems }: TargetItemClientProps) {
             ))}
           </div>
         ) : filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center gap-4 py-20 text-center">
-            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-muted">
-              <BoxMinimalistic weight="BoldDuotone" className="h-8 w-8 text-muted-foreground" />
-            </div>
-            <div>
-              <p className="font-semibold text-foreground">Belum ada target item</p>
-              <p className="text-sm text-muted-foreground mt-1">
-                Tambahkan target item untuk memulai konfigurasi KPI
-              </p>
-            </div>
-            <Button onClick={handleAdd} className="rounded-full gap-2" size="sm">
-              <AddCircle weight="BoldDuotone" className="h-4 w-4" />
-              Tambah Target Item
-            </Button>
-          </div>
+          <EmptyState
+            icon={<BoxMinimalistic weight="BoldDuotone" className="h-8 w-8 text-muted-foreground" />}
+            title="Belum ada target item"
+            description="Tambahkan target item untuk memulai konfigurasi KPI"
+            action={
+              <PermissionGate module="kpi-master" action="create">
+                <Button onClick={handleAdd} className="rounded-full gap-2" size="sm">
+                  <AddCircle weight="BoldDuotone" className="h-4 w-4" />
+                  Tambah Target Item
+                </Button>
+              </PermissionGate>
+            }
+          />
         ) : (
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="pl-5">Nama</TableHead>
-                  <TableHead>Tipe Indikator</TableHead>
-                  <TableHead>Tipe Target</TableHead>
-                  <TableHead>Target Utama</TableHead>
-                  <TableHead>Rincian Reguler</TableHead>
-                  <TableHead>Rincian Hadjatan</TableHead>
-                  <TableHead className="pr-5 text-right">Aksi</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filtered.map((item) => (
-                  <TableRow key={item.id}>
-                    <TableCell className="pl-5 font-medium">{item.name}</TableCell>
-                    <TableCell>
-                      <IndicatorBadge type={item.indicatorType} />
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="outline" className="rounded-full text-xs capitalize">
-                        {item.type === "qty" ? "Qty" : "Harga"}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="font-mono text-sm">
-                      {formatTargetValue(item)}
-                    </TableCell>
-                    <TableCell className="font-mono text-sm text-muted-foreground">
-                      {formatSplitReguler(item)}
-                    </TableCell>
-                    <TableCell className="font-mono text-sm text-muted-foreground">
-                      {formatSplitHadjatan(item)}
-                    </TableCell>
-                    <TableCell className="pr-5">
-                      <div className="flex items-center justify-end gap-2">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 rounded-xl"
-                          onClick={() => handleEdit(item)}
-                        >
-                          <Pen weight="BoldDuotone" className="h-4 w-4 text-muted-foreground" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 rounded-xl text-destructive hover:text-destructive"
-                          onClick={() => confirmDelete(item)}
-                        >
-                          <TrashBinTrash weight="BoldDuotone" className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </TableCell>
+          <>
+            {/* Table — desktop (sm+) */}
+            <div className="hidden sm:block w-full overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="pl-5">Nama</TableHead>
+                    <TableHead>Dealing</TableHead>
+                    <TableHead>Omset</TableHead>
+                    <TableHead>Homebase</TableHead>
+                    <TableHead className="pr-5 text-right">Aksi</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
+                </TableHeader>
+                <TableBody>
+                  {filtered.map((item) => (
+                    <TableRow key={item.id}>
+                      <TableCell className="pl-5 font-medium">{item.name}</TableCell>
+                      <TableCell>
+                        {formatQtyColumn(
+                          item.dealingQty,
+                          item.dealingQtyReguler,
+                          item.dealingQtyHadjatan
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {formatOmsetColumn(
+                          item.omsetPrice,
+                          item.omsetPriceReguler,
+                          item.omsetPriceHadjatan
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {formatQtyColumn(
+                          item.homebaseQty,
+                          item.homebaseQtyReguler,
+                          item.homebaseQtyHadjatan
+                        )}
+                      </TableCell>
+                      <TableCell className="pr-5">
+                        <div className="flex items-center justify-end gap-2">
+                          <PermissionGate module="kpi-master" action="edit">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 rounded-xl"
+                              onClick={() => handleEdit(item)}
+                            >
+                              <Pen weight="BoldDuotone" className="h-4 w-4 text-muted-foreground" />
+                            </Button>
+                          </PermissionGate>
+                          <PermissionGate module="kpi-master" action="delete">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 rounded-xl text-destructive hover:text-destructive"
+                              onClick={() => confirmDelete(item)}
+                            >
+                              <TrashBinTrash weight="BoldDuotone" className="h-4 w-4" />
+                            </Button>
+                          </PermissionGate>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+
+            {/* Card list — mobile (<sm) */}
+            <div className="block sm:hidden p-4 space-y-3">
+              {filtered.map((item) => (
+                <div key={item.id} className="rounded-xl border bg-card p-3 space-y-2">
+                  <p className="font-medium text-foreground truncate">{item.name}</p>
+                  <div className="grid grid-cols-3 gap-2 text-xs">
+                    <div>
+                      <p className="text-muted-foreground">Dealing</p>
+                      {formatQtyColumn(item.dealingQty, item.dealingQtyReguler, item.dealingQtyHadjatan)}
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">Omset</p>
+                      {formatOmsetColumn(item.omsetPrice, item.omsetPriceReguler, item.omsetPriceHadjatan)}
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">Homebase</p>
+                      {formatQtyColumn(item.homebaseQty, item.homebaseQtyReguler, item.homebaseQtyHadjatan)}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1 pt-1 border-t border-border">
+                    <PermissionGate module="kpi-master" action="edit">
+                      <Button
+                        variant="outline"
+                        className="h-9 flex-1 text-xs"
+                        onClick={() => handleEdit(item)}
+                      >
+                        <Pen weight="BoldDuotone" className="h-3.5 w-3.5 mr-1 text-muted-foreground" />
+                        Edit
+                      </Button>
+                    </PermissionGate>
+                    <PermissionGate module="kpi-master" action="delete">
+                      <Button
+                        variant="outline"
+                        className="h-9 flex-1 text-xs text-destructive border-destructive/30 hover:bg-destructive/5"
+                        onClick={() => confirmDelete(item)}
+                      >
+                        <TrashBinTrash weight="BoldDuotone" className="h-3.5 w-3.5 mr-1" />
+                        Hapus
+                      </Button>
+                    </PermissionGate>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
         )}
       </div>
 

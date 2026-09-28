@@ -67,6 +67,8 @@ const DYNAMIC_ROUTE_META: Record<string, RouteMeta> = {
   "/settings/tutorial": { title: "Tutorial CMS", subtitle: "Kelola konten tutorial aplikasi", parent: "/settings" },
   "/settings/booking-log": { title: "Booking Activity Log", subtitle: "Monitoring activity log booking Wedding & MICE", parent: "/settings" },
   "/settings/quotation-templates": { title: "Quotation Templates", subtitle: "Kelola template quotation", parent: "/settings" },
+  "/settings/banner": { title: "Banner", subtitle: "Kelola banner carousel di halaman dashboard", parent: "/settings" },
+  "/settings/public-holiday": { title: "Hari Libur Nasional", subtitle: "Kelola daftar tanggal merah / hari libur nasional", parent: "/settings" },
   "/profile": { title: "Profile", subtitle: "Kelola informasi pribadi dan keamanan akun Anda.", parent: "/settings" },
   "/notifications": { title: "Notifikasi", subtitle: "Semua notifikasi" },
   "/tutorial": { title: "Tutorial", subtitle: "Panduan penggunaan aplikasi" },

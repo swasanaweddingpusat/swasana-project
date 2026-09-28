@@ -104,10 +104,6 @@ export const createGuestbookEntrySchema = z
 
 export type CreateGuestbookEntryInput = z.infer<typeof createGuestbookEntrySchema>;
 
-export const checkOutGuestbookEntrySchema = z.object({
-  checkOutAt: z.string().optional().nullable(),
-});
-
 export const updateGuestbookEntrySchema = z.object({
   visitStatus: z.enum(['cold', 'warm', 'hot', 'done_visit', 'to_be_discuss', 'deal', 'lost']).optional().nullable(),
   notes: z.string().optional().nullable(),
@@ -132,7 +128,6 @@ export const updateGuestbookEntrySchema = z.object({
   hostId: z.string().optional().nullable(),
   venueId: z.string().optional().nullable(),
   checkInAt: z.string().min(1, 'Tanggal berkunjung wajib diisi').optional(),
-  checkOutAt: z.string().optional().nullable(),
   proofFiles: proofFilesSchema,
   commitVisitDate: z.string().optional().nullable(),
   commitPayDate: z.string().optional().nullable(),
@@ -155,6 +150,12 @@ export const updateGuestbookEntrySchema = z.object({
 });
 
 export type UpdateGuestbookEntryInput = z.infer<typeof updateGuestbookEntrySchema>;
+
+export const confirmGuestbookGuestCountSchema = z.object({
+  guestCount: z.coerce.number().int().min(1, 'Jumlah tamu minimal 1').max(1000, 'Jumlah tamu maksimal 1000'),
+});
+
+export type ConfirmGuestbookGuestCountInput = z.infer<typeof confirmGuestbookGuestCountSchema>;
 
 /** Sumber informasi dianggap "dari Bitrix" kalau namanya mengandung kata "bitrix" — heuristik yang sama dipakai client (GuestbookDrawer) dan server (actions/guestbook.ts) supaya konsisten. */
 export function isBitrixSourceName(name: string | null | undefined): boolean {

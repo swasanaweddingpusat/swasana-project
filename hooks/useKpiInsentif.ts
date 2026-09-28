@@ -6,24 +6,42 @@ import {
   updateTargetItem,
   deleteTargetItem,
   createAchievementSchema,
+  updateAchievementSchema,
   upsertSchemaWithTiers,
   deleteAchievementSchema,
   createKpiMaster,
   updateKpiMaster,
   deleteKpiMaster,
+  createCommissionPolicy,
+  updateCommissionPolicy,
+  deleteCommissionPolicy,
+  createAward,
+  updateAward,
+  deleteAward,
+  createAwardWinner,
+  updateAwardWinner,
+  deleteAwardWinner,
+  markStagePaid,
+  recomputeStagedPayment,
 } from "@/actions/kpiInsentif";
 import type {
   TargetItemRow,
   AchievementSchemaRow,
   AchievementSchemaDetail,
   KpiMasterRow,
+  CommissionPolicyRow,
+  KpiAwardRow,
 } from "@/lib/queries/kpiInsentif";
+import type { KpiAwardCandidateItem } from "@/types/kpiInsentif";
 import {
   fetchKpiAssignments,
   fetchKpiResults,
   fetchProfilesForAssignment,
+  fetchAwardWinners,
+  fetchAwardCandidates,
   type AssignmentFilters,
   type ResultFilters,
+  type AwardWinnerFilters,
 } from "@/services/kpiInsentifService";
 
 // ─── Target Items ─────────────────────────────────────────────────────────────
@@ -93,6 +111,15 @@ export function useCreateAchievementSchema() {
   return useMutation({
     mutationFn: (data: Parameters<typeof createAchievementSchema>[0]) =>
       createAchievementSchema(data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["kpi-insentif"] }),
+  });
+}
+
+export function useUpdateAchievementSchema() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: Parameters<typeof updateAchievementSchema>[1] }) =>
+      updateAchievementSchema(id, data),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["kpi-insentif"] }),
   });
 }
@@ -277,10 +304,157 @@ export function useFinalizeResult() {
 
 // ─── Profiles ────────────────────────────────────────────────────────────────
 
-export function useProfilesForAssignment() {
+export function useProfilesForAssignment(businessRole?: "sales" | "manager") {
   return useQuery({
-    queryKey: ["kpi-insentif", "profiles-for-assignment"],
-    queryFn: () => fetchProfilesForAssignment(),
+    queryKey: ["kpi-insentif", "profiles-for-assignment", businessRole ?? "all"],
+    queryFn: () => fetchProfilesForAssignment(businessRole),
     staleTime: 10 * 60_000,
+  });
+}
+
+// ─── Staged payment (Tahap 1/2) ────────────────────────────────────────────────
+
+export function useMarkStagePaid() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ resultId, stage }: { resultId: string; stage: 1 | 2 }) =>
+      markStagePaid(resultId, stage),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["kpi-insentif"] }),
+  });
+}
+
+export function useRecomputeStagedPayment() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (resultId: string) => recomputeStagedPayment(resultId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["kpi-insentif"] }),
+  });
+}
+
+// ─── Commission Policies ────────────────────────────────────────────────────────
+
+export function useCommissionPolicies(businessRole?: string) {
+  return useQuery<CommissionPolicyRow[]>({
+    queryKey: ["kpi-insentif", "commission-policies", businessRole ?? "all"],
+    queryFn: async () => {
+      const params = businessRole ? `?businessRole=${businessRole}` : "";
+      const res = await fetch(`/api/kpi-insentif/commission-policies${params}`);
+      if (!res.ok) throw new Error(`Gagal mengambil kebijakan komisi (${res.status})`);
+      return res.json() as Promise<CommissionPolicyRow[]>;
+    },
+    staleTime: 5 * 60_000,
+  });
+}
+
+export function useCreateCommissionPolicy() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: Parameters<typeof createCommissionPolicy>[0]) =>
+      createCommissionPolicy(data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["kpi-insentif"] }),
+  });
+}
+
+export function useUpdateCommissionPolicy() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: Parameters<typeof updateCommissionPolicy>[1] }) =>
+      updateCommissionPolicy(id, data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["kpi-insentif"] }),
+  });
+}
+
+export function useDeleteCommissionPolicy() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => deleteCommissionPolicy(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["kpi-insentif"] }),
+  });
+}
+
+// ─── Awards ──────────────────────────────────────────────────────────────────
+
+export function useAwards(filters?: { businessRole?: string; isActive?: boolean }) {
+  return useQuery<KpiAwardRow[]>({
+    queryKey: ["kpi-insentif", "awards", filters?.businessRole ?? "all", filters?.isActive ?? "all"],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (filters?.businessRole) params.set("businessRole", filters.businessRole);
+      if (filters?.isActive !== undefined) params.set("isActive", String(filters.isActive));
+      const qs = params.toString();
+      const res = await fetch(`/api/kpi-insentif/awards${qs ? `?${qs}` : ""}`);
+      if (!res.ok) throw new Error(`Gagal mengambil award (${res.status})`);
+      return res.json() as Promise<KpiAwardRow[]>;
+    },
+    staleTime: 5 * 60_000,
+  });
+}
+
+export function useCreateAward() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: Parameters<typeof createAward>[0]) => createAward(data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["kpi-insentif"] }),
+  });
+}
+
+export function useUpdateAward() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: Parameters<typeof updateAward>[1] }) =>
+      updateAward(id, data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["kpi-insentif"] }),
+  });
+}
+
+export function useDeleteAward() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => deleteAward(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["kpi-insentif"] }),
+  });
+}
+
+// ─── Award Winners ───────────────────────────────────────────────────────────
+
+export function useAwardWinners(filters?: AwardWinnerFilters) {
+  return useQuery({
+    queryKey: ["kpi-insentif", "award-winners", filters?.awardId, filters?.period, filters?.profileId],
+    queryFn: () => fetchAwardWinners(filters),
+    staleTime: 2 * 60_000,
+  });
+}
+
+export function useAwardCandidates(awardId?: string, period?: string) {
+  return useQuery<KpiAwardCandidateItem[]>({
+    queryKey: ["kpi-insentif", "award-candidates", awardId, period],
+    queryFn: () => fetchAwardCandidates(awardId!, period!),
+    enabled: !!awardId && !!period,
+    staleTime: 60_000,
+  });
+}
+
+export function useCreateAwardWinner() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: Parameters<typeof createAwardWinner>[0]) => createAwardWinner(data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["kpi-insentif"] }),
+  });
+}
+
+export function useUpdateAwardWinner() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: Parameters<typeof updateAwardWinner>[1] }) =>
+      updateAwardWinner(id, data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["kpi-insentif"] }),
+  });
+}
+
+export function useDeleteAwardWinner() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => deleteAwardWinner(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["kpi-insentif"] }),
   });
 }

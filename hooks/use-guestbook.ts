@@ -1,15 +1,14 @@
 "use client";
 
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
-import { fetchGuestbookEntries } from "@/services/guestbookService";
+import { fetchGuestbookEntries, fetchGuestVisitHistory } from "@/services/guestbookService";
 import {
   createGuestbookEntry,
-  checkOutGuestbookEntry,
   updateGuestbookEntry,
   deleteGuestbookEntry,
   confirmGuestbookAttendance,
+  lookupGuestbookEntryByCode,
   deleteBulkGuestbookEntries,
-  bulkCheckOutGuestbookEntries,
   refreshGuestbookAdsUrl,
 } from "@/actions/guestbook";
 import type { GuestbookFilterOptions } from "@/lib/queries/guestbookEntries";
@@ -23,15 +22,15 @@ export function useGuestbookEntries(params?: GuestbookFilterOptions & { page?: n
       page,
       pageSize,
       params?.search,
-      params?.venueId,
+      params?.venueIds,
       params?.hostId,
       params?.dateFrom,
       params?.dateTo,
-      params?.category,
-      params?.interactionType,
-      params?.status,
-      params?.sourceOfInformationId,
-      params?.festivalId,
+      params?.categories,
+      params?.interactionTypes,
+      params?.statuses,
+      params?.sourceOfInformationIds,
+      params?.festivalIds,
     ],
     queryFn: () => fetchGuestbookEntries({ page, pageSize, ...params }),
     placeholderData: keepPreviousData,
@@ -43,15 +42,6 @@ export function useCreateGuestbookEntry() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (data: Parameters<typeof createGuestbookEntry>[0]) => createGuestbookEntry(data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["guestbook-entries"] }),
-  });
-}
-
-export function useCheckOutGuestbookEntry() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: ({ id, visitStatus }: { id: string; visitStatus: "deal" | "to_be_discuss" | "lost" }) =>
-      checkOutGuestbookEntry(id, visitStatus),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["guestbook-entries"] }),
   });
 }
@@ -80,20 +70,27 @@ export function useDeleteBulkGuestbookEntries() {
   });
 }
 
-export function useBulkCheckOutGuestbookEntries() {
+export function useConfirmGuestbookAttendance() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ ids, visitStatus }: { ids: string[]; visitStatus: "deal" | "to_be_discuss" | "lost" }) =>
-      bulkCheckOutGuestbookEntries(ids, visitStatus),
+    mutationFn: ({ guestCode, actualGuestCount }: { guestCode: string; actualGuestCount?: number }) =>
+      confirmGuestbookAttendance(guestCode, actualGuestCount),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["guestbook-entries"] }),
   });
 }
 
-export function useConfirmGuestbookAttendance() {
-  const qc = useQueryClient();
+export function useLookupGuestbookEntryByCode() {
   return useMutation({
-    mutationFn: (guestCode: string) => confirmGuestbookAttendance(guestCode),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["guestbook-entries"] }),
+    mutationFn: (guestCode: string) => lookupGuestbookEntryByCode(guestCode),
+  });
+}
+
+export function useGuestVisitHistory(entryId: string | undefined) {
+  return useQuery({
+    queryKey: ["guestbook-visit-history", entryId],
+    queryFn: () => fetchGuestVisitHistory(entryId as string),
+    enabled: !!entryId,
+    staleTime: 5 * 60 * 1000,
   });
 }
 

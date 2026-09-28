@@ -8,6 +8,13 @@ const ALLOWED_CATEGORY = new Set<GuestbookCategoryFilter>(["WEDDINGS", "MICE", "
 const ALLOWED_INTERACTION = new Set<GuestInteractionType>(["client_visit", "online_meeting", "jemput_bola"]);
 const ALLOWED_STATUS = new Set<GuestVisitStatus>(["cold", "warm", "hot", "done_visit", "to_be_discuss", "deal", "lost"]);
 
+/** Parses a comma-separated query param into a trimmed, non-empty string array. */
+function parseListParam(raw: string | null): string[] | undefined {
+  if (!raw) return undefined;
+  const values = raw.split(",").map((v) => v.trim()).filter(Boolean);
+  return values.length > 0 ? values : undefined;
+}
+
 export async function GET(request: Request): Promise<Response> {
   const { session, response } = await requirePermissionForRoute({
     module: "guestbook",
@@ -22,29 +29,25 @@ export async function GET(request: Request): Promise<Response> {
   const pageSize = Math.min(100, Math.max(1, Number(searchParams.get("pageSize")) || 50));
 
   const search = searchParams.get("search")?.trim() || undefined;
-  const venueId = searchParams.get("venueId")?.trim() || undefined;
+  const venueIds = parseListParam(searchParams.get("venueIds"));
   const hostId = searchParams.get("hostId")?.trim() || undefined;
   const dateFrom = searchParams.get("dateFrom")?.trim() || undefined;
   const dateTo = searchParams.get("dateTo")?.trim() || undefined;
 
-  const rawCategory = searchParams.get("category");
-  const category: GuestbookCategoryFilter | undefined =
-    rawCategory && ALLOWED_CATEGORY.has(rawCategory as GuestbookCategoryFilter)
-      ? (rawCategory as GuestbookCategoryFilter)
-      : undefined;
+  const categories = parseListParam(searchParams.get("categories"))?.filter((v): v is GuestbookCategoryFilter =>
+    ALLOWED_CATEGORY.has(v as GuestbookCategoryFilter)
+  );
 
-  const rawInteractionType = searchParams.get("interactionType");
-  const interactionType: GuestInteractionType | undefined =
-    rawInteractionType && ALLOWED_INTERACTION.has(rawInteractionType as GuestInteractionType)
-      ? (rawInteractionType as GuestInteractionType)
-      : undefined;
+  const interactionTypes = parseListParam(searchParams.get("interactionTypes"))?.filter(
+    (v): v is GuestInteractionType => ALLOWED_INTERACTION.has(v as GuestInteractionType)
+  );
 
-  const rawStatus = searchParams.get("status");
-  const status: GuestVisitStatus | undefined =
-    rawStatus && ALLOWED_STATUS.has(rawStatus as GuestVisitStatus) ? (rawStatus as GuestVisitStatus) : undefined;
+  const statuses = parseListParam(searchParams.get("statuses"))?.filter((v): v is GuestVisitStatus =>
+    ALLOWED_STATUS.has(v as GuestVisitStatus)
+  );
 
-  const sourceOfInformationId = searchParams.get("sourceOfInformationId")?.trim() || undefined;
-  const festivalId = searchParams.get("festivalId")?.trim() || undefined;
+  const sourceOfInformationIds = parseListParam(searchParams.get("sourceOfInformationIds"));
+  const festivalIds = parseListParam(searchParams.get("festivalIds"));
 
   const profileId = session.user.profileId ?? undefined;
   // dataScope is already carried on the JWT/session (refreshed from DB every 10
@@ -57,15 +60,15 @@ export async function GET(request: Request): Promise<Response> {
       page,
       pageSize,
       search,
-      venueId,
+      venueIds,
       hostId,
       dateFrom,
       dateTo,
-      category,
-      interactionType,
-      status,
-      sourceOfInformationId,
-      festivalId,
+      categories,
+      interactionTypes,
+      statuses,
+      sourceOfInformationIds,
+      festivalIds,
     });
     return Response.json(result);
   } catch (error) {

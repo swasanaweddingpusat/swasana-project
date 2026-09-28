@@ -31,6 +31,12 @@ const WORK_TYPE_LABEL: Record<string, string> = {
   WFA: "WFA",
 };
 
+const WORK_TYPE_APPROVAL_BADGE: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
+  pending: { label: "Menunggu", variant: "secondary" },
+  approved: { label: "Disetujui", variant: "default" },
+  rejected: { label: "Ditolak", variant: "destructive" },
+};
+
 function formatDate(date: string | Date): string {
   return new Date(date).toLocaleDateString("id-ID", { weekday: "short", day: "numeric", month: "short", year: "numeric" });
 }
@@ -143,7 +149,14 @@ export function AttendanceTable() {
                           <TableCell>{record.workShift?.name ?? "-"}</TableCell>
                           <TableCell>
                             {record.workType ? (
-                              <Badge variant="outline">{WORK_TYPE_LABEL[record.workType] ?? record.workType}</Badge>
+                              <div className="flex flex-wrap items-center gap-1">
+                                <Badge variant="outline">{WORK_TYPE_LABEL[record.workType] ?? record.workType}</Badge>
+                                {record.workType !== "WFO" && record.workTypeApprovalStatus && (
+                                  <Badge variant={WORK_TYPE_APPROVAL_BADGE[record.workTypeApprovalStatus].variant}>
+                                    {WORK_TYPE_APPROVAL_BADGE[record.workTypeApprovalStatus].label}
+                                  </Badge>
+                                )}
+                              </div>
                             ) : (
                               "-"
                             )}

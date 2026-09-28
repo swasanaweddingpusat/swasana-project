@@ -26,6 +26,7 @@ import {
   Sledgehammer,
   Gift,
   MedalStar,
+  MedalRibbonStar,
   TagPrice,
   ClipboardCheck,
   ChartSquare,
@@ -43,6 +44,7 @@ import {
   ChatRound,
   UserRounded,
   Wallet,
+  QrCode,
 } from "@solar-icons/react";
 
 type SolarIcon = ForwardRefExoticComponent<Omit<IconProps, "ref"> & RefAttributes<SVGSVGElement>>;
@@ -116,6 +118,7 @@ export const MODULE_NAV_MAP: Record<ModuleKey, NavItem[]> = {
   ],
   hrd: [
     { name: "Database Karyawan", href: "/hrd/database-karyawan", icon: UsersGroupRounded, subtitle: "Data lengkap seluruh karyawan", permission: { module: "hr", action: "view" } },
+    { name: "Koreksi Absen", href: "/hrd/koreksi-absen", icon: ClipboardList, subtitle: "Persetujuan pengajuan koreksi absensi", permission: { module: "hr-attendance", action: "approve" } },
     { name: "Penggajian & Perpajakan", href: "/hrd/penggajian-perpajakan", icon: Dollar, subtitle: "Proses penggajian dan konfigurasi pajak", permission: { module: "hr", action: "view" } },
     { name: "Slip Gaji", href: "/hrd/slip-gaji", icon: FileText, subtitle: "Rekap slip gaji seluruh karyawan", permission: { module: "hr", action: "view" } },
     { name: "Sistem Cuti", href: "/hrd/sistem-cuti", icon: CalendarDate, subtitle: "Pengajuan dan saldo cuti karyawan", permission: { module: "hr", action: "view" } },
@@ -172,8 +175,13 @@ export const GENERAL_NAV: NavItem[] = [
       { name: "Transaksi", href: "/bitrix24/transaksi", icon: ClipboardList, title: "Transaksi Bitrix24", subtitle: "Data transaksi (deals) CRM dari Bitrix24", permission: { module: "bitrix", action: "view" } },
       { name: "Percakapan", href: "/bitrix24/percakapan", icon: ChatRound, title: "Percakapan Bitrix24", subtitle: "Data percakapan Contact Center (Open Lines) dari Bitrix24", permission: { module: "bitrix", action: "view" } },
       { name: "Response Sales", href: "/bitrix24/response-sales", icon: GraphUp, title: "Response Sales Bitrix24", subtitle: "Rata-rata waktu respons sales per percakapan", permission: { module: "bitrix", action: "view" } },
+      { name: "Report CS", href: "/bitrix24/cs-report", icon: ClipboardCheck, title: "Report Chat CS Bitrix24", subtitle: "Ringkasan chat masuk harian & auto-generate report WhatsApp CS", permission: { module: "bitrix", action: "view" } },
     ] },
-  { name: "Guestbook", href: "/guestbook", icon: Notebook, subtitle: "Catat kunjungan tamu, vendor, dan client ke kantor", permission: { module: "guestbook", action: "view" } },
+  { name: "Guestbook", href: "/guestbook", icon: Notebook, subtitle: "Catat kunjungan tamu, vendor, dan client ke kantor", permission: { module: "guestbook", action: "view" },
+    submenu: [
+      { name: "Daftar Tamu", href: "/guestbook", icon: Notebook, title: "Guest Book", subtitle: "Catat kunjungan tamu, vendor, dan client ke kantor", permission: { module: "guestbook", action: "view" } },
+      { name: "Scan Kehadiran", href: "/guestbook/scan", icon: QrCode, title: "Scan Kehadiran Expo", subtitle: "Konfirmasi kehadiran tamu expo lewat scan QR code", permission: { module: "guestbook", action: "view" } },
+    ] },
   { name: "Customers", href: "/customers", icon: UserRounded, subtitle: "Kelola data customer, member status, dan riwayat booking", permission: { module: "customers", action: "view" } },
   { name: "Indikator Pernikahan", href: "/wedding-indicators", icon: Heart, subtitle: "Kelola kuesioner penilaian kepuasan pasangan pernikahan", permission: { module: "vendor-specialist", action: "view" } },
   { name: "Absensi", href: "/absensi", icon: CheckSquare, subtitle: "Catat kehadiran dengan foto dan lokasi", permission: { module: "attendance", action: "view" } },
@@ -212,14 +220,11 @@ export const GENERAL_NAV: NavItem[] = [
     submenu: [
       { name: "Dashboard KPI", href: "/kpi-insentif", icon: PieChart, subtitle: "Ringkasan penilaian, kelengkapan, dan review", permission: { module: "kpi-insentif", action: "view" } },
       { name: "KPI Saya", href: "/kpi-insentif/kpi-saya", icon: UserHands, subtitle: "Lihat target dan hasil penilaian pribadi", permission: { module: "kpi-insentif", action: "view" } },
-      { name: "Master & Template", href: "/kpi-insentif/konfigurasi", icon: ClipboardList, subtitle: "Kelola indikator, skema, dan versi KPI", permission: { module: "kpi-master", action: "view" }, submenu: [
-        { name: "Target Item", href: "/kpi-insentif/target-item", permission: { module: "kpi-master", action: "view" } },
-        { name: "Skema Achievement", href: "/kpi-insentif/achievement", permission: { module: "kpi-master", action: "view" } },
-        { name: "Master KPI", href: "/kpi-insentif/kpi-master", permission: { module: "kpi-master", action: "view" } },
-      ] },
+      { name: "Master & Template", href: "/kpi-insentif/konfigurasi", icon: ClipboardList, subtitle: "Kelola target item, skema achievement, master KPI, dan komisi & bonus lanjutan", permission: { module: "kpi-master", action: "view" } },
       { name: "Penugasan Target", href: "/kpi-insentif/penugasan", icon: UserHands, subtitle: "Tugaskan KPI ke Sales atau Manager", permission: { module: "kpi-assignment", action: "view" } },
       { name: "Review & Simulasi", href: "/kpi-insentif/simulasi", icon: ChartSquare, subtitle: "Tinjau hasil sementara dan jalankan kalkulasi", permission: { module: "kpi-simulation", action: "view" } },
       { name: "Laporan & Riwayat", href: "/kpi-insentif/laporan", icon: GraphNew, subtitle: "Lihat hasil final dan riwayat penilaian", permission: { module: "kpi-report", action: "view" } },
+      { name: "Awards & Best Performer", href: "/kpi-insentif/awards", icon: MedalRibbonStar, subtitle: "Kelola award dan pemenang Sales/Manager terbaik", permission: { module: "kpi-award", action: "view" } },
     ],
   },
 ];
