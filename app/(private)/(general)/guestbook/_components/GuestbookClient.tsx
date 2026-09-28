@@ -12,7 +12,6 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   Table,
   TableBody,
@@ -55,7 +54,6 @@ import {
   TrashBinTrash,
   UserCircle,
   MenuDotsCircle,
-  ClipboardList,
 } from "@solar-icons/react";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
@@ -77,7 +75,6 @@ import { guestbookSourceLabel, type ProofFiles } from "@/lib/validations/guestbo
 import { GuestbookDrawer } from "./GuestbookDrawer";
 import { GuestbookDetailDrawer } from "./GuestbookDetailDrawer";
 import { GuestbookFilterDrawer } from "./GuestbookFilterDrawer";
-import { GuestbookFunnelReportSection } from "./GuestbookFunnelReportSection";
 import { ActivityLogModal } from "./activity-log-modal";
 import { resolveGuestbookProofThumb } from "./photo-url";
 import { PaginationBar } from "@/components/shared/pagination-bar";
@@ -497,19 +494,6 @@ function GuestbookClientInner() {
 
   return (
     <div className="flex flex-col gap-3">
-      <Tabs defaultValue="data-tamu">
-        <TabsList className="rounded-full">
-          <TabsTrigger value="data-tamu" className="rounded-full gap-2">
-            <UsersGroupRounded weight="BoldDuotone" className="h-4 w-4" />
-            Data Tamu
-          </TabsTrigger>
-          <TabsTrigger value="laporan" className="rounded-full gap-2">
-            <ClipboardList weight="BoldDuotone" className="h-4 w-4" />
-            Laporan
-          </TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="data-tamu" className="flex flex-col gap-3 mt-3">
       {/* Table — desktop */}
       <Card className="rounded-2xl shadow-sm hidden sm:block py-0">
         <CardContent className="p-0">
@@ -1003,16 +987,6 @@ function GuestbookClientInner() {
           label="Navigasi halaman guestbook"
         />
       </div>
-        </TabsContent>
-
-        <TabsContent value="laporan" className="mt-3">
-          <GuestbookFunnelReportSection
-            dateRange={dateRange}
-            venueIds={filterVenueIds}
-            hostId={filterHostId !== "all" ? filterHostId : undefined}
-          />
-        </TabsContent>
-      </Tabs>
 
       <GuestbookDrawer
         isOpen={drawerOpen || editEntry !== null}

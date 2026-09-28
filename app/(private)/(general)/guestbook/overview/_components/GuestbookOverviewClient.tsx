@@ -14,6 +14,7 @@ import { useGuestbookEntries } from "@/hooks/use-guestbook";
 import type { GuestbookCategoryFilter } from "@/lib/queries/guestbookEntries";
 import type { GuestVisitStatus } from "@prisma/client";
 import { GuestbookOverviewCards } from "../../_components/GuestbookOverviewCards";
+import { GuestbookFunnelReportSection } from "../../_components/GuestbookFunnelReportSection";
 
 const EMPTY_OVERVIEW = {
   total: 0,
@@ -147,6 +148,14 @@ export function GuestbookOverviewClient() {
           onHostClick={(key) => setFilterHostId((p) => (p === key ? "all" : key))}
         />
       )}
+
+      {/* Funnel report — ikut date range/venue/PIC yang sama, tapi punya
+          endpoint sendiri sehingga tidak terpengaruh filter status/kategori. */}
+      <GuestbookFunnelReportSection
+        dateRange={dateRange}
+        venueIds={filterVenueIds}
+        hostId={filterHostId !== "all" ? filterHostId : undefined}
+      />
     </div>
   );
 }
