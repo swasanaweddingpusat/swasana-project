@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Calendar } from "@/components/ui/calendar";
 import { CalendarDate, Restart } from "@solar-icons/react";
 import { useGuestbookEntries } from "@/hooks/use-guestbook";
@@ -20,6 +21,7 @@ const EMPTY_OVERVIEW = {
   doneVisit: 0,
   lost: 0,
   onlineMeetings: 0,
+  deal: 0,
   byStatus: [],
   byCategory: [],
   bySource: [],
@@ -47,6 +49,14 @@ function toggleArrayValue<T>(arr: T[], value: T): T[] {
   return arr.includes(value) ? arr.filter((v) => v !== value) : [...arr, value];
 }
 
+// Dropdown kategori hanya menawarkan pilihan tunggal (atau semua). Filter
+// kategori sendiri tetap berupa array karena kartu "Kategori Event" bisa
+// mengaktifkan lebih dari satu lewat klik.
+const CATEGORY_OPTIONS = [
+  { value: "WEDDINGS", label: "Wedding" },
+  { value: "MICE", label: "MICE" },
+] as const;
+
 export function GuestbookOverviewClient() {
   const [dateRange, setDateRange] = useState<DateRange | undefined>(todayRange);
   const [filterStatusIds, setFilterStatusIds] = useState<string[]>([]);
@@ -72,6 +82,15 @@ export function GuestbookOverviewClient() {
     venueIds: filterVenueIds.length > 0 ? filterVenueIds : undefined,
     hostId: filterHostId !== "all" ? filterHostId : undefined,
   });
+
+  // Dropdown hanya bisa mewakili satu kategori. Kalau kartu "Kategori Event"
+  // mengaktifkan kombinasi lain (mis. dua kategori sekaligus, atau "no_package"),
+  // dropdown jatuh ke "all" agar tidak menampilkan label yang menyesatkan.
+  const categorySelectValue =
+    filterCategories.length === 1 &&
+    CATEGORY_OPTIONS.some((opt) => opt.value === filterCategories[0])
+      ? filterCategories[0]
+      : "all";
 
   const activeFilterCount =
     filterStatusIds.length +
@@ -100,6 +119,24 @@ export function GuestbookOverviewClient() {
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            <Select
+              value={categorySelectValue}
+              onValueChange={(v) =>
+                setFilterCategories(v === "all" ? [] : [v as GuestbookCategoryFilter])
+              }
+            >
+              <SelectTrigger className="h-8 w-[130px] rounded-xl text-xs">
+                <SelectValue placeholder="Semua Kategori" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Semua Kategori</SelectItem>
+                {CATEGORY_OPTIONS.map((opt) => (
+                  <SelectItem key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             <Popover>
               <PopoverTrigger className="flex h-8 items-center gap-2 rounded-xl border bg-background px-3 text-xs">
                 <span className="truncate">{formatDateRangeLabel(dateRange)}</span>
@@ -128,12 +165,13 @@ export function GuestbookOverviewClient() {
         dateRange={dateRange}
         venueIds={filterVenueIds}
         hostId={filterHostId !== "all" ? filterHostId : undefined}
+        categories={filterCategories}
       />
 
       {isLoading ? (
         <div className="space-y-3">
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-            {Array.from({ length: 4 }).map((_, i) => (
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+            {Array.from({ length: 5 }).map((_, i) => (
               <Skeleton key={i} className="h-[76px] rounded-2xl" />
             ))}
           </div>

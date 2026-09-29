@@ -114,6 +114,8 @@ export interface GuestbookOverview {
   lost: number;
   /** Online Meeting — entry berstatus "Online Meeting". */
   onlineMeetings: number;
+  /** Deal — entry berstatus "Deal" saja, tanpa No Deal (Lost). */
+  deal: number;
   byStatus: GuestbookOverviewBucket[];
   byCategory: GuestbookOverviewBucket[];
   bySource: GuestbookOverviewBucket[];
@@ -234,7 +236,7 @@ export async function getGuestbookEntries(
     .slice(0, 10)
     .map((row) => ({ key: row.key as string, label: labels.get(row.key as string) ?? fallback, count: row.count }));
 
-  const [statusGroups, categoryGroups, sourceGroups, venueGroups, hostGroups, adsUrlGroups, sourceAdsGroups, doneVisit, lost, onlineMeetings] = await Promise.all([
+  const [statusGroups, categoryGroups, sourceGroups, venueGroups, hostGroups, adsUrlGroups, sourceAdsGroups, doneVisit, lost, onlineMeetings, deal] = await Promise.all([
     db.guestbookEntry.groupBy({ by: ["prospectStatusId"], where, _count: { _all: true } }),
     db.guestbookEntry.groupBy({ by: ["eventCategory"], where, _count: { _all: true } }),
     db.guestbookEntry.groupBy({ by: ["sourceOfInformationId"], where, _count: { _all: true } }),
@@ -251,6 +253,7 @@ export async function getGuestbookEntries(
     db.guestbookEntry.count({ where: { ...where, prospectStatus: { name: PROSPECT_STATUS.VISIT_VENUE } } }),
     db.guestbookEntry.count({ where: { ...where, prospectStatus: { name: PROSPECT_STATUS.TIDAK_JADI_VISIT_LOST } } }),
     db.guestbookEntry.count({ where: { ...where, prospectStatus: { name: PROSPECT_STATUS.ONLINE_MEETING } } }),
+    db.guestbookEntry.count({ where: { ...where, prospectStatus: { name: PROSPECT_STATUS.DEAL } } }),
   ]);
 
   // Label status dibaca dari tabel — daftar status dikelola admin lewat
@@ -281,6 +284,7 @@ export async function getGuestbookEntries(
     doneVisit,
     lost,
     onlineMeetings,
+    deal,
     byStatus: buildBuckets(statusGroups.map((row) => ({ key: row.prospectStatusId, count: row._count._all })), statusLabels, "Tanpa status"),
     byCategory: buildBuckets(categoryGroups.map((row) => ({ key: row.eventCategory, count: row._count._all })), new Map([["WEDDINGS", "Wedding"], ["MICE", "MICE"]]), "Tanpa kategori"),
     bySource: buildBuckets(sourceGroups.map((row) => ({ key: row.sourceOfInformationId, count: row._count._all })), sourceLabels, "Tanpa sumber")

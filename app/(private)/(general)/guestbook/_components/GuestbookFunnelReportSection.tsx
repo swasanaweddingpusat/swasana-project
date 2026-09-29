@@ -12,6 +12,7 @@ import { cn } from "@/lib/utils";
 import { useGuestbookFunnelReport, useGuestbookFunnelBucketEntries } from "@/hooks/use-guestbook";
 import { prospectStatusClass } from "@/lib/prospect-status";
 import type {
+  GuestbookCategoryFilter,
   GuestbookFunnelReport,
   GuestbookProspectBreakdown,
   GuestbookFunnelBucketKey,
@@ -21,6 +22,7 @@ interface GuestbookFunnelReportSectionProps {
   dateRange: DateRange | undefined;
   venueIds: string[];
   hostId?: string;
+  categories?: GuestbookCategoryFilter[];
 }
 
 interface ActiveBucket {
@@ -375,7 +377,12 @@ function FunnelReportSkeleton() {
   );
 }
 
-export function GuestbookFunnelReportSection({ dateRange, venueIds, hostId }: GuestbookFunnelReportSectionProps) {
+export function GuestbookFunnelReportSection({
+  dateRange,
+  venueIds,
+  hostId,
+  categories,
+}: GuestbookFunnelReportSectionProps) {
   const dateFrom = dateRange?.from ? format(dateRange.from, "yyyy-MM-dd") : undefined;
   const dateTo = dateRange?.to ? format(dateRange.to, "yyyy-MM-dd") : undefined;
   const [activeBucket, setActiveBucket] = useState<ActiveBucket | null>(null);
@@ -383,6 +390,7 @@ export function GuestbookFunnelReportSection({ dateRange, venueIds, hostId }: Gu
   const { data, isLoading } = useGuestbookFunnelReport({
     venueIds: venueIds.length > 0 ? venueIds : undefined,
     hostId,
+    categories: categories && categories.length > 0 ? categories : undefined,
     dateFrom,
     dateTo,
   });
