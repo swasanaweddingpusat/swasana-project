@@ -26,6 +26,182 @@ interface QuotationPreviewProps {
 const PRINT_AREA_ID = "quotation-print-area";
 
 /**
+ * Satu sumber angka untuk margin halaman A4 — dipakai baik oleh `pageStyle`
+ * (jalur Cetak / react-to-print) maupun jsPDF (jalur Download PDF) supaya
+ * kedua hasil konsisten. 12mm sebelumnya terlalu lebar dan bikin dokumen
+ * gampang tumpah ke halaman berikutnya; 10mm masih nyaman dibaca tapi lebih
+ * hemat ruang.
+ */
+const PAGE_MARGIN_MM = 10;
+
+/**
+ * Aturan gabungan tipografi + spacing + border + warna khusus cetak/PDF.
+ * Preview di layar TETAP memakai ukuran Tailwind aslinya (text-2xl, text-[11px],
+ * mt-6/mt-8/dst, px-8 py-8) supaya enak dibaca di dialog; begitu masuk jalur
+ * Cetak (di-inject lewat `pageStyle`, hanya aktif di window print) atau
+ * Download PDF (di-inject ke dokumen hasil clone oleh html2canvas lewat
+ * `onclone`, DAN sementara ditempel ke DOM asli saat mengukur tinggi — lihat
+ * `handleDownload`), kita timpa semuanya jadi jauh lebih padat via selector
+ * class + `!important`. Putaran revisi sebelumnya cuma merapatkan margin/gap
+ * tapi TIDAK menyentuh font-size — itu sebabnya tinggi dokumen belum turun
+ * cukup dan tetap tumpah ke halaman ke-2. Sekarang font-size, line-height,
+ * border-width/color, dan warna teks ikut ditimpa juga.
+ *
+ * PENTING: konstanta ini dipakai di TIGA tempat — `pageStyle` (jalur Cetak),
+ * `PDF_COLOR_OVERRIDE` (jalur Download PDF, dipakai saat `onclone`), dan
+ * disuntik sementara ke live DOM di `handleDownload` untuk mengukur
+ * scrollHeight yang akurat sebelum menghitung skala fit-to-page. Kalau nambah
+ * aturan baru di sini, otomatis ikut ke tiga-tiganya — jangan taruh aturan
+ * padat di tempat lain supaya tidak ada jalur yang "kelewat".
+ */
+const PRINT_SPACING_RULES = `
+  /* --- Kontainer & warna dasar (grayscale, hindari kesan kecoklatan) --- */
+  #${PRINT_AREA_ID} > div {
+    padding: 6mm 7mm !important;
+  }
+
+  #${PRINT_AREA_ID} {
+    color: #171717 !important;
+  }
+
+  #${PRINT_AREA_ID} .text-foreground {
+    color: #171717 !important;
+  }
+
+  #${PRINT_AREA_ID} .text-muted-foreground {
+    color: #525252 !important;
+  }
+
+  /* --- Tipografi: semua ukuran teks yang dipakai di dokumen ini --- */
+  #${PRINT_AREA_ID} .text-2xl {
+    font-size: 19px !important;
+    line-height: 1.2 !important;
+  }
+
+  #${PRINT_AREA_ID} .text-xs {
+    font-size: 8px !important;
+    line-height: 1.25 !important;
+  }
+
+  #${PRINT_AREA_ID} .text-\[11px\] {
+    font-size: 10px !important;
+    line-height: 1.4 !important;
+  }
+
+  #${PRINT_AREA_ID} .text-\[10px\] {
+    font-size: 9px !important;
+    line-height: 1.35 !important;
+  }
+
+  /* --- Border: tipis & abu-abu, bukan hitam pekat --- */
+  #${PRINT_AREA_ID} .border-b {
+    border-bottom-width: 0.5px !important;
+    border-bottom-color: #a3a3a3 !important;
+  }
+
+  #${PRINT_AREA_ID} .border-t {
+    border-top-width: 0.5px !important;
+    border-top-color: #a3a3a3 !important;
+  }
+
+  #${PRINT_AREA_ID} .border-border {
+    border-color: #d4d4d4 !important;
+  }
+
+  /* --- Spacing vertikal: dipadatkan lebih jauh dari putaran sebelumnya --- */
+  #${PRINT_AREA_ID} .mt-8 {
+    margin-top: 8px !important;
+  }
+
+  #${PRINT_AREA_ID} .mt-6 {
+    margin-top: 6px !important;
+  }
+
+  #${PRINT_AREA_ID} .mt-5 {
+    margin-top: 5px !important;
+  }
+
+  #${PRINT_AREA_ID} .mt-4 {
+    margin-top: 5px !important;
+  }
+
+  #${PRINT_AREA_ID} .mt-3 {
+    margin-top: 6px !important;
+  }
+
+  #${PRINT_AREA_ID} .mt-2 {
+    margin-top: 3px !important;
+  }
+
+  #${PRINT_AREA_ID} .mt-1 {
+    margin-top: 2px !important;
+  }
+
+  #${PRINT_AREA_ID} .mt-0\.5 {
+    margin-top: 1px !important;
+  }
+
+  #${PRINT_AREA_ID} .gap-8 {
+    gap: 14px !important;
+  }
+
+  #${PRINT_AREA_ID} .pt-4 {
+    padding-top: 6px !important;
+  }
+
+  #${PRINT_AREA_ID} .pt-3 {
+    padding-top: 6px !important;
+  }
+
+  #${PRINT_AREA_ID} .pt-2 {
+    padding-top: 4px !important;
+  }
+
+  #${PRINT_AREA_ID} .pt-1 {
+    padding-top: 2px !important;
+  }
+
+  #${PRINT_AREA_ID} .py-2 {
+    padding-top: 4px !important;
+    padding-bottom: 4px !important;
+  }
+
+  #${PRINT_AREA_ID} .py-0\.5 {
+    padding-top: 1px !important;
+    padding-bottom: 1px !important;
+  }
+
+  #${PRINT_AREA_ID} .space-y-1 > * + * {
+    margin-top: 3px !important;
+  }
+
+  #${PRINT_AREA_ID} .space-y-1\.5 > * + * {
+    margin-top: 4px !important;
+  }
+
+  #${PRINT_AREA_ID} .space-y-2 > * + * {
+    margin-top: 5px !important;
+  }
+
+  #${PRINT_AREA_ID} .space-y-0\.5 > * + * {
+    margin-top: 1px !important;
+  }
+
+  /* --- Elemen bertinggi tetap: black band & area tanda tangan --- */
+  #${PRINT_AREA_ID} .h-2 {
+    height: 1.5px !important;
+  }
+
+  #${PRINT_AREA_ID} .h-16 {
+    height: 28px !important;
+  }
+
+  #${PRINT_AREA_ID} .max-h-20 {
+    max-height: 26px !important;
+  }
+`;
+
+/**
  * Tailwind v4 mendefinisikan token warna dengan `oklch()`, sementara html2canvas
  * 1.4.1 (dipakai internal oleh jsPDF.html()) belum bisa mem-parsing fungsi warna
  * tersebut dan akan melempar error saat rasterisasi. Dokumen quotation ini pada
@@ -55,6 +231,8 @@ const PDF_COLOR_OVERRIDE = `
   #${PRINT_AREA_ID} {
     box-shadow: none !important;
   }
+
+  ${PRINT_SPACING_RULES}
 `;
 
 // Editable-clause fallbacks — used when the quotation's corresponding field is
@@ -165,7 +343,7 @@ export function QuotationPreview({
     pageStyle: `
       @page {
         size: A4 portrait;
-        margin: 12mm;
+        margin: ${PAGE_MARGIN_MM}mm;
       }
 
       html,
@@ -179,6 +357,20 @@ export function QuotationPreview({
         width: 100% !important;
         max-width: none !important;
         box-shadow: none !important;
+        /*
+         * Penyusutan proporsional tambahan sebagai jaring pengaman di atas
+         * override tipografi/spacing dari PRINT_SPACING_RULES. Dipilih CSS
+         * zoom (bukan transform: scale) karena Chrome/Chromium menghitung
+         * ulang page-break berdasarkan layout hasil zoom — jadi break-inside:
+         * avoid di bawah tetap berfungsi. transform: scale sebaliknya tidak
+         * memengaruhi layout flow sehingga page-break dihitung dari ukuran
+         * SEBELUM discale, yang justru bisa memecah dokumen di tempat yang
+         * salah. 0.94 dipilih konservatif (~6%) agar dokumen ukuran normal
+         * punya sedikit buffer ekstra untuk tetap satu halaman, tanpa
+         * mengecilkan teks sampai sulit dibaca — nilai font-size di
+         * PRINT_SPACING_RULES sudah melakukan pekerjaan berat.
+         */
+        zoom: 0.94;
       }
 
       #${PRINT_AREA_ID} thead {
@@ -191,6 +383,8 @@ export function QuotationPreview({
         break-inside: avoid;
         page-break-inside: avoid;
       }
+
+      ${PRINT_SPACING_RULES}
     `,
   });
 
@@ -206,19 +400,50 @@ export function QuotationPreview({
     if (!element || downloading) return;
 
     setDownloading(true);
+    // Sisipkan sementara aturan padat yang sama dengan jalur Cetak (font,
+    // spacing, border) ke live DOM SEBELUM mengukur, supaya `scrollHeight`
+    // yang kita baca merefleksikan ukuran versi cetak — bukan versi layar
+    // yang lebih longgar. Style ini dilepas lagi segera setelah diukur; unsur
+    // visual yang benar-benar dipakai untuk rasterisasi tetap datang dari
+    // `PDF_COLOR_OVERRIDE` yang di-inject ke dokumen clone via `onclone`.
+    const measureStyle = document.createElement("style");
+    measureStyle.textContent = PRINT_SPACING_RULES;
+    document.head.appendChild(measureStyle);
+    const measuredWidthPx = element.offsetWidth;
+    const measuredHeightPx = element.scrollHeight;
+    document.head.removeChild(measureStyle);
+
     try {
       const { jsPDF } = await import("jspdf");
       const doc = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait" });
 
-      const marginMm = 12;
+      const marginMm = PAGE_MARGIN_MM;
       const pageWidthMm = doc.internal.pageSize.getWidth();
-      // html2canvas memakai satuan px, jadi lebar konten dikonversi ke skala
-      // yang pas dengan area cetak A4 dikurangi margin kiri-kanan.
+      const pageHeightMm = doc.internal.pageSize.getHeight();
+      // html2canvas memakai satuan px, jadi ukuran konten dikonversi ke skala
+      // yang pas dengan area cetak A4 dikurangi margin. Kita hitung skala yang
+      // dibutuhkan agar konten muat secara LEBAR maupun TINGGI, lalu ambil
+      // yang paling kecil ("fit to page") supaya dokumen ukuran normal selalu
+      // jadi 1 halaman deterministik, tidak bergantung pada heuristik
+      // `autoPaging` semata.
       const contentWidthMm = pageWidthMm - marginMm * 2;
-      const scale = (contentWidthMm / element.offsetWidth) * (96 / 25.4);
+      const contentHeightMm = pageHeightMm - marginMm * 2;
+      const pxToMm = 25.4 / 96;
+      const scaleByWidth = (contentWidthMm / measuredWidthPx) / pxToMm;
+      const scaleByHeight = (contentHeightMm / measuredHeightPx) / pxToMm;
+      // Batas bawah: jangan mengecilkan lebih dari 65% skala lebar, supaya
+      // dokumen dengan item ekstrem panjang tidak jadi terlalu kecil/tidak
+      // terbaca — kasus itu saja yang boleh jatuh ke halaman ke-2 lewat
+      // `autoPaging`.
+      const minAllowedScale = scaleByWidth * 0.65;
+      const scale = Math.max(Math.min(scaleByWidth, scaleByHeight), minAllowedScale);
+      // Saat skala dikecilkan demi tinggi, lebar hasil render jadi lebih kecil
+      // dari contentWidthMm — offset x supaya tetap center, bukan nempel kiri.
+      const renderedWidthMm = measuredWidthPx * scale * pxToMm;
+      const xOffset = marginMm + Math.max(0, (contentWidthMm - renderedWidthMm) / 2);
 
       await doc.html(element, {
-        x: marginMm,
+        x: xOffset,
         y: marginMm,
         html2canvas: {
           scale,
@@ -375,7 +600,7 @@ export function QuotationPreview({
               </div>
 
               {/* Black band */}
-              <div className="mt-5 h-7 w-full rounded-sm bg-foreground" />
+              <div className="mt-5 h-2 w-full rounded-sm bg-foreground" />
 
               {/* Tabel item */}
               <table className="mt-4 w-full border-collapse text-[11px]">
@@ -573,13 +798,13 @@ export function QuotationPreview({
               </p>
 
               {/* Signature */}
-              <div data-print-keep className="mt-10 text-[11px]">
+              <div data-print-keep className="mt-8 text-[11px]">
                 <p className="text-foreground">
                   {q.signingLocation?.trim() || "Jakarta"},{" "}
                   {formatLongDate(q.issuedAt ?? q.createdAt)}
                 </p>
                 <div className="mt-2 w-56">
-                  <div className="flex items-end justify-center h-20">
+                  <div className="flex items-end justify-center h-16">
                     {q.signatureSales ? (
                       <Image
                         src={q.signatureSales}
