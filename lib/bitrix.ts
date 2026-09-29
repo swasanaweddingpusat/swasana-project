@@ -131,9 +131,11 @@ export async function bitrixList<T = Record<string, unknown>>(
 /**
  * Fetch EVERY page of a Bitrix list method by walking the `next` cursor.
  *
- * Guarded by `maxPages` so an unexpectedly huge filter can't spin forever — the
- * overview aggregates a single day (tens of rows), so the default cap of 40
- * pages (2000 rows) is comfortably above any realistic daily volume.
+ * Guarded by `maxPages` purely as a runaway-loop safety net (a broken cursor
+ * could otherwise spin forever) — NOT a data cap. Callers like the Bitrix24
+ * Overview let users pick arbitrarily wide date ranges (a full quarter/year of
+ * deals can run into the thousands), so the cap must sit well above any
+ * realistic result set: 1000 pages = 50,000 rows.
  */
 export async function bitrixListAll<T = Record<string, unknown>>(
   method: string,
@@ -142,7 +144,7 @@ export async function bitrixListAll<T = Record<string, unknown>>(
     select?: string[];
     order?: Record<string, "ASC" | "DESC">;
   } = {},
-  maxPages = 40,
+  maxPages = 1000,
 ): Promise<{ items: T[]; total: number }> {
   const all: T[] = [];
   let start = 0;

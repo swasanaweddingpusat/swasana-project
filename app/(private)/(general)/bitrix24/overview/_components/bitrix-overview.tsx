@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { format } from "date-fns";
 import type { DateRange } from "react-day-picker";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, LabelList } from "recharts";
 import {
   Bolt,
   RefreshCircle,
@@ -20,8 +21,10 @@ import {
   CalendarDate,
   CheckCircle,
   DangerCircle,
+  ChartSquare,
 } from "@solar-icons/react";
 import { Card } from "@/components/ui/card";
+import { ChartContainer, ChartTooltip, type ChartConfig } from "@/components/ui/chart";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
@@ -50,6 +53,12 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SearchableSelect } from "@/components/ui/searchable-select";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 import { cn } from "@/lib/utils";
 import { Drawer } from "@/components/shared/drawer";
 import { BitrixDealDetail } from "@/components/shared/BitrixDealDetail";
@@ -57,6 +66,13 @@ import {
   exportBitrixOverviewExcel,
   exportBitrixOverviewPdf,
 } from "@/lib/bitrix-overview-export";
+import {
+  buildSalesStatusBreakdown,
+  buildStatusClientBreakdown,
+  buildNotDatabaseBreakdown,
+  type SalesStatusGroup,
+  type StatusClientRow,
+} from "@/lib/bitrix-overview-status";
 import {
   useBitrixOverview,
   type BitrixOverviewData as OverviewData,
@@ -163,6 +179,10 @@ const dealFilterLabels: Record<Exclude<DealFilter, null>, string> = {
   notResponded: "Belum Dibalas",
 };
 
+const statusClientChartConfig: ChartConfig = {
+  count: { label: "Jumlah", color: "var(--brand-ink)" },
+};
+
 export function BitrixOverview() {
   const [filters, setFilters] = useState<Filters>(initialFilters);
   const [filterOpen, setFilterOpen] = useState(false);
@@ -219,6 +239,21 @@ export function BitrixOverview() {
   }
 
   const adsPct = data && data.total > 0 ? Math.round((data.fromAds / data.total) * 100) : 0;
+
+  const salesStatusBreakdown = useMemo(
+    () => (data?.deals ? buildSalesStatusBreakdown(data.deals) : []),
+    [data?.deals],
+  );
+
+  const statusClientBreakdown = useMemo(
+    () => (data?.deals ? buildStatusClientBreakdown(data.deals) : []),
+    [data?.deals],
+  );
+
+  const notDatabaseBreakdown = useMemo(
+    () => (data?.deals ? buildNotDatabaseBreakdown(data.deals) : []),
+    [data?.deals],
+  );
 
   const filteredDeals = useMemo(() => {
     if (!dealFilter || !data?.deals) return [];
@@ -385,7 +420,18 @@ export function BitrixOverview() {
             <VenueCard buckets={data?.venues} total={data?.withVenue ?? 0} loading={loading} />
           </div>
 
+          <StatusClientChart data={statusClientBreakdown} loading={loading} />
+
           <SalesTable buckets={data?.sales} loading={loading} />
+
+          <SalesStatusCard groups={salesStatusBreakdown} loading={loading} />
+
+          <SalesStatusCard
+            title="Detail Data Tidak Jadi Database per Sales"
+            icon={<DangerCircle weight="BoldDuotone" className="h-4 w-4 text-muted-foreground" />}
+            groups={notDatabaseBreakdown}
+            loading={loading}
+          />
 
           <AdsCard buckets={data?.ads} organik={data?.organik ?? 0} total={data?.total ?? 0} loading={loading} />
 
@@ -917,6 +963,87 @@ function LoadingRows() {
   );
 }
 
+interface StatusClientChartDatum {
+  label: string;
+  fullLabel: string;
+  count: number;
+}
+
+interface StatusClientTooltipPayloadEntry {
+  payload: StatusClientChartDatum;
+}
+
+function StatusClientTooltipContent({
+  active,
+  payload,
+}: {
+  active?: boolean;
+  payload?: StatusClientTooltipPayloadEntry[];
+}): React.ReactElement | null {
+  if (!active || !payload?.length) return null;
+  const d = payload[0].payload;
+  return (
+    <div className="rounded-lg border border-border/50 bg-background px-3 py-2 text-xs shadow-xl">
+      <p className="font-semibold text-foreground">{d.fullLabel}</p>
+      <p className="mt-1 text-muted-foreground">{d.count.toLocaleString("id-ID")} deal</p>
+    </div>
+  );
+}
+
+// "Status Client" — a column chart of ALL deals grouped by stage label,
+// sorted descending, with the count printed above each bar (mirrors the
+// reference report exported from Bitrix24).
+function StatusClientChart({ data, loading }: { data: StatusClientRow[]; loading: boolean }) {
+  const chartData = useMemo<StatusClientChartDatum[]>(
+    () =>
+      data.map((d) => ({
+        label: d.label.length > 14 ? `${d.label.slice(0, 13)}…` : d.label,
+        fullLabel: d.label,
+        count: d.count,
+      })),
+    [data],
+  );
+
+  return (
+    <CardShell
+      title="Status Client"
+      icon={<ChartSquare weight="BoldDuotone" className="h-4 w-4 text-muted-foreground" />}
+    >
+      {loading ? (
+        <Skeleton className="h-80 w-full rounded-xl" />
+      ) : chartData.length === 0 ? (
+        <p className="py-6 text-center text-sm text-muted-foreground">Tidak ada data.</p>
+      ) : (
+        <ChartContainer config={statusClientChartConfig} className="h-80 w-full">
+          <BarChart data={chartData} margin={{ top: 24, right: 8, bottom: 32, left: 0 }}>
+            <CartesianGrid vertical={false} stroke="var(--border)" strokeDasharray="3 3" />
+            <XAxis
+              dataKey="label"
+              tickLine={false}
+              axisLine={false}
+              interval={0}
+              angle={-40}
+              textAnchor="end"
+              height={64}
+              tick={{ fontSize: 10 }}
+            />
+            <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 10 }} width={36} allowDecimals={false} />
+            <ChartTooltip content={<StatusClientTooltipContent />} />
+            <Bar dataKey="count" radius={[6, 6, 0, 0]} maxBarSize={48} fill="var(--brand-ink)">
+              <LabelList
+                dataKey="count"
+                position="top"
+                style={{ fontSize: 10, fill: "var(--foreground)" }}
+                formatter={(value) => Number(value).toLocaleString("id-ID")}
+              />
+            </Bar>
+          </BarChart>
+        </ChartContainer>
+      )}
+    </CardShell>
+  );
+}
+
 function BarRow({
   label,
   count,
@@ -995,6 +1122,53 @@ function SalesTable({ buckets, loading }: { buckets: SalesBucket[] | undefined; 
             ))}
           </TableBody>
         </Table>
+      )}
+    </CardShell>
+  );
+}
+
+function SalesStatusCard({
+  title = "Detail Status Database per Sales",
+  icon = <UsersGroupRounded weight="BoldDuotone" className="h-4 w-4 text-muted-foreground" />,
+  groups,
+  loading,
+}: {
+  title?: string;
+  icon?: React.ReactNode;
+  groups: SalesStatusGroup[];
+  loading: boolean;
+}) {
+  return (
+    <CardShell title={title} icon={icon}>
+      {loading ? (
+        <LoadingRows />
+      ) : groups.length === 0 ? (
+        <p className="py-6 text-center text-sm text-muted-foreground">Tidak ada data.</p>
+      ) : (
+        <Accordion className="gap-0">
+          {groups.map((group) => (
+            <AccordionItem key={group.key} value={group.key}>
+              <AccordionTrigger>
+                <span className="flex w-full items-center justify-between pr-2">
+                  <span className="font-semibold">{group.label}</span>
+                  <span className="font-heading font-semibold tabular-nums">
+                    {group.total.toLocaleString("id-ID")}
+                  </span>
+                </span>
+              </AccordionTrigger>
+              <AccordionContent>
+                <ul className="space-y-1.5 pl-1">
+                  {group.statuses.map((s) => (
+                    <li key={s.label} className="flex items-center justify-between text-sm">
+                      <span className="text-muted-foreground">{s.label}</span>
+                      <span className="font-medium tabular-nums">{s.count.toLocaleString("id-ID")}</span>
+                    </li>
+                  ))}
+                </ul>
+              </AccordionContent>
+            </AccordionItem>
+          ))}
+        </Accordion>
       )}
     </CardShell>
   );
