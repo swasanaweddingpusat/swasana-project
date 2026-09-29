@@ -33,6 +33,10 @@ export function richTextToPlainText(value: string | null | undefined): string {
       return HTML_ENTITY_MAP[code.toLowerCase()] ?? entity;
     })
     .replace(/[ \t]+\n/g, "\n")
+    // TipTap wraps list-item text in <p>. Both </p> and </li> become a
+    // newline above, so collapse only the duplicate break before the next
+    // bullet while preserving intentional spacing between normal paragraphs.
+    .replace(/\n{2,}(?=• )/g, "\n")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 }

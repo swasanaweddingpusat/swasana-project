@@ -22,7 +22,20 @@ export interface EligibleMiceQuotation {
   salesName: string | null;
 }
 
-/** Approved, unconverted quotations available to the Booking MICE flow. */
+/**
+ * Conversion-ready, unconverted quotations available to the Booking MICE flow.
+ *
+ * Previously this INNER JOINed approval_records on module = 'quotations'. No code
+ * path ever creates such a record, so the join matched nothing and the picker was
+ * permanently empty. Eligibility is now the same readiness contract enforced by
+ * lib/quotationReadiness.ts (getQuotationConversionReadinessError):
+ *   - venue, event type and event date present
+ *   - a package selected when packageSource is 'meeting-package'
+ *   - subtotal > 0
+ *   - signing location + sales signature present
+ *   - at least one TOP, and every TOP has a positive amount and a due date
+ * Plus the invariant that must never be relaxed: the quotation has no booking yet.
+ */
 export async function getEligibleMiceQuotations(
   search: string,
   salesIds?: string[],
@@ -41,13 +54,24 @@ export async function getEligibleMiceQuotations(
       q."eventDate", q."eventEndDate", q."time", q."notes", q."pax",
       q."packageName", q."totalPrice", q."salesId", p."fullName" AS "salesName"
     FROM "quotations" q
-    INNER JOIN "approval_records" ar
-      ON ar."module" = 'quotations'
-      AND ar."entityId" = q."id"
-      AND ar."status" = 'approved'
     INNER JOIN "profiles" p ON p."id" = q."salesId"
     LEFT JOIN "bookings" b ON b."quotationId" = q."id"
     WHERE b."id" IS NULL
+      AND q."venueId" IS NOT NULL
+      AND q."eventTypeId" IS NOT NULL
+      AND q."eventDate" IS NOT NULL
+      AND (q."packageSource" IS DISTINCT FROM 'meeting-package' OR q."packageId" IS NOT NULL)
+      AND q."subtotal" > 0
+      AND COALESCE(TRIM(q."signingLocation"), '') <> ''
+      AND COALESCE(TRIM(q."signatureSales"), '') <> ''
+      AND EXISTS (
+        SELECT 1 FROM "quotation_terms" t WHERE t."quotationId" = q."id"
+      )
+      AND NOT EXISTS (
+        SELECT 1 FROM "quotation_terms" t
+        WHERE t."quotationId" = q."id"
+          AND (t."amount" <= 0 OR t."dueDate" IS NULL)
+      )
       AND (
         q."clientName" ILIKE ${query}
         OR q."clientPhone" ILIKE ${query}

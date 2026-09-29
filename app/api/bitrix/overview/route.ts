@@ -19,6 +19,10 @@ const UF_REASON = "UF_CRM_1774952346733"; // enum: includes "Getback"
 const UF_ISSUE = "UF_CRM_1768930533046"; // enum: Leads / No Response / Spam / Komplain …
 const UF_DB_DATE = "UF_CRM_1786680629702"; // date: "Tanggal Database" — when the lead entered the database
 
+// Diekspor supaya cron warmer (lib/bitrix-warm-targets.ts) memfilter pada field
+// yang sama persis — beda field berarti cache key berbeda dan warmer jadi sia-sia.
+export const OVERVIEW_DB_DATE_FIELD = UF_DB_DATE;
+
 // Open Lines conversation activities — same provider Response Sales / Percakapan use.
 const PROVIDER_ID = "IMOPENLINES_SESSION";
 
@@ -41,9 +45,32 @@ export const OVERVIEW_DEAL_SELECT = [
   UF_DB_DATE,
 ];
 
-// Venue enum values that aren't real venues — excluded from the venue breakdown
-// and from the "database venue" total, matching the daily report's scope.
-const NON_VENUE_LABELS = new Set(["MICE", "NON VENUE"]);
+// Nilai enum Venue yang bukan venue sungguhan — dikecualikan dari breakdown
+// Venue dan dari total "Database Venue".
+//
+// "MICE" TIDAK termasuk di sini: acara MICE tetap terhitung sebagai database
+// venue. Hanya "NON VENUE" yang dibuang karena itu penanda ketiadaan venue,
+// bukan sebuah lokasi.
+//
+// Dicocokkan case-insensitive karena penulisan enum di Bitrix tidak dijamin
+// selalu huruf kapital.
+const NON_VENUE_LABELS = new Set(["NON VENUE"]);
+
+function isNonVenueLabel(label: string): boolean {
+  return NON_VENUE_LABELS.has(label.toUpperCase());
+}
+
+// A deal only counts toward "Database Sales" once a real sales agent has
+// processed it into the standard "DB - <VENUE> - <TANGGAL> - <Nama>" title
+// convention (confirmed against live Bitrix deal titles — every "DB"-led
+// title observed is followed by " -", no false positives). Raw/unprocessed
+// leads are still titled with just the contact's name/phone number and sit
+// under whoever triaged them first — often Customer Service/front-desk
+// (e.g. Fauzan, Rifat) routing the chat, not a sales rep — so they must not
+// be counted as that person's sales database.
+function isProcessedDatabaseTitle(title: string | null): boolean {
+  return /^\s*db\s*-/i.test(title ?? "");
+}
 
 // "Database mandiri" = leads the sales sourced themselves (Live TikTok streams or
 // Referral); everything else is "database kantor" (office/ads-driven channels).
@@ -132,12 +159,37 @@ export async function GET(request: Request) {
       getBitrixDealEnums([UF_VENUE, UF_REASON, UF_ISSUE]),
     ]);
 
-    // Bitrix stores DATE_CREATE with a +03:00 offset; filtering on the bare date
-    // string (no offset) matches "created this day" in its UI.
-    const filter: Record<string, string | string[]> = {
-      ">=DATE_CREATE": `${fromDay}T00:00:00`,
-      "<DATE_CREATE": `${nextDay(toDay)}T00:00:00`,
+    // Rentang tanggal utama halaman ini memakai "Tanggal Database" (UF_DB_DATE),
+    // BUKAN DATE_CREATE. Yang diukur adalah kapan lead masuk ke database, bukan
+    // kapan record-nya dibuat di CRM — keduanya bisa berbeda jauh ketika sales
+    // memasukkan lead lama.
+    //
+    // UF_DB_DATE bertipe date-only, jadi batasnya memakai ISO day telanjang dan
+    // `to` bersifat inklusif lewat `<=` pada hari yang sama.
+    //
+    // Satu query mengambil DUA populasi sekaligus lewat LOGIC OR:
+    //   cabang 0 — punya Tanggal Database di dalam rentang. Ini yang memberi
+    //               makan seluruh angka ber-nama "Database*".
+    //   cabang 1 — Tanggal Database kosong, tetapi dibuat di CRM pada rentang
+    //               yang sama. Deal ini hanya menambah Total Transaksi.
+    //
+    // Digabung agar Total Transaksi tetap menjadi penyebut yang sah bagi
+    // Database Venue ("78 dari 149"), alih-alih membandingkan dua populasi dari
+    // dua query terpisah. Pemisahannya dilakukan di sisi kita lewat predikat
+    // hasDbDate di bawah.
+    const filter: Record<string, unknown> = {
+      LOGIC: "OR",
+      "0": {
+        [`>=${UF_DB_DATE}`]: fromDay,
+        [`<=${UF_DB_DATE}`]: toDay,
+      },
+      "1": {
+        [`=${UF_DB_DATE}`]: "",
+        ">=DATE_CREATE": `${fromDay}T00:00:00`,
+        "<=DATE_CREATE": `${toDay}T23:59:59`,
+      },
     };
+    // Filter lain berada di level atas, jadi berlaku untuk KEDUA cabang OR.
     if (pipeline) filter.CATEGORY_ID = pipeline;
     if (clientId) filter.CONTACT_ID = clientId;
     if (salesId) filter.ASSIGNED_BY_ID = salesId;
@@ -151,10 +203,11 @@ export async function GET(request: Request) {
       const issueId = Object.entries(issueEnumForFilter).find(([, label]) => label === issueName)?.[0];
       filter[UF_ISSUE] = issueId ?? "__none__";
     }
-    // Tanggal Database range → UF_DB_DATE. Date-only field, so bound on the bare
-    // ISO day; "to" is inclusive via <= on the same day.
-    if (isIsoDay(dbFrom)) filter[`>=${UF_DB_DATE}`] = dbFrom;
-    if (isIsoDay(dbTo)) filter[`<=${UF_DB_DATE}`] = dbTo;
+    // dbFrom/dbTo dipertahankan demi kompatibilitas pemanggil lama: mempersempit
+    // cabang Tanggal Database saja. UI sendiri tidak lagi mengirimkannya.
+    const dbBranch = filter["0"] as Record<string, string>;
+    if (isIsoDay(dbFrom) && dbFrom > fromDay) dbBranch[`>=${UF_DB_DATE}`] = dbFrom;
+    if (isIsoDay(dbTo) && dbTo < toDay) dbBranch[`<=${UF_DB_DATE}`] = dbTo;
 
     const { items } = await bitrixListAll<RawDeal>("crm.deal.list", {
       select: OVERVIEW_DEAL_SELECT,
@@ -164,6 +217,13 @@ export async function GET(request: Request) {
 
     // Still needed for the Database Sales breakdown labels (ASSIGNED_BY_ID → name).
     const userMap = await resolveBitrixUsers(items.map((d) => d.ASSIGNED_BY_ID ?? "").filter(Boolean));
+
+    // Pemisahan dua populasi hasil LOGIC OR di atas:
+    //   `items`   — SEMUA transaksi pada rentang. Hanya dipakai Total Transaksi.
+    //   `dbItems` — hanya yang punya Tanggal Database. Ini sumber setiap angka
+    //               bernama "Database*" (Sumber Database, Database Venue,
+    //               Database Sales, Kantor/Mandiri) serta breakdown turunannya.
+    const dbItems = items.filter((d) => !!(d[UF_DB_DATE] ?? "").trim());
 
     const venueEnum = enums[UF_VENUE] ?? {};
     const reasonEnum = enums[UF_REASON] ?? {};
@@ -179,7 +239,7 @@ export async function GET(request: Request) {
 
     // Sumber Database — channel label (WA / IG Messenger / TikTok DM …).
     const sources: Bucket[] = bucketize(
-      items,
+      dbItems,
       (d) => d.SOURCE_ID ?? "UNKNOWN",
       (key) => meta.sources[key] ?? labelFromSourceId(key),
     );
@@ -208,9 +268,17 @@ export async function GET(request: Request) {
       .sort((a, b) => b.count - a.count);
     const fromAds = items.length - organik;
 
-    // Database Sales — per responsible user, with getback count.
+    // Database Sales — per responsible user, with getback count. Only deals
+    // processed into the "DB - ..." title convention count as that sales'
+    // database; unprocessed leads (still titled with just the contact's
+    // name/phone) are typically still sitting under whoever triaged them
+    // first — often CS/front-desk (Fauzan, Rifat) — not a real sales rep.
+    const processedDealIds = new Set(
+      dbItems.filter((d) => isProcessedDatabaseTitle(d.TITLE)).map((d) => d.ID),
+    );
     const salesMap = new Map<string, SalesBucket>();
-    for (const d of items) {
+    for (const d of dbItems) {
+      if (!isProcessedDatabaseTitle(d.TITLE)) continue;
       const key = d.ASSIGNED_BY_ID ?? "UNKNOWN";
       const label = userMap[key] ?? (key === "UNKNOWN" ? "Tidak ditetapkan" : `#${key}`);
       const bucket = salesMap.get(key) ?? {
@@ -236,10 +304,10 @@ export async function GET(request: Request) {
     // Venue — from the custom enum field; skip empty + non-venue placeholders.
     const venueMap = new Map<string, number>();
     let withVenue = 0;
-    for (const d of items) {
+    for (const d of dbItems) {
       const venueId = d[UF_VENUE];
       const label = venueId ? venueEnum[venueId] : undefined;
-      if (!label || NON_VENUE_LABELS.has(label)) continue;
+      if (!label || isNonVenueLabel(label)) continue;
       venueMap.set(label, (venueMap.get(label) ?? 0) + 1);
       withVenue++;
     }
@@ -255,10 +323,7 @@ export async function GET(request: Request) {
     // sessions/metrics so the per-sales sum always matches the aggregate.
     const dealIds = items.map((d) => d.ID);
     const assignedByDeal = new Map(items.map((d) => [d.ID, d.ASSIGNED_BY_ID ?? "UNKNOWN"]));
-    let responded = 0;
-    let notResponded = 0;
-    const responseBySalesMap = new Map<string, { responded: number; notResponded: number }>();
-    // Per-deal response status: true = all sessions ok, false = has pending, null = no sessions
+    // Per-deal response status: true = all sessions ok, false = has pending, absent = no sessions
     const dealResponseMap = new Map<string, boolean>();
     if (dealIds.length > 0) {
       const { items: acts } = await bitrixListAll<{
@@ -287,33 +352,40 @@ export async function GET(request: Request) {
       const metrics = await resolveSessionMetrics(
         [...sessionsBySessionId.values()].map(({ sessionId, lastUpdated }) => ({ sessionId, lastUpdated })),
       );
+      // Fold every session onto its owning deal FIRST — a deal can have more than
+      // one Open Lines session, and counting per-session (as this used to) let a
+      // single deal contribute to both "responded" and "not responded" at once,
+      // inflating both totals past the real number of deals. Aggregates below are
+      // derived from this deal-grained map so they always match deals[].responded.
       for (const { sessionId, dealId } of sessionsBySessionId.values()) {
-        const isPending = metrics[sessionId]?.hasPending === true;
-        if (isPending) notResponded++;
-        else responded++;
-
-        const userId = (dealId ? assignedByDeal.get(dealId) : undefined) ?? "UNKNOWN";
-        const bucket = responseBySalesMap.get(userId) ?? { responded: 0, notResponded: 0 };
-        if (isPending) bucket.notResponded++;
-        else bucket.responded++;
-        responseBySalesMap.set(userId, bucket);
-
-        const salesBucket = salesMap.get(userId);
-        if (salesBucket) {
-          if (isPending) salesBucket.notResponded++;
-          else salesBucket.responded++;
+        if (!dealId) continue;
+        const isPendingSession = metrics[sessionId]?.hasPending === true;
+        const current = dealResponseMap.get(dealId);
+        if (current === undefined) {
+          dealResponseMap.set(dealId, !isPendingSession);
+        } else if (isPendingSession) {
+          dealResponseMap.set(dealId, false);
         }
+      }
+    }
 
-        // Track per-deal: if any session is pending, the deal is not fully responded.
-        if (dealId) {
-          const isPendingSession = metrics[sessionId]?.hasPending === true;
-          const current = dealResponseMap.get(dealId);
-          if (current === undefined) {
-            dealResponseMap.set(dealId, !isPendingSession);
-          } else if (isPendingSession) {
-            dealResponseMap.set(dealId, false);
-          }
-        }
+    let responded = 0;
+    let notResponded = 0;
+    const responseBySalesMap = new Map<string, { responded: number; notResponded: number }>();
+    for (const [dealId, isResponded] of dealResponseMap) {
+      const userId = assignedByDeal.get(dealId) ?? "UNKNOWN";
+      if (isResponded) responded++;
+      else notResponded++;
+
+      const bucket = responseBySalesMap.get(userId) ?? { responded: 0, notResponded: 0 };
+      if (isResponded) bucket.responded++;
+      else bucket.notResponded++;
+      responseBySalesMap.set(userId, bucket);
+
+      const salesBucket = processedDealIds.has(dealId) ? salesMap.get(userId) : undefined;
+      if (salesBucket) {
+        if (isResponded) salesBucket.responded++;
+        else salesBucket.notResponded++;
       }
     }
 
@@ -336,7 +408,7 @@ export async function GET(request: Request) {
         meta.sources[d.SOURCE_ID ?? "UNKNOWN"] ?? labelFromSourceId(d.SOURCE_ID ?? "UNKNOWN");
       const venueId = d[UF_VENUE];
       const rawVenueLabel = venueId ? (venueEnum[venueId] ?? "") : "";
-      const hasVenue = !!rawVenueLabel && !NON_VENUE_LABELS.has(rawVenueLabel);
+      const hasVenue = !!rawVenueLabel && !isNonVenueLabel(rawVenueLabel);
       const issueId = d[UF_ISSUE];
       const issueLabel = issueId ? (issueEnum[issueId] ?? "") : "";
       const reasonId = d[UF_REASON];
@@ -355,6 +427,11 @@ export async function GET(request: Request) {
         reasonLabel,
         adsUrl,
         dateCreate: d.DATE_CREATE ?? "",
+        dbDate: (d[UF_DB_DATE] ?? "").trim(),
+        // Menandai deal mana yang ikut hitungan "Database*". Client memakainya
+        // untuk menyaring breakdown Status/Tidak Jadi Database agar konsisten
+        // dengan kartu-kartu di atasnya.
+        hasDbDate: !!(d[UF_DB_DATE] ?? "").trim(),
         stageLabel: meta.stages[d.STAGE_ID ?? ""] ?? d.STAGE_ID ?? "",
         pipeline: d.CATEGORY_ID ?? "",
         isKantor: !MANDIRI_SOURCE_LABELS.has(sourceLabel.toLowerCase()),
@@ -402,15 +479,6 @@ export async function GET(request: Request) {
 
 function isIsoDay(v: string | null): v is string {
   return !!v && /^\d{4}-\d{2}-\d{2}$/.test(v);
-}
-
-// Day after an ISO day via UTC calendar math — avoids timezone drift for a
-// date-only boundary.
-function nextDay(day: string): string {
-  const [y, m, d] = day.split("-").map(Number);
-  const dt = new Date(Date.UTC(y, m - 1, d));
-  dt.setUTCDate(dt.getUTCDate() + 1);
-  return dt.toISOString().slice(0, 10);
 }
 
 function yesterdayFallback(to: string | null): string {

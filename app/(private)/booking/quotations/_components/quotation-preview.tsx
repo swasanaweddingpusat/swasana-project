@@ -1,9 +1,12 @@
 "use client";
 
+import { useRef, useState } from "react";
 import Image from "next/image";
 import { format } from "date-fns";
+import { useReactToPrint } from "react-to-print";
 import { id as idLocale } from "date-fns/locale";
-import { Printer, CloseCircle } from "@solar-icons/react";
+import { toast } from "sonner";
+import { Printer, CloseCircle, DownloadMinimalistic, Refresh } from "@solar-icons/react";
 import {
   Dialog,
   DialogContent,
@@ -21,6 +24,216 @@ interface QuotationPreviewProps {
 }
 
 const PRINT_AREA_ID = "quotation-print-area";
+
+/**
+ * Satu sumber angka untuk margin halaman A4 — dipakai baik oleh `pageStyle`
+ * (jalur Cetak / react-to-print) maupun jsPDF (jalur Download PDF) supaya
+ * kedua hasil konsisten. 12mm sebelumnya terlalu lebar dan bikin dokumen
+ * gampang tumpah ke halaman berikutnya; 10mm masih nyaman dibaca tapi lebih
+ * hemat ruang.
+ */
+const PAGE_MARGIN_MM = 10;
+
+/**
+ * Aturan gabungan tipografi + spacing + border + warna khusus cetak/PDF.
+ * Preview di layar TETAP memakai ukuran Tailwind aslinya (text-2xl, text-[11px],
+ * mt-6/mt-8/dst, px-8 py-8) supaya enak dibaca di dialog; begitu masuk jalur
+ * Cetak (di-inject lewat `pageStyle`, hanya aktif di window print) atau
+ * Download PDF (di-inject ke dokumen hasil clone oleh html2canvas lewat
+ * `onclone`, DAN sementara ditempel ke DOM asli saat mengukur tinggi — lihat
+ * `handleDownload`), kita timpa semuanya jadi jauh lebih padat via selector
+ * class + `!important`. Putaran revisi sebelumnya cuma merapatkan margin/gap
+ * tapi TIDAK menyentuh font-size — itu sebabnya tinggi dokumen belum turun
+ * cukup dan tetap tumpah ke halaman ke-2. Sekarang font-size, line-height,
+ * border-width/color, dan warna teks ikut ditimpa juga.
+ *
+ * PENTING: konstanta ini dipakai di TIGA tempat — `pageStyle` (jalur Cetak),
+ * `PDF_COLOR_OVERRIDE` (jalur Download PDF, dipakai saat `onclone`), dan
+ * disuntik sementara ke live DOM di `handleDownload` untuk mengukur
+ * scrollHeight yang akurat sebelum menghitung skala fit-to-page. Kalau nambah
+ * aturan baru di sini, otomatis ikut ke tiga-tiganya — jangan taruh aturan
+ * padat di tempat lain supaya tidak ada jalur yang "kelewat".
+ */
+const PRINT_SPACING_RULES = `
+  /* --- Kontainer & warna dasar (grayscale, hindari kesan kecoklatan) --- */
+  #${PRINT_AREA_ID} > div {
+    padding: 6mm 7mm !important;
+  }
+
+  #${PRINT_AREA_ID} {
+    color: #171717 !important;
+  }
+
+  #${PRINT_AREA_ID} .text-foreground {
+    color: #171717 !important;
+  }
+
+  #${PRINT_AREA_ID} .text-muted-foreground {
+    color: #525252 !important;
+  }
+
+  /* --- Tipografi: semua ukuran teks yang dipakai di dokumen ini --- */
+  #${PRINT_AREA_ID} .text-2xl {
+    font-size: 19px !important;
+    line-height: 1.2 !important;
+  }
+
+  #${PRINT_AREA_ID} .text-xs {
+    font-size: 8px !important;
+    line-height: 1.25 !important;
+  }
+
+  #${PRINT_AREA_ID} .text-\[11px\] {
+    font-size: 10px !important;
+    line-height: 1.4 !important;
+  }
+
+  #${PRINT_AREA_ID} .text-\[10px\] {
+    font-size: 9px !important;
+    line-height: 1.35 !important;
+  }
+
+  /* --- Border: tipis & abu-abu, bukan hitam pekat --- */
+  #${PRINT_AREA_ID} .border-b {
+    border-bottom-width: 0.5px !important;
+    border-bottom-color: #a3a3a3 !important;
+  }
+
+  #${PRINT_AREA_ID} .border-t {
+    border-top-width: 0.5px !important;
+    border-top-color: #a3a3a3 !important;
+  }
+
+  #${PRINT_AREA_ID} .border-border {
+    border-color: #d4d4d4 !important;
+  }
+
+  /* --- Spacing vertikal: dipadatkan lebih jauh dari putaran sebelumnya --- */
+  #${PRINT_AREA_ID} .mt-8 {
+    margin-top: 8px !important;
+  }
+
+  #${PRINT_AREA_ID} .mt-6 {
+    margin-top: 6px !important;
+  }
+
+  #${PRINT_AREA_ID} .mt-5 {
+    margin-top: 5px !important;
+  }
+
+  #${PRINT_AREA_ID} .mt-4 {
+    margin-top: 5px !important;
+  }
+
+  #${PRINT_AREA_ID} .mt-3 {
+    margin-top: 6px !important;
+  }
+
+  #${PRINT_AREA_ID} .mt-2 {
+    margin-top: 3px !important;
+  }
+
+  #${PRINT_AREA_ID} .mt-1 {
+    margin-top: 2px !important;
+  }
+
+  #${PRINT_AREA_ID} .mt-0\.5 {
+    margin-top: 1px !important;
+  }
+
+  #${PRINT_AREA_ID} .gap-8 {
+    gap: 14px !important;
+  }
+
+  #${PRINT_AREA_ID} .pt-4 {
+    padding-top: 6px !important;
+  }
+
+  #${PRINT_AREA_ID} .pt-3 {
+    padding-top: 6px !important;
+  }
+
+  #${PRINT_AREA_ID} .pt-2 {
+    padding-top: 4px !important;
+  }
+
+  #${PRINT_AREA_ID} .pt-1 {
+    padding-top: 2px !important;
+  }
+
+  #${PRINT_AREA_ID} .py-2 {
+    padding-top: 4px !important;
+    padding-bottom: 4px !important;
+  }
+
+  #${PRINT_AREA_ID} .py-0\.5 {
+    padding-top: 1px !important;
+    padding-bottom: 1px !important;
+  }
+
+  #${PRINT_AREA_ID} .space-y-1 > * + * {
+    margin-top: 3px !important;
+  }
+
+  #${PRINT_AREA_ID} .space-y-1\.5 > * + * {
+    margin-top: 4px !important;
+  }
+
+  #${PRINT_AREA_ID} .space-y-2 > * + * {
+    margin-top: 5px !important;
+  }
+
+  #${PRINT_AREA_ID} .space-y-0\.5 > * + * {
+    margin-top: 1px !important;
+  }
+
+  /* --- Elemen bertinggi tetap: black band & area tanda tangan --- */
+  #${PRINT_AREA_ID} .h-2 {
+    height: 1.5px !important;
+  }
+
+  #${PRINT_AREA_ID} .h-16 {
+    height: 28px !important;
+  }
+
+  #${PRINT_AREA_ID} .max-h-20 {
+    max-height: 26px !important;
+  }
+`;
+
+/**
+ * Tailwind v4 mendefinisikan token warna dengan `oklch()`, sementara html2canvas
+ * 1.4.1 (dipakai internal oleh jsPDF.html()) belum bisa mem-parsing fungsi warna
+ * tersebut dan akan melempar error saat rasterisasi. Dokumen quotation ini pada
+ * dasarnya hitam-putih, jadi saat proses clone kita timpa token-nya dengan nilai
+ * rgb/hex setara supaya hasil PDF identik dengan yang tampil di layar.
+ */
+const PDF_COLOR_OVERRIDE = `
+  #${PRINT_AREA_ID}, #${PRINT_AREA_ID} * {
+    --background: #ffffff;
+    --foreground: #0a0a0a;
+    --card: #ffffff;
+    --card-foreground: #0a0a0a;
+    --muted: #f5f5f5;
+    --muted-foreground: #737373;
+    --border: #e5e5e5;
+    --primary: #171717;
+    --primary-foreground: #fafafa;
+    --secondary: #f5f5f5;
+    --secondary-foreground: #171717;
+    --accent: #f5f5f5;
+    --accent-foreground: #171717;
+    --destructive: #e7000b;
+    --ring: #a1a1a1;
+    color: #0a0a0a;
+  }
+
+  #${PRINT_AREA_ID} {
+    box-shadow: none !important;
+  }
+
+  ${PRINT_SPACING_RULES}
+`;
 
 // Editable-clause fallbacks — used when the quotation's corresponding field is
 // null (legacy rows / not yet customized via the drawer's Step 5 form).
@@ -120,11 +333,145 @@ export function QuotationPreview({
   onOpenChange,
   quotation,
 }: QuotationPreviewProps) {
+  const printRef = useRef<HTMLDivElement>(null);
+  const documentTitle = quotation
+    ? `Quotation-${deriveQuotationNo(quotation).replace(/[^a-z0-9-]+/gi, "-")}`
+    : "Quotation";
+  const handlePrint = useReactToPrint({
+    contentRef: printRef,
+    documentTitle,
+    pageStyle: `
+      @page {
+        size: A4 portrait;
+        margin: ${PAGE_MARGIN_MM}mm;
+      }
+
+      html,
+      body {
+        background: white !important;
+        print-color-adjust: exact !important;
+        -webkit-print-color-adjust: exact !important;
+      }
+
+      #${PRINT_AREA_ID} {
+        width: 100% !important;
+        max-width: none !important;
+        box-shadow: none !important;
+        /*
+         * Penyusutan proporsional tambahan sebagai jaring pengaman di atas
+         * override tipografi/spacing dari PRINT_SPACING_RULES. Dipilih CSS
+         * zoom (bukan transform: scale) karena Chrome/Chromium menghitung
+         * ulang page-break berdasarkan layout hasil zoom — jadi break-inside:
+         * avoid di bawah tetap berfungsi. transform: scale sebaliknya tidak
+         * memengaruhi layout flow sehingga page-break dihitung dari ukuran
+         * SEBELUM discale, yang justru bisa memecah dokumen di tempat yang
+         * salah. 0.94 dipilih konservatif (~6%) agar dokumen ukuran normal
+         * punya sedikit buffer ekstra untuk tetap satu halaman, tanpa
+         * mengecilkan teks sampai sulit dibaca — nilai font-size di
+         * PRINT_SPACING_RULES sudah melakukan pekerjaan berat.
+         */
+        zoom: 0.94;
+      }
+
+      #${PRINT_AREA_ID} thead {
+        display: table-header-group;
+      }
+
+      #${PRINT_AREA_ID} tr,
+      #${PRINT_AREA_ID} img,
+      #${PRINT_AREA_ID} [data-print-keep] {
+        break-inside: avoid;
+        page-break-inside: avoid;
+      }
+
+      ${PRINT_SPACING_RULES}
+    `,
+  });
+
+  const [downloading, setDownloading] = useState(false);
+
+  /**
+   * Unduh langsung sebagai file PDF tanpa membuka dialog print.
+   * jsPDF di-import dinamis supaya bundle-nya (+ html2canvas) tidak ikut
+   * terbawa pada initial load modal.
+   */
+  async function handleDownload(): Promise<void> {
+    const element = printRef.current;
+    if (!element || downloading) return;
+
+    setDownloading(true);
+    // Sisipkan sementara aturan padat yang sama dengan jalur Cetak (font,
+    // spacing, border) ke live DOM SEBELUM mengukur, supaya `scrollHeight`
+    // yang kita baca merefleksikan ukuran versi cetak — bukan versi layar
+    // yang lebih longgar. Style ini dilepas lagi segera setelah diukur; unsur
+    // visual yang benar-benar dipakai untuk rasterisasi tetap datang dari
+    // `PDF_COLOR_OVERRIDE` yang di-inject ke dokumen clone via `onclone`.
+    const measureStyle = document.createElement("style");
+    measureStyle.textContent = PRINT_SPACING_RULES;
+    document.head.appendChild(measureStyle);
+    const measuredWidthPx = element.offsetWidth;
+    const measuredHeightPx = element.scrollHeight;
+    document.head.removeChild(measureStyle);
+
+    try {
+      const { jsPDF } = await import("jspdf");
+      const doc = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait" });
+
+      const marginMm = PAGE_MARGIN_MM;
+      const pageWidthMm = doc.internal.pageSize.getWidth();
+      const pageHeightMm = doc.internal.pageSize.getHeight();
+      // html2canvas memakai satuan px, jadi ukuran konten dikonversi ke skala
+      // yang pas dengan area cetak A4 dikurangi margin. Kita hitung skala yang
+      // dibutuhkan agar konten muat secara LEBAR maupun TINGGI, lalu ambil
+      // yang paling kecil ("fit to page") supaya dokumen ukuran normal selalu
+      // jadi 1 halaman deterministik, tidak bergantung pada heuristik
+      // `autoPaging` semata.
+      const contentWidthMm = pageWidthMm - marginMm * 2;
+      const contentHeightMm = pageHeightMm - marginMm * 2;
+      const pxToMm = 25.4 / 96;
+      const scaleByWidth = (contentWidthMm / measuredWidthPx) / pxToMm;
+      const scaleByHeight = (contentHeightMm / measuredHeightPx) / pxToMm;
+      // Batas bawah: jangan mengecilkan lebih dari 65% skala lebar, supaya
+      // dokumen dengan item ekstrem panjang tidak jadi terlalu kecil/tidak
+      // terbaca — kasus itu saja yang boleh jatuh ke halaman ke-2 lewat
+      // `autoPaging`.
+      const minAllowedScale = scaleByWidth * 0.65;
+      const scale = Math.max(Math.min(scaleByWidth, scaleByHeight), minAllowedScale);
+      // Saat skala dikecilkan demi tinggi, lebar hasil render jadi lebih kecil
+      // dari contentWidthMm — offset x supaya tetap center, bukan nempel kiri.
+      const renderedWidthMm = measuredWidthPx * scale * pxToMm;
+      const xOffset = marginMm + Math.max(0, (contentWidthMm - renderedWidthMm) / 2);
+
+      await doc.html(element, {
+        x: xOffset,
+        y: marginMm,
+        html2canvas: {
+          scale,
+          useCORS: true,
+          backgroundColor: "#ffffff",
+          onclone: (clonedDoc: Document) => {
+            const style = clonedDoc.createElement("style");
+            style.textContent = PDF_COLOR_OVERRIDE;
+            clonedDoc.head.appendChild(style);
+          },
+        },
+        autoPaging: "text",
+        margin: [marginMm, 0, marginMm, 0],
+      });
+
+      doc.save(`${documentTitle}.pdf`);
+    } catch (error) {
+      console.error("Gagal mengunduh PDF quotation:", error);
+      toast.error("Gagal mengunduh PDF. Coba gunakan Cetak / Simpan PDF.");
+    } finally {
+      setDownloading(false);
+    }
+  }
+
   if (!quotation) return null;
 
   const q = quotation;
   const items = resolveItems(q);
-
   const subtotal = q.price;
   const discount = q.discount ?? 0;
   const downPayment = q.downPayment ?? 0;
@@ -135,10 +482,6 @@ export function QuotationPreview({
     richTextToPlainText(q.cancellationPolicy) || DEFAULT_CANCELLATION_POLICY;
   const closingNote = richTextToPlainText(q.closingNote) || defaultClosingNote(q.venue);
   const termIncludesBankTransfer = /bank\s+transfer/i.test(termAndCondition);
-
-  function handlePrint() {
-    window.print();
-  }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -161,11 +504,32 @@ export function QuotationPreview({
           <div className="flex items-center gap-2">
             <Button
               size="sm"
+              variant="outline"
+              onClick={handleDownload}
+              disabled={downloading}
+              title="Unduh PDF"
+              className="h-8 rounded-full px-4 text-xs cursor-pointer"
+            >
+              {downloading ? (
+                <Refresh
+                  weight="BoldDuotone"
+                  className="h-3.5 w-3.5 mr-1.5 animate-spin"
+                />
+              ) : (
+                <DownloadMinimalistic
+                  weight="BoldDuotone"
+                  className="h-3.5 w-3.5 mr-1.5"
+                />
+              )}
+              {downloading ? "Menyiapkan…" : "Download PDF"}
+            </Button>
+            <Button
+              size="sm"
               onClick={handlePrint}
               className="h-8 rounded-full px-4 text-xs cursor-pointer"
             >
               <Printer weight="BoldDuotone" className="h-3.5 w-3.5 mr-1.5" />
-              Cetak / PDF
+              Cetak / Simpan PDF
             </Button>
             <button
               type="button"
@@ -185,6 +549,7 @@ export function QuotationPreview({
         <div className="max-h-[80vh] overflow-y-auto bg-muted/40 p-4 sm:p-6">
           {/* ── Kertas dokumen ─────────────────────────────────── */}
           <div
+            ref={printRef}
             id={PRINT_AREA_ID}
             className="mx-auto w-full max-w-[760px] bg-card text-foreground shadow-sm"
           >
@@ -235,7 +600,7 @@ export function QuotationPreview({
               </div>
 
               {/* Black band */}
-              <div className="mt-5 h-7 w-full rounded-sm bg-foreground" />
+              <div className="mt-5 h-2 w-full rounded-sm bg-foreground" />
 
               {/* Tabel item */}
               <table className="mt-4 w-full border-collapse text-[11px]">
@@ -294,7 +659,10 @@ export function QuotationPreview({
               </table>
 
               {/* Term & payment + totals */}
-              <div className="mt-8 grid grid-cols-1 gap-8 border-t pt-4 sm:grid-cols-2">
+              <div
+                data-print-keep
+                className="mt-8 grid grid-cols-1 gap-8 border-t pt-4 sm:grid-cols-2"
+              >
                 {/* Kiri: term & payment */}
                 <div className="space-y-2 text-[11px] leading-relaxed">
                   <p className="font-bold text-foreground">Term &amp; Payment :</p>
@@ -430,13 +798,13 @@ export function QuotationPreview({
               </p>
 
               {/* Signature */}
-              <div className="mt-10 text-[11px]">
+              <div data-print-keep className="mt-8 text-[11px]">
                 <p className="text-foreground">
                   {q.signingLocation?.trim() || "Jakarta"},{" "}
                   {formatLongDate(q.issuedAt ?? q.createdAt)}
                 </p>
                 <div className="mt-2 w-56">
-                  <div className="flex items-end justify-center h-20">
+                  <div className="flex items-end justify-center h-16">
                     {q.signatureSales ? (
                       <Image
                         src={q.signatureSales}
@@ -459,24 +827,6 @@ export function QuotationPreview({
         </div>
       </DialogContent>
 
-      {/* Print isolation: hanya kertas dokumen yang tampil saat cetak */}
-      <style>{`
-        @media print {
-          body * { visibility: hidden !important; }
-          #${PRINT_AREA_ID}, #${PRINT_AREA_ID} * { visibility: visible !important; }
-          #${PRINT_AREA_ID} {
-            position: absolute !important;
-            left: 0 !important;
-            top: 0 !important;
-            width: 100% !important;
-            max-width: none !important;
-            box-shadow: none !important;
-            print-color-adjust: exact !important;
-            -webkit-print-color-adjust: exact !important;
-          }
-          [data-print-hide] { display: none !important; }
-        }
-      `}</style>
     </Dialog>
   );
 }

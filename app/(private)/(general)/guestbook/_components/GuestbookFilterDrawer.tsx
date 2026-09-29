@@ -32,8 +32,12 @@ const EVENT_CATEGORY_OPTIONS = [
 interface GuestbookFilterDrawerProps {
   open: boolean;
   onClose: () => void;
-  search: string;
-  onSearchChange: (value: string) => void;
+  // Pencarian teks bebas — hanya dipakai oleh halaman Guestbook utama
+  // (GuestbookClient). Overview tidak punya kolom pencarian, jadi kedua
+  // props ini opsional: section "Cari" hanya dirender kalau `onSearchChange`
+  // disediakan.
+  search?: string;
+  onSearchChange?: (value: string) => void;
   dateRange: DateRange | undefined;
   onDateRangeChange: (range: DateRange | undefined) => void;
   venueIds: string[];
@@ -46,8 +50,10 @@ interface GuestbookFilterDrawerProps {
   onStatusIdsChange: (value: string[]) => void;
   sourceOfInformationIds: string[];
   onSourceOfInformationIdsChange: (value: string[]) => void;
-  festivalIds: string[];
-  onFestivalIdsChange: (value: string[]) => void;
+  // Filter festival — hanya relevan di halaman Guestbook utama. Overview
+  // tidak menampilkan section ini ketika kedua props ini tidak disediakan.
+  festivalIds?: string[];
+  onFestivalIdsChange?: (value: string[]) => void;
   venues: { id: string; name: string }[];
   salesOptions: { id: string; name: string }[];
   onReset: () => void;
@@ -83,28 +89,33 @@ export function GuestbookFilterDrawer({
   const { data: festivalOptions = [] } = useQuery({
     queryKey: ["festivals"],
     queryFn: () => fetchJson<FestivalOption[]>("/api/festivals"),
+    enabled: onFestivalIdsChange !== undefined,
   });
   const { data: prospectStatuses = [] } = useProspectStatuses();
+  const showSearch = onSearchChange !== undefined;
+  const showFestival = onFestivalIdsChange !== undefined;
 
   return (
     <Drawer isOpen={open} onClose={onClose} title="Filter Guestbook" maxWidth="sm:max-w-sm">
       <div className="flex flex-col h-full">
         <div className="flex-1 overflow-y-auto space-y-5 pb-4">
-          <div className="space-y-1.5">
-            <Label className="text-sm font-medium">Cari</Label>
-            <div className="relative">
-              <Magnifer
-                weight="BoldDuotone"
-                className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground"
-              />
-              <Input
-                value={search}
-                onChange={(e) => onSearchChange(e.target.value)}
-                placeholder="Nama / kode / telepon / host"
-                className="rounded-xl pl-9"
-              />
+          {showSearch ? (
+            <div className="space-y-1.5">
+              <Label className="text-sm font-medium">Cari</Label>
+              <div className="relative">
+                <Magnifer
+                  weight="BoldDuotone"
+                  className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground"
+                />
+                <Input
+                  value={search ?? ""}
+                  onChange={(e) => onSearchChange?.(e.target.value)}
+                  placeholder="Nama / kode / telepon / host"
+                  className="rounded-xl pl-9"
+                />
+              </div>
             </div>
-          </div>
+          ) : null}
 
           <div className="space-y-1.5">
             <Label className="text-sm font-medium">Tanggal Berkunjung</Label>
@@ -184,18 +195,20 @@ export function GuestbookFilterDrawer({
             />
           </div>
 
-          <div className="space-y-1.5">
-            <Label className="text-sm font-medium">Festival</Label>
-            <MultiSelect
-              options={festivalOptions}
-              value={festivalIds}
-              onChange={onFestivalIdsChange}
-              placeholder="Semua Festival"
-              searchPlaceholder="Cari festival..."
-              emptyText="Festival tidak ditemukan"
-              className="rounded-xl"
-            />
-          </div>
+          {showFestival ? (
+            <div className="space-y-1.5">
+              <Label className="text-sm font-medium">Festival</Label>
+              <MultiSelect
+                options={festivalOptions}
+                value={festivalIds ?? []}
+                onChange={(v) => onFestivalIdsChange?.(v)}
+                placeholder="Semua Festival"
+                searchPlaceholder="Cari festival..."
+                emptyText="Festival tidak ditemukan"
+                className="rounded-xl"
+              />
+            </div>
+          ) : null}
         </div>
 
         <div className="sticky bottom-0 bg-background border-t border-border pt-4 mt-4 flex items-center gap-3">

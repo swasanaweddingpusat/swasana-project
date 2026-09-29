@@ -2598,15 +2598,18 @@ enum QuotationItemType {
 }
 
 model QuotationTerm {
-  id              String    @id @default(uuid())
-  quotationId     String
-  name            String
-  amount          Int
-  dueDate         DateTime?
-  sortOrder       Int       @default(0)
-  paymentStatus   String    @default("unpaid")
-  paymentEvidence String? // R2 key for payment proof (required when paid)
-  createdAt       DateTime  @default(now())
+  id          String    @id @default(uuid())
+  quotationId String
+  name        String
+  amount      Int
+  dueDate     DateTime?
+  sortOrder   Int       @default(0)
+  // Payment tracking lives at the Booking level (TermOfPayment + Ledger /
+  // PaymentAllocation), never at the quotation stage — see the comment on
+  // TermOfPayment and docs/finance-ar-invoice-issue-spec.md. paymentStatus /
+  // paymentEvidence columns were dropped here (zero code references) rather
+  // than left as dead weight.
+  createdAt   DateTime  @default(now())
 
   quotation Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
 
@@ -4255,6 +4258,7 @@ model GuestbookEntry {
   prospectStatus      ProspectStatus?       @relation(fields: [prospectStatusId], references: [id], onDelete: SetNull)
 
   @@index([checkInAt])
+  @@index([createdAt]) // matriks performance Guestbook Overview memfilter per tanggal input sales
   @@index([hostId])
   @@index([venueId])
   @@index([salesId])
@@ -4929,4 +4933,38 @@ model KpiAwardWinner {
   @@index([profileId])
   @@index([groupId])
   @@map("kpi_award_winners")
+}
+
+// ── AiProviderConfig — koneksi model AI (Anthropic langsung / gateway 9router) ─
+// Credential disimpan TERENKRIPSI (AES-256-GCM, lihat lib/crypto.ts) dan tidak
+// pernah dikirim balik ke client. Dipakai Settings > AI Model + Chat AI.
+
+enum AiProviderKind {
+  anthropic
+  router9
+}
+
+enum AiAuthScheme {
+  api_key
+  bearer
+}
+
+model AiProviderConfig {
+  id            String         @id @default(uuid())
+  name          String         @unique
+  kind          AiProviderKind @default(anthropic)
+  baseUrl       String?
+  authScheme    AiAuthScheme   @default(api_key)
+  credentialEnc String
+  modelId       String
+  isActive      Boolean        @default(true)
+  isDefault     Boolean        @default(false)
+  sortOrder     Int            @default(0)
+  lastTestedAt  DateTime?
+  lastTestOk    Boolean?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  @@index([isActive, sortOrder])
+  @@map("ai_provider_configs")
 }

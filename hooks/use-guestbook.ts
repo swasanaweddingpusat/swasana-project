@@ -1,7 +1,12 @@
 "use client";
 
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
-import { fetchGuestbookEntries, fetchGuestVisitHistory, fetchGuestbookFunnelReport } from "@/services/guestbookService";
+import {
+  fetchGuestbookEntries,
+  fetchGuestVisitHistory,
+  fetchGuestbookFunnelReport,
+  fetchGuestbookFunnelBucketEntries,
+} from "@/services/guestbookService";
 import {
   createGuestbookEntry,
   updateGuestbookEntry,
@@ -11,7 +16,7 @@ import {
   deleteBulkGuestbookEntries,
   refreshGuestbookAdsUrl,
 } from "@/actions/guestbook";
-import type { GuestbookFilterOptions } from "@/lib/queries/guestbookEntries";
+import type { GuestbookFilterOptions, GuestbookFunnelBucketKey } from "@/lib/queries/guestbookEntries";
 
 export function useGuestbookEntries(params?: GuestbookFilterOptions & { page?: number; pageSize?: number }) {
   const page = params?.page ?? 1;
@@ -30,6 +35,7 @@ export function useGuestbookEntries(params?: GuestbookFilterOptions & { page?: n
       params?.statusIds,
       params?.sourceOfInformationIds,
       params?.festivalIds,
+      params?.dateField,
     ],
     queryFn: () => fetchGuestbookEntries({ page, pageSize, ...params }),
     placeholderData: keepPreviousData,
@@ -119,5 +125,17 @@ export function useGuestbookFunnelReport(params?: GuestbookFilterOptions) {
     ],
     queryFn: () => fetchGuestbookFunnelReport(params),
     staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function useGuestbookFunnelBucketEntries(
+  bucket: GuestbookFunnelBucketKey | undefined,
+  params?: Pick<GuestbookFilterOptions, "venueIds" | "hostId" | "dateFrom" | "dateTo">
+) {
+  return useQuery({
+    queryKey: ["guestbook-funnel-bucket", bucket, params?.venueIds, params?.hostId, params?.dateFrom, params?.dateTo],
+    queryFn: () => fetchGuestbookFunnelBucketEntries(bucket as GuestbookFunnelBucketKey, params),
+    enabled: !!bucket,
+    staleTime: 60 * 1000,
   });
 }

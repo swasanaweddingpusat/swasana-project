@@ -776,10 +776,6 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
       toast.error("No. Telepon wajib diisi");
       return false;
     }
-    if (form.onlineMedium && form.onlineMedium !== "whatsapp_call" && !form.meetingUrl.trim()) {
-      toast.error("Link meeting wajib diisi");
-      return false;
-    }
     if (!form.venueId && !form.meetingLocation.trim()) {
       toast.error("Pilih venue atau isi lokasi kunjungan");
       return false;
@@ -1189,7 +1185,7 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
               <>
                   <div className="space-y-1.5">
                     <Label htmlFor="gb-onlineMedium" className="text-sm font-medium">
-                      Medium <span className="text-destructive">*</span>
+                      Medium
                     </Label>
                     <Select value={form.onlineMedium} onValueChange={(v) => setField("onlineMedium", v)}>
                       <SelectTrigger id="gb-onlineMedium" className="rounded-xl w-full">
@@ -1204,8 +1200,7 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
                   </div>
                   <div className="space-y-1.5">
                     <Label htmlFor="gb-meetingUrl" className="text-sm font-medium">
-                      Link Meeting{" "}
-                      {form.onlineMedium !== "whatsapp_call" && <span className="text-destructive">*</span>}
+                      Link Meeting
                     </Label>
                     <Input id="gb-meetingUrl" placeholder="https://..." value={form.meetingUrl} onChange={(e) => setField("meetingUrl", e.target.value)} className="rounded-xl" />
                   </div>

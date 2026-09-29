@@ -1,6 +1,6 @@
 import { bitrixList, bitrixListAll, getBitrixCrmMeta, getBitrixDealEnums } from "@/lib/bitrix";
 import { DEAL_SELECT } from "@/app/api/bitrix/deals/route";
-import { OVERVIEW_DEAL_SELECT } from "@/app/api/bitrix/overview/route";
+import { OVERVIEW_DEAL_SELECT, OVERVIEW_DB_DATE_FIELD } from "@/app/api/bitrix/overview/route";
 import { ACTIVITY_SELECT, PROVIDER_ID } from "@/app/api/bitrix/percakapan/route";
 
 // Well-known, high-value Bitrix queries force-refreshed once a day by the
@@ -25,14 +25,6 @@ export interface WarmTarget {
 function yesterdayIsoDay(): string {
   const dt = new Date();
   dt.setUTCDate(dt.getUTCDate() - 1);
-  return dt.toISOString().slice(0, 10);
-}
-
-// Mirrors the `nextDay` helper duplicated in each Bitrix route file.
-function nextIsoDay(day: string): string {
-  const [y, m, d] = day.split("-").map(Number);
-  const dt = new Date(Date.UTC(y, m - 1, d));
-  dt.setUTCDate(dt.getUTCDate() + 1);
   return dt.toISOString().slice(0, 10);
 }
 
@@ -62,11 +54,15 @@ export const WARM_TARGETS: WarmTarget[] = [
     run: () => {
       const fromDay = yesterdayIsoDay();
       const toDay = fromDay;
+      // Harus persis sama dengan filter di app/api/bitrix/overview/route.ts —
+      // rentang utamanya memakai UF_DB_DATE ("Tanggal Database"), bukan
+      // DATE_CREATE. Kalau berbeda, warmer mengisi cache key yang tidak pernah
+      // dibaca route dan halaman tetap dingin.
       return bitrixListAll("crm.deal.list", {
         select: OVERVIEW_DEAL_SELECT,
         filter: {
-          ">=DATE_CREATE": `${fromDay}T00:00:00`,
-          "<DATE_CREATE": `${nextIsoDay(toDay)}T00:00:00`,
+          [`>=${OVERVIEW_DB_DATE_FIELD}`]: fromDay,
+          [`<=${OVERVIEW_DB_DATE_FIELD}`]: toDay,
         },
         order: { DATE_CREATE: "ASC" },
       });

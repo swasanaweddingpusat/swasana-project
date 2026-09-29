@@ -11,6 +11,9 @@ import {
 import type { QuotationsResult } from "@/lib/queries/quotations";
 import type { CreateQuotationInput, UpdateQuotationInput } from "@/lib/validations/quotation";
 
+/** Mirrors the QuotationStatus enum in prisma/schema.prisma. */
+type QuotationStatusValue = "draft" | "sent" | "revised" | "accepted" | "rejected";
+
 interface QuotationsParams {
   page: number;
   pageSize: number;
@@ -94,11 +97,22 @@ export function useConvertQuotationToMiceBooking() {
   });
 }
 
+/**
+ * Status-only transition (draft -> sent -> accepted/rejected/revised).
+ *
+ * `status` is typed to the schema's enum instead of a loose string, so an invalid
+ * value fails at compile time rather than being rejected by zod at runtime. The
+ * previous `as UpdateQuotationInput` cast defeated that check entirely.
+ *
+ * NOTE: no UI currently calls this — the quotations table renders only
+ * "Siap"/"Converted", so no control ever triggers a transition. The hook is
+ * correct and ready; what is missing is the trigger in the FE.
+ */
 export function useUpdateQuotationStatus() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, status }: { id: string; status: string }) =>
-      updateQuotation({ id, status } as UpdateQuotationInput),
+    mutationFn: ({ id, status }: { id: string; status: QuotationStatusValue }) =>
+      updateQuotation({ id, status }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["quotations"] });
     },
