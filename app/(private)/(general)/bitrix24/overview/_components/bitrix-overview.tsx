@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { format } from "date-fns";
+import { toast } from "sonner";
 import type { DateRange } from "react-day-picker";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, LabelList } from "recharts";
 import {
@@ -60,6 +61,7 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import { cn } from "@/lib/utils";
+import { downloadElementAsPdf } from "@/lib/section-pdf";
 import { Drawer } from "@/components/shared/drawer";
 import { BitrixDealDetail } from "@/components/shared/BitrixDealDetail";
 import {
@@ -357,18 +359,20 @@ export function BitrixOverview() {
         <>
           {/* Metric cards */}
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+            {/* Total Transaksi lebih dulu: ia adalah penyebut yang dirujuk
+                hint kartu Database Venue di sebelahnya. */}
+            <MetricCard
+              icon={<ChatRoundLine weight="BoldDuotone" className="h-5 w-5 text-foreground" />}
+              label="Total Transaksi"
+              value={loading ? null : data?.total ?? 0}
+              onClick={data ? () => setDealFilter("all") : undefined}
+            />
             <MetricCard
               icon={<Buildings weight="BoldDuotone" className="h-5 w-5 text-foreground" />}
               label="Database Venue"
               value={loading ? null : data?.withVenue ?? 0}
               hint={loading ? undefined : `dari ${data?.total ?? 0} total transaksi`}
               onClick={data ? () => setDealFilter("withVenue") : undefined}
-            />
-            <MetricCard
-              icon={<ChatRoundLine weight="BoldDuotone" className="h-5 w-5 text-foreground" />}
-              label="Total Transaksi"
-              value={loading ? null : data?.total ?? 0}
-              onClick={data ? () => setDealFilter("all") : undefined}
             />
             <MetricCard
               icon={<VolumeLoud weight="BoldDuotone" className="h-5 w-5 text-foreground" />}
@@ -941,12 +945,64 @@ function ResponseStatusCard({
   );
 }
 
-function CardShell({ title, icon, children }: { title: string; icon: React.ReactNode; children: React.ReactNode }) {
+/**
+ * Pembungkus setiap section di halaman ini. Tombol "Download PDF" dipasang di
+ * sini supaya seluruh section mendapatkannya tanpa penempelan berulang; yang
+ * terunduh adalah elemen Card ini sendiri, jadi judul dan isinya ikut serta.
+ *
+ * `downloadable={false}` dipakai untuk section yang tidak masuk akal dicetak
+ * (mis. kartu yang isinya hanya kontrol).
+ */
+function CardShell({
+  title,
+  icon,
+  children,
+  downloadable = true,
+}: {
+  title: string;
+  icon: React.ReactNode;
+  children: React.ReactNode;
+  downloadable?: boolean;
+}) {
+  const cardRef = useRef<HTMLDivElement>(null);
+  const [downloading, setDownloading] = useState(false);
+
+  async function handleDownload(): Promise<void> {
+    const el = cardRef.current;
+    if (!el || downloading) return;
+    setDownloading(true);
+    try {
+      await downloadElementAsPdf(el, title);
+    } catch (error) {
+      console.error(`Gagal mengunduh PDF section "${title}":`, error);
+      toast.error("Gagal mengunduh PDF. Coba ulangi.");
+    } finally {
+      setDownloading(false);
+    }
+  }
+
   return (
-    <Card className="rounded-xl p-5">
-      <div className="mb-4 flex items-center gap-2">
-        {icon}
-        <h3 className="font-heading text-sm font-semibold">{title}</h3>
+    <Card ref={cardRef} className="rounded-xl p-5">
+      <div className="mb-4 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          {icon}
+          <h3 className="font-heading text-sm font-semibold">{title}</h3>
+        </div>
+        {downloadable ? (
+          // data-pdf-hide: tombolnya sendiri tidak boleh ikut tercetak.
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            data-pdf-hide
+            onClick={handleDownload}
+            disabled={downloading}
+            className="h-7 shrink-0 rounded-lg px-2 text-xs"
+          >
+            <Download weight="BoldDuotone" className="mr-1 h-3.5 w-3.5" />
+            {downloading ? "Menyiapkan…" : "PDF"}
+          </Button>
+        ) : null}
       </div>
       {children}
     </Card>
