@@ -1,5 +1,12 @@
 import type { jsPDF } from "jspdf";
 import type { Workbook, Worksheet } from "exceljs";
+import {
+  buildSalesStatusBreakdown,
+  buildStatusClientBreakdown,
+  buildNotDatabaseBreakdown,
+  type SalesStatusGroup,
+  type StatusClientRow,
+} from "@/lib/bitrix-overview-status";
 
 interface Bucket {
   key: string;
@@ -22,6 +29,14 @@ interface SalesBucket {
   mandiri: number;
 }
 
+interface DealForStatus {
+  salesId: string;
+  salesName: string;
+  stageLabel: string;
+  hasVenue: boolean;
+  issueLabel: string;
+}
+
 interface OverviewData {
   range: { from: string; to: string };
   total: number;
@@ -35,6 +50,7 @@ interface OverviewData {
   ads: AdBucket[];
   sales: SalesBucket[];
   venues: Bucket[];
+  deals: DealForStatus[];
 }
 
 function stamp(): string {
@@ -72,7 +88,23 @@ export async function exportBitrixOverviewExcel(data: OverviewData): Promise<voi
   const sales = wb.addWorksheet("Database Sales");
   buildSalesSheet(sales, data.sales);
 
-  // 5. Sumber Iklan sheet.
+  // 5. Komposisi Tahapan sheet — overall stage/status composition.
+  const statusClient = buildStatusClientBreakdown(data.deals);
+  const statusSheet = wb.addWorksheet("Komposisi Tahapan");
+  buildBucketSheet(statusSheet, "Komposisi Tahapan", statusClient, ["Status", "Jumlah"]);
+
+  // 6. Detail Status per Sales sheet — per-sales breakdown of stage/status.
+  const salesStatus = buildSalesStatusBreakdown(data.deals);
+  const salesStatusSheet = wb.addWorksheet("Detail Status per Sales");
+  buildSalesStatusSheet(salesStatusSheet, salesStatus);
+
+  // 7. Tidak Jadi Database sheet — per-sales breakdown of deals that did NOT
+  // become a database entry (!hasVenue), by issue label.
+  const notDatabase = buildNotDatabaseBreakdown(data.deals);
+  const notDatabaseSheet = wb.addWorksheet("Tidak Jadi Database");
+  buildSalesStatusSheet(notDatabaseSheet, notDatabase, "Detail Data Tidak Jadi Database per Sales");
+
+  // 8. Sumber Iklan sheet.
   const ads = wb.addWorksheet("Sumber Iklan");
   buildAdsSheet(ads, data.ads);
 
@@ -130,6 +162,20 @@ export async function exportBitrixOverviewPdf(data: OverviewData): Promise<void>
   y = drawPdfBucketSection(doc, "Sumber Database", data.sources, y, margin, pageWidth, pageHeight);
   y = drawPdfBucketSection(doc, "Venue", data.venues, y, margin, pageWidth, pageHeight);
   y = drawPdfSalesSection(doc, data.sales, y, margin, pageWidth, pageHeight);
+  const statusClient = buildStatusClientBreakdown(data.deals);
+  y = drawPdfBucketSection(doc, "Komposisi Tahapan", statusClient, y, margin, pageWidth, pageHeight);
+  const salesStatus = buildSalesStatusBreakdown(data.deals);
+  y = drawPdfSalesStatusSection(doc, salesStatus, y, margin, pageWidth, pageHeight);
+  const notDatabase = buildNotDatabaseBreakdown(data.deals);
+  y = drawPdfSalesStatusSection(
+    doc,
+    notDatabase,
+    y,
+    margin,
+    pageWidth,
+    pageHeight,
+    "Detail Data Tidak Jadi Database per Sales",
+  );
   drawPdfAdsSection(doc, data.ads, y, margin, pageWidth, pageHeight);
 
   const ab = doc.output("arraybuffer") as ArrayBuffer;
@@ -177,6 +223,25 @@ function buildSalesSheet(ws: Worksheet, buckets: SalesBucket[] | undefined): voi
   ws.addRow(["Nama", "Jumlah", "Kantor", "Mandiri", "Getback"]);
   for (const b of buckets ?? []) {
     ws.addRow([b.label, b.count, b.kantor, b.mandiri, b.getback]);
+  }
+  fitColumns(ws);
+}
+
+function buildSalesStatusSheet(
+  ws: Worksheet,
+  groups: SalesStatusGroup[],
+  title = "Detail Status Database per Sales",
+): void {
+  const heading = ws.addRow([title]);
+  heading.font = { bold: true, size: 13 };
+  ws.addRow([]);
+  ws.addRow(["Nama Sales", "Total"]);
+  for (const group of groups) {
+    const salesRow = ws.addRow([group.label, group.total]);
+    salesRow.font = { bold: true };
+    for (const s of group.statuses) {
+      ws.addRow(["  " + s.label, s.count]);
+    }
   }
   fitColumns(ws);
 }
@@ -268,6 +333,50 @@ function drawPdfSalesSection(
     y += 13;
   }
   y += 10;
+  return y;
+}
+
+function drawPdfSalesStatusSection(
+  doc: jsPDF,
+  groups: SalesStatusGroup[],
+  y: number,
+  margin: number,
+  pageWidth: number,
+  pageHeight: number,
+  title = "Detail Status Database per Sales",
+): number {
+  if (y + 40 > pageHeight - margin) {
+    doc.addPage();
+    y = margin;
+  }
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(11);
+  doc.text(title, margin, y);
+  y += 16;
+
+  for (const group of groups) {
+    if (y > pageHeight - margin) {
+      doc.addPage();
+      y = margin;
+    }
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9);
+    doc.text(group.label, margin, y);
+    doc.text(String(group.total), pageWidth - margin, y, { align: "right" });
+    y += 13;
+
+    doc.setFont("helvetica", "normal");
+    for (const s of group.statuses) {
+      if (y > pageHeight - margin) {
+        doc.addPage();
+        y = margin;
+      }
+      doc.text(s.label, margin + 12, y);
+      doc.text(String(s.count), pageWidth - margin, y, { align: "right" });
+      y += 12;
+    }
+    y += 6;
+  }
   return y;
 }
 
