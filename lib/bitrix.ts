@@ -131,11 +131,13 @@ export async function bitrixList<T = Record<string, unknown>>(
 /**
  * Fetch EVERY page of a Bitrix list method by walking the `next` cursor.
  *
- * Guarded by `maxPages` purely as a runaway-loop safety net (a broken cursor
- * could otherwise spin forever) — NOT a data cap. Callers like the Bitrix24
- * Overview let users pick arbitrarily wide date ranges (a full quarter/year of
- * deals can run into the thousands), so the cap must sit well above any
- * realistic result set: 1000 pages = 50,000 rows.
+ * `maxPages` is purely an infinite-loop safety net, not an expected volume —
+ * callers like the Overview and export routes accept arbitrary (multi-week or
+ * multi-month) date ranges, and the old default of 40 pages (2000 rows) would
+ * silently truncate wider ranges, under-reporting every count derived from the
+ * result versus Bitrix's real numbers. 500 pages (25,000 rows) comfortably
+ * covers this portal's realistic volume; if it's ever hit, that's logged
+ * instead of silently returning a partial result.
  */
 export async function bitrixListAll<T = Record<string, unknown>>(
   method: string,
@@ -144,11 +146,12 @@ export async function bitrixListAll<T = Record<string, unknown>>(
     select?: string[];
     order?: Record<string, "ASC" | "DESC">;
   } = {},
-  maxPages = 1000,
+  maxPages = 500,
 ): Promise<{ items: T[]; total: number }> {
   const all: T[] = [];
   let start = 0;
   let total = 0;
+  let truncated = false;
 
   for (let page = 0; page < maxPages; page++) {
     const res = await bitrixList<T>(method, { ...params, start });
@@ -156,6 +159,13 @@ export async function bitrixListAll<T = Record<string, unknown>>(
     total = res.total;
     if (res.next === undefined || res.next === null) break;
     start = res.next;
+    if (page === maxPages - 1) truncated = true;
+  }
+
+  if (truncated) {
+    console.error(
+      `[bitrix] bitrixListAll("${method}") hit the ${maxPages}-page cap — result truncated to ${all.length}/${total} rows.`,
+    );
   }
 
   return { items: all, total };

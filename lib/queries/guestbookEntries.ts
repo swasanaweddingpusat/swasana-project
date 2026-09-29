@@ -504,6 +504,105 @@ async function computeProspectBreakdown(
   };
 }
 
+export type GuestbookFunnelBucketKey =
+  | "database"
+  | "onlineMeeting"
+  | "belumVisit"
+  | "visitVenue"
+  | "tidakJadiVisitLost"
+  | "deal"
+  | "noDealLost"
+  | "cold"
+  | "warm"
+  | "hot"
+  | "noResponse"
+  | "totalAds";
+
+export interface GuestbookFunnelBucketEntry {
+  id: string;
+  visitorName: string;
+  companyName: string | null;
+  phoneNumber: string | null;
+  checkInAt: Date;
+  prospectStatus: { id: string; name: string } | null;
+  host: { id: string; fullName: string | null } | null;
+  venue: { id: string; name: string } | null;
+  sourceOfInformation: { id: string; name: string } | null;
+  bitrixAdsUrl: string | null;
+}
+
+const FUNNEL_BUCKET_TAKE = 200;
+
+/** Status yang dikurangkan dari Database untuk mendapat sisa Belum Visit —
+ *  harus persis sama dengan yang dipakai di computeFunnelReport supaya angka
+ *  card dan isi drawer selalu konsisten. */
+const BELUM_VISIT_EXCLUDED_STATUSES = [
+  PROSPECT_STATUS.ONLINE_MEETING,
+  PROSPECT_STATUS.VISIT_VENUE,
+  PROSPECT_STATUS.TIDAK_JADI_VISIT_LOST,
+  PROSPECT_STATUS.NO_DEAL_LOST,
+  PROSPECT_STATUS.DEAL,
+];
+
+const FUNNEL_BUCKET_STATUS_NAME: Partial<Record<GuestbookFunnelBucketKey, string>> = {
+  onlineMeeting: PROSPECT_STATUS.ONLINE_MEETING,
+  visitVenue: PROSPECT_STATUS.VISIT_VENUE,
+  tidakJadiVisitLost: PROSPECT_STATUS.TIDAK_JADI_VISIT_LOST,
+  deal: PROSPECT_STATUS.DEAL,
+  noDealLost: PROSPECT_STATUS.NO_DEAL_LOST,
+  cold: PROSPECT_STATUS.COLD,
+  warm: PROSPECT_STATUS.WARM,
+  hot: PROSPECT_STATUS.HOT,
+  noResponse: PROSPECT_STATUS.NO_RESPONSE,
+};
+
+/** Daftar entry mentah di balik satu bucket funnel/ads Overview — dipakai drawer
+ *  saat sebuah stat card di-klik. Logika pencocokan bucket sengaja dijaga persis
+ *  sama dengan computeFunnelReport/computeProspectBreakdown di atas. */
+export async function getGuestbookFunnelBucketEntries(
+  profileId: string | undefined,
+  dataScope: DataScope | undefined,
+  filters: GuestbookFilterOptions | undefined,
+  bucket: GuestbookFunnelBucketKey
+): Promise<GuestbookFunnelBucketEntry[]> {
+  const scopeWhere = (await buildOwnerScopeWhere(profileId, dataScope, "salesId")) as Prisma.GuestbookEntryWhereInput;
+  const baseWhere: Prisma.GuestbookEntryWhereInput = { ...scopeWhere, ...buildGuestbookWhere(filters ?? {}) };
+
+  let where: Prisma.GuestbookEntryWhereInput;
+  if (bucket === "database") {
+    where = baseWhere;
+  } else if (bucket === "totalAds") {
+    where = { AND: [baseWhere, { bitrixAdsUrl: { not: null } }, { bitrixAdsUrl: { not: "" } }] };
+  } else if (bucket === "belumVisit") {
+    where = {
+      AND: [
+        baseWhere,
+        { OR: [{ prospectStatusId: null }, { prospectStatus: { name: { notIn: BELUM_VISIT_EXCLUDED_STATUSES } } }] },
+      ],
+    };
+  } else {
+    where = { ...baseWhere, prospectStatus: { name: FUNNEL_BUCKET_STATUS_NAME[bucket] } };
+  }
+
+  return db.guestbookEntry.findMany({
+    where,
+    select: {
+      id: true,
+      visitorName: true,
+      companyName: true,
+      phoneNumber: true,
+      checkInAt: true,
+      prospectStatus: { select: { id: true, name: true } },
+      host: { select: { id: true, fullName: true } },
+      venue: { select: { id: true, name: true } },
+      sourceOfInformation: { select: { id: true, name: true } },
+      bitrixAdsUrl: true,
+    },
+    orderBy: { checkInAt: "desc" },
+    take: FUNNEL_BUCKET_TAKE,
+  });
+}
+
 /** Powers Guestbook Overview performance cards. Semua status/funnel mengikuti
  *  filter aktif tanpa filter Ads URL. `bitrixAdsUrl` hanya dipakai menghitung
  *  Total Ads URL sebagai denominator rasio Ads Performance. */
