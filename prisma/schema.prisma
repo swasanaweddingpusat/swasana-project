@@ -2598,15 +2598,18 @@ enum QuotationItemType {
 }
 
 model QuotationTerm {
-  id              String    @id @default(uuid())
-  quotationId     String
-  name            String
-  amount          Int
-  dueDate         DateTime?
-  sortOrder       Int       @default(0)
-  paymentStatus   String    @default("unpaid")
-  paymentEvidence String? // R2 key for payment proof (required when paid)
-  createdAt       DateTime  @default(now())
+  id          String    @id @default(uuid())
+  quotationId String
+  name        String
+  amount      Int
+  dueDate     DateTime?
+  sortOrder   Int       @default(0)
+  // Payment tracking lives at the Booking level (TermOfPayment + Ledger /
+  // PaymentAllocation), never at the quotation stage — see the comment on
+  // TermOfPayment and docs/finance-ar-invoice-issue-spec.md. paymentStatus /
+  // paymentEvidence columns were dropped here (zero code references) rather
+  // than left as dead weight.
+  createdAt   DateTime  @default(now())
 
   quotation Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
 
