@@ -60,16 +60,7 @@ export const createGuestbookEntrySchema = z
     }
 
     // Paket bersifat opsional untuk create maupun edit guestbook.
-
-    // Dulu aturan ini bercabang per interactionType. Setelah field itu dihapus,
-    // medium/link meeting hanya divalidasi kalau user memang mengisinya.
-    if (val.onlineMedium && val.onlineMedium !== 'whatsapp_call' && !val.meetingUrl?.trim()) {
-      ctx.addIssue({
-        path: ['meetingUrl'],
-        code: z.ZodIssueCode.custom,
-        message: 'Link meeting wajib diisi',
-      });
-    }
+    // Medium dan link meeting bersifat opsional — boleh dikosongkan.
 
     if (!val.venueId && !val.meetingLocation?.trim()) {
       ctx.addIssue({
