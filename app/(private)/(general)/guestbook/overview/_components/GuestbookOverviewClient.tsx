@@ -57,9 +57,13 @@ export function GuestbookOverviewClient() {
 
   // pageSize 1: this page only renders aggregate stats, so the paginated rows
   // are dead weight — the overview block is computed over the whole filter set.
+  // dateField "createdAt": seluruh metrik Overview dihitung per tanggal input
+  // sales, sama dengan kartu Database/Ads Performance. Tanpa ini angka Database
+  // di dua blok tersebut tidak akan cocok karena beda kolom tanggal.
   const { data, isLoading } = useGuestbookEntries({
     page: 1,
     pageSize: 1,
+    dateField: "createdAt",
     dateFrom: dateRange?.from ? format(dateRange.from, "yyyy-MM-dd") : undefined,
     dateTo: dateRange?.to ? format(dateRange.to, "yyyy-MM-dd") : undefined,
     statusIds: filterStatusIds.length > 0 ? filterStatusIds : undefined,

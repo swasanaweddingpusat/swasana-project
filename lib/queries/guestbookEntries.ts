@@ -18,7 +18,13 @@ export interface GuestbookFilterOptions {
   statusIds?: string[];
   sourceOfInformationIds?: string[];
   festivalIds?: string[];
+  /** Kolom tanggal yang dipakai filter rentang. Default `checkInAt`.
+   *  - `checkInAt` : tanggal kunjungan tamu (list & export).
+   *  - `createdAt` : tanggal sales input data (seluruh metrik Overview). */
+  dateField?: GuestbookDateField;
 }
+
+export type GuestbookDateField = "checkInAt" | "createdAt";
 
 export interface GuestbookEntriesOptions extends GuestbookFilterOptions {
   page?: number;
@@ -44,7 +50,7 @@ export function buildGuestbookWhere(filters: GuestbookFilterOptions): Prisma.Gue
   if (filters.hostId) where.hostId = filters.hostId;
 
   if (filters.dateFrom || filters.dateTo) {
-    where.checkInAt = {
+    where[filters.dateField ?? "checkInAt"] = {
       ...(filters.dateFrom && { gte: new Date(`${filters.dateFrom}T00:00:00`) }),
       ...(filters.dateTo && { lte: new Date(`${filters.dateTo}T23:59:59.999`) }),
     };
@@ -411,7 +417,6 @@ export interface GuestbookFunnelReport {
   noDealLost: number;
   deal: number;
   databaseToVisitPct: number;
-  visitToDealPct: number;
   databaseToDealPct: number;
 }
 
@@ -424,9 +429,13 @@ export interface GuestbookProspectBreakdown {
 
 export interface GuestbookFunnelReportResult {
   overall: GuestbookFunnelReport;
+  /** Funnel yang datasetnya dibatasi ke entry ber-Bitrix Ads URL. Pembilang dan
+   *  penyebut rasio Ads harus sama-sama dari sini, kalau tidak persentasenya
+   *  bisa tembus 100% (mis. Visit Venue keseluruhan dibagi Total Ads URL). */
+  ads: GuestbookFunnelReport;
   /** Jumlah entry pada filter aktif yang benar-benar memiliki Bitrix Ads URL. */
   totalAdsUrl: number;
-  /** Breakdown status hanya mengikuti filter aktif (tanggal/venue/PIC), bukan Ads URL. */
+  /** Breakdown status untuk kartu Ads — dataset sama dengan `ads` dan `totalAdsUrl`. */
   prospectBreakdown: GuestbookProspectBreakdown;
 }
 
@@ -487,7 +496,6 @@ async function computeFunnelReport(
     noDealLost,
     deal,
     databaseToVisitPct: database > 0 ? (visitCount / database) * 100 : 0,
-    visitToDealPct: visitCount > 0 ? (deal / visitCount) * 100 : 0,
     databaseToDealPct: database > 0 ? (deal / database) * 100 : 0,
   };
 }
@@ -603,27 +611,34 @@ export async function getGuestbookFunnelBucketEntries(
   });
 }
 
-/** Powers Guestbook Overview performance cards. Semua status/funnel mengikuti
- *  filter aktif tanpa filter Ads URL. `bitrixAdsUrl` hanya dipakai menghitung
- *  Total Ads URL sebagai denominator rasio Ads Performance. */
+/** Powers Guestbook Overview performance cards.
+ *
+ *  Rentang tanggal memakai `createdAt` (tanggal sales input data), BUKAN
+ *  `checkInAt`. Matriks ini mengukur produktivitas input sales pada periode
+ *  terpilih, jadi harus dikunci ke kolom yang sama dengan kartu ringkasan
+ *  Overview — kalau beda, Database di matriks dan di kartu tidak akan cocok. */
 export async function getGuestbookFunnelReport(
   profileId: string | undefined,
   dataScope: DataScope | undefined,
   filters?: GuestbookFilterOptions
 ): Promise<GuestbookFunnelReportResult> {
   const scopeWhere = (await buildOwnerScopeWhere(profileId, dataScope, "salesId")) as Prisma.GuestbookEntryWhereInput;
-  const where: Prisma.GuestbookEntryWhereInput = { ...scopeWhere, ...buildGuestbookWhere(filters ?? {}) };
+  const where: Prisma.GuestbookEntryWhereInput = {
+    ...scopeWhere,
+    ...buildGuestbookWhere({ ...(filters ?? {}), dateField: "createdAt" }),
+  };
   // Total Ads URL hanya menghitung entry yang benar-benar punya URL iklan.
   // `not: null` saja masih menerima string kosong dari data legacy.
   const adsWhere: Prisma.GuestbookEntryWhereInput = {
     AND: [where, { bitrixAdsUrl: { not: null } }, { bitrixAdsUrl: { not: "" } }],
   };
 
-  const [overall, totalAdsUrl, prospectBreakdown] = await Promise.all([
+  const [overall, ads, totalAdsUrl, prospectBreakdown] = await Promise.all([
     computeFunnelReport(where),
+    computeFunnelReport(adsWhere),
     db.guestbookEntry.count({ where: adsWhere }),
-    computeProspectBreakdown(where),
+    computeProspectBreakdown(adsWhere),
   ]);
 
-  return { overall, totalAdsUrl, prospectBreakdown };
+  return { overall, ads, totalAdsUrl, prospectBreakdown };
 }

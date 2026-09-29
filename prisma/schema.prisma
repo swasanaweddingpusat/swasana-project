@@ -4255,6 +4255,7 @@ model GuestbookEntry {
   prospectStatus      ProspectStatus?       @relation(fields: [prospectStatusId], references: [id], onDelete: SetNull)
 
   @@index([checkInAt])
+  @@index([createdAt]) // matriks performance Guestbook Overview memfilter per tanggal input sales
   @@index([hostId])
   @@index([venueId])
   @@index([salesId])
