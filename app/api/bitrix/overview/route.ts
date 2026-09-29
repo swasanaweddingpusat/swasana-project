@@ -167,58 +167,68 @@ export async function GET(request: Request) {
     // UF_DB_DATE bertipe date-only, jadi batasnya memakai ISO day telanjang dan
     // `to` bersifat inklusif lewat `<=` pada hari yang sama.
     //
-    // Satu query mengambil DUA populasi sekaligus lewat LOGIC OR:
-    //   cabang 0 — punya Tanggal Database di dalam rentang. Ini yang memberi
+    // DUA query mengambil dua populasi:
+    //   query pertama — punya Tanggal Database di dalam rentang. Ini yang memberi
     //               makan seluruh angka ber-nama "Database*".
-    //   cabang 1 — Tanggal Database kosong, tetapi dibuat di CRM pada rentang
-    //               yang sama. Deal ini hanya menambah Total Transaksi.
+    //   query kedua — Tanggal Database kosong, tetapi dibuat di CRM pada rentang
+    //               yang sama. Deal ini HANYA menambah Total Transaksi.
     //
-    // Digabung agar Total Transaksi tetap menjadi penyebut yang sah bagi
-    // Database Venue ("78 dari 149"), alih-alih membandingkan dua populasi dari
-    // dua query terpisah. Pemisahannya dilakukan di sisi kita lewat predikat
-    // hasDbDate di bawah.
-    const filter: Record<string, unknown> = {
-      LOGIC: "OR",
-      "0": {
-        [`>=${UF_DB_DATE}`]: fromDay,
-        [`<=${UF_DB_DATE}`]: toDay,
-      },
-      "1": {
-        [`=${UF_DB_DATE}`]: "",
-        ">=DATE_CREATE": `${fromDay}T00:00:00`,
-        "<=DATE_CREATE": `${toDay}T23:59:59`,
-      },
-    };
-    // Filter lain berada di level atas, jadi berlaku untuk KEDUA cabang OR.
-    if (pipeline) filter.CATEGORY_ID = pipeline;
-    if (clientId) filter.CONTACT_ID = clientId;
-    if (salesId) filter.ASSIGNED_BY_ID = salesId;
+    // Dua query terpisah, BUKAN satu query ber-LOGIC OR. Bitrix memperlakukan
+    // syarat di dalam satu cabang OR sebagai OR juga, bukan AND, sehingga
+    // `{ UF kosong, DATE_CREATE dalam rentang }` melebar menjadi "semua deal
+    // tanpa Tanggal Database" tanpa batas tanggal sama sekali — terukur 33.784
+    // baris untuk rentang yang seharusnya hanya 5.083. Dua query menjaga
+    // semantik AND di tiap sisi.
+    const sharedFilter: Record<string, string | string[]> = {};
+    if (pipeline) sharedFilter.CATEGORY_ID = pipeline;
+    if (clientId) sharedFilter.CONTACT_ID = clientId;
+    if (salesId) sharedFilter.ASSIGNED_BY_ID = salesId;
     if (stageName) {
       const ids = meta.stageIdsByName[stageName] ?? [];
-      filter.STAGE_ID = ids.length > 0 ? ids : ["__none__"];
+      sharedFilter.STAGE_ID = ids.length > 0 ? ids : ["__none__"];
     }
     if (issueName) {
       // Resolve the issue label back to its enum item ID (label → ID).
       const issueEnumForFilter = enums[UF_ISSUE] ?? {};
       const issueId = Object.entries(issueEnumForFilter).find(([, label]) => label === issueName)?.[0];
-      filter[UF_ISSUE] = issueId ?? "__none__";
+      sharedFilter[UF_ISSUE] = issueId ?? "__none__";
     }
-    // dbFrom/dbTo dipertahankan demi kompatibilitas pemanggil lama: mempersempit
-    // cabang Tanggal Database saja. UI sendiri tidak lagi mengirimkannya.
-    const dbBranch = filter["0"] as Record<string, string>;
-    if (isIsoDay(dbFrom) && dbFrom > fromDay) dbBranch[`>=${UF_DB_DATE}`] = dbFrom;
-    if (isIsoDay(dbTo) && dbTo < toDay) dbBranch[`<=${UF_DB_DATE}`] = dbTo;
 
-    const { items } = await bitrixListAll<RawDeal>("crm.deal.list", {
-      select: OVERVIEW_DEAL_SELECT,
-      filter,
-      order: { DATE_CREATE: "ASC" },
-    });
+    // dbFrom/dbTo dipertahankan demi kompatibilitas pemanggil lama: mempersempit
+    // rentang Tanggal Database. UI sendiri tidak lagi mengirimkannya.
+    const dbFromEff = isIsoDay(dbFrom) && dbFrom > fromDay ? dbFrom : fromDay;
+    const dbToEff = isIsoDay(dbTo) && dbTo < toDay ? dbTo : toDay;
+
+    const dbFilter: Record<string, unknown> = {
+      ...sharedFilter,
+      [`>=${UF_DB_DATE}`]: dbFromEff,
+      [`<=${UF_DB_DATE}`]: dbToEff,
+    };
+    const noDbFilter: Record<string, unknown> = {
+      ...sharedFilter,
+      [`=${UF_DB_DATE}`]: "",
+      ">=DATE_CREATE": `${fromDay}T00:00:00`,
+      "<=DATE_CREATE": `${toDay}T23:59:59`,
+    };
+
+    const [dbRes, noDbRes] = await Promise.all([
+      bitrixListAll<RawDeal>("crm.deal.list", {
+        select: OVERVIEW_DEAL_SELECT,
+        filter: dbFilter,
+        order: { DATE_CREATE: "ASC" },
+      }),
+      bitrixListAll<RawDeal>("crm.deal.list", {
+        select: OVERVIEW_DEAL_SELECT,
+        filter: noDbFilter,
+        order: { DATE_CREATE: "ASC" },
+      }),
+    ]);
+    const items = [...dbRes.items, ...noDbRes.items];
 
     // Still needed for the Database Sales breakdown labels (ASSIGNED_BY_ID → name).
     const userMap = await resolveBitrixUsers(items.map((d) => d.ASSIGNED_BY_ID ?? "").filter(Boolean));
 
-    // Pemisahan dua populasi hasil LOGIC OR di atas:
+    // Pemisahan dua populasi hasil dua query di atas:
     //   `items`   — SEMUA transaksi pada rentang. Hanya dipakai Total Transaksi.
     //   `dbItems` — hanya yang punya Tanggal Database. Ini sumber setiap angka
     //               bernama "Database*" (Sumber Database, Database Venue,
