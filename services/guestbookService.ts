@@ -3,6 +3,8 @@ import type {
   GuestbookFilterOptions,
   GuestVisitHistoryItem,
   GuestbookFunnelReportResult,
+  GuestbookFunnelBucketKey,
+  GuestbookFunnelBucketEntry,
 } from "@/lib/queries/guestbookEntries";
 
 export async function fetchGuestbookEntries(
@@ -52,4 +54,20 @@ export async function fetchGuestbookFunnelReport(
   const res = await fetch(`/api/guestbook/funnel-report${qs ? `?${qs}` : ""}`);
   if (!res.ok) throw new Error("Failed to fetch guestbook funnel report");
   return res.json() as Promise<GuestbookFunnelReportResult>;
+}
+
+export async function fetchGuestbookFunnelBucketEntries(
+  bucket: GuestbookFunnelBucketKey,
+  params?: Pick<GuestbookFilterOptions, "venueIds" | "hostId" | "dateFrom" | "dateTo">
+): Promise<GuestbookFunnelBucketEntry[]> {
+  const searchParams = new URLSearchParams();
+  searchParams.set("bucket", bucket);
+  if (params?.venueIds?.length) searchParams.set("venueIds", params.venueIds.join(","));
+  if (params?.hostId) searchParams.set("hostId", params.hostId);
+  if (params?.dateFrom) searchParams.set("dateFrom", params.dateFrom);
+  if (params?.dateTo) searchParams.set("dateTo", params.dateTo);
+
+  const res = await fetch(`/api/guestbook/funnel-bucket?${searchParams.toString()}`);
+  if (!res.ok) throw new Error("Failed to fetch guestbook funnel bucket entries");
+  return res.json() as Promise<GuestbookFunnelBucketEntry[]>;
 }

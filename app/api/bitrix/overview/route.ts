@@ -43,7 +43,25 @@ export const OVERVIEW_DEAL_SELECT = [
 
 // Venue enum values that aren't real venues — excluded from the venue breakdown
 // and from the "database venue" total, matching the daily report's scope.
+// Matched case-insensitively (see isNonVenueLabel) since the enum's raw casing
+// in Bitrix isn't guaranteed to be all-caps.
 const NON_VENUE_LABELS = new Set(["MICE", "NON VENUE"]);
+
+function isNonVenueLabel(label: string): boolean {
+  return NON_VENUE_LABELS.has(label.toUpperCase());
+}
+
+// A deal only counts toward "Database Sales" once a real sales agent has
+// processed it into the standard "DB - <VENUE> - <TANGGAL> - <Nama>" title
+// convention (confirmed against live Bitrix deal titles — every "DB"-led
+// title observed is followed by " -", no false positives). Raw/unprocessed
+// leads are still titled with just the contact's name/phone number and sit
+// under whoever triaged them first — often Customer Service/front-desk
+// (e.g. Fauzan, Rifat) routing the chat, not a sales rep — so they must not
+// be counted as that person's sales database.
+function isProcessedDatabaseTitle(title: string | null): boolean {
+  return /^\s*db\s*-/i.test(title ?? "");
+}
 
 // "Database mandiri" = leads the sales sourced themselves (Live TikTok streams or
 // Referral); everything else is "database kantor" (office/ads-driven channels).
@@ -208,9 +226,17 @@ export async function GET(request: Request) {
       .sort((a, b) => b.count - a.count);
     const fromAds = items.length - organik;
 
-    // Database Sales — per responsible user, with getback count.
+    // Database Sales — per responsible user, with getback count. Only deals
+    // processed into the "DB - ..." title convention count as that sales'
+    // database; unprocessed leads (still titled with just the contact's
+    // name/phone) are typically still sitting under whoever triaged them
+    // first — often CS/front-desk (Fauzan, Rifat) — not a real sales rep.
+    const processedDealIds = new Set(
+      items.filter((d) => isProcessedDatabaseTitle(d.TITLE)).map((d) => d.ID),
+    );
     const salesMap = new Map<string, SalesBucket>();
     for (const d of items) {
+      if (!isProcessedDatabaseTitle(d.TITLE)) continue;
       const key = d.ASSIGNED_BY_ID ?? "UNKNOWN";
       const label = userMap[key] ?? (key === "UNKNOWN" ? "Tidak ditetapkan" : `#${key}`);
       const bucket = salesMap.get(key) ?? {
@@ -239,7 +265,7 @@ export async function GET(request: Request) {
     for (const d of items) {
       const venueId = d[UF_VENUE];
       const label = venueId ? venueEnum[venueId] : undefined;
-      if (!label || NON_VENUE_LABELS.has(label)) continue;
+      if (!label || isNonVenueLabel(label)) continue;
       venueMap.set(label, (venueMap.get(label) ?? 0) + 1);
       withVenue++;
     }
@@ -255,10 +281,7 @@ export async function GET(request: Request) {
     // sessions/metrics so the per-sales sum always matches the aggregate.
     const dealIds = items.map((d) => d.ID);
     const assignedByDeal = new Map(items.map((d) => [d.ID, d.ASSIGNED_BY_ID ?? "UNKNOWN"]));
-    let responded = 0;
-    let notResponded = 0;
-    const responseBySalesMap = new Map<string, { responded: number; notResponded: number }>();
-    // Per-deal response status: true = all sessions ok, false = has pending, null = no sessions
+    // Per-deal response status: true = all sessions ok, false = has pending, absent = no sessions
     const dealResponseMap = new Map<string, boolean>();
     if (dealIds.length > 0) {
       const { items: acts } = await bitrixListAll<{
@@ -287,33 +310,40 @@ export async function GET(request: Request) {
       const metrics = await resolveSessionMetrics(
         [...sessionsBySessionId.values()].map(({ sessionId, lastUpdated }) => ({ sessionId, lastUpdated })),
       );
+      // Fold every session onto its owning deal FIRST — a deal can have more than
+      // one Open Lines session, and counting per-session (as this used to) let a
+      // single deal contribute to both "responded" and "not responded" at once,
+      // inflating both totals past the real number of deals. Aggregates below are
+      // derived from this deal-grained map so they always match deals[].responded.
       for (const { sessionId, dealId } of sessionsBySessionId.values()) {
-        const isPending = metrics[sessionId]?.hasPending === true;
-        if (isPending) notResponded++;
-        else responded++;
-
-        const userId = (dealId ? assignedByDeal.get(dealId) : undefined) ?? "UNKNOWN";
-        const bucket = responseBySalesMap.get(userId) ?? { responded: 0, notResponded: 0 };
-        if (isPending) bucket.notResponded++;
-        else bucket.responded++;
-        responseBySalesMap.set(userId, bucket);
-
-        const salesBucket = salesMap.get(userId);
-        if (salesBucket) {
-          if (isPending) salesBucket.notResponded++;
-          else salesBucket.responded++;
+        if (!dealId) continue;
+        const isPendingSession = metrics[sessionId]?.hasPending === true;
+        const current = dealResponseMap.get(dealId);
+        if (current === undefined) {
+          dealResponseMap.set(dealId, !isPendingSession);
+        } else if (isPendingSession) {
+          dealResponseMap.set(dealId, false);
         }
+      }
+    }
 
-        // Track per-deal: if any session is pending, the deal is not fully responded.
-        if (dealId) {
-          const isPendingSession = metrics[sessionId]?.hasPending === true;
-          const current = dealResponseMap.get(dealId);
-          if (current === undefined) {
-            dealResponseMap.set(dealId, !isPendingSession);
-          } else if (isPendingSession) {
-            dealResponseMap.set(dealId, false);
-          }
-        }
+    let responded = 0;
+    let notResponded = 0;
+    const responseBySalesMap = new Map<string, { responded: number; notResponded: number }>();
+    for (const [dealId, isResponded] of dealResponseMap) {
+      const userId = assignedByDeal.get(dealId) ?? "UNKNOWN";
+      if (isResponded) responded++;
+      else notResponded++;
+
+      const bucket = responseBySalesMap.get(userId) ?? { responded: 0, notResponded: 0 };
+      if (isResponded) bucket.responded++;
+      else bucket.notResponded++;
+      responseBySalesMap.set(userId, bucket);
+
+      const salesBucket = processedDealIds.has(dealId) ? salesMap.get(userId) : undefined;
+      if (salesBucket) {
+        if (isResponded) salesBucket.responded++;
+        else salesBucket.notResponded++;
       }
     }
 
@@ -336,7 +366,7 @@ export async function GET(request: Request) {
         meta.sources[d.SOURCE_ID ?? "UNKNOWN"] ?? labelFromSourceId(d.SOURCE_ID ?? "UNKNOWN");
       const venueId = d[UF_VENUE];
       const rawVenueLabel = venueId ? (venueEnum[venueId] ?? "") : "";
-      const hasVenue = !!rawVenueLabel && !NON_VENUE_LABELS.has(rawVenueLabel);
+      const hasVenue = !!rawVenueLabel && !isNonVenueLabel(rawVenueLabel);
       const issueId = d[UF_ISSUE];
       const issueLabel = issueId ? (issueEnum[issueId] ?? "") : "";
       const reasonId = d[UF_REASON];

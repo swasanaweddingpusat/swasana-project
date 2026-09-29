@@ -1,17 +1,31 @@
 "use client";
 
+import { useState } from "react";
 import { format } from "date-fns";
 import type { DateRange } from "react-day-picker";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Badge } from "@/components/ui/badge";
+import { Table, TableHeader, TableBody, TableHead, TableRow, TableCell } from "@/components/ui/table";
+import { Drawer } from "@/components/shared/drawer";
 import { cn } from "@/lib/utils";
-import { useGuestbookFunnelReport } from "@/hooks/use-guestbook";
-import type { GuestbookFunnelReport, GuestbookProspectBreakdown } from "@/lib/queries/guestbookEntries";
+import { useGuestbookFunnelReport, useGuestbookFunnelBucketEntries } from "@/hooks/use-guestbook";
+import { prospectStatusClass } from "@/lib/prospect-status";
+import type {
+  GuestbookFunnelReport,
+  GuestbookProspectBreakdown,
+  GuestbookFunnelBucketKey,
+} from "@/lib/queries/guestbookEntries";
 
 interface GuestbookFunnelReportSectionProps {
   dateRange: DateRange | undefined;
   venueIds: string[];
   hostId?: string;
+}
+
+interface ActiveBucket {
+  key: GuestbookFunnelBucketKey;
+  label: string;
 }
 
 type CellTone = "default" | "primary" | "secondary" | "destructive";
@@ -53,12 +67,31 @@ function RatioCell({
   );
 }
 
-function DataCell({ label, value, tone = "default" }: { label: string; value: number; tone?: CellTone }) {
+function DataCell({
+  label,
+  value,
+  tone = "default",
+  onClick,
+}: {
+  label: string;
+  value: number;
+  tone?: CellTone;
+  onClick?: () => void;
+}) {
   return (
-    <div className={cn("flex min-w-0 flex-col justify-between gap-2 rounded-xl border p-3", CELL_TONE_CLASSNAMES[tone])}>
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={!onClick}
+      className={cn(
+        "flex min-w-0 flex-col justify-between gap-2 rounded-xl border p-3 text-left",
+        CELL_TONE_CLASSNAMES[tone],
+        onClick && "cursor-pointer transition-shadow hover:shadow-md"
+      )}
+    >
       <p className="text-xs font-medium leading-snug opacity-75">{label}</p>
       <p className="font-heading text-xl font-semibold tabular-nums">{formatCount(value)}</p>
-    </div>
+    </button>
   );
 }
 
@@ -77,21 +110,15 @@ function RatioGrid({
   const databaseToDealPct = databaseCount > 0 ? (report.deal / databaseCount) * 100 : 0;
 
   return (
-    <div className="grid grid-cols-3 overflow-hidden rounded-xl border bg-muted/30">
+    <div className="grid grid-cols-2 overflow-hidden rounded-xl border bg-muted/30">
       <RatioCell
-        label={ads ? "Ads URL → Visit Venue" : "Database → Visit"}
+        label={ads ? "Ads → Visit Venue" : "Database → Visit"}
         value={databaseToVisitPct}
         denominator={databaseCount}
         numerator={visitCount}
       />
       <RatioCell
-        label="Visit → Deal"
-        value={report.visitToDealPct}
-        denominator={visitCount}
-        numerator={report.deal}
-      />
-      <RatioCell
-        label={ads ? "Ads URL → Deal" : "Database → Deal"}
+        label={ads ? "Ads → Deal" : "Database → Deal"}
         value={databaseToDealPct}
         denominator={databaseCount}
         numerator={report.deal}
@@ -100,21 +127,73 @@ function RatioGrid({
   );
 }
 
-function FunnelCells({ report, includeDatabase }: { report: GuestbookFunnelReport; includeDatabase: boolean }) {
+function FunnelCells({
+  report,
+  includeDatabase,
+  onCellClick,
+}: {
+  report: GuestbookFunnelReport;
+  includeDatabase: boolean;
+  onCellClick: (bucket: ActiveBucket) => void;
+}) {
   return (
     <div className={cn("grid grid-cols-2 gap-2 sm:grid-cols-4", includeDatabase && "2xl:grid-cols-7")}>
-      {includeDatabase ? <DataCell label="Database" value={report.database} tone="primary" /> : null}
-      <DataCell label="Online Meeting" value={report.onlineMeeting} tone="secondary" />
-      <DataCell label="Belum Visit" value={report.belumVisit} />
-      <DataCell label="Visit Venue" value={report.visitVenue} tone="secondary" />
-      <DataCell label="Tidak Jadi Visit (Lost)" value={report.tidakJadiVisitLost} tone="destructive" />
-      <DataCell label="Deal" value={report.deal} tone="primary" />
-      <DataCell label="No Deal (Lost)" value={report.noDealLost} tone="destructive" />
+      {includeDatabase ? (
+        <DataCell
+          label="Database"
+          value={report.database}
+          tone="primary"
+          onClick={() => onCellClick({ key: "database", label: "Database" })}
+        />
+      ) : null}
+      <DataCell
+        label="Online Meeting"
+        value={report.onlineMeeting}
+        tone="secondary"
+        onClick={() => onCellClick({ key: "onlineMeeting", label: "Online Meeting" })}
+      />
+      <DataCell
+        label="Belum Visit"
+        value={report.belumVisit}
+        onClick={() => onCellClick({ key: "belumVisit", label: "Belum Visit" })}
+      />
+      <DataCell
+        label="Visit Venue"
+        value={report.visitVenue}
+        tone="secondary"
+        onClick={() => onCellClick({ key: "visitVenue", label: "Visit Venue" })}
+      />
+      <DataCell
+        label="Tidak Jadi Visit (Lost)"
+        value={report.tidakJadiVisitLost}
+        tone="destructive"
+        onClick={() => onCellClick({ key: "tidakJadiVisitLost", label: "Tidak Jadi Visit (Lost)" })}
+      />
+      <DataCell
+        label="Deal"
+        value={report.deal}
+        tone="primary"
+        onClick={() => onCellClick({ key: "deal", label: "Deal" })}
+      />
+      <DataCell
+        label="No Deal (Lost)"
+        value={report.noDealLost}
+        tone="destructive"
+        onClick={() => onCellClick({ key: "noDealLost", label: "No Deal (Lost)" })}
+      />
     </div>
   );
 }
 
-function AdsDatabaseBreakdown({ breakdown, total }: { breakdown: GuestbookProspectBreakdown; total: number }) {
+function AdsDatabaseBreakdown({
+  breakdown,
+  total,
+  onCellClick,
+}: {
+  breakdown: GuestbookProspectBreakdown;
+  total: number;
+  onCellClick: (bucket: ActiveBucket) => void;
+}) {
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between gap-3">
@@ -122,11 +201,32 @@ function AdsDatabaseBreakdown({ breakdown, total }: { breakdown: GuestbookProspe
         <p className="text-xs text-muted-foreground">Status prospek sesuai filter tanggal</p>
       </div>
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
-        <DataCell label="Cold Prospek" value={breakdown.cold} />
-        <DataCell label="Warm Prospek" value={breakdown.warm} />
-        <DataCell label="Hot Prospek" value={breakdown.hot} />
-        <DataCell label="No Response" value={breakdown.noResponse} />
-        <DataCell label="Total Ads URL" value={total} tone="primary" />
+        <DataCell
+          label="Cold Prospek"
+          value={breakdown.cold}
+          onClick={() => onCellClick({ key: "cold", label: "Cold Prospek" })}
+        />
+        <DataCell
+          label="Warm Prospek"
+          value={breakdown.warm}
+          onClick={() => onCellClick({ key: "warm", label: "Warm Prospek" })}
+        />
+        <DataCell
+          label="Hot Prospek"
+          value={breakdown.hot}
+          onClick={() => onCellClick({ key: "hot", label: "Hot Prospek" })}
+        />
+        <DataCell
+          label="No Response"
+          value={breakdown.noResponse}
+          onClick={() => onCellClick({ key: "noResponse", label: "No Response" })}
+        />
+        <DataCell
+          label="Total Ads"
+          value={total}
+          tone="primary"
+          onClick={() => onCellClick({ key: "totalAds", label: "Total Ads" })}
+        />
       </div>
     </div>
   );
@@ -139,6 +239,7 @@ function PerformanceCard({
   ads = false,
   prospectBreakdown,
   totalAdsUrl = 0,
+  onCellClick,
 }: {
   title: string;
   description: string;
@@ -146,6 +247,7 @@ function PerformanceCard({
   ads?: boolean;
   prospectBreakdown?: GuestbookProspectBreakdown;
   totalAdsUrl?: number;
+  onCellClick: (bucket: ActiveBucket) => void;
 }) {
   return (
     <Card className="rounded-2xl shadow-sm">
@@ -155,10 +257,100 @@ function PerformanceCard({
       </CardHeader>
       <CardContent className="space-y-4">
         <RatioGrid report={report} ads={ads} totalAdsUrl={totalAdsUrl} />
-        {prospectBreakdown ? <AdsDatabaseBreakdown breakdown={prospectBreakdown} total={totalAdsUrl} /> : null}
-        <FunnelCells report={report} includeDatabase={!ads} />
+        {prospectBreakdown ? (
+          <AdsDatabaseBreakdown breakdown={prospectBreakdown} total={totalAdsUrl} onCellClick={onCellClick} />
+        ) : null}
+        <FunnelCells report={report} includeDatabase={!ads} onCellClick={onCellClick} />
       </CardContent>
     </Card>
+  );
+}
+
+function FunnelBucketDrawer({
+  bucket,
+  onClose,
+  venueIds,
+  hostId,
+  dateFrom,
+  dateTo,
+}: {
+  bucket: ActiveBucket;
+  onClose: () => void;
+  venueIds: string[];
+  hostId?: string;
+  dateFrom?: string;
+  dateTo?: string;
+}) {
+  const { data: entries, isLoading } = useGuestbookFunnelBucketEntries(bucket.key, {
+    venueIds: venueIds.length > 0 ? venueIds : undefined,
+    hostId,
+    dateFrom,
+    dateTo,
+  });
+
+  return (
+    <Drawer
+      isOpen
+      onClose={onClose}
+      title={`${bucket.label} (${entries?.length ?? 0})`}
+      maxWidth="sm:max-w-2xl"
+    >
+      {isLoading ? (
+        <div className="space-y-2 py-2">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <Skeleton key={i} className="h-12 w-full rounded-lg" />
+          ))}
+        </div>
+      ) : !entries || entries.length === 0 ? (
+        <p className="py-8 text-center text-sm text-muted-foreground">Tidak ada data.</p>
+      ) : (
+        <div className="overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="min-w-40">Nama</TableHead>
+                <TableHead>Kontak</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Sales</TableHead>
+                <TableHead>Venue</TableHead>
+                <TableHead>Sumber</TableHead>
+                <TableHead>Tanggal</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {entries.map((entry) => (
+                <TableRow key={entry.id}>
+                  <TableCell className="font-medium">
+                    <div className="flex flex-col gap-0.5">
+                      <span className="line-clamp-1">{entry.visitorName}</span>
+                      {entry.companyName && (
+                        <span className="text-xs text-muted-foreground">{entry.companyName}</span>
+                      )}
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-sm">{entry.phoneNumber || "—"}</TableCell>
+                  <TableCell>
+                    {entry.prospectStatus ? (
+                      <Badge className={cn("rounded-full text-[10px]", prospectStatusClass(entry.prospectStatus.name))}>
+                        {entry.prospectStatus.name}
+                      </Badge>
+                    ) : (
+                      <span className="text-sm text-muted-foreground">—</span>
+                    )}
+                  </TableCell>
+                  <TableCell className="text-sm">{entry.host?.fullName || "—"}</TableCell>
+                  <TableCell className="text-sm">{entry.venue?.name || "—"}</TableCell>
+                  <TableCell className="text-sm">{entry.sourceOfInformation?.name || "—"}</TableCell>
+                  <TableCell className="whitespace-nowrap text-sm">
+                    {format(new Date(entry.checkInAt), "d MMM yyyy")}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      )}
+    </Drawer>
   );
 }
 
@@ -182,11 +374,15 @@ function FunnelReportSkeleton() {
 }
 
 export function GuestbookFunnelReportSection({ dateRange, venueIds, hostId }: GuestbookFunnelReportSectionProps) {
+  const dateFrom = dateRange?.from ? format(dateRange.from, "yyyy-MM-dd") : undefined;
+  const dateTo = dateRange?.to ? format(dateRange.to, "yyyy-MM-dd") : undefined;
+  const [activeBucket, setActiveBucket] = useState<ActiveBucket | null>(null);
+
   const { data, isLoading } = useGuestbookFunnelReport({
     venueIds: venueIds.length > 0 ? venueIds : undefined,
     hostId,
-    dateFrom: dateRange?.from ? format(dateRange.from, "yyyy-MM-dd") : undefined,
-    dateTo: dateRange?.to ? format(dateRange.to, "yyyy-MM-dd") : undefined,
+    dateFrom,
+    dateTo,
   });
 
   if (isLoading || !data) {
@@ -204,15 +400,27 @@ export function GuestbookFunnelReportSection({ dateRange, venueIds, hostId }: Gu
         title="Database Performance"
         description="Konversi seluruh database tamu sesuai filter aktif"
         report={data.overall}
+        onCellClick={setActiveBucket}
       />
       <PerformanceCard
         title="Ads Performance"
-        description="Status mengikuti filter tanggal; Total Ads URL dihitung terpisah"
+        description="Status mengikuti filter tanggal; Total Ads dihitung terpisah"
         report={data.overall}
         ads
         prospectBreakdown={data.prospectBreakdown}
         totalAdsUrl={data.totalAdsUrl}
+        onCellClick={setActiveBucket}
       />
+      {activeBucket ? (
+        <FunnelBucketDrawer
+          bucket={activeBucket}
+          onClose={() => setActiveBucket(null)}
+          venueIds={venueIds}
+          hostId={hostId}
+          dateFrom={dateFrom}
+          dateTo={dateTo}
+        />
+      ) : null}
     </div>
   );
 }
