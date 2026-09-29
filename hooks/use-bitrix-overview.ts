@@ -59,6 +59,10 @@ export interface BitrixDealItem {
   pipeline: string;
   isKantor: boolean;
   hasVenue: boolean;
+  /** Tanggal Database (UF_CRM_1786680629702); "" bila belum diisi. */
+  dbDate: string;
+  /** True bila punya Tanggal Database — penentu ikut/tidaknya ke angka "Database*". */
+  hasDbDate: boolean;
   isFromAds: boolean;
   isSpamPrank: boolean;
   isGetback: boolean;
