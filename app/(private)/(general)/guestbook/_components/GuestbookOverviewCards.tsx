@@ -9,6 +9,7 @@ import {
   VolumeLoud,
   Leaf,
   Videocamera,
+  CheckCircle,
   Link as LinkIcon,
 } from "@solar-icons/react";
 import { cn } from "@/lib/utils";
@@ -143,6 +144,8 @@ export function GuestbookOverviewCards({
     { label: "Sudah Visit", value: overview.doneVisit, icon: Buildings2 },
     { label: "Tidak Jadi Visit (Lost)", value: overview.lost, icon: ChartSquare },
     { label: "Online Meeting", value: overview.onlineMeetings, icon: Videocamera },
+    // Hanya status "Deal" — "No Deal (Lost)" tidak ikut terhitung di sini.
+    { label: "Deal", value: overview.deal, icon: CheckCircle },
   ];
 
   const lists: {
@@ -160,7 +163,7 @@ export function GuestbookOverviewCards({
 
   return (
     <div className="space-y-3">
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
       {metrics.map(({ label, value, icon: Icon }) => (
         <Card key={label} className="rounded-2xl shadow-sm">
           <CardContent className="flex items-center gap-3 p-4">

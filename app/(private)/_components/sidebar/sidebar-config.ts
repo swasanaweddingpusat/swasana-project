@@ -42,6 +42,7 @@ import {
   Chart2,
   Bolt,
   ChatRound,
+  MagicStick3,
   UserRounded,
   Wallet,
   QrCode,
@@ -102,6 +103,7 @@ export const SETTINGS_MODULES = [
   "settings-booking-log",
   "settings-banner",
   "settings-festival",
+  "settings-ai-model",
   "hr-attendance",
 ] as const;
 
@@ -170,6 +172,7 @@ export const MODULE_NAV_MAP: Record<ModuleKey, NavItem[]> = {
  */
 export const GENERAL_NAV: NavItem[] = [
   { name: "Overview", href: "/", icon: Widget, subtitle: "Ringkasan aktivitas dan performa" },
+  { name: "Chat AI", href: "/chat-ai", icon: MagicStick3, subtitle: "Asisten AI untuk mendukung pekerjaan Anda" },
   { name: "BITRIX24", href: "/bitrix24", icon: Bolt, subtitle: "Integrasi CRM Bitrix24", permission: { module: "bitrix", action: "view" },
     submenu: [
       { name: "Overview", href: "/bitrix24/overview", icon: PieChart, title: "Overview Bitrix24", subtitle: "Ringkasan perolehan lead & database CRM dari Bitrix24", permission: { module: "bitrix", action: "view" } },

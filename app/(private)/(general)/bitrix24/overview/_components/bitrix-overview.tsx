@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { format } from "date-fns";
+import { toast } from "sonner";
 import type { DateRange } from "react-day-picker";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, LabelList } from "recharts";
 import {
@@ -65,6 +66,8 @@ import { BitrixDealDetail } from "@/components/shared/BitrixDealDetail";
 import {
   exportBitrixOverviewExcel,
   exportBitrixOverviewPdf,
+  exportBitrixOverviewSectionPdf,
+  type BitrixOverviewSection,
 } from "@/lib/bitrix-overview-export";
 import {
   buildSalesStatusBreakdown,
@@ -139,7 +142,6 @@ interface Filters {
   issue: string; // "" = all (issue label)
   client: PersonOption | null;
   sales: PersonOption | null;
-  dbRange: DateRange | undefined; // optional — "Tanggal Database" (UF_CRM_1786680629702)
 }
 
 function initialFilters(): Filters {
@@ -151,7 +153,6 @@ function initialFilters(): Filters {
     issue: "",
     client: null,
     sales: null,
-    dbRange: undefined,
   };
 }
 
@@ -194,9 +195,6 @@ export function BitrixOverview() {
 
   const from = filters.range?.from ? toIsoDay(filters.range.from) : "";
   const to = filters.range?.to ? toIsoDay(filters.range.to) : from;
-  const dbFrom = filters.dbRange?.from ? toIsoDay(filters.dbRange.from) : "";
-  const dbTo = filters.dbRange?.from ? toIsoDay(filters.dbRange.to ?? filters.dbRange.from) : "";
-
   // Live-polled via TanStack Query, 30s TTL mirroring the server's Bitrix read
   // cache (lib/bitrix-cache.ts FRESH_WINDOW_MS) — see hooks/use-bitrix-overview.ts.
   const overviewQuery = useBitrixOverview({
@@ -207,8 +205,6 @@ export function BitrixOverview() {
     issue: filters.issue || undefined,
     clientId: filters.client?.id,
     salesId: filters.sales?.id,
-    dbFrom: dbFrom || undefined,
-    dbTo: dbTo || undefined,
   });
 
   const data = overviewQuery.data ?? null;
@@ -241,7 +237,7 @@ export function BitrixOverview() {
   const adsPct = data && data.total > 0 ? Math.round((data.fromAds / data.total) * 100) : 0;
 
   const salesStatusBreakdown = useMemo(
-    () => (data?.deals ? buildSalesStatusBreakdown(data.deals) : []),
+    () => (data?.deals ? buildSalesStatusBreakdown(data.deals.filter((d) => d.hasDbDate)) : []),
     [data?.deals],
   );
 
@@ -251,7 +247,7 @@ export function BitrixOverview() {
   );
 
   const notDatabaseBreakdown = useMemo(
-    () => (data?.deals ? buildNotDatabaseBreakdown(data.deals) : []),
+    () => (data?.deals ? buildNotDatabaseBreakdown(data.deals.filter((d) => d.hasDbDate)) : []),
     [data?.deals],
   );
 
@@ -277,8 +273,7 @@ export function BitrixOverview() {
     (filters.stage ? 1 : 0) +
     (filters.issue ? 1 : 0) +
     (filters.client ? 1 : 0) +
-    (filters.sales ? 1 : 0) +
-    (filters.dbRange?.from ? 1 : 0);
+    (filters.sales ? 1 : 0);
 
   function applyFilters(next: Filters) {
     setFilters(next);
@@ -357,18 +352,20 @@ export function BitrixOverview() {
         <>
           {/* Metric cards */}
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+            {/* Total Transaksi lebih dulu: ia adalah penyebut yang dirujuk
+                hint kartu Database Venue di sebelahnya. */}
+            <MetricCard
+              icon={<ChatRoundLine weight="BoldDuotone" className="h-5 w-5 text-foreground" />}
+              label="Total Transaksi"
+              value={loading ? null : data?.total ?? 0}
+              onClick={data ? () => setDealFilter("all") : undefined}
+            />
             <MetricCard
               icon={<Buildings weight="BoldDuotone" className="h-5 w-5 text-foreground" />}
               label="Database Venue"
               value={loading ? null : data?.withVenue ?? 0}
               hint={loading ? undefined : `dari ${data?.total ?? 0} total transaksi`}
               onClick={data ? () => setDealFilter("withVenue") : undefined}
-            />
-            <MetricCard
-              icon={<ChatRoundLine weight="BoldDuotone" className="h-5 w-5 text-foreground" />}
-              label="Total Transaksi"
-              value={loading ? null : data?.total ?? 0}
-              onClick={data ? () => setDealFilter("all") : undefined}
             />
             <MetricCard
               icon={<VolumeLoud weight="BoldDuotone" className="h-5 w-5 text-foreground" />}
@@ -413,27 +410,42 @@ export function BitrixOverview() {
             <BreakdownCard
               title="Sumber Database"
               icon={<ChatRoundLine weight="BoldDuotone" className="h-4 w-4 text-muted-foreground" />}
+              section="sources"
+              overviewData={data}
               buckets={data?.sources}
               total={data?.total ?? 0}
               loading={loading}
             />
-            <VenueCard buckets={data?.venues} total={data?.withVenue ?? 0} loading={loading} />
+            <VenueCard buckets={data?.venues} overviewData={data} total={data?.withVenue ?? 0} loading={loading} />
           </div>
 
-          <StatusClientChart data={statusClientBreakdown} loading={loading} />
+          <StatusClientChart data={statusClientBreakdown} overviewData={data} loading={loading} />
 
-          <SalesTable buckets={data?.sales} loading={loading} />
+          <SalesTable buckets={data?.sales} overviewData={data} loading={loading} />
 
-          <SalesStatusCard groups={salesStatusBreakdown} loading={loading} />
+          <SalesStatusCard
+            section="salesStatus"
+            overviewData={data}
+            groups={salesStatusBreakdown}
+            loading={loading}
+          />
 
           <SalesStatusCard
             title="Detail Data Tidak Jadi Database per Sales"
             icon={<DangerCircle weight="BoldDuotone" className="h-4 w-4 text-muted-foreground" />}
+            section="notDatabase"
+            overviewData={data}
             groups={notDatabaseBreakdown}
             loading={loading}
           />
 
-          <AdsCard buckets={data?.ads} organik={data?.organik ?? 0} total={data?.total ?? 0} loading={loading} />
+          <AdsCard
+            buckets={data?.ads}
+            overviewData={data}
+            organik={data?.organik ?? 0}
+            total={data?.total ?? 0}
+            loading={loading}
+          />
 
           <p className="px-1 text-xs text-muted-foreground">
             Data ditarik langsung dari CRM Bitrix24 (transaksi/deals dibuat pada rentang tanggal terpilih). Angka
@@ -498,7 +510,6 @@ function FilterPanel({
   const [issue, setIssue] = useState(initial.issue);
   const [client, setClient] = useState<PersonOption | null>(initial.client);
   const [sales, setSales] = useState<PersonOption | null>(initial.sales);
-  const [dbRange, setDbRange] = useState<DateRange | undefined>(initial.dbRange);
 
   // Nama Client — async search hits the server (Bitrix crm.contact.list typeahead)
   // once the user types. There's no preloaded roster (unlike Sales), so the
@@ -706,36 +717,6 @@ function FilterPanel({
               </div>
             </div>
 
-            {/* By tanggal database — optional, independent from the mandatory range above */}
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between">
-                <Label className="text-xs text-muted-foreground">Tanggal Database</Label>
-                {dbRange?.from && (
-                  <button
-                    type="button"
-                    onClick={() => setDbRange(undefined)}
-                    className="text-xs font-medium text-primary hover:underline"
-                  >
-                    Bersihkan
-                  </button>
-                )}
-              </div>
-              <Popover>
-                <PopoverTrigger
-                  className={cn(
-                    "flex h-10 w-full items-center justify-between rounded-full border border-input bg-background px-4 text-sm",
-                    "hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                    !dbRange?.from && "text-muted-foreground",
-                  )}
-                >
-                  <span className="truncate">{formatDateRangeLabel(dbRange, "Semua tanggal")}</span>
-                  <CalendarDate weight="BoldDuotone" className="h-4 w-4 shrink-0 text-muted-foreground" />
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
-                  <Calendar mode="range" numberOfMonths={1} selected={dbRange} onSelect={setDbRange} />
-                </PopoverContent>
-              </Popover>
-            </div>
           </div>
         </div>
       </div>
@@ -757,7 +738,6 @@ function FilterPanel({
                 issue,
                 client,
                 sales,
-                dbRange,
               })
             }
           >
@@ -941,12 +921,71 @@ function ResponseStatusCard({
   );
 }
 
-function CardShell({ title, icon, children }: { title: string; icon: React.ReactNode; children: React.ReactNode }) {
+/**
+ * Pembungkus setiap section di halaman ini. Tombol "Download PDF" dipasang di
+ * sini supaya seluruh section mendapatkannya tanpa penempelan berulang.
+ *
+ * PDF-nya digambar langsung dari data (`exportBitrixOverviewSectionPdf`) —
+ * bukan rasterisasi DOM — supaya tidak pernah kena error html2canvas
+ * "unsupported color function" dari warna oklch/color-mix Tailwind v4 (lihat
+ * riwayat modul rasterisasi DOM lama yang sudah dihapus). `section` mengidentifikasi
+ * data mana yang perlu digambar; JANGAN dicocokkan dari string `title` karena
+ * rapuh terhadap perubahan copy.
+ *
+ * `downloadable={false}` dipakai untuk section yang tidak masuk akal dicetak
+ * (mis. kartu yang isinya hanya kontrol) — section boleh diabaikan (`?`) di
+ * kasus itu.
+ */
+function CardShell({
+  title,
+  icon,
+  children,
+  section,
+  data,
+  downloadable = true,
+}: {
+  title: string;
+  icon: React.ReactNode;
+  children: React.ReactNode;
+  section?: BitrixOverviewSection;
+  data: OverviewData | null;
+  downloadable?: boolean;
+}) {
+  const [downloading, setDownloading] = useState(false);
+
+  async function handleDownload(): Promise<void> {
+    if (!section || !data || downloading) return;
+    setDownloading(true);
+    try {
+      await exportBitrixOverviewSectionPdf(section, data);
+    } catch (error) {
+      console.error(`Gagal mengunduh PDF section "${title}":`, error);
+      toast.error("Gagal mengunduh PDF. Coba ulangi.");
+    } finally {
+      setDownloading(false);
+    }
+  }
+
   return (
     <Card className="rounded-xl p-5">
-      <div className="mb-4 flex items-center gap-2">
-        {icon}
-        <h3 className="font-heading text-sm font-semibold">{title}</h3>
+      <div className="mb-4 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          {icon}
+          <h3 className="font-heading text-sm font-semibold">{title}</h3>
+        </div>
+        {downloadable ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={handleDownload}
+            disabled={downloading || !data || !section}
+            className="h-7 shrink-0 rounded-lg px-2 text-xs"
+          >
+            <Download weight="BoldDuotone" className="mr-1 h-3.5 w-3.5" />
+            {downloading ? "Menyiapkan…" : "PDF"}
+          </Button>
+        ) : null}
       </div>
       {children}
     </Card>
@@ -993,7 +1032,15 @@ function StatusClientTooltipContent({
 // "Status Client" — a column chart of ALL deals grouped by stage label,
 // sorted descending, with the count printed above each bar (mirrors the
 // reference report exported from Bitrix24).
-function StatusClientChart({ data, loading }: { data: StatusClientRow[]; loading: boolean }) {
+function StatusClientChart({
+  data,
+  overviewData,
+  loading,
+}: {
+  data: StatusClientRow[];
+  overviewData: OverviewData | null;
+  loading: boolean;
+}) {
   const chartData = useMemo<StatusClientChartDatum[]>(
     () =>
       data.map((d) => ({
@@ -1008,6 +1055,8 @@ function StatusClientChart({ data, loading }: { data: StatusClientRow[]; loading
     <CardShell
       title="Status Client"
       icon={<ChartSquare weight="BoldDuotone" className="h-4 w-4 text-muted-foreground" />}
+      section="statusClient"
+      data={overviewData}
     >
       {loading ? (
         <Skeleton className="h-80 w-full rounded-xl" />
@@ -1078,11 +1127,21 @@ function BarRow({
   );
 }
 
-function SalesTable({ buckets, loading }: { buckets: SalesBucket[] | undefined; loading: boolean }) {
+function SalesTable({
+  buckets,
+  overviewData,
+  loading,
+}: {
+  buckets: SalesBucket[] | undefined;
+  overviewData: OverviewData | null;
+  loading: boolean;
+}) {
   return (
     <CardShell
       title="Database Sales"
       icon={<UsersGroupRounded weight="BoldDuotone" className="h-4 w-4 text-muted-foreground" />}
+      section="sales"
+      data={overviewData}
     >
       {loading ? (
         <LoadingRows />
@@ -1130,16 +1189,20 @@ function SalesTable({ buckets, loading }: { buckets: SalesBucket[] | undefined; 
 function SalesStatusCard({
   title = "Detail Status Database per Sales",
   icon = <UsersGroupRounded weight="BoldDuotone" className="h-4 w-4 text-muted-foreground" />,
+  section,
+  overviewData,
   groups,
   loading,
 }: {
   title?: string;
   icon?: React.ReactNode;
+  section: BitrixOverviewSection;
+  overviewData: OverviewData | null;
   groups: SalesStatusGroup[];
   loading: boolean;
 }) {
   return (
-    <CardShell title={title} icon={icon}>
+    <CardShell title={title} icon={icon} section={section} data={overviewData}>
       {loading ? (
         <LoadingRows />
       ) : groups.length === 0 ? (
@@ -1177,18 +1240,22 @@ function SalesStatusCard({
 function BreakdownCard({
   title,
   icon,
+  section,
+  overviewData,
   buckets,
   total,
   loading,
 }: {
   title: string;
   icon: React.ReactNode;
+  section: BitrixOverviewSection;
+  overviewData: OverviewData | null;
   buckets: Bucket[] | undefined;
   total: number;
   loading: boolean;
 }) {
   return (
-    <CardShell title={title} icon={icon}>
+    <CardShell title={title} icon={icon} section={section} data={overviewData}>
       {loading ? (
         <LoadingRows />
       ) : !buckets || buckets.length === 0 ? (
@@ -1204,11 +1271,23 @@ function BreakdownCard({
   );
 }
 
-function VenueCard({ buckets, total, loading }: { buckets: Bucket[] | undefined; total: number; loading: boolean }) {
+function VenueCard({
+  buckets,
+  overviewData,
+  total,
+  loading,
+}: {
+  buckets: Bucket[] | undefined;
+  overviewData: OverviewData | null;
+  total: number;
+  loading: boolean;
+}) {
   return (
     <BreakdownCard
       title="Venue"
       icon={<Buildings weight="BoldDuotone" className="h-4 w-4 text-muted-foreground" />}
+      section="venues"
+      overviewData={overviewData}
       buckets={buckets}
       total={total}
       loading={loading}
@@ -1278,17 +1357,24 @@ function DealListDrawer({
 
 function AdsCard({
   buckets,
+  overviewData,
   organik,
   total,
   loading,
 }: {
   buckets: AdBucket[] | undefined;
+  overviewData: OverviewData | null;
   organik: number;
   total: number;
   loading: boolean;
 }) {
   return (
-    <CardShell title="Sumber Iklan" icon={<VolumeLoud weight="BoldDuotone" className="h-4 w-4 text-muted-foreground" />}>
+    <CardShell
+      title="Sumber Iklan"
+      icon={<VolumeLoud weight="BoldDuotone" className="h-4 w-4 text-muted-foreground" />}
+      section="ads"
+      data={overviewData}
+    >
       {loading ? (
         <LoadingRows />
       ) : !buckets || (buckets.length === 0 && organik === 0) ? (

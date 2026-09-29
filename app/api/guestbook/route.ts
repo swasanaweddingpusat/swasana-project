@@ -41,6 +41,10 @@ export async function GET(request: Request): Promise<Response> {
   const sourceOfInformationIds = parseListParam(searchParams.get("sourceOfInformationIds"));
   const festivalIds = parseListParam(searchParams.get("festivalIds"));
 
+  // Overview memfilter per tanggal input sales (`createdAt`); halaman list tetap
+  // per tanggal kunjungan. Nilai selain "createdAt" jatuh ke default checkInAt.
+  const dateField = searchParams.get("dateField") === "createdAt" ? ("createdAt" as const) : undefined;
+
   const profileId = session.user.profileId ?? undefined;
   // dataScope is already carried on the JWT/session (refreshed from DB every 10
   // min in lib/auth.ts), so read it straight from the session instead of an extra
@@ -60,6 +64,7 @@ export async function GET(request: Request): Promise<Response> {
       statusIds,
       sourceOfInformationIds,
       festivalIds,
+      dateField,
     });
     return Response.json(result);
   } catch (error) {

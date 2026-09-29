@@ -5,6 +5,7 @@ import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
 import { SwasanaSidebar } from "./_components/sidebar/sidebar";
 import { Header } from "./_components/header/header";
 import { AuthGate } from "./_components/auth-gate";
+import { PrivateContent } from "./_components/PrivateContent";
 import { HeaderActionProvider } from "@/components/providers/header-action-provider";
 import { BookingDrawerProvider } from "@/components/providers/booking-drawer-provider";
 import { QuotationDrawerProvider } from "@/components/providers/quotation-drawer-provider";
@@ -52,11 +53,11 @@ export default function PrivateLayout({
                       <Suspense>
                         <Header />
                       </Suspense>
-                      <main className="flex-1 p-4 pb-24 md:pb-6 lg:p-6">
+                      <PrivateContent>
                         <Suspense>
                           <AuthGate>{children}</AuthGate>
                         </Suspense>
-                      </main>
+                      </PrivateContent>
                       <Suspense fallback={null}>
                         <MobileBottomNav />
                       </Suspense>

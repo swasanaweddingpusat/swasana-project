@@ -1,5 +1,6 @@
 "use client";
 
+import { useSession } from "next-auth/react";
 import {
   SidebarGroup,
   SidebarGroupContent,
@@ -16,6 +17,7 @@ import {
 } from "./sidebar-config";
 import { NavItemRow } from "./nav-item";
 import { usePermissions } from "@/hooks/use-permissions";
+import { canUseChatAi } from "@/lib/ai/chat-access";
 import { useActiveModule } from "./use-active-module";
 
 type CanFn = (module: string, action: string) => boolean;
@@ -60,6 +62,7 @@ function filterNavItems(items: NavItem[], can: CanFn, isGroupMember: boolean): N
 }
 
 export function SidebarNav() {
+  const { data: session } = useSession();
   const { can, isLoading, isGroupMember } = usePermissions();
   const activeModule = useActiveModule();
 
@@ -67,17 +70,22 @@ export function SidebarNav() {
   // flat top-level rows — they show in every module world, never swap it out.
   const moduleItems = isLoading ? [] : filterNavItems(MODULE_NAV_MAP[activeModule], can, isGroupMember);
   const generalItems = isLoading ? [] : filterNavItems(GENERAL_NAV, can, isGroupMember);
+  const canAccessChatAi = canUseChatAi(session?.user.email);
+  const visibleGeneralItems = generalItems.filter(
+    (item) => item.href !== "/chat-ai" || canAccessChatAi,
+  );
   const settingsVisible = !isLoading && SETTINGS_MODULES.some((mod) => can(mod, "view"));
 
-  // Overview (general landing at `/`), BITRIX24, and Buku Tamu are General items
-  // that must always sit at the very top of the sidebar (in that order), above the
-  // active module's world nav. Pull them out of General; the rest of General stays
-  // flat below the module items.
-  const PINNED_TOP = ["/", "/bitrix24", "/guestbook"];
+  // Overview, Chat AI, BITRIX24, and Buku Tamu are General items that must always
+  // sit at the very top of the sidebar (in that order), above the active module's
+  // world nav. Pull them out of General; the rest stays flat below module items.
+  const PINNED_TOP = ["/", "/chat-ai", "/bitrix24", "/guestbook"];
   const pinnedItems = PINNED_TOP
-    .map((href) => generalItems.find((item) => item.href === href))
+    .map((href) => visibleGeneralItems.find((item) => item.href === href))
     .filter((item): item is NavItem => item !== undefined);
-  const remainingGeneralItems = generalItems.filter((item) => !PINNED_TOP.includes(item.href));
+  const remainingGeneralItems = visibleGeneralItems.filter(
+    (item) => !PINNED_TOP.includes(item.href),
+  );
 
   return (
     <SidebarGroup>

@@ -164,6 +164,8 @@ export function MobileBottomNav(): React.JSX.Element | null {
     mice: openMiceBookingDrawer,
   };
 
+  if (pathname === "/chat-ai") return null;
+
   /**
    * Open the create drawer for `key`.
    * When off the item's list page, register an onSuccess redirect so the user

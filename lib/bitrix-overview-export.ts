@@ -121,6 +121,186 @@ export async function exportBitrixOverviewExcel(data: OverviewData): Promise<voi
   );
 }
 
+// Identifies one exportable section of the Overview page. Kept as a closed
+// union (not matched against the on-screen title string) so CardShell call
+// sites are explicit about which data feeds their "Download PDF" button.
+export type BitrixOverviewSection =
+  | "sources"
+  | "venues"
+  | "sales"
+  | "statusClient"
+  | "salesStatus"
+  | "notDatabase"
+  | "ads";
+
+/**
+ * Gambar diagram batang vertikal memakai primitif jsPDF (rect + text), meniru
+ * kartu Status Client di layar.
+ *
+ * Sengaja TIDAK merasterisasi DOM: selain hasilnya tetap tajam karena vektor,
+ * cara ini kebal terhadap kegagalan html2canvas membaca warna oklch/color-mix
+ * milik Tailwind v4.
+ *
+ * Mengembalikan posisi Y setelah diagram, mengikuti pola drawPdf*Section lain.
+ */
+function drawPdfBarChart(
+  doc: jsPDF,
+  title: string,
+  buckets: Bucket[] | undefined,
+  y: number,
+  margin: number,
+  pageWidth: number,
+  pageHeight: number,
+): number {
+  const rows = (buckets ?? []).filter((b) => b.count > 0);
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(11);
+  doc.text(title, margin, y);
+  y += 18;
+
+  if (rows.length === 0) {
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9);
+    doc.text("Tidak ada data.", margin, y);
+    return y + 16;
+  }
+
+  // Tinggi area plot dibatasi agar diagram + label miring tetap muat pada satu
+  // halaman bersama judul dan periode di atasnya.
+  const chartWidth = pageWidth - margin * 2;
+  const plotHeight = Math.min(220, pageHeight - y - margin - 90);
+  const baseline = y + plotHeight;
+  const maxCount = Math.max(...rows.map((b) => b.count));
+
+  // Lebar batang dihitung dari jumlah kategori; celah 30% dari slot.
+  const slot = chartWidth / rows.length;
+  const barWidth = Math.max(6, Math.min(34, slot * 0.7));
+
+  // Sumbu Y: empat garis bantu horizontal beserta nilainya.
+  doc.setFontSize(7);
+  doc.setDrawColor(224);
+  doc.setLineWidth(0.5);
+  for (let i = 0; i <= 4; i++) {
+    const gy = baseline - (plotHeight * i) / 4;
+    const value = Math.round((maxCount * i) / 4);
+    doc.setTextColor(140);
+    doc.text(value.toLocaleString("id-ID"), margin - 4, gy + 2, { align: "right" });
+    doc.line(margin, gy, margin + chartWidth, gy);
+  }
+
+  // Batang + nilai di atasnya + label kategori miring 45° di bawah baseline.
+  rows.forEach((b, i) => {
+    const barHeight = maxCount > 0 ? (b.count / maxCount) * plotHeight : 0;
+    const cx = margin + slot * i + slot / 2;
+    const bx = cx - barWidth / 2;
+
+    doc.setFillColor(15, 65, 89); // brand ink — samakan dengan warna batang di layar
+    doc.rect(bx, baseline - barHeight, barWidth, barHeight, "F");
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7);
+    doc.setTextColor(40);
+    doc.text(b.count.toLocaleString("id-ID"), cx, baseline - barHeight - 4, { align: "center" });
+
+    // Label dipotong supaya tidak saling tindih saat kategorinya banyak.
+    const label = b.label.length > 18 ? `${b.label.slice(0, 17)}…` : b.label;
+    doc.setTextColor(90);
+    doc.text(label, cx, baseline + 8, { align: "right", angle: 45 });
+  });
+
+  doc.setTextColor(0);
+  return baseline + 70;
+}
+
+const SECTION_TITLES: Record<BitrixOverviewSection, string> = {
+  sources: "Sumber Database",
+  venues: "Venue",
+  sales: "Database Sales",
+  statusClient: "Status Client",
+  salesStatus: "Detail Status Database per Sales",
+  notDatabase: "Detail Data Tidak Jadi Database per Sales",
+  ads: "Sumber Iklan",
+};
+
+/**
+ * Per-section PDF export used by the "Download PDF" button on each Overview
+ * card. Draws directly from `data` with jsPDF — same drawPdf*Section helpers
+ * as `exportBitrixOverviewPdf` — so it can never hit the html2canvas
+ * "unsupported color function" crash that DOM rasterization (the old
+ * the old DOM-rasterization module was prone to.
+ */
+export async function exportBitrixOverviewSectionPdf(
+  section: BitrixOverviewSection,
+  data: OverviewData,
+): Promise<void> {
+  const { jsPDF } = await import("jspdf");
+  // Section berdiagram dicetak melintang: 13+ kategori pada halaman potret
+  // membuat batangnya terlalu rapat dan labelnya bertumpuk.
+  const isChartSection = section === "statusClient";
+  const doc = new jsPDF({
+    orientation: isChartSection ? "landscape" : "portrait",
+    unit: "pt",
+    format: "a4",
+  });
+  const margin = 40;
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  let y = margin;
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(10);
+  doc.setTextColor(90);
+  doc.text(`Periode: ${data.range.from} s/d ${data.range.to}`, margin, y);
+  y += 20;
+  doc.setTextColor(0);
+
+  switch (section) {
+    case "sources":
+      drawPdfBucketSection(doc, SECTION_TITLES.sources, data.sources, y, margin, pageWidth, pageHeight);
+      break;
+    case "venues":
+      drawPdfBucketSection(doc, SECTION_TITLES.venues, data.venues, y, margin, pageWidth, pageHeight);
+      break;
+    case "sales":
+      drawPdfSalesSection(doc, data.sales, y, margin, pageWidth, pageHeight);
+      break;
+    case "statusClient": {
+      // Status Client tampil sebagai diagram batang di layar, jadi PDF-nya juga
+      // digambar sebagai diagram — lalu disusul rinciannya sebagai teks agar
+      // angka pastinya tetap terbaca.
+      const statusClient = buildStatusClientBreakdown(data.deals);
+      const afterChart = drawPdfBarChart(
+        doc,
+        SECTION_TITLES.statusClient,
+        statusClient,
+        y,
+        margin,
+        pageWidth,
+        pageHeight,
+      );
+      drawPdfBucketSection(doc, "Rincian", statusClient, afterChart, margin, pageWidth, pageHeight);
+      break;
+    }
+    case "salesStatus": {
+      const salesStatus = buildSalesStatusBreakdown(data.deals);
+      drawPdfSalesStatusSection(doc, salesStatus, y, margin, pageWidth, pageHeight, SECTION_TITLES.salesStatus);
+      break;
+    }
+    case "notDatabase": {
+      const notDatabase = buildNotDatabaseBreakdown(data.deals);
+      drawPdfSalesStatusSection(doc, notDatabase, y, margin, pageWidth, pageHeight, SECTION_TITLES.notDatabase);
+      break;
+    }
+    case "ads":
+      drawPdfAdsSection(doc, data.ads, y, margin, pageWidth, pageHeight);
+      break;
+  }
+
+  const ab = doc.output("arraybuffer") as ArrayBuffer;
+  await downloadBlob(new Blob([ab], { type: "application/pdf" }), `bitrix-${section}-${stamp()}.pdf`);
+}
+
 export async function exportBitrixOverviewPdf(data: OverviewData): Promise<void> {
   const { jsPDF } = await import("jspdf");
   const doc = new jsPDF({ orientation: "portrait", unit: "pt", format: "a4" });

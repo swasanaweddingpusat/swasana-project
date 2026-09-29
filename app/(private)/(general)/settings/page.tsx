@@ -28,6 +28,7 @@ import {
   ClipboardCheck,
   ChartSquare,
   Settings,
+  MagicStick3,
   type IconProps,
 } from "@solar-icons/react";
 import type { ComponentType } from "react";
@@ -80,6 +81,13 @@ const GROUPS: SettingGroup[] = [
         icon: Widget,
         href: "/settings/modules",
         module: "settings-role-permission",
+      },
+      {
+        title: "AI Model",
+        description: "Kelola koneksi model AI (Anthropic / 9router) untuk Chat AI.",
+        icon: MagicStick3,
+        href: "/settings/model-ai",
+        module: "settings-ai-model",
       },
       {
         title: "Booking Activity Log",
@@ -277,6 +285,7 @@ export default async function SettingsHubPage() {
     "settings-booking-log",
     "settings-banner",
     "settings-festival",
+    "settings-ai-model",
     "settings-package-category",
     "kpi-master",
     "kpi-assignment", "kpi-report",

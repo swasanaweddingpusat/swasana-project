@@ -2,24 +2,25 @@
 
 import { useState } from "react";
 import { format } from "date-fns";
-import { id as idLocale } from "date-fns/locale";
 import type { DateRange } from "react-day-picker";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Calendar } from "@/components/ui/calendar";
-import { CalendarDate, Restart } from "@solar-icons/react";
+import { Filter } from "@solar-icons/react";
 import { useGuestbookEntries } from "@/hooks/use-guestbook";
+import { useVenues } from "@/hooks/use-venues";
+import { useSalesUsers } from "@/hooks/use-sales-users";
 import type { GuestbookCategoryFilter } from "@/lib/queries/guestbookEntries";
 import { GuestbookOverviewCards } from "../../_components/GuestbookOverviewCards";
 import { GuestbookFunnelReportSection } from "../../_components/GuestbookFunnelReportSection";
+import { GuestbookFilterDrawer } from "../../_components/GuestbookFilterDrawer";
 
 const EMPTY_OVERVIEW = {
   total: 0,
   doneVisit: 0,
   lost: 0,
   onlineMeetings: 0,
+  deal: 0,
   byStatus: [],
   byCategory: [],
   bySource: [],
@@ -34,15 +35,6 @@ function todayRange(): DateRange {
   return { from: today, to: today };
 }
 
-// Label for the date-range Popover trigger, e.g. "12 Agu – 15 Agu 2026".
-function formatDateRangeLabel(range: DateRange | undefined): string {
-  if (!range?.from) return "Pilih tanggal";
-  const from = format(range.from, "d MMM yyyy", { locale: idLocale });
-  if (!range.to) return from;
-  const to = format(range.to, "d MMM yyyy", { locale: idLocale });
-  return from === to ? from : `${from} – ${to}`;
-}
-
 function toggleArrayValue<T>(arr: T[], value: T): T[] {
   return arr.includes(value) ? arr.filter((v) => v !== value) : [...arr, value];
 }
@@ -54,12 +46,21 @@ export function GuestbookOverviewClient() {
   const [filterSourceIds, setFilterSourceIds] = useState<string[]>([]);
   const [filterVenueIds, setFilterVenueIds] = useState<string[]>([]);
   const [filterHostId, setFilterHostId] = useState<string>("all");
+  const [filterOpen, setFilterOpen] = useState(false);
+
+  const { data: venues = [] } = useVenues();
+  const { users: salesUsers } = useSalesUsers();
+  const salesOptions = salesUsers.map((u) => ({ id: u.id, name: u.fullName ?? u.id }));
 
   // pageSize 1: this page only renders aggregate stats, so the paginated rows
   // are dead weight — the overview block is computed over the whole filter set.
+  // dateField "createdAt": seluruh metrik Overview dihitung per tanggal input
+  // sales, sama dengan kartu Database/Ads Performance. Tanpa ini angka Database
+  // di dua blok tersebut tidak akan cocok karena beda kolom tanggal.
   const { data, isLoading } = useGuestbookEntries({
     page: 1,
     pageSize: 1,
+    dateField: "createdAt",
     dateFrom: dateRange?.from ? format(dateRange.from, "yyyy-MM-dd") : undefined,
     dateTo: dateRange?.to ? format(dateRange.to, "yyyy-MM-dd") : undefined,
     statusIds: filterStatusIds.length > 0 ? filterStatusIds : undefined,
@@ -95,41 +96,55 @@ export function GuestbookOverviewClient() {
               Ringkasan kunjungan tamu. Klik kartu untuk mempersempit data.
             </p>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Popover>
-              <PopoverTrigger className="flex h-8 items-center gap-2 rounded-xl border bg-background px-3 text-xs">
-                <span className="truncate">{formatDateRangeLabel(dateRange)}</span>
-                <CalendarDate weight="BoldDuotone" className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0" align="end">
-                <Calendar mode="range" numberOfMonths={2} selected={dateRange} onSelect={setDateRange} autoFocus />
-              </PopoverContent>
-            </Popover>
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8 rounded-xl text-xs"
-              onClick={resetFilters}
-              disabled={activeFilterCount === 0 && !dateRange?.from}
-            >
-              <Restart weight="BoldDuotone" className="mr-1.5 h-3.5 w-3.5" />
-              Reset{activeFilterCount > 0 ? ` (${activeFilterCount})` : ""}
-            </Button>
-          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 gap-1.5 rounded-full text-xs relative"
+            onClick={() => setFilterOpen(true)}
+          >
+            <Filter weight="BoldDuotone" className="h-3.5 w-3.5" />
+            Filter
+            {activeFilterCount > 0 && (
+              <span className="absolute -top-1.5 -right-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[9px] font-bold text-primary-foreground leading-none">
+                {activeFilterCount}
+              </span>
+            )}
+          </Button>
         </CardContent>
       </Card>
+
+      <GuestbookFilterDrawer
+        open={filterOpen}
+        onClose={() => setFilterOpen(false)}
+        dateRange={dateRange}
+        onDateRangeChange={setDateRange}
+        venueIds={filterVenueIds}
+        onVenueIdsChange={setFilterVenueIds}
+        hostId={filterHostId}
+        onHostIdChange={setFilterHostId}
+        categories={filterCategories}
+        onCategoriesChange={setFilterCategories}
+        statusIds={filterStatusIds}
+        onStatusIdsChange={setFilterStatusIds}
+        sourceOfInformationIds={filterSourceIds}
+        onSourceOfInformationIdsChange={setFilterSourceIds}
+        venues={venues}
+        salesOptions={salesOptions}
+        onReset={resetFilters}
+      />
 
       {/* Ratio funnel jadi insight utama halaman, langsung setelah kontrol filter. */}
       <GuestbookFunnelReportSection
         dateRange={dateRange}
         venueIds={filterVenueIds}
         hostId={filterHostId !== "all" ? filterHostId : undefined}
+        categories={filterCategories}
       />
 
       {isLoading ? (
         <div className="space-y-3">
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-            {Array.from({ length: 4 }).map((_, i) => (
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+            {Array.from({ length: 5 }).map((_, i) => (
               <Skeleton key={i} className="h-[76px] rounded-2xl" />
             ))}
           </div>

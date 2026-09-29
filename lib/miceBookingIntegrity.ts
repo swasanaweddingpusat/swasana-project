@@ -1,5 +1,6 @@
 import type { BookingStatus, Prisma, WeddingSession } from "@prisma/client";
 import { db } from "@/lib/db";
+import { getQuotationConversionReadinessError } from "@/lib/quotationReadiness";
 
 interface MiceSlotInput {
   venueId: string;
@@ -59,12 +60,36 @@ export async function hasMiceSlotConflict(input: MiceSlotInput): Promise<boolean
   return Boolean(conflict);
 }
 
+/**
+ * True when a quotation is complete enough to become a Booking MICE.
+ *
+ * This used to read an ApprovalRecord with module "quotations". No code path in
+ * the app ever created such a record (quotations have no approval UI or action —
+ * only `booking-mice`, `booking`, `package`, `catering` and `decoration` records
+ * are ever written), so the check was unconditionally false and silently killed
+ * every conversion that went through booking-mice. The guard is now the same
+ * document-readiness contract the quotation module already enforces on its own
+ * convert path, via getQuotationConversionReadinessError.
+ *
+ * Name kept as-is: the call sites live in actions/booking-mice*.ts.
+ */
 export async function isQuotationApproved(quotationId: string): Promise<boolean> {
-  const approval = await db.approvalRecord.findUnique({
-    where: { module_entityId: { module: "quotations", entityId: quotationId } },
-    select: { status: true },
+  const quotation = await db.quotation.findUnique({
+    where: { id: quotationId },
+    select: {
+      venueId: true,
+      eventTypeId: true,
+      eventDate: true,
+      packageSource: true,
+      packageId: true,
+      subtotal: true,
+      signingLocation: true,
+      signatureSales: true,
+      terms: { select: { amount: true, dueDate: true } },
+    },
   });
-  return approval?.status === "approved";
+  if (!quotation) return false;
+  return getQuotationConversionReadinessError(quotation) === null;
 }
 
 /** Resolve and ensure a quotation has not already produced another Booking MICE. */
