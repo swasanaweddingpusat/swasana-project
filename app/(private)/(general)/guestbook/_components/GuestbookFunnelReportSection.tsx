@@ -12,6 +12,7 @@ import { cn } from "@/lib/utils";
 import { useGuestbookFunnelReport, useGuestbookFunnelBucketEntries } from "@/hooks/use-guestbook";
 import { prospectStatusClass } from "@/lib/prospect-status";
 import type {
+  GuestbookCategoryFilter,
   GuestbookFunnelReport,
   GuestbookProspectBreakdown,
   GuestbookFunnelBucketKey,
@@ -21,6 +22,7 @@ interface GuestbookFunnelReportSectionProps {
   dateRange: DateRange | undefined;
   venueIds: string[];
   hostId?: string;
+  categories?: GuestbookCategoryFilter[];
 }
 
 interface ActiveBucket {
@@ -104,6 +106,8 @@ function RatioGrid({
   ads: boolean;
   totalAdsUrl?: number;
 }) {
+  // Untuk Ads, `report` sudah berupa funnel yang datasetnya dibatasi ke entry
+  // ber-Ads URL, jadi pembilang dan penyebut berasal dari populasi yang sama.
   const visitCount = report.visitVenue;
   const databaseCount = ads ? totalAdsUrl : report.database;
   const databaseToVisitPct = databaseCount > 0 ? (visitCount / databaseCount) * 100 : 0;
@@ -373,7 +377,12 @@ function FunnelReportSkeleton() {
   );
 }
 
-export function GuestbookFunnelReportSection({ dateRange, venueIds, hostId }: GuestbookFunnelReportSectionProps) {
+export function GuestbookFunnelReportSection({
+  dateRange,
+  venueIds,
+  hostId,
+  categories,
+}: GuestbookFunnelReportSectionProps) {
   const dateFrom = dateRange?.from ? format(dateRange.from, "yyyy-MM-dd") : undefined;
   const dateTo = dateRange?.to ? format(dateRange.to, "yyyy-MM-dd") : undefined;
   const [activeBucket, setActiveBucket] = useState<ActiveBucket | null>(null);
@@ -381,6 +390,7 @@ export function GuestbookFunnelReportSection({ dateRange, venueIds, hostId }: Gu
   const { data, isLoading } = useGuestbookFunnelReport({
     venueIds: venueIds.length > 0 ? venueIds : undefined,
     hostId,
+    categories: categories && categories.length > 0 ? categories : undefined,
     dateFrom,
     dateTo,
   });
@@ -398,14 +408,14 @@ export function GuestbookFunnelReportSection({ dateRange, venueIds, hostId }: Gu
     <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
       <PerformanceCard
         title="Database Performance"
-        description="Konversi seluruh database tamu sesuai filter aktif"
+        description="Konversi seluruh database tamu per tanggal input sales"
         report={data.overall}
         onCellClick={setActiveBucket}
       />
       <PerformanceCard
         title="Ads Performance"
-        description="Status mengikuti filter tanggal; Total Ads dihitung terpisah"
-        report={data.overall}
+        description="Hanya data dari Ads, mengikuti tanggal input sales"
+        report={data.ads}
         ads
         prospectBreakdown={data.prospectBreakdown}
         totalAdsUrl={data.totalAdsUrl}

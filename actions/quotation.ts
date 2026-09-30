@@ -393,7 +393,7 @@ export async function updateQuotation(
           ...(input.status !== undefined && { status: input.status }),
           ...(input.clientName !== undefined && { clientName: input.clientName }),
           ...(input.clientPhone !== undefined && { clientPhone: input.clientPhone ?? "" }),
-          instansi: input.instansi ?? null,
+          ...(input.instansi !== undefined && { instansi: input.instansi ?? null }),
           ...(input.salesId !== undefined && { salesId: input.salesId }),
           ...(input.venueId !== undefined && { venueId: input.venueId }),
           ...(input.paymentMethodId !== undefined && {
@@ -402,33 +402,46 @@ export async function updateQuotation(
             bankAccountNumber: bankDetails.bankAccountNumber,
             bankRecipient: bankDetails.bankRecipient,
           }),
-          venueName: input.venueName ?? null,
-          eventTypeId: input.eventTypeId ?? null,
-          eventTypeName: input.eventTypeName ?? null,
+          ...(input.venueName !== undefined && { venueName: input.venueName ?? null }),
+          ...(input.eventTypeId !== undefined && { eventTypeId: input.eventTypeId ?? null }),
+          ...(input.eventTypeName !== undefined && { eventTypeName: input.eventTypeName ?? null }),
           ...(input.packageId !== undefined && { packageId: input.packageId ?? null }),
           ...(input.packageName !== undefined && { packageName: input.packageName ?? null }),
           ...(input.pax !== undefined && { pax: input.pax }),
           ...(input.packageSource !== undefined && { packageSource: input.packageSource ?? null }),
-          eventDate: input.eventDate ? new Date(input.eventDate) : null,
-          eventEndDate: input.eventEndDate ? new Date(input.eventEndDate) : null,
-          time: input.time ?? null,
-          place: input.place ?? null,
-          details: input.details ?? null,
+          // `!== undefined` distinguishes "field not sent" (leave untouched) from
+          // "field sent as empty string" (explicit clear to null) — a client that
+          // wants to unset a date must send "" explicitly, not omit the key.
+          ...(input.eventDate !== undefined && {
+            eventDate: input.eventDate ? new Date(input.eventDate) : null,
+          }),
+          ...(input.eventEndDate !== undefined && {
+            eventEndDate: input.eventEndDate ? new Date(input.eventEndDate) : null,
+          }),
+          ...(input.time !== undefined && { time: input.time ?? null }),
+          ...(input.place !== undefined && { place: input.place ?? null }),
+          ...(input.details !== undefined && { details: input.details ?? null }),
           ...(pricingUpdate !== undefined && {
             subtotal: pricingUpdate.subtotal,
             discount: pricingUpdate.discount,
             totalPrice: pricingUpdate.totalPrice,
           }),
-          bookingFee: input.bookingFee ?? null,
-          discountName: input.discountName ?? null,
-          termAndCondition: input.termAndCondition ?? null,
-          paymentNote: input.paymentNote ?? null,
-          cancellationPolicy: input.cancellationPolicy ?? null,
-          closingNote: input.closingNote ?? null,
-          validUntil: input.validUntil ? new Date(input.validUntil) : undefined,
-          notes: input.notes ?? null,
-          signingLocation: input.signingLocation ?? null,
-          signatureSales: input.signatureSales ?? null,
+          ...(input.bookingFee !== undefined && { bookingFee: input.bookingFee ?? null }),
+          ...(input.discountName !== undefined && { discountName: input.discountName ?? null }),
+          ...(input.termAndCondition !== undefined && {
+            termAndCondition: input.termAndCondition ?? null,
+          }),
+          ...(input.paymentNote !== undefined && { paymentNote: input.paymentNote ?? null }),
+          ...(input.cancellationPolicy !== undefined && {
+            cancellationPolicy: input.cancellationPolicy ?? null,
+          }),
+          ...(input.closingNote !== undefined && { closingNote: input.closingNote ?? null }),
+          ...(input.validUntil !== undefined && {
+            validUntil: input.validUntil ? new Date(input.validUntil) : null,
+          }),
+          ...(input.notes !== undefined && { notes: input.notes ?? null }),
+          ...(input.signingLocation !== undefined && { signingLocation: input.signingLocation }),
+          ...(input.signatureSales !== undefined && { signatureSales: input.signatureSales }),
         },
       }),
       // 2. Replace items + additionals (both in quotation_items, type distinguishes them)
@@ -1037,6 +1050,11 @@ export async function convertQuotationToMiceBooking(
       }),
     ];
 
+    // TODO: quotation.prices dan quotation.taxDeposits belum terbawa ke booking
+    // saat konversi — belum ada model snap Booking yang cocok untuk menampung
+    // baris "Harga" (QTY/NOMINAL) dan "Tax & Deposit" ala quotation (beda bentuk
+    // dari SnapPackageCategoryPrice yang berbasis kategori paket wedding). Perlu
+    // model baru yang harus disetujui dulu sebelum dikerjakan.
     if (livePackage && quotation.packageName) {
       ops.push(
         db.snapPackage.create({

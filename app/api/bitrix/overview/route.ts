@@ -19,6 +19,10 @@ const UF_REASON = "UF_CRM_1774952346733"; // enum: includes "Getback"
 const UF_ISSUE = "UF_CRM_1768930533046"; // enum: Leads / No Response / Spam / Komplain …
 const UF_DB_DATE = "UF_CRM_1786680629702"; // date: "Tanggal Database" — when the lead entered the database
 
+// Diekspor supaya cron warmer (lib/bitrix-warm-targets.ts) memfilter pada field
+// yang sama persis — beda field berarti cache key berbeda dan warmer jadi sia-sia.
+export const OVERVIEW_DB_DATE_FIELD = UF_DB_DATE;
+
 // Open Lines conversation activities — same provider Response Sales / Percakapan use.
 const PROVIDER_ID = "IMOPENLINES_SESSION";
 
@@ -41,11 +45,16 @@ export const OVERVIEW_DEAL_SELECT = [
   UF_DB_DATE,
 ];
 
-// Venue enum values that aren't real venues — excluded from the venue breakdown
-// and from the "database venue" total, matching the daily report's scope.
-// Matched case-insensitively (see isNonVenueLabel) since the enum's raw casing
-// in Bitrix isn't guaranteed to be all-caps.
-const NON_VENUE_LABELS = new Set(["MICE", "NON VENUE"]);
+// Nilai enum Venue yang bukan venue sungguhan — dikecualikan dari breakdown
+// Venue dan dari total "Database Venue".
+//
+// "MICE" TIDAK termasuk di sini: acara MICE tetap terhitung sebagai database
+// venue. Hanya "NON VENUE" yang dibuang karena itu penanda ketiadaan venue,
+// bukan sebuah lokasi.
+//
+// Dicocokkan case-insensitive karena penulisan enum di Bitrix tidak dijamin
+// selalu huruf kapital.
+const NON_VENUE_LABELS = new Set(["NON VENUE"]);
 
 function isNonVenueLabel(label: string): boolean {
   return NON_VENUE_LABELS.has(label.toUpperCase());
@@ -150,38 +159,81 @@ export async function GET(request: Request) {
       getBitrixDealEnums([UF_VENUE, UF_REASON, UF_ISSUE]),
     ]);
 
-    // Bitrix stores DATE_CREATE with a +03:00 offset; filtering on the bare date
-    // string (no offset) matches "created this day" in its UI.
-    const filter: Record<string, string | string[]> = {
-      ">=DATE_CREATE": `${fromDay}T00:00:00`,
-      "<DATE_CREATE": `${nextDay(toDay)}T00:00:00`,
-    };
-    if (pipeline) filter.CATEGORY_ID = pipeline;
-    if (clientId) filter.CONTACT_ID = clientId;
-    if (salesId) filter.ASSIGNED_BY_ID = salesId;
+    // Rentang tanggal utama halaman ini memakai "Tanggal Database" (UF_DB_DATE),
+    // BUKAN DATE_CREATE. Yang diukur adalah kapan lead masuk ke database, bukan
+    // kapan record-nya dibuat di CRM — keduanya bisa berbeda jauh ketika sales
+    // memasukkan lead lama.
+    //
+    // UF_DB_DATE bertipe date-only, jadi batasnya memakai ISO day telanjang dan
+    // `to` bersifat inklusif lewat `<=` pada hari yang sama.
+    //
+    // DUA query mengambil dua populasi:
+    //   query pertama — punya Tanggal Database di dalam rentang. Ini yang memberi
+    //               makan seluruh angka ber-nama "Database*".
+    //   query kedua — Tanggal Database kosong, tetapi dibuat di CRM pada rentang
+    //               yang sama. Deal ini HANYA menambah Total Transaksi.
+    //
+    // Dua query terpisah, BUKAN satu query ber-LOGIC OR. Bitrix memperlakukan
+    // syarat di dalam satu cabang OR sebagai OR juga, bukan AND, sehingga
+    // `{ UF kosong, DATE_CREATE dalam rentang }` melebar menjadi "semua deal
+    // tanpa Tanggal Database" tanpa batas tanggal sama sekali — terukur 33.784
+    // baris untuk rentang yang seharusnya hanya 5.083. Dua query menjaga
+    // semantik AND di tiap sisi.
+    const sharedFilter: Record<string, string | string[]> = {};
+    if (pipeline) sharedFilter.CATEGORY_ID = pipeline;
+    if (clientId) sharedFilter.CONTACT_ID = clientId;
+    if (salesId) sharedFilter.ASSIGNED_BY_ID = salesId;
     if (stageName) {
       const ids = meta.stageIdsByName[stageName] ?? [];
-      filter.STAGE_ID = ids.length > 0 ? ids : ["__none__"];
+      sharedFilter.STAGE_ID = ids.length > 0 ? ids : ["__none__"];
     }
     if (issueName) {
       // Resolve the issue label back to its enum item ID (label → ID).
       const issueEnumForFilter = enums[UF_ISSUE] ?? {};
       const issueId = Object.entries(issueEnumForFilter).find(([, label]) => label === issueName)?.[0];
-      filter[UF_ISSUE] = issueId ?? "__none__";
+      sharedFilter[UF_ISSUE] = issueId ?? "__none__";
     }
-    // Tanggal Database range → UF_DB_DATE. Date-only field, so bound on the bare
-    // ISO day; "to" is inclusive via <= on the same day.
-    if (isIsoDay(dbFrom)) filter[`>=${UF_DB_DATE}`] = dbFrom;
-    if (isIsoDay(dbTo)) filter[`<=${UF_DB_DATE}`] = dbTo;
 
-    const { items } = await bitrixListAll<RawDeal>("crm.deal.list", {
-      select: OVERVIEW_DEAL_SELECT,
-      filter,
-      order: { DATE_CREATE: "ASC" },
-    });
+    // dbFrom/dbTo dipertahankan demi kompatibilitas pemanggil lama: mempersempit
+    // rentang Tanggal Database. UI sendiri tidak lagi mengirimkannya.
+    const dbFromEff = isIsoDay(dbFrom) && dbFrom > fromDay ? dbFrom : fromDay;
+    const dbToEff = isIsoDay(dbTo) && dbTo < toDay ? dbTo : toDay;
+
+    const dbFilter: Record<string, unknown> = {
+      ...sharedFilter,
+      [`>=${UF_DB_DATE}`]: dbFromEff,
+      [`<=${UF_DB_DATE}`]: dbToEff,
+    };
+    const noDbFilter: Record<string, unknown> = {
+      ...sharedFilter,
+      [`=${UF_DB_DATE}`]: "",
+      ">=DATE_CREATE": `${fromDay}T00:00:00`,
+      "<=DATE_CREATE": `${toDay}T23:59:59`,
+    };
+
+    const [dbRes, noDbRes] = await Promise.all([
+      bitrixListAll<RawDeal>("crm.deal.list", {
+        select: OVERVIEW_DEAL_SELECT,
+        filter: dbFilter,
+        order: { DATE_CREATE: "ASC" },
+      }),
+      bitrixListAll<RawDeal>("crm.deal.list", {
+        select: OVERVIEW_DEAL_SELECT,
+        filter: noDbFilter,
+        order: { DATE_CREATE: "ASC" },
+      }),
+    ]);
+    const items = [...dbRes.items, ...noDbRes.items];
 
     // Still needed for the Database Sales breakdown labels (ASSIGNED_BY_ID → name).
     const userMap = await resolveBitrixUsers(items.map((d) => d.ASSIGNED_BY_ID ?? "").filter(Boolean));
+
+    // Pemisahan dua populasi hasil dua query di atas:
+    //   `items`   — SEMUA transaksi pada rentang. Hanya dipakai Total Transaksi.
+    //   `dbItems` — hanya yang punya Tanggal Database. Ini sumber setiap angka
+    //               bernama "Database*" (Sumber Database, Database Venue,
+    //               Database Sales, Kantor/Mandiri) serta breakdown turunannya.
+    const dbItems = items.filter((d) => !!(d[UF_DB_DATE] ?? "").trim());
 
     const venueEnum = enums[UF_VENUE] ?? {};
     const reasonEnum = enums[UF_REASON] ?? {};
@@ -197,7 +249,7 @@ export async function GET(request: Request) {
 
     // Sumber Database — channel label (WA / IG Messenger / TikTok DM …).
     const sources: Bucket[] = bucketize(
-      items,
+      dbItems,
       (d) => d.SOURCE_ID ?? "UNKNOWN",
       (key) => meta.sources[key] ?? labelFromSourceId(key),
     );
@@ -232,10 +284,10 @@ export async function GET(request: Request) {
     // name/phone) are typically still sitting under whoever triaged them
     // first — often CS/front-desk (Fauzan, Rifat) — not a real sales rep.
     const processedDealIds = new Set(
-      items.filter((d) => isProcessedDatabaseTitle(d.TITLE)).map((d) => d.ID),
+      dbItems.filter((d) => isProcessedDatabaseTitle(d.TITLE)).map((d) => d.ID),
     );
     const salesMap = new Map<string, SalesBucket>();
-    for (const d of items) {
+    for (const d of dbItems) {
       if (!isProcessedDatabaseTitle(d.TITLE)) continue;
       const key = d.ASSIGNED_BY_ID ?? "UNKNOWN";
       const label = userMap[key] ?? (key === "UNKNOWN" ? "Tidak ditetapkan" : `#${key}`);
@@ -262,7 +314,7 @@ export async function GET(request: Request) {
     // Venue — from the custom enum field; skip empty + non-venue placeholders.
     const venueMap = new Map<string, number>();
     let withVenue = 0;
-    for (const d of items) {
+    for (const d of dbItems) {
       const venueId = d[UF_VENUE];
       const label = venueId ? venueEnum[venueId] : undefined;
       if (!label || isNonVenueLabel(label)) continue;
@@ -385,6 +437,11 @@ export async function GET(request: Request) {
         reasonLabel,
         adsUrl,
         dateCreate: d.DATE_CREATE ?? "",
+        dbDate: (d[UF_DB_DATE] ?? "").trim(),
+        // Menandai deal mana yang ikut hitungan "Database*". Client memakainya
+        // untuk menyaring breakdown Status/Tidak Jadi Database agar konsisten
+        // dengan kartu-kartu di atasnya.
+        hasDbDate: !!(d[UF_DB_DATE] ?? "").trim(),
         stageLabel: meta.stages[d.STAGE_ID ?? ""] ?? d.STAGE_ID ?? "",
         pipeline: d.CATEGORY_ID ?? "",
         isKantor: !MANDIRI_SOURCE_LABELS.has(sourceLabel.toLowerCase()),
@@ -432,15 +489,6 @@ export async function GET(request: Request) {
 
 function isIsoDay(v: string | null): v is string {
   return !!v && /^\d{4}-\d{2}-\d{2}$/.test(v);
-}
-
-// Day after an ISO day via UTC calendar math — avoids timezone drift for a
-// date-only boundary.
-function nextDay(day: string): string {
-  const [y, m, d] = day.split("-").map(Number);
-  const dt = new Date(Date.UTC(y, m - 1, d));
-  dt.setUTCDate(dt.getUTCDate() + 1);
-  return dt.toISOString().slice(0, 10);
 }
 
 function yesterdayFallback(to: string | null): string {

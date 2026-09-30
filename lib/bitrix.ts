@@ -38,14 +38,126 @@ function isCacheableMethod(method: string): boolean {
   );
 }
 
+// ─── Retry / backoff for throttled or transiently-failing Bitrix calls ─────
+//
+// Bitrix's inbound webhooks enforce a per-second rate limit and reply with
+// HTTP 503 (occasionally 429) or a `QUERY_LIMIT_EXCEEDED` error envelope when
+// exceeded. None of that was handled before — a single throttle response
+// bubbled straight up as a user-facing error. This wraps the HTTP + envelope
+// parsing of a single attempt so `rawBitrixCall` can retry ONLY the failure
+// modes that are actually worth retrying.
+
+/** Small, fixed cap: this function is invoked from user-facing HTTP request
+ *  handlers that have their own timeout budget, so retries must resolve
+ *  (successfully or not) within a few seconds, not retry indefinitely. */
+const MAX_ATTEMPTS = 3;
+/** Starting backoff window in ms — gives Bitrix's per-second throttle window
+ *  time to reset before the next attempt. */
+const BASE_BACKOFF_MS = 400;
+/** Upper bound so a pathological run of 503s can't stall a request for long. */
+const MAX_BACKOFF_MS = 4000;
+
+const RETRYABLE_HTTP_STATUSES = new Set([503, 429]);
+// Bitrix error codes that specifically mean "you're being throttled, try
+// again" — matched case-insensitively since Bitrix's casing isn't documented
+// to be stable. Everything else (auth/permission/validation errors) is NOT
+// retried: retrying those only wastes the attempt budget and can worsen an
+// active throttle.
+const RETRYABLE_ERROR_CODES = new Set(["query_limit_exceeded"]);
+
+function isRetryableErrorCode(code: string): boolean {
+  return RETRYABLE_ERROR_CODES.has(code.toLowerCase());
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * "Full jitter" backoff (see the AWS Architecture Blog's "Exponential Backoff
+ * And Jitter" post): the delay is a random value in [0, cap], where the cap
+ * itself doubles each attempt. This spreads retries across the *entire*
+ * window rather than clustering them around the midpoint (as "equal jitter"
+ * would), which is what actually prevents many parallel callers from
+ * re-throttling Bitrix all at once after a shared rate-limit window resets.
+ */
+function computeBackoffMs(attempt: number): number {
+  const cap = Math.min(MAX_BACKOFF_MS, BASE_BACKOFF_MS * 2 ** (attempt - 1));
+  return Math.random() * cap;
+}
+
+/** Internal-only wrapper marking a failure as retry-eligible. Never escapes
+ *  `rawBitrixCall` — callers only ever see `BitrixApiError` (or throw it
+ *  unwrapped), so `withBitrixCache`'s "serve stale cache on failure" fallback
+ *  keeps working unchanged. */
+class RetryableBitrixFailure {
+  constructor(public readonly error: BitrixApiError) {}
+}
+
+/** One HTTP round-trip + envelope parse, with no retry logic of its own —
+ *  `rawBitrixCall` decides whether a thrown failure is worth retrying. */
+async function attemptBitrixCall<T>(
+  url: string,
+  params: Record<string, unknown>,
+): Promise<{ result: T; total?: number; next?: number }> {
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(params),
+      cache: "no-store",
+    });
+  } catch (e) {
+    // Network failures (DNS, connection reset, etc.) are transient by nature.
+    throw new RetryableBitrixFailure(
+      new BitrixApiError("network", `Gagal menghubungi Bitrix: ${(e as Error).message}`),
+    );
+  }
+
+  if (RETRYABLE_HTTP_STATUSES.has(res.status)) {
+    throw new RetryableBitrixFailure(
+      new BitrixApiError(
+        `http_${res.status}`,
+        `Bitrix menolak permintaan sementara (HTTP ${res.status}).`,
+      ),
+    );
+  }
+
+  const json = (await res.json().catch(() => null)) as
+    | (BitrixError & { result?: T; total?: number; next?: number })
+    | null;
+
+  if (!json) {
+    // Not a throttle signal — a genuinely malformed response isn't worth
+    // retrying (HTTP 503/429 above already caught the throttle case).
+    throw new BitrixApiError("bad_response", `Respons Bitrix tidak valid (HTTP ${res.status}).`);
+  }
+
+  if (json.error) {
+    const err = new BitrixApiError(json.error, json.error_description ?? json.error);
+    if (isRetryableErrorCode(json.error)) throw new RetryableBitrixFailure(err);
+    throw err;
+  }
+
+  return { result: json.result as T, total: json.total, next: json.next };
+}
+
 /**
  * Low-level call to a Bitrix REST method — always hits Bitrix live, no cache.
+ *
+ * Retries HTTP 503/429 and `QUERY_LIMIT_EXCEEDED` envelope errors with capped
+ * exponential backoff + full jitter (see `computeBackoffMs`); everything else
+ * (misconfiguration, auth/permission errors, validation errors, malformed
+ * responses) fails immediately on the first attempt. A successful call never
+ * pays any retry-related overhead — the loop body runs once and returns.
  *
  * @param method dotted REST method, e.g. "crm.deal.list"
  * @param params request payload (filter/select/order/start/fields/id ...)
  * @returns the parsed `result` field of the Bitrix envelope
  * @throws BitrixApiError when the webhook is unconfigured, the HTTP call fails,
- *         or Bitrix returns an `error` envelope.
+ *         or Bitrix returns an `error` envelope (including after exhausting
+ *         retries on a throttled/transient failure).
  */
 async function rawBitrixCall<T = unknown>(
   method: string,
@@ -57,31 +169,22 @@ async function rawBitrixCall<T = unknown>(
 
   const url = `${BASE.replace(/\/$/, "")}/${method}`;
 
-  let res: Response;
-  try {
-    res = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(params),
-      cache: "no-store",
-    });
-  } catch (e) {
-    throw new BitrixApiError("network", `Gagal menghubungi Bitrix: ${(e as Error).message}`);
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    try {
+      return await attemptBitrixCall<T>(url, params);
+    } catch (e) {
+      if (!(e instanceof RetryableBitrixFailure)) throw e;
+      if (attempt === MAX_ATTEMPTS) throw e.error;
+      console.warn(
+        `[bitrix] ${method}: attempt ${attempt}/${MAX_ATTEMPTS} failed (${e.error.code}), retrying…`,
+      );
+      await sleep(computeBackoffMs(attempt));
+    }
   }
 
-  const json = (await res.json().catch(() => null)) as
-    | (BitrixError & { result?: T; total?: number; next?: number })
-    | null;
-
-  if (!json) {
-    throw new BitrixApiError("bad_response", `Respons Bitrix tidak valid (HTTP ${res.status}).`);
-  }
-
-  if (json.error) {
-    throw new BitrixApiError(json.error, json.error_description ?? json.error);
-  }
-
-  return { result: json.result as T, total: json.total, next: json.next };
+  // Unreachable — the loop above always returns or throws — but keeps the
+  // function's control flow explicit for TypeScript.
+  throw new BitrixApiError("unknown", "Bitrix call failed after retries.");
 }
 
 /**
@@ -128,32 +231,123 @@ export async function bitrixList<T = Record<string, unknown>>(
   return { items: Array.isArray(result) ? result : [], total: total ?? 0, next };
 }
 
+interface BitrixListAllParams {
+  filter?: Record<string, unknown>;
+  select?: string[];
+  order?: Record<string, "ASC" | "DESC">;
+}
+
 /**
- * Fetch EVERY page of a Bitrix list method by walking the `next` cursor.
+ * Encode `select`/`order`/`filter` + a page offset into a Bitrix `batch`
+ * command string, e.g. `"crm.deal.list?select[]=ID&order[DATE_CREATE]=ASC&start=50"`.
  *
- * `maxPages` is purely an infinite-loop safety net, not an expected volume —
- * callers like the Overview and export routes accept arbitrary (multi-week or
- * multi-month) date ranges, and the old default of 40 pages (2000 rows) would
- * silently truncate wider ranges, under-reporting every count derived from the
- * result versus Bitrix's real numbers. 500 pages (25,000 rows) comfortably
- * covers this portal's realistic volume; if it's ever hit, that's logged
- * instead of silently returning a partial result.
+ * Bitrix's `batch` endpoint parses each `cmd` value as an ordinary REST query
+ * string (PHP `parse_str` convention): repeated `key[]=` for arrays, and
+ * `key[subKey]=` for maps — used here both for `order` (field name to ASC/DESC)
+ * and `filter` (field name, possibly with a comparison-operator prefix like
+ * ">=", to a scalar or array value). Only the DYNAMIC parts (field names,
+ * values) are percent-encoded; the bracket structure itself is left literal,
+ * since Bitrix's query parser matches on those literal characters — encoding
+ * them too would break the array/map syntax it expects. Verified against
+ * production: batch commands built this way returned byte-identical rows
+ * (same IDs, same order) to sequential `bitrixList` calls at the same offsets.
  */
-export async function bitrixListAll<T = Record<string, unknown>>(
+function buildBitrixBatchCommand(method: string, params: BitrixListAllParams, start: number): string {
+  const parts: string[] = [];
+
+  for (const field of params.select ?? []) {
+    parts.push(`select[]=${encodeURIComponent(field)}`);
+  }
+
+  for (const [field, dir] of Object.entries(params.order ?? {})) {
+    parts.push(`order[${encodeURIComponent(field)}]=${encodeURIComponent(dir)}`);
+  }
+
+  for (const [field, value] of Object.entries(params.filter ?? {})) {
+    const key = `filter[${encodeURIComponent(field)}]`;
+    if (Array.isArray(value)) {
+      for (const v of value) parts.push(`${key}[]=${encodeURIComponent(String(v))}`);
+    } else {
+      parts.push(`${key}=${encodeURIComponent(String(value))}`);
+    }
+  }
+
+  parts.push(`start=${start}`);
+  return `${method}?${parts.join("&")}`;
+}
+
+/**
+ * Fetch multiple pages of `method` in one or more `batch` calls — one `batch`
+ * round-trip replaces up to 50 sequential `next`-cursor calls, which is both
+ * faster (fewer round-trips) and gentler on Bitrix's per-second rate limit
+ * (one request counted, not fifty). `offsets` must already be capped/ordered
+ * by the caller; this only chunks them into batches of at most 50 commands
+ * (Bitrix's hard per-batch command limit) and reassembles by offset.
+ *
+ * Returns `null` — instead of throwing — on ANY sign the result can't be
+ * trusted (a batch call itself failing, Bitrix reporting a per-command error
+ * via `result_error`, or a missing/malformed page in an otherwise-OK-looking
+ * response), so the caller can silently fall back to sequential paging rather
+ * than serving a dashboard with silently-dropped rows.
+ */
+async function fetchBitrixPagesViaBatch<T>(
   method: string,
-  params: {
-    filter?: Record<string, unknown>;
-    select?: string[];
-    order?: Record<string, "ASC" | "DESC">;
-  } = {},
-  maxPages = 500,
+  params: BitrixListAllParams,
+  offsets: number[],
+): Promise<Map<number, T[]> | null> {
+  const BATCH_CHUNK_SIZE = 50; // Bitrix's hard cap on commands per `batch` call.
+  const pages = new Map<number, T[]>();
+
+  for (let i = 0; i < offsets.length; i += BATCH_CHUNK_SIZE) {
+    const chunkOffsets = offsets.slice(i, i + BATCH_CHUNK_SIZE);
+    const cmd: Record<string, string> = {};
+    chunkOffsets.forEach((offset, idx) => {
+      cmd[`c${idx}`] = buildBitrixBatchCommand(method, params, offset);
+    });
+
+    let batchRes: { result: { result?: Record<string, T[]>; result_error?: Record<string, unknown> } };
+    try {
+      batchRes = await bitrixCall<{ result?: Record<string, T[]>; result_error?: Record<string, unknown> }>(
+        "batch",
+        { cmd, halt: 0 },
+      );
+    } catch {
+      return null;
+    }
+
+    const payload = batchRes.result ?? {};
+    if (payload.result_error && Object.keys(payload.result_error).length > 0) return null;
+
+    const rows = payload.result ?? {};
+    for (let idx = 0; idx < chunkOffsets.length; idx++) {
+      const page = rows[`c${idx}`];
+      if (!Array.isArray(page)) return null;
+      pages.set(chunkOffsets[idx], page);
+    }
+  }
+
+  return pages;
+}
+
+/**
+ * Walk the `next` cursor sequentially, continuing from an already-fetched
+ * first page (never re-fetches offset 0 — that would duplicate its rows).
+ * `page` starts at 1 to keep the `maxPages` budget/truncation math identical
+ * to the original single-loop implementation this replaced.
+ */
+async function bitrixListAllSequential<T>(
+  method: string,
+  params: BitrixListAllParams,
+  maxPages: number,
+  firstPage: { items: T[]; total: number; next?: number },
 ): Promise<{ items: T[]; total: number }> {
-  const all: T[] = [];
-  let start = 0;
-  let total = 0;
+  const all = [...firstPage.items];
+  let total = firstPage.total;
+  let start = firstPage.next;
   let truncated = false;
 
-  for (let page = 0; page < maxPages; page++) {
+  for (let page = 1; page < maxPages; page++) {
+    if (start === undefined || start === null) break;
     const res = await bitrixList<T>(method, { ...params, start });
     all.push(...res.items);
     total = res.total;
@@ -169,6 +363,85 @@ export async function bitrixListAll<T = Record<string, unknown>>(
   }
 
   return { items: all, total };
+}
+
+/**
+ * Fetch EVERY page of a Bitrix list method.
+ *
+ * Fetches page 1 to learn `total` and the actual page size Bitrix used, then
+ * — since Bitrix returns `total` up front — computes every remaining offset
+ * and fetches them via `batch` (see `fetchBitrixPagesViaBatch`) instead of
+ * walking `next` one round-trip at a time. Falls back to the original
+ * sequential `next`-cursor walk (`bitrixListAllSequential`) whenever the
+ * batch result can't be fully trusted:
+ *   - `total` is 0/undefined despite a `next` cursor existing (contradictory —
+ *     there's no reliable page size to derive offsets from), or the first
+ *     page came back empty despite `total` implying more rows exist;
+ *   - any `batch` call in the chain fails, returns a per-command error, or
+ *     comes back in an unexpected shape.
+ * "Slower but correct" always wins over "faster but maybe wrong" here.
+ *
+ * `maxPages` is purely an infinite-loop / runaway-volume safety net, not an
+ * expected volume — callers like the Overview and export routes accept
+ * arbitrary (multi-week or multi-month) date ranges, and the old default of
+ * 40 pages (2000 rows) would silently truncate wider ranges, under-reporting
+ * every count derived from the result versus Bitrix's real numbers. 500 pages
+ * (25,000 rows) comfortably covers this portal's realistic volume; if it's
+ * ever hit (batch or sequential path alike), that's logged instead of
+ * silently returning a partial result.
+ */
+export async function bitrixListAll<T = Record<string, unknown>>(
+  method: string,
+  params: BitrixListAllParams = {},
+  maxPages = 500,
+): Promise<{ items: T[]; total: number }> {
+  const first = await bitrixList<T>(method, { ...params, start: 0 });
+
+  // Fast path: Bitrix says there's nothing more to fetch.
+  if (first.next === undefined || first.next === null) {
+    return { items: first.items, total: first.total };
+  }
+  if (first.total > 0 && first.total <= first.items.length) {
+    return { items: first.items, total: first.total };
+  }
+
+  const pageSize = first.items.length;
+  const totalIsTrustworthy = pageSize > 0 && first.total > first.items.length;
+  if (!totalIsTrustworthy) {
+    return bitrixListAllSequential<T>(method, params, maxPages, first);
+  }
+
+  const offsets: number[] = [];
+  for (let start = pageSize; start < first.total; start += pageSize) offsets.push(start);
+
+  // `maxPages` counts the already-fetched first page too.
+  const maxAdditionalPages = Math.max(0, maxPages - 1);
+  let truncated = false;
+  if (offsets.length > maxAdditionalPages) {
+    offsets.length = maxAdditionalPages;
+    truncated = true;
+  }
+
+  const pages = await fetchBitrixPagesViaBatch<T>(method, params, offsets);
+
+  if (pages) {
+    const all = [...first.items];
+    // Reassemble by OFFSET order, not batch-response key order — this is what
+    // keeps the caller's `order` (e.g. DATE_CREATE ASC) intact end-to-end.
+    for (const offset of offsets) all.push(...(pages.get(offset) ?? []));
+
+    if (truncated) {
+      console.error(
+        `[bitrix] bitrixListAll("${method}") hit the ${maxPages}-page cap — result truncated to ${all.length}/${first.total} rows.`,
+      );
+    }
+    return { items: all, total: first.total };
+  }
+
+  console.warn(
+    `[bitrix] bitrixListAll("${method}") batch paging failed or returned an unexpected shape — falling back to sequential paging.`,
+  );
+  return bitrixListAllSequential<T>(method, params, maxPages, first);
 }
 
 // ─── CRM metadata (pipelines / stages / sources) ──────────────────────────────

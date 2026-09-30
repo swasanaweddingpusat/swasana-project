@@ -45,6 +45,8 @@ export function Header() {
   // eslint-disable-next-line react-hooks/set-state-in-effect -- one-shot hydration flag, intentional
   useEffect(() => setMounted(true), []);
 
+  if (pathname === "/chat-ai") return null;
+
   const canCreateWedding = can("booking", "create");
   const canCreateMice = can("booking-mice", "create");
   const canCreateQuotation = can("quotations", "create");

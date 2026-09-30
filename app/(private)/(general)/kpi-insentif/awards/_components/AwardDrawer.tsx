@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { useForm, Controller } from "react-hook-form";
+import { useForm, useWatch, Controller } from "react-hook-form";
 import { toast } from "sonner";
 import { AddCircle, Pen } from "@solar-icons/react";
 import { Drawer } from "@/components/shared/drawer";
@@ -66,13 +66,12 @@ export function AwardDrawer({ isOpen, onClose, editItem }: AwardDrawerProps) {
   const {
     register,
     handleSubmit,
-    watch,
     control,
     reset,
     formState: { errors },
   } = useForm<FormValues>({ defaultValues: DEFAULT_VALUES });
 
-  const isRanked = watch("isRanked");
+  const isRanked = useWatch({ control, name: "isRanked" });
 
   useEffect(() => {
     if (!isOpen) return;
