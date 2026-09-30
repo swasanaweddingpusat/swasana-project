@@ -1,10 +1,8 @@
 "use client";
 
 import { useMemo } from "react";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid } from "recharts";
 import { UsersGroupRounded, Crown, Star } from "@solar-icons/react";
 import { cn } from "@/lib/utils";
-import { ChartContainer, ChartTooltip, type ChartConfig } from "@/components/ui/chart";
 import { useDashboardGroups } from "@/hooks/useDashboardGroups";
 import type { GroupAchievementData } from "@/lib/queries/dashboard";
 
@@ -23,40 +21,6 @@ function getInitials(name: string): string {
     .map((n) => n[0])
     .join("")
     .toUpperCase();
-}
-
-const groupChartConfig = {
-  revenue: { label: "Revenue", color: "hsl(var(--primary))" },
-} satisfies ChartConfig;
-
-interface TooltipPayloadEntry {
-  payload: {
-    name: string;
-    revenue: number;
-    leaderName: string;
-    confirmedBookings: number;
-    memberCount: number;
-  };
-}
-
-function GroupTooltipContent({
-  active,
-  payload,
-}: {
-  active?: boolean;
-  payload?: TooltipPayloadEntry[];
-}): React.ReactElement | null {
-  if (!active || !payload?.length) return null;
-  const d = payload[0].payload;
-  return (
-    <div className="rounded-lg border border-border/50 bg-background px-3 py-2 text-xs shadow-xl">
-      <p className="font-semibold text-foreground">{d.name}</p>
-      <p className="mt-1 text-muted-foreground">Leader: {d.leaderName}</p>
-      <p className="text-muted-foreground">{d.confirmedBookings} booking confirmed</p>
-      <p className="text-muted-foreground">{d.memberCount} anggota</p>
-      <p className="mt-1 font-semibold text-foreground">{formatCurrency(d.revenue)}</p>
-    </div>
-  );
 }
 
 interface GroupAchievementSectionProps {
@@ -82,59 +46,11 @@ export function GroupAchievementSection({
     () => [...groups].sort((a, b) => b.revenue - a.revenue),
     [groups],
   );
-
-  const chartData = useMemo(
-    () =>
-      sorted.map((g) => ({
-        name: g.name,
-        revenue: g.revenue,
-        leaderName: g.leaderName,
-        confirmedBookings: g.confirmedBookings,
-        memberCount: g.memberCount,
-      })),
-    [sorted],
-  );
-
-  const chartHeight = Math.max(sorted.length * 48 + 32, 120);
+  const maxRevenue = Math.max(...sorted.map((group) => group.revenue), 1);
 
   return (
     <div className="flex flex-col gap-4">
       <h2 className="text-base font-semibold text-foreground">Achievement per Group</h2>
-
-      {sorted.length > 0 && (
-        <div className="rounded-2xl border border-border bg-card p-5 shadow-sm">
-          <ChartContainer config={groupChartConfig} className="aspect-auto" style={{ height: chartHeight }}>
-            <BarChart
-              data={chartData}
-              layout="vertical"
-              margin={{ top: 0, right: 16, bottom: 0, left: 0 }}
-            >
-              <CartesianGrid horizontal={false} strokeDasharray="3 3" />
-              <XAxis
-                type="number"
-                tickFormatter={(v: number) => formatCurrency(v)}
-                tick={{ fontSize: 10 }}
-                axisLine={false}
-                tickLine={false}
-              />
-              <YAxis
-                type="category"
-                dataKey="name"
-                width={90}
-                tick={{ fontSize: 11 }}
-                axisLine={false}
-                tickLine={false}
-              />
-              <ChartTooltip content={<GroupTooltipContent />} />
-              <Bar
-                dataKey="revenue"
-                fill="hsl(var(--primary))"
-                radius={[0, 4, 4, 0]}
-              />
-            </BarChart>
-          </ChartContainer>
-        </div>
-      )}
 
       <ol className="flex flex-col divide-y divide-border overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
         {sorted.map((g, idx) => {
@@ -188,9 +104,18 @@ export function GroupAchievementSection({
                 </p>
               </div>
 
-              <p className="shrink-0 text-sm font-semibold text-foreground tabular-nums">
-                {formatCurrency(g.revenue)}
-              </p>
+              <div className="w-32 shrink-0 sm:w-48">
+                <div className="mb-1 flex items-center justify-between gap-2 text-xs">
+                  <span className="text-muted-foreground">{g.confirmedBookings} booking</span>
+                  <span className="font-semibold tabular-nums text-foreground">{formatCurrency(g.revenue)}</span>
+                </div>
+                <div className="h-2 overflow-hidden rounded-full bg-muted">
+                  <div
+                    className="h-full rounded-full bg-primary transition-[width]"
+                    style={{ width: `${Math.round((g.revenue / maxRevenue) * 100)}%` }}
+                  />
+                </div>
+              </div>
             </li>
           );
         })}

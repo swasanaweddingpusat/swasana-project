@@ -140,9 +140,12 @@ export async function getManagerProfiles() {
 
   return db.profile.findMany({
     where: { status: "active", role: { name: { in: ["manager", "manager-mice"] } } },
-    select: { id: true, fullName: true, role: { select: { name: true } } },
+    select: { id: true, fullName: true, avatarUrl: true, role: { select: { name: true } } },
     orderBy: { fullName: "asc" },
-  });
+  }).then((profiles) => profiles.map((profile) => ({
+    ...profile,
+    avatarUrl: resolveAvatarUrl(profile.avatarUrl),
+  })));
 }
 
 export type ManagerProfile = Awaited<ReturnType<typeof getManagerProfiles>>[number];
