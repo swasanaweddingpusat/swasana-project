@@ -153,8 +153,11 @@ export function GuestbookOverviewCards({
     items: GuestbookOverviewBucket[];
     activeKeys: string[];
     onItemClick: (key: string) => void;
+    /** Semua status ditampilkan (termasuk yang count-nya 0), jadi tidak dipotong
+     *  seperti list Top 5 lainnya. */
+    maxItems?: number;
   }[] = [
-    { title: "Status", items: overview.byStatus, activeKeys: activeStatuses, onItemClick: onStatusClick },
+    { title: "Status", items: overview.byStatus, activeKeys: activeStatuses, onItemClick: onStatusClick, maxItems: overview.byStatus.length },
     { title: "Kategori Event", items: overview.byCategory, activeKeys: activeCategories, onItemClick: onCategoryClick },
     { title: "Sumber Data", items: overview.bySource, activeKeys: activeSourceIds, onItemClick: onSourceClick },
     { title: "Venue Teratas", items: overview.byVenue, activeKeys: activeVenueIds, onItemClick: onVenueClick },
@@ -179,7 +182,7 @@ export function GuestbookOverviewCards({
       ))}
       </div>
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-        {lists.map(({ title, items, activeKeys, onItemClick }) => (
+        {lists.map(({ title, items, activeKeys, onItemClick, maxItems = 5 }) => (
           <Card key={title} className="rounded-2xl shadow-sm">
             <CardContent className="p-4">
               <p className="mb-3 text-sm font-semibold text-foreground">{title}</p>
@@ -187,7 +190,7 @@ export function GuestbookOverviewCards({
                 <p className="text-xs text-muted-foreground">Belum ada data</p>
               ) : (
                 <div className="space-y-1">
-                  {items.slice(0, 5).map((item) => {
+                  {items.slice(0, maxItems).map((item) => {
                     const isActive = activeKeys.includes(item.key);
                     return (
                       <div
