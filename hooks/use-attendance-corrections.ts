@@ -4,9 +4,12 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   fetchAttendanceCorrections,
   fetchMyAttendanceCorrections,
+  fetchPendingForManager,
 } from "@/services/attendance-correction-service";
 import {
   submitAttendanceCorrection,
+  managerApproveAttendanceCorrection,
+  managerRejectAttendanceCorrection,
   hrApproveAttendanceCorrection,
   hrRejectAttendanceCorrection,
   cancelAttendanceCorrection,
@@ -37,6 +40,36 @@ export function useSubmitAttendanceCorrection() {
   return useMutation({
     mutationFn: (data: Parameters<typeof submitAttendanceCorrection>[0]) =>
       submitAttendanceCorrection(data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["attendance-corrections"] });
+    },
+  });
+}
+
+export function usePendingForManager() {
+  return useQuery({
+    queryKey: ["attendance-corrections", "pending"],
+    queryFn: fetchPendingForManager,
+    staleTime: 30 * 1000,
+  });
+}
+
+export function useManagerApproveAttendanceCorrection() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: Parameters<typeof managerApproveAttendanceCorrection>[0]) =>
+      managerApproveAttendanceCorrection(data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["attendance-corrections"] });
+    },
+  });
+}
+
+export function useManagerRejectAttendanceCorrection() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: Parameters<typeof managerRejectAttendanceCorrection>[0]) =>
+      managerRejectAttendanceCorrection(data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["attendance-corrections"] });
     },

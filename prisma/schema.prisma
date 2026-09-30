@@ -195,11 +195,14 @@ model Profile {
   shiftOverridesCreated        ShiftOverride[]            @relation("ShiftOverrideCreator")
   leaveBalances                LeaveBalance[]
   leaveRequests                LeaveRequest[]
+  leaveApprovals               LeaveRequest[]             @relation("LeaveApprover")
   leaveManagerApprovals        LeaveRequest[]             @relation("LeaveManagerApprover")
   leaveHrApprovals             LeaveRequest[]             @relation("LeaveHrApprover")
   leaveRejections              LeaveRequest[]             @relation("LeaveRejector")
   attendanceCorrections         AttendanceCorrection[]
   attendanceCorrectionsReviewed AttendanceCorrection[] @relation("AttendanceCorrectionReviewer")
+  attendanceCorrectionApprovals        AttendanceCorrection[] @relation("AttendanceCorrectionApprover")
+  attendanceCorrectionManagerApprovals AttendanceCorrection[] @relation("AttendanceCorrectionManagerApprover")
   attendanceWorkTypeApprovals   Attendance[]           @relation("AttendanceWorkTypeApprover")
   holidayTokenGrants           HolidayTokenGrant[]
   holidayTokenGrantsIssued     HolidayTokenGrant[]        @relation("HolidayTokenGranter")
@@ -981,6 +984,7 @@ enum AttendanceCorrectionType {
 
 enum AttendanceCorrectionStatus {
   pending
+  manager_approved
   approved
   rejected
   cancelled
@@ -3109,6 +3113,7 @@ model LeaveRequest {
   status            LeaveRequestStatus @default(pending)
   publicHolidayId   String?
   publicHolidayName String?
+  approverId        String?
 
   managerApprovedBy String?
   managerApprovedAt DateTime?
@@ -3130,6 +3135,7 @@ model LeaveRequest {
 
   profile         Profile        @relation(fields: [profileId], references: [id], onDelete: Cascade)
   leaveType       LeaveType      @relation(fields: [leaveTypeId], references: [id], onDelete: Cascade)
+  approver        Profile?       @relation("LeaveApprover", fields: [approverId], references: [id], onDelete: SetNull)
   managerApprover Profile?       @relation("LeaveManagerApprover", fields: [managerApprovedBy], references: [id], onDelete: SetNull)
   hrApprover      Profile?       @relation("LeaveHrApprover", fields: [hrApprovedBy], references: [id], onDelete: SetNull)
   rejector        Profile?       @relation("LeaveRejector", fields: [rejectedBy], references: [id], onDelete: SetNull)
@@ -3141,6 +3147,7 @@ model LeaveRequest {
   @@index([startDate])
   @@index([endDate])
   @@index([publicHolidayId])
+  @@index([approverId])
   @@map("leave_requests")
 }
 
@@ -3165,19 +3172,27 @@ model AttendanceCorrection {
   reviewedAt DateTime?
   reviewNote String?
 
+  approverId        String?
+  managerApprovedBy String?
+  managerApprovedAt DateTime?
+  managerNote       String?
+
   cancelledAt DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  profile      Profile       @relation(fields: [profileId], references: [id], onDelete: Cascade)
-  workShift    WorkShift?    @relation(fields: [workShiftId], references: [id], onDelete: SetNull)
-  workLocation WorkLocation? @relation(fields: [workLocationId], references: [id], onDelete: SetNull)
-  reviewer     Profile?      @relation("AttendanceCorrectionReviewer", fields: [reviewedBy], references: [id], onDelete: SetNull)
+  profile         Profile       @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  workShift       WorkShift?    @relation(fields: [workShiftId], references: [id], onDelete: SetNull)
+  workLocation    WorkLocation? @relation(fields: [workLocationId], references: [id], onDelete: SetNull)
+  reviewer        Profile?      @relation("AttendanceCorrectionReviewer", fields: [reviewedBy], references: [id], onDelete: SetNull)
+  approver        Profile?      @relation("AttendanceCorrectionApprover", fields: [approverId], references: [id], onDelete: SetNull)
+  managerApprover Profile?      @relation("AttendanceCorrectionManagerApprover", fields: [managerApprovedBy], references: [id], onDelete: SetNull)
 
   @@index([profileId])
   @@index([date])
   @@index([status])
+  @@index([approverId])
   @@map("attendance_corrections")
 }
 
