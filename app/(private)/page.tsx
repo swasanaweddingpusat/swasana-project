@@ -8,7 +8,6 @@ import { hasPermission } from "@/lib/permissions";
 import { getDashboardData, resolveDealingRange, resolveEventRange, toIsoDay } from "@/lib/queries/dashboard";
 import { getDashboardCalendarEvents } from "@/lib/queries/calendar-events";
 import { getTopSalesByRecentBooking } from "@/lib/queries/salesPerformance";
-import { getManagerProfiles } from "@/lib/queries/users";
 import { getActiveBanners } from "@/lib/queries/banners";
 import { getKpiSayaSummary, hasActiveKpiAssignment } from "@/lib/queries/kpiInsentif";
 import { SalesStatCards } from "./_components/sales-stat-cards";
@@ -18,7 +17,6 @@ import { SalesPerformanceSection } from "./_components/SalesPerformanceSection";
 import { KpiSayaRingkasSection } from "./_components/KpiSayaRingkasSection";
 import { DashboardFilterDrawer } from "./_components/dashboard-filter-drawer";
 import { DashboardBannerCarousel } from "./_components/dashboard-banner-carousel";
-import { TopPeopleSection } from "./_components/top-people-section";
 import { GuestbookOverviewClient } from "./(general)/guestbook/overview/_components/GuestbookOverviewClient";
 import { BitrixOverview } from "./(general)/bitrix24/overview/_components/bitrix-overview";
 
@@ -88,10 +86,7 @@ export default async function DashboardPage({
   const currentMonthTo = new Date(now.getFullYear(), now.getMonth() + 1, 1);
   const currentMonthRange = { from: currentMonthFrom, to: currentMonthTo };
 
-  const [topSalesData, managerProfiles] = await Promise.all([
-    getTopSalesByRecentBooking(undefined, currentMonthRange, undefined),
-    getManagerProfiles(),
-  ]);
+  const topSalesData = await getTopSalesByRecentBooking(undefined, currentMonthRange, undefined);
 
   // KPI Saya Ringkas widget — gated on kpi-insentif:view permission AND an
   // active (non-draft) KPI assignment for the current period. Roles without any
@@ -159,15 +154,6 @@ export default async function DashboardPage({
         </div>
         <DashboardFilterDrawer />
       </div>
-
-      <TopPeopleSection sales={topSalesData.map((sales) => ({
-        profileId: sales.profileId,
-        name: sales.name,
-        avatarUrl: sales.avatarUrl,
-        revenue: sales.revenue,
-        confirmedBookings: sales.bookingCount,
-        target: sales.target,
-      }))} managers={managerProfiles} />
 
       <SalesStatCards
         initialStats={stats}
