@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { useForm, Controller } from "react-hook-form";
+import { useForm, useWatch, Controller } from "react-hook-form";
 import { toast } from "sonner";
 import {
   AddCircle,
@@ -181,7 +181,6 @@ export function KpiMasterDrawer({ isOpen, onClose, editMaster }: KpiMasterDrawer
   const {
     register,
     handleSubmit,
-    watch,
     control,
     reset,
     setValue,
@@ -190,11 +189,11 @@ export function KpiMasterDrawer({ isOpen, onClose, editMaster }: KpiMasterDrawer
     defaultValues: DEFAULT_VALUES,
   });
 
-  const businessRole = watch("businessRole");
+  const businessRole = useWatch({ control, name: "businessRole" });
   const previousBusinessRoleRef = useRef<FormValues["businessRole"] | null>(null);
-  const targetItemId = watch("targetItemId");
-  const achievementSchemaId = watch("achievementSchemaId");
-  const isDraft = watch("isDraft");
+  const targetItemId = useWatch({ control, name: "targetItemId" });
+  const achievementSchemaId = useWatch({ control, name: "achievementSchemaId" });
+  const isDraft = useWatch({ control, name: "isDraft" });
 
   // Fetch target items
   const { data: targetItems = [] } = useTargetItems();
