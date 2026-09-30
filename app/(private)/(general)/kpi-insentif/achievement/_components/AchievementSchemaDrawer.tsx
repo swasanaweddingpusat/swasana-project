@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { useForm, useFieldArray, Controller } from "react-hook-form";
+import { useForm, useFieldArray, useWatch, Controller } from "react-hook-form";
 import { toast } from "sonner";
 import {
   AddCircle,
@@ -140,7 +140,6 @@ export function AchievementSchemaDrawer({
   const {
     register,
     handleSubmit,
-    watch,
     control,
     reset,
     formState: { errors },
@@ -153,11 +152,11 @@ export function AchievementSchemaDrawer({
     name: "tiers",
   });
 
-  const businessRole = watch("businessRole");
-  const isDraft = watch("isDraft");
-  const stagedPaymentEnabled = watch("stagedPaymentEnabled");
-  const stage1PayoutPct = watch("stage1PayoutPct");
-  const stage2PayoutPct = watch("stage2PayoutPct");
+  const businessRole = useWatch({ control, name: "businessRole" });
+  const isDraft = useWatch({ control, name: "isDraft" });
+  const stagedPaymentEnabled = useWatch({ control, name: "stagedPaymentEnabled" });
+  const stage1PayoutPct = useWatch({ control, name: "stage1PayoutPct" });
+  const stage2PayoutPct = useWatch({ control, name: "stage2PayoutPct" });
   const stagePctSum = (parseFloat(stage1PayoutPct || "0") || 0) + (parseFloat(stage2PayoutPct || "0") || 0);
   const isStagePctSumValid = Math.abs(stagePctSum - 100) < 0.01;
 
@@ -577,7 +576,6 @@ export function AchievementSchemaDrawer({
                         totalTiers={tierFields.length}
                         control={control}
                         register={register}
-                        watch={watch}
                         onRemove={() => remove(index)}
                         onMoveUp={() => moveTier(index, "up")}
                         onMoveDown={() => moveTier(index, "down")}
@@ -627,7 +625,6 @@ interface TierRowProps {
   totalTiers: number;
   control: ReturnType<typeof useForm<FormValues>>["control"];
   register: ReturnType<typeof useForm<FormValues>>["register"];
-  watch: ReturnType<typeof useForm<FormValues>>["watch"];
   onRemove: () => void;
   onMoveUp: () => void;
   onMoveDown: () => void;
@@ -638,12 +635,11 @@ function TierTableRow({
   totalTiers,
   control,
   register,
-  watch,
   onRemove,
   onMoveUp,
   onMoveDown,
 }: TierRowProps) {
-  const actionType = watch(`tiers.${index}.actionType`);
+  const actionType = useWatch({ control, name: `tiers.${index}.actionType` });
 
   return (
     <TableRow>

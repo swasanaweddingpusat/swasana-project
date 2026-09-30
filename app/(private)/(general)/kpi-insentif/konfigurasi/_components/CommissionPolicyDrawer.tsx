@@ -2,7 +2,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { useForm, Controller } from "react-hook-form";
+import { useForm, useWatch, Controller } from "react-hook-form";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { AddCircle, Pen, InfoCircle, Calendar as CalendarSolarIcon } from "@solar-icons/react";
@@ -87,7 +87,6 @@ export function CommissionPolicyDrawer({
   const {
     register,
     handleSubmit,
-    watch,
     control,
     reset,
     setError,
@@ -97,11 +96,11 @@ export function CommissionPolicyDrawer({
     defaultValues: DEFAULT_VALUES,
   });
 
-  const isDraft = watch("isDraft");
-  const nominalPerDeal = watch("nominalPerDeal");
-  const pctOfRevenue = watch("pctOfRevenue");
-  const effectiveFrom = watch("effectiveFrom");
-  const effectiveTo = watch("effectiveTo");
+  const isDraft = useWatch({ control, name: "isDraft" });
+  const nominalPerDeal = useWatch({ control, name: "nominalPerDeal" });
+  const pctOfRevenue = useWatch({ control, name: "pctOfRevenue" });
+  const effectiveFrom = useWatch({ control, name: "effectiveFrom" });
+  const effectiveTo = useWatch({ control, name: "effectiveTo" });
 
   useEffect(() => {
     if (!isOpen) return;
