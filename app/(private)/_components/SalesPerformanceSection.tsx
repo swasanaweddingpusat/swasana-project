@@ -11,12 +11,6 @@ import {
   AltArrowLeft,
   AltArrowRight,
 } from "@solar-icons/react";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid } from "recharts";
-import {
-  ChartContainer,
-  ChartTooltip,
-  type ChartConfig,
-} from "@/components/ui/chart";
 import { cn } from "@/lib/utils";
 import { useDashboardSalesPerformance } from "@/hooks/useDashboardSalesPerformance";
 import { useDashboardBookings } from "@/hooks/use-dashboard-bookings";
@@ -37,10 +31,6 @@ function formatCurrency(amount: number): string {
   return `Rp ${amount.toLocaleString("id-ID")}`;
 }
 
-function formatChartTooltip(value: number): string {
-  return `Rp ${value.toLocaleString("id-ID")}`;
-}
-
 function getInitials(name: string): string {
   return name
     .split(" ")
@@ -56,13 +46,6 @@ function getMonthRange(year: number, month: number): { from: string; to: string 
   const to = `${year}-${String(month + 1).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
   return { from, to };
 }
-
-// ─── Chart config ─────────────────────────────────────────────────────────────
-
-const salesChartConfig = {
-  revenue: { label: "Revenue", color: "hsl(var(--primary))" },
-  target: { label: "Target", color: "hsl(var(--muted))" },
-} satisfies ChartConfig;
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
@@ -113,111 +96,6 @@ function AvatarCircle({
         )}
       </div>
       <PodiumIcon rank={rank} />
-    </div>
-  );
-}
-
-// ─── Sales Chart ──────────────────────────────────────────────────────────────
-
-interface ChartDataItem {
-  name: string;
-  fullName: string;
-  revenue: number;
-  target?: number;
-  bookingCount: number;
-  groupName: string | null;
-}
-
-interface SalesTooltipPayloadEntry {
-  payload: ChartDataItem;
-  dataKey: string;
-}
-
-function SalesTooltipContent({
-  active,
-  payload,
-}: {
-  active?: boolean;
-  payload?: SalesTooltipPayloadEntry[];
-}): React.ReactElement | null {
-  if (!active || !payload?.length) return null;
-  const d = payload[0].payload;
-  return (
-    <div className="rounded-lg border border-border/50 bg-background px-3 py-2 text-xs shadow-xl">
-      <p className="font-semibold text-foreground">{d.fullName}</p>
-      {d.groupName && (
-        <p className="text-muted-foreground">{d.groupName}</p>
-      )}
-      <p className="mt-1 text-muted-foreground">{d.bookingCount} booking</p>
-      <div className="mt-1 flex flex-col gap-0.5">
-        <p className="font-semibold text-foreground">Revenue: {formatChartTooltip(d.revenue)}</p>
-        {d.target !== undefined && (
-          <p className="text-muted-foreground">Target: {formatChartTooltip(d.target)}</p>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function SalesChart({ data }: { data: SalesPerformanceCardItem[] }) {
-  const chartData = useMemo<ChartDataItem[]>(() => {
-    return data.slice(0, 10).map((item) => ({
-      name: item.name.length > 15 ? item.name.slice(0, 15) + "…" : item.name,
-      fullName: item.name,
-      revenue: item.revenue,
-      target: item.hasTarget && item.target > 0 ? item.target : undefined,
-      bookingCount: item.bookingCount,
-      groupName: item.groupName,
-    }));
-  }, [data]);
-
-  const chartHeight = Math.max(200, chartData.length * 40 + 40);
-
-  const hasAnyTarget = chartData.some((d) => d.target !== undefined);
-
-  return (
-    <div className="rounded-2xl border border-border bg-card shadow-sm p-5">
-      <ChartContainer config={salesChartConfig} className="aspect-auto" style={{ height: chartHeight }}>
-        <BarChart
-          data={chartData}
-          layout="vertical"
-          margin={{ top: 0, right: 16, bottom: 0, left: 8 }}
-        >
-          <CartesianGrid horizontal={false} strokeDasharray="3 3" />
-          <YAxis
-            dataKey="name"
-            type="category"
-            width={110}
-            tick={{ fontSize: 12 }}
-            tickLine={false}
-            axisLine={false}
-          />
-          <XAxis
-            type="number"
-            tickFormatter={(v: number) => formatCurrency(v)}
-            tick={{ fontSize: 11 }}
-            tickLine={false}
-            axisLine={false}
-          />
-          <ChartTooltip content={<SalesTooltipContent />} />
-          <Bar
-            dataKey="revenue"
-            name="revenue"
-            fill="hsl(var(--primary))"
-            radius={[0, 4, 4, 0]}
-            barSize={hasAnyTarget ? 10 : 16}
-          />
-          {hasAnyTarget && (
-            <Bar
-              dataKey="target"
-              name="target"
-              fill="hsl(var(--muted))"
-              radius={[0, 4, 4, 0]}
-              barSize={10}
-            />
-          )}
-        </BarChart>
-      </ChartContainer>
     </div>
   );
 }
@@ -377,8 +255,6 @@ export function SalesPerformanceSection({
             isCurrentMonth={isCurrentMonth}
           />
         </div>
-
-        <SalesChart data={data} />
 
         <ol className="flex flex-col divide-y divide-border overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
           {data.map((item, idx) => (
