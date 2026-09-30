@@ -5,7 +5,6 @@ import {
   buildStatusClientBreakdown,
   buildNotDatabaseBreakdown,
   type SalesStatusGroup,
-  type StatusClientRow,
 } from "@/lib/bitrix-overview-status";
 
 interface Bucket {
