@@ -42,6 +42,9 @@
     "test": "vitest run",
     "test:watch": "vitest"
   },
+  "engines": {
+    "node": ">=22.19.0"
+  },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
   },

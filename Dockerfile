@@ -6,7 +6,7 @@
 # ─────────────────────────────────────────────────────────────────────────────
 
 # ── deps: install node_modules (postinstall runs `prisma generate`) ──────────
-FROM node:20-bookworm-slim AS deps
+FROM node:22-bookworm-slim AS deps
 WORKDIR /app
 # Pin npm to the latest release (base image ships an older 10.x).
 RUN npm install -g npm@11.17.0
@@ -20,7 +20,7 @@ ENV DATABASE_URL="postgresql://user:pass@localhost:5432/db"
 RUN npm ci
 
 # ── builder: compile Next.js standalone output ───────────────────────────────
-FROM node:20-bookworm-slim AS builder
+FROM node:22-bookworm-slim AS builder
 WORKDIR /app
 # Pin npm to the latest release (base image ships an older 10.x).
 RUN npm install -g npm@11.17.0
@@ -52,7 +52,7 @@ ENV DATABASE_URL="postgresql://user:pass@localhost:5432/db"
 RUN npm run build
 
 # ── runner: minimal runtime image ────────────────────────────────────────────
-FROM node:20-bookworm-slim AS runner
+FROM node:22-bookworm-slim AS runner
 WORKDIR /app
 ENV NODE_ENV=production \
     NEXT_TELEMETRY_DISABLED=1 \
