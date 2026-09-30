@@ -46,6 +46,7 @@ export function GroupAchievementSection({
     () => [...groups].sort((a, b) => b.revenue - a.revenue),
     [groups],
   );
+  const maxRevenue = Math.max(...sorted.map((group) => group.revenue), 1);
 
   return (
     <div className="flex flex-col gap-4">
@@ -103,9 +104,18 @@ export function GroupAchievementSection({
                 </p>
               </div>
 
-              <p className="shrink-0 text-sm font-semibold text-foreground tabular-nums">
-                {formatCurrency(g.revenue)}
-              </p>
+              <div className="w-32 shrink-0 sm:w-48">
+                <div className="mb-1 flex items-center justify-between gap-2 text-xs">
+                  <span className="text-muted-foreground">{g.confirmedBookings} booking</span>
+                  <span className="font-semibold tabular-nums text-foreground">{formatCurrency(g.revenue)}</span>
+                </div>
+                <div className="h-2 overflow-hidden rounded-full bg-muted">
+                  <div
+                    className="h-full rounded-full bg-primary transition-[width]"
+                    style={{ width: `${Math.round((g.revenue / maxRevenue) * 100)}%` }}
+                  />
+                </div>
+              </div>
             </li>
           );
         })}

@@ -216,7 +216,7 @@ export function SalesPerformanceSection({
           <div className="flex items-center gap-2">
             <CupStar weight="BoldDuotone" className="h-5 w-5 text-[var(--brand-gold)]" />
             <h2 className="text-base font-semibold text-foreground">
-              Achievement & Performance Sales
+              Scoreboard Top Sales
             </h2>
           </div>
           <MonthPicker
