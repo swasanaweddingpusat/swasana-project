@@ -3,7 +3,7 @@ import type {
   GuestbookFilterOptions,
   GuestVisitHistoryItem,
   GuestbookFunnelReportResult,
-  GuestbookFunnelBucketKey,
+  GuestbookFunnelDrilldownKey,
   GuestbookFunnelBucketEntry,
 } from "@/lib/queries/guestbookEntries";
 
@@ -58,7 +58,7 @@ export async function fetchGuestbookFunnelReport(
 }
 
 export async function fetchGuestbookFunnelBucketEntries(
-  bucket: GuestbookFunnelBucketKey,
+  bucket: GuestbookFunnelDrilldownKey,
   params?: Pick<GuestbookFilterOptions, "venueIds" | "hostId" | "dateFrom" | "dateTo">
 ): Promise<GuestbookFunnelBucketEntry[]> {
   const searchParams = new URLSearchParams();

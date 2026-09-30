@@ -14,8 +14,8 @@ import { prospectStatusClass } from "@/lib/prospect-status";
 import type {
   GuestbookCategoryFilter,
   GuestbookFunnelReport,
-  GuestbookProspectBreakdown,
-  GuestbookFunnelBucketKey,
+  GuestbookAdsStatusBucket,
+  GuestbookFunnelDrilldownKey,
 } from "@/lib/queries/guestbookEntries";
 
 interface GuestbookFunnelReportSectionProps {
@@ -26,7 +26,7 @@ interface GuestbookFunnelReportSectionProps {
 }
 
 interface ActiveBucket {
-  key: GuestbookFunnelBucketKey;
+  key: GuestbookFunnelDrilldownKey;
   label: string;
 }
 
@@ -116,13 +116,13 @@ function RatioGrid({
   return (
     <div className="grid grid-cols-2 overflow-hidden rounded-xl border bg-muted/30">
       <RatioCell
-        label={ads ? "Ads → Visit Venue" : "Database → Visit"}
+        label={ads ? "Database dari Ads → Visit" : "Database → Visit"}
         value={databaseToVisitPct}
         denominator={databaseCount}
         numerator={visitCount}
       />
       <RatioCell
-        label={ads ? "Ads → Deal" : "Database → Deal"}
+        label={ads ? "Database dari Ads → Deal" : "Database → Deal"}
         value={databaseToDealPct}
         denominator={databaseCount}
         numerator={report.deal}
@@ -190,47 +190,38 @@ function FunnelCells({
 }
 
 function AdsDatabaseBreakdown({
-  breakdown,
+  statusBuckets,
   total,
   onCellClick,
 }: {
-  breakdown: GuestbookProspectBreakdown;
+  statusBuckets: GuestbookAdsStatusBucket[];
   total: number;
   onCellClick: (bucket: ActiveBucket) => void;
 }) {
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between gap-3">
-        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Database</p>
-        <p className="text-xs text-muted-foreground">Status prospek sesuai filter tanggal</p>
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Database dari Ads</p>
+        <p className="text-xs text-muted-foreground">Semua status = pembagian dari total Ads</p>
       </div>
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 xl:grid-cols-5">
         <DataCell
-          label="Cold Prospek"
-          value={breakdown.cold}
-          onClick={() => onCellClick({ key: "cold", label: "Cold Prospek" })}
-        />
-        <DataCell
-          label="Warm Prospek"
-          value={breakdown.warm}
-          onClick={() => onCellClick({ key: "warm", label: "Warm Prospek" })}
-        />
-        <DataCell
-          label="Hot Prospek"
-          value={breakdown.hot}
-          onClick={() => onCellClick({ key: "hot", label: "Hot Prospek" })}
-        />
-        <DataCell
-          label="No Response"
-          value={breakdown.noResponse}
-          onClick={() => onCellClick({ key: "noResponse", label: "No Response" })}
-        />
-        <DataCell
-          label="Total Ads"
+          label="Database dari Ads"
           value={total}
           tone="primary"
-          onClick={() => onCellClick({ key: "totalAds", label: "Total Ads" })}
+          onClick={() => onCellClick({ key: "totalAds", label: "Database dari Ads" })}
         />
+        {statusBuckets.map((bucket) => {
+          const key: GuestbookFunnelDrilldownKey = `adsStatus:${bucket.statusId ?? "none"}`;
+          return (
+            <DataCell
+              key={key}
+              label={bucket.statusName}
+              value={bucket.count}
+              onClick={() => onCellClick({ key, label: `${bucket.statusName} (Ads)` })}
+            />
+          );
+        })}
       </div>
     </div>
   );
@@ -241,7 +232,7 @@ function PerformanceCard({
   description,
   report,
   ads = false,
-  prospectBreakdown,
+  adsStatusBreakdown,
   totalAdsUrl = 0,
   onCellClick,
 }: {
@@ -249,7 +240,7 @@ function PerformanceCard({
   description: string;
   report: GuestbookFunnelReport;
   ads?: boolean;
-  prospectBreakdown?: GuestbookProspectBreakdown;
+  adsStatusBreakdown?: GuestbookAdsStatusBucket[];
   totalAdsUrl?: number;
   onCellClick: (bucket: ActiveBucket) => void;
 }) {
@@ -261,8 +252,8 @@ function PerformanceCard({
       </CardHeader>
       <CardContent className="space-y-4">
         <RatioGrid report={report} ads={ads} totalAdsUrl={totalAdsUrl} />
-        {prospectBreakdown ? (
-          <AdsDatabaseBreakdown breakdown={prospectBreakdown} total={totalAdsUrl} onCellClick={onCellClick} />
+        {adsStatusBreakdown ? (
+          <AdsDatabaseBreakdown statusBuckets={adsStatusBreakdown} total={totalAdsUrl} onCellClick={onCellClick} />
         ) : null}
         <FunnelCells report={report} includeDatabase={!ads} onCellClick={onCellClick} />
       </CardContent>
@@ -417,7 +408,7 @@ export function GuestbookFunnelReportSection({
         description="Hanya data dari Ads, mengikuti tanggal input sales"
         report={data.ads}
         ads
-        prospectBreakdown={data.prospectBreakdown}
+        adsStatusBreakdown={data.adsStatusBreakdown}
         totalAdsUrl={data.totalAdsUrl}
         onCellClick={setActiveBucket}
       />

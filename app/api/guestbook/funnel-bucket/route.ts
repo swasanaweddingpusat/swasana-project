@@ -1,6 +1,10 @@
 import { requirePermissionForRoute } from "@/lib/permissions";
 import { apiLimiter, rateLimitResponse } from "@/lib/rate-limit";
-import { getGuestbookFunnelBucketEntries, type GuestbookFunnelBucketKey } from "@/lib/queries/guestbookEntries";
+import {
+  getGuestbookFunnelBucketEntries,
+  type GuestbookFunnelBucketKey,
+  type GuestbookFunnelDrilldownKey,
+} from "@/lib/queries/guestbookEntries";
 import type { DataScope } from "@/types/user";
 
 const ALLOWED_BUCKET = new Set<GuestbookFunnelBucketKey>([
@@ -34,8 +38,13 @@ export async function GET(request: Request): Promise<Response> {
   if (!apiLimiter.check(`guestbook-funnel-bucket:${session.user.id}`)) return rateLimitResponse();
 
   const { searchParams } = new URL(request.url);
-  const bucket = searchParams.get("bucket") as GuestbookFunnelBucketKey | null;
-  if (!bucket || !ALLOWED_BUCKET.has(bucket)) {
+  const bucket = searchParams.get("bucket") as GuestbookFunnelDrilldownKey | null;
+  // Kartu "Database dari Ads" mengirim `adsStatus:<statusId>` yang statusId-nya
+  // dinamis (dikelola admin), jadi divalidasi lewat prefix, bukan allowlist.
+  const isValidBucket =
+    !!bucket &&
+    (ALLOWED_BUCKET.has(bucket as GuestbookFunnelBucketKey) || bucket.startsWith("adsStatus:"));
+  if (!isValidBucket) {
     return Response.json({ error: "Invalid bucket" }, { status: 400 });
   }
 
@@ -52,7 +61,7 @@ export async function GET(request: Request): Promise<Response> {
       profileId,
       dataScope,
       { venueIds, hostId, dateFrom, dateTo },
-      bucket
+      bucket as GuestbookFunnelDrilldownKey
     );
     return Response.json(result);
   } catch (error) {
