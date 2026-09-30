@@ -33,6 +33,7 @@ const WORK_TYPE_LABEL: Record<string, string> = {
 
 const WORK_TYPE_APPROVAL_BADGE: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
   pending: { label: "Menunggu", variant: "secondary" },
+  manager_approved: { label: "Menunggu HR", variant: "outline" },
   approved: { label: "Disetujui", variant: "default" },
   rejected: { label: "Ditolak", variant: "destructive" },
 };

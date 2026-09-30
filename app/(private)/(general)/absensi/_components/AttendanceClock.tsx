@@ -24,6 +24,12 @@ const STATUS_OPTIONS: { value: AttendanceStatusValue; label: string }[] = [
   { value: "DAY_OFF", label: "Day Off" },
 ];
 
+type DayOffType = "REGULAR" | "PUBLIC_HOLIDAY";
+const DAY_OFF_TYPE_OPTIONS: { value: DayOffType; label: string }[] = [
+  { value: "REGULAR", label: "Libur Mingguan" },
+  { value: "PUBLIC_HOLIDAY", label: "Public Holiday / Tanggal Merah" },
+];
+
 const WORK_TYPE_OPTIONS = [
   { value: "WFO", label: "Kerja dari Kantor (WFO)" },
   { value: "WFH", label: "Kerja dari Rumah (WFH)" },
@@ -36,8 +42,9 @@ const WORK_TYPE_LABEL: Record<string, string> = {
   WFA: "WFA",
 };
 
-const WORK_TYPE_APPROVAL_BADGE: Record<string, { label: string; variant: "secondary" | "destructive" } | undefined> = {
+const WORK_TYPE_APPROVAL_BADGE: Record<string, { label: string; variant: "secondary" | "destructive" | "outline" } | undefined> = {
   pending: { label: "Menunggu Persetujuan", variant: "secondary" },
+  manager_approved: { label: "Menunggu HR", variant: "outline" },
   rejected: { label: "Ditolak", variant: "destructive" },
 };
 
@@ -110,7 +117,8 @@ export function AttendanceClock() {
       // Entering the workday flow — nothing off-flow to clear.
     } else {
       // Entering the off flow — clear workday-only selections, including the public
-      // holiday tag (Day Off is always libur biasa; Public Holiday only applies to WORKDAY).
+      // holiday tag (Day Off defaults to "Libur Mingguan"; user can re-tag via the
+      // "Tipe Libur" dropdown below).
       setSelectedShiftId("");
       setSelectedWorkType("");
       setSelectedLocationId("");
@@ -125,8 +133,14 @@ export function AttendanceClock() {
     setSelectedPublicHolidayId(checked ? (context?.publicHolidayOptions[0]?.id ?? "") : "");
   }, [context?.publicHolidayOptions]);
 
+  const handleDayOffTypeChange = useCallback((value: string) => {
+    handlePublicHolidayToggle(value === "PUBLIC_HOLIDAY");
+  }, [handlePublicHolidayToggle]);
+
   const isMutating = clockInMutation.isPending || clockOutMutation.isPending;
   const isWorkday = selectedStatus === "WORKDAY";
+  const isDayOff = selectedStatus === "DAY_OFF";
+  const derivedDayOffType: DayOffType = selectedIsPublicHoliday ? "PUBLIC_HOLIDAY" : "REGULAR";
 
   const getStatusBadge = useCallback(() => {
     if (todayLoading) return <Badge variant="secondary">Memuat...</Badge>;
@@ -242,9 +256,19 @@ export function AttendanceClock() {
     }
 
     if (!isWorkday) {
-      // Off flow: plain day off. Selfie only, no GPS/location needed.
+      // Off flow: plain day off or a day off tagged as Public Holiday. Selfie only,
+      // no GPS/location needed.
+      if (selectedIsPublicHoliday && !selectedPublicHolidayId) {
+        toast.error("Pilih public holiday terlebih dahulu");
+        return;
+      }
       clockInMutation.mutate(
-        { attendanceStatus: "DAY_OFF", photoBase64: capturedPhoto },
+        {
+          attendanceStatus: "DAY_OFF",
+          photoBase64: capturedPhoto,
+          isPublicHoliday: selectedIsPublicHoliday,
+          publicHolidayId: selectedIsPublicHoliday ? (selectedPublicHolidayId || undefined) : undefined,
+        },
         {
           onSuccess: () => {
             toast.success("Absensi berhasil disimpan!");
@@ -332,7 +356,7 @@ export function AttendanceClock() {
     (isWorkday && !selectedShiftId) ||
     (isWorkday && !selectedWorkType) ||
     (isWorkday && selectedWorkType === "WFO" && !selectedLocationId) ||
-    (isWorkday && selectedIsPublicHoliday && !selectedPublicHolidayId) ||
+    (selectedIsPublicHoliday && !selectedPublicHolidayId) ||
     (isWorkday && (gpsLoading || !gpsCoords));
 
   return (
@@ -448,6 +472,24 @@ export function AttendanceClock() {
                   </Select>
                 </div>
 
+                {isDayOff && (
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium text-muted-foreground">Tipe Libur</label>
+                    <Select value={derivedDayOffType} onValueChange={handleDayOffTypeChange}>
+                      <SelectTrigger className="w-full rounded-xl">
+                        <SelectValue placeholder="Pilih tipe libur" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {DAY_OFF_TYPE_OPTIONS.map((o) => (
+                          <SelectItem key={o.value} value={o.value}>
+                            {o.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+
                 {isWorkday && (
                   <div className="space-y-1.5">
                     <label className="text-xs font-medium text-muted-foreground">Shift</label>
@@ -531,7 +573,7 @@ export function AttendanceClock() {
                   </div>
                 )}
 
-                {isWorkday && selectedIsPublicHoliday && (
+                {selectedIsPublicHoliday && (
                   <div className="space-y-1.5 sm:col-span-2">
                     <label className="text-xs font-medium text-muted-foreground">Public Holiday</label>
                     <Select value={selectedPublicHolidayId} onValueChange={setSelectedPublicHolidayId} disabled={!context?.publicHolidayOptions.length}>

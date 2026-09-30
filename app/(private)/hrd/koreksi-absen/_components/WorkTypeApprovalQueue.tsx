@@ -26,7 +26,10 @@ import {
 } from "@/components/ui/table";
 import { usePermissions } from "@/hooks/use-permissions";
 import {
+  usePendingWorkTypeApprovalsForManager,
   useWorkTypeApprovals,
+  useManagerApproveWorkType,
+  useManagerRejectWorkType,
   useApproveWorkType,
   useRejectWorkType,
 } from "@/hooks/use-work-type-approvals";
@@ -35,6 +38,7 @@ import type { PendingWorkTypeApprovalItem } from "@/lib/queries/attendance";
 import { AttendancePhotoEvidenceModal } from "@/components/shared/AttendancePhotoEvidenceModal";
 
 type DialogMode = "approve" | "reject";
+type DialogScope = "manager" | "hr";
 
 const WORK_TYPE_LABEL: Record<string, string> = {
   WFH: "WFH",
@@ -61,28 +65,39 @@ export function WorkTypeApprovalQueue() {
   const { can } = usePermissions();
   const canApprove = can("hr-attendance", "approve");
 
-  const { data: pending, isLoading } = useWorkTypeApprovals();
+  const { data: pendingManager, isLoading: loadingManager } = usePendingWorkTypeApprovalsForManager();
+  const { data: pendingHr, isLoading: loadingHr } = useWorkTypeApprovals(
+    canApprove ? { status: "manager_approved" } : undefined,
+  );
+  const { data: pendingAll, isLoading: loadingPendingAll } = useWorkTypeApprovals(
+    canApprove ? { status: "pending" } : undefined,
+  );
 
-  const approveMut = useApproveWorkType();
-  const rejectMut = useRejectWorkType();
+  const managerApproveMut = useManagerApproveWorkType();
+  const managerRejectMut = useManagerRejectWorkType();
+  const hrApproveMut = useApproveWorkType();
+  const hrRejectMut = useRejectWorkType();
 
   const [dialogTarget, setDialogTarget] = useState<PendingWorkTypeApprovalItem | null>(null);
   const [dialogMode, setDialogMode] = useState<DialogMode>("approve");
+  const [dialogScope, setDialogScope] = useState<DialogScope>("manager");
   const [dialogNote, setDialogNote] = useState("");
   const [evidenceTarget, setEvidenceTarget] = useState<PendingWorkTypeApprovalItem | null>(null);
 
-  const openDialog = useCallback((item: PendingWorkTypeApprovalItem, mode: DialogMode) => {
-    setDialogTarget(item);
-    setDialogMode(mode);
-    setDialogNote("");
-  }, []);
+  const openDialog = useCallback(
+    (item: PendingWorkTypeApprovalItem, mode: DialogMode, scope: DialogScope) => {
+      setDialogTarget(item);
+      setDialogMode(mode);
+      setDialogScope(scope);
+      setDialogNote("");
+    },
+    [],
+  );
 
   const closeDialog = useCallback(() => {
     setDialogTarget(null);
     setDialogNote("");
   }, []);
-
-  const isMutating = approveMut.isPending || rejectMut.isPending;
 
   const handleConfirm = useCallback(() => {
     if (!dialogTarget) return;
@@ -92,156 +107,232 @@ export function WorkTypeApprovalQueue() {
       return;
     }
 
-    if (dialogMode === "approve") {
-      approveMut.mutate(
-        { attendanceId: dialogTarget.id, note: dialogNote || undefined },
-        {
-          onSuccess: (result) => {
-            if (result.success) {
-              toast.success("Tipe kerja berhasil disetujui");
-            } else {
-              toast.error(result.error ?? "Gagal menyetujui tipe kerja");
-            }
-            closeDialog();
+    if (dialogScope === "manager") {
+      if (dialogMode === "approve") {
+        managerApproveMut.mutate(
+          { attendanceId: dialogTarget.id, note: dialogNote || undefined },
+          {
+            onSuccess: (result) => {
+              if (result.success) {
+                toast.success("Tipe kerja berhasil disetujui");
+              } else {
+                toast.error(result.error ?? "Gagal menyetujui tipe kerja");
+              }
+              closeDialog();
+            },
+            onError: () => {
+              toast.error("Terjadi kesalahan");
+              closeDialog();
+            },
           },
-          onError: () => {
-            toast.error("Terjadi kesalahan");
-            closeDialog();
+        );
+      } else {
+        managerRejectMut.mutate(
+          { attendanceId: dialogTarget.id, reason: dialogNote },
+          {
+            onSuccess: (result) => {
+              if (result.success) {
+                toast.success("Tipe kerja berhasil ditolak");
+              } else {
+                toast.error(result.error ?? "Gagal menolak tipe kerja");
+              }
+              closeDialog();
+            },
+            onError: () => {
+              toast.error("Terjadi kesalahan");
+              closeDialog();
+            },
           },
-        },
-      );
+        );
+      }
     } else {
-      rejectMut.mutate(
-        { attendanceId: dialogTarget.id, reason: dialogNote },
-        {
-          onSuccess: (result) => {
-            if (result.success) {
-              toast.success("Tipe kerja berhasil ditolak");
-            } else {
-              toast.error(result.error ?? "Gagal menolak tipe kerja");
-            }
-            closeDialog();
+      if (dialogMode === "approve") {
+        hrApproveMut.mutate(
+          { attendanceId: dialogTarget.id, note: dialogNote || undefined },
+          {
+            onSuccess: (result) => {
+              if (result.success) {
+                toast.success("Tipe kerja berhasil disetujui oleh HR");
+              } else {
+                toast.error(result.error ?? "Gagal menyetujui tipe kerja");
+              }
+              closeDialog();
+            },
+            onError: () => {
+              toast.error("Terjadi kesalahan");
+              closeDialog();
+            },
           },
-          onError: () => {
-            toast.error("Terjadi kesalahan");
-            closeDialog();
+        );
+      } else {
+        hrRejectMut.mutate(
+          { attendanceId: dialogTarget.id, reason: dialogNote },
+          {
+            onSuccess: (result) => {
+              if (result.success) {
+                toast.success("Tipe kerja berhasil ditolak oleh HR");
+              } else {
+                toast.error(result.error ?? "Gagal menolak tipe kerja");
+              }
+              closeDialog();
+            },
+            onError: () => {
+              toast.error("Terjadi kesalahan");
+              closeDialog();
+            },
           },
-        },
-      );
+        );
+      }
     }
-  }, [dialogTarget, dialogMode, dialogNote, approveMut, rejectMut, closeDialog]);
+  }, [
+    dialogTarget,
+    dialogMode,
+    dialogScope,
+    dialogNote,
+    managerApproveMut,
+    managerRejectMut,
+    hrApproveMut,
+    hrRejectMut,
+    closeDialog,
+  ]);
 
-  if (!canApprove) return null;
+  const isMutating =
+    managerApproveMut.isPending ||
+    managerRejectMut.isPending ||
+    hrApproveMut.isPending ||
+    hrRejectMut.isPending;
+
+  const showManagerSection = pendingManager && pendingManager.length > 0;
+  const showHrSection = canApprove;
+
+  if (!showManagerSection && !loadingManager && !showHrSection) return null;
 
   return (
     <>
-      <Card className="rounded-2xl shadow-sm">
-        <CardHeader className="pb-3">
-          <CardTitle className="font-heading text-lg flex items-center gap-2">
-            <HomeSmile weight="BoldDuotone" className="h-5 w-5" />
-            Persetujuan WFH/WFA
-            {pending && pending.length > 0 && (
-              <Badge variant="secondary" className="rounded-full ml-2">
-                {pending.length}
-              </Badge>
-            )}
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {isLoading && (
-            <div className="space-y-2">
-              {Array.from({ length: 3 }).map((_, i) => (
-                <Skeleton key={i} className="h-10 w-full rounded-lg" />
-              ))}
-            </div>
-          )}
-
-          {!isLoading && (!pending || pending.length === 0) && (
-            <div className="flex flex-col items-center justify-center py-12 text-center">
-              <CheckCircle weight="BoldDuotone" className="h-10 w-10 text-muted-foreground/40" />
-              <p className="mt-3 text-sm text-muted-foreground">
-                Tidak ada pengajuan WFH/WFA yang menunggu persetujuan
-              </p>
-            </div>
-          )}
-
-          {!isLoading && pending && pending.length > 0 && (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Karyawan</TableHead>
-                    <TableHead>Tanggal</TableHead>
-                    <TableHead>Tipe</TableHead>
-                    <TableHead>Shift</TableHead>
-                    <TableHead>Alasan</TableHead>
-                    <TableHead className="w-32">Aksi</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {pending.map((item) => (
-                    <TableRow key={item.id}>
-                      <TableCell>
-                        <div>
-                          <p className="font-medium text-sm">{item.profile.fullName}</p>
-                          {item.profile.department && (
-                            <p className="text-xs text-muted-foreground">{item.profile.department.name}</p>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-sm">{formatDate(item.date)}</TableCell>
-                      <TableCell className="text-sm">
-                        <Badge variant="outline">{item.workType ? WORK_TYPE_LABEL[item.workType] : "-"}</Badge>
-                      </TableCell>
-                      <TableCell className="text-xs text-muted-foreground">
-                        {item.workShift?.name ?? "-"}
-                        {item.clockInAt && <p>Masuk {formatTime(item.clockInAt)}</p>}
-                      </TableCell>
-                      <TableCell className="text-xs text-muted-foreground max-w-40 truncate">
-                        {item.workTypeReason || "-"}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-1">
-                          {item.clockInEvidence !== null && item.clockInEvidence !== undefined && (
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-7 w-7 rounded-full"
-                              onClick={() => setEvidenceTarget(item)}
-                              title="Lihat foto"
-                            >
-                              <Gallery weight="BoldDuotone" className="h-4 w-4" />
-                            </Button>
-                          )}
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7 rounded-full text-primary hover:text-primary"
-                            onClick={() => openDialog(item, "approve")}
-                            title="Setujui"
-                          >
-                            <CheckCircle weight="BoldDuotone" className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7 rounded-full text-destructive hover:text-destructive"
-                            onClick={() => openDialog(item, "reject")}
-                            title="Tolak"
-                          >
-                            <CloseCircle weight="BoldDuotone" className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
+      <div className="space-y-6">
+        {/* Manager Approval Section */}
+        {(loadingManager || showManagerSection) && (
+          <Card className="rounded-2xl shadow-sm">
+            <CardHeader className="pb-3">
+              <CardTitle className="font-heading text-lg flex items-center gap-2">
+                <HomeSmile weight="BoldDuotone" className="h-5 w-5" />
+                Persetujuan Manager
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {loadingManager && (
+                <div className="space-y-2">
+                  {Array.from({ length: 3 }).map((_, i) => (
+                    <Skeleton key={i} className="h-10 w-full rounded-lg" />
                   ))}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+                </div>
+              )}
 
+              {!loadingManager && showManagerSection && (
+                <ApprovalTableContent
+                  items={pendingManager}
+                  scope="manager"
+                  onApprove={(item) => openDialog(item, "approve", "manager")}
+                  onReject={(item) => openDialog(item, "reject", "manager")}
+                  onViewEvidence={setEvidenceTarget}
+                />
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* HR visibility into requests still pending at manager level */}
+        {showHrSection && (
+          <Card className="rounded-2xl shadow-sm">
+            <CardHeader className="pb-3">
+              <CardTitle className="font-heading text-lg flex items-center gap-2">
+                <HomeSmile weight="BoldDuotone" className="h-5 w-5" />
+                Menunggu Manager
+                {pendingAll && pendingAll.length > 0 && (
+                  <Badge variant="secondary" className="rounded-full ml-2">
+                    {pendingAll.length}
+                  </Badge>
+                )}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {loadingPendingAll && (
+                <div className="space-y-2">
+                  {Array.from({ length: 3 }).map((_, i) => (
+                    <Skeleton key={i} className="h-10 w-full rounded-lg" />
+                  ))}
+                </div>
+              )}
+
+              {!loadingPendingAll && (!pendingAll || pendingAll.length === 0) && (
+                <div className="flex flex-col items-center justify-center py-12 text-center">
+                  <CheckCircle weight="BoldDuotone" className="h-10 w-10 text-muted-foreground/40" />
+                  <p className="mt-3 text-sm text-muted-foreground">
+                    Tidak ada pengajuan WFH/WFA yang menunggu persetujuan manager
+                  </p>
+                </div>
+              )}
+
+              {!loadingPendingAll && pendingAll && pendingAll.length > 0 && (
+                <ApprovalTableContent
+                  items={pendingAll}
+                  scope="hr-pending"
+                  onApprove={(item) => openDialog(item, "approve", "hr")}
+                  onReject={(item) => openDialog(item, "reject", "hr")}
+                  onViewEvidence={setEvidenceTarget}
+                />
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* HR Approval Section */}
+        {showHrSection && (
+          <Card className="rounded-2xl shadow-sm">
+            <CardHeader className="pb-3">
+              <CardTitle className="font-heading text-lg flex items-center gap-2">
+                <HomeSmile weight="BoldDuotone" className="h-5 w-5" />
+                Persetujuan HR
+                {pendingHr && pendingHr.length > 0 && (
+                  <Badge variant="secondary" className="rounded-full ml-2">
+                    {pendingHr.length}
+                  </Badge>
+                )}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {loadingHr && (
+                <div className="space-y-2">
+                  {Array.from({ length: 3 }).map((_, i) => (
+                    <Skeleton key={i} className="h-10 w-full rounded-lg" />
+                  ))}
+                </div>
+              )}
+
+              {!loadingHr && (!pendingHr || pendingHr.length === 0) && (
+                <div className="flex flex-col items-center justify-center py-12 text-center">
+                  <CheckCircle weight="BoldDuotone" className="h-10 w-10 text-muted-foreground/40" />
+                  <p className="mt-3 text-sm text-muted-foreground">
+                    Tidak ada pengajuan WFH/WFA yang menunggu persetujuan HR
+                  </p>
+                </div>
+              )}
+
+              {!loadingHr && pendingHr && pendingHr.length > 0 && (
+                <ApprovalTableContent
+                  items={pendingHr}
+                  scope="hr"
+                  onApprove={(item) => openDialog(item, "approve", "hr")}
+                  onReject={(item) => openDialog(item, "reject", "hr")}
+                  onViewEvidence={setEvidenceTarget}
+                />
+              )}
+            </CardContent>
+          </Card>
+        )}
+      </div>
+
+      {/* Approve / Reject Dialog */}
       <Dialog
         open={dialogTarget !== null}
         onOpenChange={(open) => {
@@ -310,5 +401,117 @@ export function WorkTypeApprovalQueue() {
         onClose={() => setEvidenceTarget(null)}
       />
     </>
+  );
+}
+
+// ─── Shared approval table content ──────────────────────────────────────────
+
+function ApprovalTableContent({
+  items,
+  scope,
+  onApprove,
+  onReject,
+  onViewEvidence,
+}: {
+  items: PendingWorkTypeApprovalItem[];
+  scope: "manager" | "hr" | "hr-pending";
+  onApprove: (item: PendingWorkTypeApprovalItem) => void;
+  onReject: (item: PendingWorkTypeApprovalItem) => void;
+  onViewEvidence: (item: PendingWorkTypeApprovalItem) => void;
+}) {
+  return (
+    <div className="overflow-x-auto">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Karyawan</TableHead>
+            <TableHead>Tanggal</TableHead>
+            <TableHead>Tipe</TableHead>
+            <TableHead>Shift</TableHead>
+            <TableHead>Alasan</TableHead>
+            {scope === "hr" && <TableHead>Manager</TableHead>}
+            {scope === "hr-pending" && <TableHead>Manager</TableHead>}
+            <TableHead className="w-32">Aksi</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {items.map((item) => (
+            <TableRow key={item.id}>
+              <TableCell>
+                <div>
+                  <p className="font-medium text-sm">{item.profile.fullName}</p>
+                  {item.profile.department && (
+                    <p className="text-xs text-muted-foreground">{item.profile.department.name}</p>
+                  )}
+                </div>
+              </TableCell>
+              <TableCell className="text-sm">{formatDate(item.date)}</TableCell>
+              <TableCell className="text-sm">
+                <Badge variant="outline">{item.workType ? WORK_TYPE_LABEL[item.workType] : "-"}</Badge>
+              </TableCell>
+              <TableCell className="text-xs text-muted-foreground">
+                {item.workShift?.name ?? "-"}
+                {item.clockInAt && <p>Masuk {formatTime(item.clockInAt)}</p>}
+              </TableCell>
+              <TableCell className="text-xs text-muted-foreground max-w-40 truncate">
+                {item.workTypeReason || "-"}
+              </TableCell>
+              {scope === "hr" && (
+                <TableCell className="text-xs text-muted-foreground">
+                  {item.workTypeManagerApprover?.fullName ?? "-"}
+                </TableCell>
+              )}
+              {scope === "hr-pending" && (
+                <TableCell className="text-xs text-muted-foreground">
+                  {item.workTypeDesignatedApprover?.fullName ?? "Belum ada manager — HR wajib proses"}
+                </TableCell>
+              )}
+              <TableCell>
+                <div className="flex items-center gap-1">
+                  {item.clockInEvidence !== null && item.clockInEvidence !== undefined && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 rounded-full"
+                      onClick={() => onViewEvidence(item)}
+                      title="Lihat foto"
+                    >
+                      <Gallery weight="BoldDuotone" className="h-4 w-4" />
+                    </Button>
+                  )}
+                  {scope === "hr-pending" && item.workTypeApproverId !== null && (
+                    <Badge variant="outline" className="rounded-full text-xs whitespace-nowrap">
+                      Menunggu {item.workTypeDesignatedApprover?.fullName ?? "manager"}
+                    </Badge>
+                  )}
+                  {(scope !== "hr-pending" || item.workTypeApproverId === null) && (
+                    <>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 rounded-full text-primary hover:text-primary"
+                        onClick={() => onApprove(item)}
+                        title="Setujui"
+                      >
+                        <CheckCircle weight="BoldDuotone" className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 rounded-full text-destructive hover:text-destructive"
+                        onClick={() => onReject(item)}
+                        title="Tolak"
+                      >
+                        <CloseCircle weight="BoldDuotone" className="h-4 w-4" />
+                      </Button>
+                    </>
+                  )}
+                </div>
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
   );
 }
