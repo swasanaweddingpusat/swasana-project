@@ -258,9 +258,8 @@ export async function getGuestbookEntries(
 
   // Label status dibaca dari tabel — daftar status dikelola admin lewat
   // Settings, jadi tidak boleh di-hardcode seperti enum sebelumnya.
-  const statusLabels = new Map(
-    (await db.prospectStatus.findMany({ select: { id: true, name: true } })).map((row) => [row.id, row.name]),
-  );
+  const allProspectStatuses = await db.prospectStatus.findMany({ select: { id: true, name: true } });
+  const statusLabels = new Map(allProspectStatuses.map((row) => [row.id, row.name]));
 
   const sourceIds = sourceGroups.flatMap((row) => row.sourceOfInformationId ? [row.sourceOfInformationId] : []);
   const venueIds = venueGroups.flatMap((row) => row.venueId ? [row.venueId] : []);
@@ -285,7 +284,14 @@ export async function getGuestbookEntries(
     lost,
     onlineMeetings,
     deal,
-    byStatus: buildBuckets(statusGroups.map((row) => ({ key: row.prospectStatusId, count: row._count._all })), statusLabels, "Tanpa status"),
+    // Semua status tetap ditampilkan walau belum pernah dipakai (count 0),
+    // beda dengan bucket lain yang cuma menampilkan nilai yang benar-benar ada.
+    byStatus: allProspectStatuses
+      .map((status) => {
+        const group = statusGroups.find((row) => row.prospectStatusId === status.id);
+        return { key: status.id, label: status.name, count: group?._count._all ?? 0 };
+      })
+      .sort((a, b) => b.count - a.count),
     byCategory: buildBuckets(categoryGroups.map((row) => ({ key: row.eventCategory, count: row._count._all })), new Map([["WEDDINGS", "Wedding"], ["MICE", "MICE"]]), "Tanpa kategori"),
     bySource: buildBuckets(sourceGroups.map((row) => ({ key: row.sourceOfInformationId, count: row._count._all })), sourceLabels, "Tanpa sumber")
       .map((bucket) => {
