@@ -125,6 +125,31 @@ export async function resolveAttendanceContext(profileId: string, date: Date): P
   };
 }
 
+// Resolves + validates the optional Public Holiday tag shared by both clock-in flows
+// (WORKDAY and DAY_OFF). Looks the holiday up by id, restricted to date <= today and
+// isActive, and returns its name so the caller can snapshot it onto the Attendance row
+// (survives a later rename/deactivation of the PublicHoliday master row).
+export async function resolveHolidayTag(
+  wantsPublicHoliday: boolean,
+  publicHolidayId: string | undefined,
+  today: Date,
+): Promise<{ ok: true; id: string | null; name: string | null } | { ok: false }> {
+  if (!wantsPublicHoliday) {
+    return { ok: true, id: null, name: null };
+  }
+
+  const holiday = await db.publicHoliday.findFirst({
+    where: { id: publicHolidayId, date: { lte: today }, isActive: true },
+    select: { id: true, name: true },
+  });
+
+  if (!holiday) {
+    return { ok: false };
+  }
+
+  return { ok: true, id: holiday.id, name: holiday.name };
+}
+
 interface LocationValidationResult {
   valid: boolean;
   nearestLocationId: string | null;
