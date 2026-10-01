@@ -140,6 +140,26 @@ export function GuestbookDetailDrawer({
       .catch(() => setQrDataUrl(null));
   }, [entry?.guestCode]);
 
+  // Intercept Escape while the image overlay is open so it closes the overlay
+  // only — not the underlying Drawer. Capture phase runs before base-ui's Dialog
+  // handler, so stopping propagation prevents the drawer from also closing.
+  useEffect(() => {
+    if (!overlayImage) return;
+    function handleEscape(e: KeyboardEvent): void {
+      if (e.key !== "Escape") return;
+      e.stopPropagation();
+      e.preventDefault();
+      setOverlayImage(null);
+    }
+    document.addEventListener("keydown", handleEscape, true);
+    return () => document.removeEventListener("keydown", handleEscape, true);
+  }, [overlayImage]);
+
+  // Safety net: never let a stale overlay carry over to another entry.
+  useEffect(() => {
+    if (!open) setOverlayImage(null);
+  }, [open]);
+
   if (!entry) return null;
 
   async function handleShareTicket(): Promise<void> {

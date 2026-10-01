@@ -15,9 +15,10 @@ import { GroupAchievementSection } from "./_components/group-achievement-section
 import { CalendarWidget } from "./_components/calendar-widget";
 import { SalesPerformanceSection } from "./_components/SalesPerformanceSection";
 import { KpiSayaRingkasSection } from "./_components/KpiSayaRingkasSection";
-import { CrmOverviewMetrics } from "./_components/crm-overview-metrics";
 import { DashboardFilterDrawer } from "./_components/dashboard-filter-drawer";
 import { DashboardBannerCarousel } from "./_components/dashboard-banner-carousel";
+import { GuestbookOverviewClient } from "./(general)/guestbook/overview/_components/GuestbookOverviewClient";
+import { BitrixOverview } from "./(general)/bitrix24/overview/_components/bitrix-overview";
 
 export const metadata: Metadata = { title: "Dashboard" };
 
@@ -154,7 +155,6 @@ export default async function DashboardPage({
         <DashboardFilterDrawer />
       </div>
 
-      {/* Stat Cards */}
       <SalesStatCards
         initialStats={stats}
         dealFrom={fromDay}
@@ -163,13 +163,10 @@ export default async function DashboardPage({
         eventTo={eventToDay}
       />
 
-      {/* KPI Saya Ringkas — personal, only rendered when the viewer has an active KPI assignment */}
-      {kpiSayaSummary && <KpiSayaRingkasSection summary={kpiSayaSummary} />}
+      <GuestbookOverviewClient />
 
-      {/* Achievement & Performance Sales — self-filtered (defaults to current month) */}
       <SalesPerformanceSection initialData={topSalesData} />
 
-      {/* Group achievement — list, full width */}
       <GroupAchievementSection
         initialGroups={groups}
         dealFrom={fromDay}
@@ -178,11 +175,9 @@ export default async function DashboardPage({
         eventTo={eventToDay}
       />
 
-      {/* Calendar Event — defaults to the current month (own bulan/tahun filter), independent of the dealing-date filter */}
+      <BitrixOverview />
+      {kpiSayaSummary && <KpiSayaRingkasSection summary={kpiSayaSummary} />}
       <CalendarWidget events={calendarEvents} year={calendarYear} month={calendarMonth + 1} />
-
-      {/* CRM: Database Kantor vs Mandiri (mirror Bitrix Overview) — self-filtered — paling bawah */}
-      <CrmOverviewMetrics />
     </div>
   );
 }

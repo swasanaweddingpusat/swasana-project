@@ -35,7 +35,7 @@ async function notifyPublishedAnnouncement(announcement: { id: string; title: st
   });
 
   await createNotifications(
-    profiles.map((profile) => ({
+    profiles.map((profile: { id: string }) => ({
       userId: profile.id,
       title: "Pengumuman Baru",
       message: announcement.title,

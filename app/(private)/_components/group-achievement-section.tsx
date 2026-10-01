@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid } from "recharts";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, LabelList } from "recharts";
 import { UsersGroupRounded, Crown, Star } from "@solar-icons/react";
 import { cn } from "@/lib/utils";
 import { ChartContainer, ChartTooltip, type ChartConfig } from "@/components/ui/chart";
@@ -26,17 +26,19 @@ function getInitials(name: string): string {
 }
 
 const groupChartConfig = {
-  revenue: { label: "Revenue", color: "hsl(var(--primary))" },
+  revenue: { label: "Revenue", color: "var(--brand-ink)" },
 } satisfies ChartConfig;
 
-interface TooltipPayloadEntry {
-  payload: {
-    name: string;
-    revenue: number;
-    leaderName: string;
-    confirmedBookings: number;
-    memberCount: number;
-  };
+interface GroupChartDatum {
+  name: string;
+  revenue: number;
+  leaderName: string;
+  confirmedBookings: number;
+  memberCount: number;
+}
+
+interface GroupTooltipPayloadEntry {
+  payload: GroupChartDatum;
 }
 
 function GroupTooltipContent({
@@ -44,7 +46,7 @@ function GroupTooltipContent({
   payload,
 }: {
   active?: boolean;
-  payload?: TooltipPayloadEntry[];
+  payload?: GroupTooltipPayloadEntry[];
 }): React.ReactElement | null {
   if (!active || !payload?.length) return null;
   const d = payload[0].payload;
@@ -82,8 +84,9 @@ export function GroupAchievementSection({
     () => [...groups].sort((a, b) => b.revenue - a.revenue),
     [groups],
   );
+  const maxRevenue = Math.max(...sorted.map((group) => group.revenue), 1);
 
-  const chartData = useMemo(
+  const chartData: GroupChartDatum[] = useMemo(
     () =>
       sorted.map((g) => ({
         name: g.name,
@@ -94,21 +97,16 @@ export function GroupAchievementSection({
       })),
     [sorted],
   );
-
   const chartHeight = Math.max(sorted.length * 48 + 32, 120);
 
   return (
     <div className="flex flex-col gap-4">
       <h2 className="text-base font-semibold text-foreground">Achievement per Group</h2>
 
-      {sorted.length > 0 && (
+      {chartData.length > 0 && (
         <div className="rounded-2xl border border-border bg-card p-5 shadow-sm">
           <ChartContainer config={groupChartConfig} className="aspect-auto" style={{ height: chartHeight }}>
-            <BarChart
-              data={chartData}
-              layout="vertical"
-              margin={{ top: 0, right: 16, bottom: 0, left: 0 }}
-            >
+            <BarChart data={chartData} layout="vertical" margin={{ top: 0, right: 48, bottom: 0, left: 0 }}>
               <CartesianGrid horizontal={false} strokeDasharray="3 3" />
               <XAxis
                 type="number"
@@ -126,11 +124,14 @@ export function GroupAchievementSection({
                 tickLine={false}
               />
               <ChartTooltip content={<GroupTooltipContent />} />
-              <Bar
-                dataKey="revenue"
-                fill="hsl(var(--primary))"
-                radius={[0, 4, 4, 0]}
-              />
+              <Bar dataKey="revenue" fill="var(--brand-ink)" radius={[0, 4, 4, 0]}>
+                <LabelList
+                  dataKey="revenue"
+                  position="right"
+                  style={{ fontSize: 10, fill: "var(--foreground)" }}
+                  formatter={(value: unknown) => formatCurrency(Number(value))}
+                />
+              </Bar>
             </BarChart>
           </ChartContainer>
         </div>
@@ -188,9 +189,18 @@ export function GroupAchievementSection({
                 </p>
               </div>
 
-              <p className="shrink-0 text-sm font-semibold text-foreground tabular-nums">
-                {formatCurrency(g.revenue)}
-              </p>
+              <div className="w-32 shrink-0 sm:w-48">
+                <div className="mb-1 flex items-center justify-between gap-2 text-xs">
+                  <span className="text-muted-foreground">{g.confirmedBookings} booking</span>
+                  <span className="font-semibold tabular-nums text-foreground">{formatCurrency(g.revenue)}</span>
+                </div>
+                <div className="h-2 overflow-hidden rounded-full bg-muted">
+                  <div
+                    className="h-full rounded-full bg-primary transition-[width]"
+                    style={{ width: `${Math.round((g.revenue / maxRevenue) * 100)}%` }}
+                  />
+                </div>
+              </div>
             </li>
           );
         })}

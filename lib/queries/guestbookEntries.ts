@@ -430,11 +430,14 @@ export interface GuestbookFunnelReport {
   databaseToDealPct: number;
 }
 
-export interface GuestbookProspectBreakdown {
-  cold: number;
-  warm: number;
-  hot: number;
-  noResponse: number;
+/** Satu baris breakdown status untuk kartu "Database dari Ads". Semua status
+ *  prospek ditampilkan sebagai pembagian dari total entry ber-Ads URL, jadi
+ *  jumlah seluruh count == totalAdsUrl. `statusId: null` = entry ads yang belum
+ *  punya status prospek. */
+export interface GuestbookAdsStatusBucket {
+  statusId: string | null;
+  statusName: string;
+  count: number;
 }
 
 export interface GuestbookFunnelReportResult {
@@ -445,8 +448,9 @@ export interface GuestbookFunnelReportResult {
   ads: GuestbookFunnelReport;
   /** Jumlah entry pada filter aktif yang benar-benar memiliki Bitrix Ads URL. */
   totalAdsUrl: number;
-  /** Breakdown status untuk kartu Ads — dataset sama dengan `ads` dan `totalAdsUrl`. */
-  prospectBreakdown: GuestbookProspectBreakdown;
+  /** Breakdown SEMUA status untuk kartu "Database dari Ads" — dataset sama dengan
+   *  `ads`/`totalAdsUrl`, sehingga jumlah seluruh count == totalAdsUrl. */
+  adsStatusBreakdown: GuestbookAdsStatusBucket[];
 }
 
 /** Hitung jumlah entry per nama status dalam satu query, lalu baca nilainya
@@ -510,16 +514,31 @@ async function computeFunnelReport(
   };
 }
 
-async function computeProspectBreakdown(
+/** Breakdown per-status untuk kartu "Database dari Ads". Menampilkan SEMUA
+ *  status prospek (ikut sortOrder Settings) supaya layout stabil walau sebuah
+ *  status bernilai 0, lalu menambah bucket "Belum ada status" untuk entry ads
+ *  tanpa status. Totalnya == jumlah entry ber-Ads URL. */
+async function computeAdsStatusBreakdown(
   where: Prisma.GuestbookEntryWhereInput
-): Promise<GuestbookProspectBreakdown> {
-  const counts = await countByStatusName(where);
-  return {
-    cold: counts.get(PROSPECT_STATUS.COLD) ?? 0,
-    warm: counts.get(PROSPECT_STATUS.WARM) ?? 0,
-    hot: counts.get(PROSPECT_STATUS.HOT) ?? 0,
-    noResponse: counts.get(PROSPECT_STATUS.NO_RESPONSE) ?? 0,
-  };
+): Promise<GuestbookAdsStatusBucket[]> {
+  const [groups, statuses] = await Promise.all([
+    db.guestbookEntry.groupBy({ by: ["prospectStatusId"], where, _count: { _all: true } }),
+    db.prospectStatus.findMany({ select: { id: true, name: true }, orderBy: { sortOrder: "asc" } }),
+  ]);
+  const countById = new Map<string | null, number>();
+  for (const row of groups) countById.set(row.prospectStatusId, row._count._all);
+
+  const buckets: GuestbookAdsStatusBucket[] = statuses.map((status) => ({
+    statusId: status.id,
+    statusName: status.name,
+    count: countById.get(status.id) ?? 0,
+  }));
+
+  const noStatusCount = countById.get(null) ?? 0;
+  if (noStatusCount > 0) {
+    buckets.push({ statusId: null, statusName: "Belum ada status", count: noStatusCount });
+  }
+  return buckets;
 }
 
 export type GuestbookFunnelBucketKey =
@@ -535,6 +554,11 @@ export type GuestbookFunnelBucketKey =
   | "hot"
   | "noResponse"
   | "totalAds";
+
+/** Kunci drill-down untuk drawer. Selain bucket funnel tetap, kartu "Database
+ *  dari Ads" memakai `adsStatus:<statusId>` (atau `adsStatus:none` untuk entry
+ *  ads tanpa status) agar drawer-nya dibatasi ke dataset ads, bukan keseluruhan. */
+export type GuestbookFunnelDrilldownKey = GuestbookFunnelBucketKey | `adsStatus:${string}`;
 
 export interface GuestbookFunnelBucketEntry {
   id: string;
@@ -576,12 +600,12 @@ const FUNNEL_BUCKET_STATUS_NAME: Partial<Record<GuestbookFunnelBucketKey, string
 
 /** Daftar entry mentah di balik satu bucket funnel/ads Overview — dipakai drawer
  *  saat sebuah stat card di-klik. Logika pencocokan bucket sengaja dijaga persis
- *  sama dengan computeFunnelReport/computeProspectBreakdown di atas. */
+ *  sama dengan computeFunnelReport/computeAdsStatusBreakdown di atas. */
 export async function getGuestbookFunnelBucketEntries(
   profileId: string | undefined,
   dataScope: DataScope | undefined,
   filters: GuestbookFilterOptions | undefined,
-  bucket: GuestbookFunnelBucketKey
+  bucket: GuestbookFunnelDrilldownKey
 ): Promise<GuestbookFunnelBucketEntry[]> {
   const scopeWhere = (await buildOwnerScopeWhere(profileId, dataScope, "salesId")) as Prisma.GuestbookEntryWhereInput;
   const baseWhere: Prisma.GuestbookEntryWhereInput = { ...scopeWhere, ...buildGuestbookWhere(filters ?? {}) };
@@ -591,6 +615,18 @@ export async function getGuestbookFunnelBucketEntries(
     where = baseWhere;
   } else if (bucket === "totalAds") {
     where = { AND: [baseWhere, { bitrixAdsUrl: { not: null } }, { bitrixAdsUrl: { not: "" } }] };
+  } else if (bucket.startsWith("adsStatus:")) {
+    // Kartu "Database dari Ads": drill-down dibatasi ke entry ber-Ads URL agar
+    // konsisten dengan angka breakdown, bukan seluruh dataset.
+    const statusId = bucket.slice("adsStatus:".length);
+    where = {
+      AND: [
+        baseWhere,
+        { bitrixAdsUrl: { not: null } },
+        { bitrixAdsUrl: { not: "" } },
+        statusId === "none" ? { prospectStatusId: null } : { prospectStatusId: statusId },
+      ],
+    };
   } else if (bucket === "belumVisit") {
     where = {
       AND: [
@@ -599,7 +635,7 @@ export async function getGuestbookFunnelBucketEntries(
       ],
     };
   } else {
-    where = { ...baseWhere, prospectStatus: { name: FUNNEL_BUCKET_STATUS_NAME[bucket] } };
+    where = { ...baseWhere, prospectStatus: { name: FUNNEL_BUCKET_STATUS_NAME[bucket as GuestbookFunnelBucketKey] } };
   }
 
   return db.guestbookEntry.findMany({
@@ -626,7 +662,10 @@ export async function getGuestbookFunnelBucketEntries(
  *  Rentang tanggal memakai `createdAt` (tanggal sales input data), BUKAN
  *  `checkInAt`. Matriks ini mengukur produktivitas input sales pada periode
  *  terpilih, jadi harus dikunci ke kolom yang sama dengan kartu ringkasan
- *  Overview — kalau beda, Database di matriks dan di kartu tidak akan cocok. */
+ *  Overview — kalau beda, Database di matriks dan di kartu tidak akan cocok.
+ *
+ *  `ads` adalah funnel terpisah yang dibatasi ke entry ber-`bitrixAdsUrl`;
+ *  `totalAdsUrl` dipakai sebagai denominator rasio Ads Performance. */
 export async function getGuestbookFunnelReport(
   profileId: string | undefined,
   dataScope: DataScope | undefined,
@@ -643,12 +682,12 @@ export async function getGuestbookFunnelReport(
     AND: [where, { bitrixAdsUrl: { not: null } }, { bitrixAdsUrl: { not: "" } }],
   };
 
-  const [overall, ads, totalAdsUrl, prospectBreakdown] = await Promise.all([
+  const [overall, ads, totalAdsUrl, adsStatusBreakdown] = await Promise.all([
     computeFunnelReport(where),
     computeFunnelReport(adsWhere),
     db.guestbookEntry.count({ where: adsWhere }),
-    computeProspectBreakdown(adsWhere),
+    computeAdsStatusBreakdown(adsWhere),
   ]);
 
-  return { overall, ads, totalAdsUrl, prospectBreakdown };
+  return { overall, ads, totalAdsUrl, adsStatusBreakdown };
 }

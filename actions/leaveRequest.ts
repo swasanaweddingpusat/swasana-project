@@ -13,6 +13,7 @@ import {
   cancelLeaveSchema,
 } from "@/lib/validations/leaveRequest";
 import { countWeekdays, getAvailableBalance, getWeekdaysBetween } from "@/lib/leave-helpers";
+import { resolveManagerId } from "@/lib/resolve-manager";
 import { uploadToStorage, randomId12 } from "@/lib/storage";
 import { compressToWebp } from "@/lib/image";
 import type { FileDescriptor } from "@/lib/validations/common";
@@ -169,6 +170,8 @@ export async function submitLeaveRequest(data: unknown): Promise<{ success: bool
       return { success: false, error: "Gagal mengupload bukti." };
     }
 
+    const approverId = await resolveManagerId(profileId);
+
     const request = await db.leaveRequest.create({
       data: {
         profileId,
@@ -182,6 +185,7 @@ export async function submitLeaveRequest(data: unknown): Promise<{ success: bool
         status: "pending",
         publicHolidayId: isHolidayToken ? parsed.data.publicHolidayId : null,
         publicHolidayName: isHolidayToken ? publicHolidayName : null,
+        approverId,
       },
     });
 
@@ -224,11 +228,11 @@ export async function managerApproveLeave(data: unknown): Promise<{ success: boo
 
     const request = await db.leaveRequest.findUnique({
       where: { id: parsed.data.requestId },
-      select: { id: true, status: true, profileId: true, profile: { select: { managerId: true } } },
+      select: { id: true, status: true, profileId: true, approverId: true },
     });
     if (!request) return { success: false, error: "Pengajuan tidak ditemukan." };
     if (request.status !== "pending") return { success: false, error: "Pengajuan sudah diproses." };
-    if (request.profile.managerId !== profileId) {
+    if (request.approverId !== profileId) {
       return { success: false, error: "Anda bukan manager dari karyawan ini." };
     }
 
@@ -280,11 +284,11 @@ export async function managerRejectLeave(data: unknown): Promise<{ success: bool
 
     const request = await db.leaveRequest.findUnique({
       where: { id: parsed.data.requestId },
-      select: { id: true, status: true, profile: { select: { managerId: true } } },
+      select: { id: true, status: true, approverId: true },
     });
     if (!request) return { success: false, error: "Pengajuan tidak ditemukan." };
     if (request.status !== "pending") return { success: false, error: "Pengajuan sudah diproses." };
-    if (request.profile.managerId !== profileId) {
+    if (request.approverId !== profileId) {
       return { success: false, error: "Anda bukan manager dari karyawan ini." };
     }
 
@@ -328,7 +332,8 @@ export async function hrApproveLeave(data: unknown): Promise<{ success: boolean;
       include: { leaveType: { select: { isDeductible: true, code: true } } },
     });
     if (!request) return { success: false, error: "Pengajuan tidak ditemukan." };
-    if (request.status !== "manager_approved") {
+    const hrCanActDirectly = request.status === "pending" && request.approverId === null;
+    if (request.status !== "manager_approved" && !hrCanActDirectly) {
       return { success: false, error: "Pengajuan belum disetujui manager." };
     }
 
@@ -449,10 +454,11 @@ export async function hrRejectLeave(data: unknown): Promise<{ success: boolean; 
   try {
     const request = await db.leaveRequest.findUnique({
       where: { id: parsed.data.requestId },
-      select: { id: true, status: true },
+      select: { id: true, status: true, approverId: true },
     });
     if (!request) return { success: false, error: "Pengajuan tidak ditemukan." };
-    if (request.status !== "manager_approved") {
+    const hrCanActDirectly = request.status === "pending" && request.approverId === null;
+    if (request.status !== "manager_approved" && !hrCanActDirectly) {
       return { success: false, error: "Pengajuan belum disetujui manager." };
     }
 

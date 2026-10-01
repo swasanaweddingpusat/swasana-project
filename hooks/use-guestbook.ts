@@ -16,7 +16,7 @@ import {
   deleteBulkGuestbookEntries,
   refreshGuestbookAdsUrl,
 } from "@/actions/guestbook";
-import type { GuestbookFilterOptions, GuestbookFunnelBucketKey } from "@/lib/queries/guestbookEntries";
+import type { GuestbookFilterOptions, GuestbookFunnelDrilldownKey } from "@/lib/queries/guestbookEntries";
 
 export function useGuestbookEntries(params?: GuestbookFilterOptions & { page?: number; pageSize?: number }) {
   const page = params?.page ?? 1;
@@ -129,12 +129,12 @@ export function useGuestbookFunnelReport(params?: GuestbookFilterOptions) {
 }
 
 export function useGuestbookFunnelBucketEntries(
-  bucket: GuestbookFunnelBucketKey | undefined,
+  bucket: GuestbookFunnelDrilldownKey | undefined,
   params?: Pick<GuestbookFilterOptions, "venueIds" | "hostId" | "dateFrom" | "dateTo">
 ) {
   return useQuery({
     queryKey: ["guestbook-funnel-bucket", bucket, params?.venueIds, params?.hostId, params?.dateFrom, params?.dateTo],
-    queryFn: () => fetchGuestbookFunnelBucketEntries(bucket as GuestbookFunnelBucketKey, params),
+    queryFn: () => fetchGuestbookFunnelBucketEntries(bucket as GuestbookFunnelDrilldownKey, params),
     enabled: !!bucket,
     staleTime: 60 * 1000,
   });

@@ -195,12 +195,17 @@ model Profile {
   shiftOverridesCreated        ShiftOverride[]            @relation("ShiftOverrideCreator")
   leaveBalances                LeaveBalance[]
   leaveRequests                LeaveRequest[]
+  leaveApprovals               LeaveRequest[]             @relation("LeaveApprover")
   leaveManagerApprovals        LeaveRequest[]             @relation("LeaveManagerApprover")
   leaveHrApprovals             LeaveRequest[]             @relation("LeaveHrApprover")
   leaveRejections              LeaveRequest[]             @relation("LeaveRejector")
   attendanceCorrections         AttendanceCorrection[]
   attendanceCorrectionsReviewed AttendanceCorrection[] @relation("AttendanceCorrectionReviewer")
+  attendanceCorrectionApprovals        AttendanceCorrection[] @relation("AttendanceCorrectionApprover")
+  attendanceCorrectionManagerApprovals AttendanceCorrection[] @relation("AttendanceCorrectionManagerApprover")
   attendanceWorkTypeApprovals   Attendance[]           @relation("AttendanceWorkTypeApprover")
+  attendanceWorkTypeDesignatedApprovals Attendance[]   @relation("AttendanceWorkTypeDesignatedApprover")
+  attendanceWorkTypeManagerApprovals    Attendance[]   @relation("AttendanceWorkTypeManagerApprover")
   holidayTokenGrants           HolidayTokenGrant[]
   holidayTokenGrantsIssued     HolidayTokenGrant[]        @relation("HolidayTokenGranter")
   employeeSalaries             EmployeeSalary[]
@@ -969,6 +974,7 @@ enum WorkType {
 
 enum WorkTypeApprovalStatus {
   pending
+  manager_approved
   approved
   rejected
 }
@@ -981,6 +987,7 @@ enum AttendanceCorrectionType {
 
 enum AttendanceCorrectionStatus {
   pending
+  manager_approved
   approved
   rejected
   cancelled
@@ -2805,12 +2812,17 @@ model Attendance {
   publicHolidayId   String?
   publicHolidayName String?
 
-  // WFH/WFA butuh approval HR (WFO & Day Off tidak relevan, field ini null).
-  workTypeReason         String?
-  workTypeApprovalStatus WorkTypeApprovalStatus?
-  workTypeApprovedBy     String?
-  workTypeApprovedAt     DateTime?
-  workTypeReviewNote     String?
+  // WFH/WFA butuh approval 2-tahap: manager (hasil resolve, snapshot saat submit) dulu,
+  // baru HR final (WFO & Day Off tidak relevan, field ini null).
+  workTypeReason            String?
+  workTypeApprovalStatus    WorkTypeApprovalStatus?
+  workTypeApproverId        String?
+  workTypeManagerApprovedBy String?
+  workTypeManagerApprovedAt DateTime?
+  workTypeManagerNote       String?
+  workTypeApprovedBy        String?
+  workTypeApprovedAt        DateTime?
+  workTypeReviewNote        String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -2819,7 +2831,9 @@ model Attendance {
   workLocation     WorkLocation?  @relation(fields: [workLocationId], references: [id], onDelete: SetNull)
   workShift        WorkShift?     @relation(fields: [workShiftId], references: [id], onDelete: SetNull)
   publicHoliday    PublicHoliday? @relation(fields: [publicHolidayId], references: [id], onDelete: SetNull)
-  workTypeApprover Profile?       @relation("AttendanceWorkTypeApprover", fields: [workTypeApprovedBy], references: [id], onDelete: SetNull)
+  workTypeApprover           Profile?       @relation("AttendanceWorkTypeApprover", fields: [workTypeApprovedBy], references: [id], onDelete: SetNull)
+  workTypeDesignatedApprover Profile?       @relation("AttendanceWorkTypeDesignatedApprover", fields: [workTypeApproverId], references: [id], onDelete: SetNull)
+  workTypeManagerApprover    Profile?       @relation("AttendanceWorkTypeManagerApprover", fields: [workTypeManagerApprovedBy], references: [id], onDelete: SetNull)
 
   @@unique([profileId, date])
   @@index([profileId])
@@ -2828,6 +2842,7 @@ model Attendance {
   @@index([workShiftId])
   @@index([publicHolidayId])
   @@index([workTypeApprovalStatus])
+  @@index([workTypeApproverId])
   @@map("attendances")
 }
 
@@ -3109,6 +3124,7 @@ model LeaveRequest {
   status            LeaveRequestStatus @default(pending)
   publicHolidayId   String?
   publicHolidayName String?
+  approverId        String?
 
   managerApprovedBy String?
   managerApprovedAt DateTime?
@@ -3130,6 +3146,7 @@ model LeaveRequest {
 
   profile         Profile        @relation(fields: [profileId], references: [id], onDelete: Cascade)
   leaveType       LeaveType      @relation(fields: [leaveTypeId], references: [id], onDelete: Cascade)
+  approver        Profile?       @relation("LeaveApprover", fields: [approverId], references: [id], onDelete: SetNull)
   managerApprover Profile?       @relation("LeaveManagerApprover", fields: [managerApprovedBy], references: [id], onDelete: SetNull)
   hrApprover      Profile?       @relation("LeaveHrApprover", fields: [hrApprovedBy], references: [id], onDelete: SetNull)
   rejector        Profile?       @relation("LeaveRejector", fields: [rejectedBy], references: [id], onDelete: SetNull)
@@ -3141,6 +3158,7 @@ model LeaveRequest {
   @@index([startDate])
   @@index([endDate])
   @@index([publicHolidayId])
+  @@index([approverId])
   @@map("leave_requests")
 }
 
@@ -3165,19 +3183,27 @@ model AttendanceCorrection {
   reviewedAt DateTime?
   reviewNote String?
 
+  approverId        String?
+  managerApprovedBy String?
+  managerApprovedAt DateTime?
+  managerNote       String?
+
   cancelledAt DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  profile      Profile       @relation(fields: [profileId], references: [id], onDelete: Cascade)
-  workShift    WorkShift?    @relation(fields: [workShiftId], references: [id], onDelete: SetNull)
-  workLocation WorkLocation? @relation(fields: [workLocationId], references: [id], onDelete: SetNull)
-  reviewer     Profile?      @relation("AttendanceCorrectionReviewer", fields: [reviewedBy], references: [id], onDelete: SetNull)
+  profile         Profile       @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  workShift       WorkShift?    @relation(fields: [workShiftId], references: [id], onDelete: SetNull)
+  workLocation    WorkLocation? @relation(fields: [workLocationId], references: [id], onDelete: SetNull)
+  reviewer        Profile?      @relation("AttendanceCorrectionReviewer", fields: [reviewedBy], references: [id], onDelete: SetNull)
+  approver        Profile?      @relation("AttendanceCorrectionApprover", fields: [approverId], references: [id], onDelete: SetNull)
+  managerApprover Profile?      @relation("AttendanceCorrectionManagerApprover", fields: [managerApprovedBy], references: [id], onDelete: SetNull)
 
   @@index([profileId])
   @@index([date])
   @@index([status])
+  @@index([approverId])
   @@map("attendance_corrections")
 }
 

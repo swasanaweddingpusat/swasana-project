@@ -2,6 +2,7 @@
 
 import { revalidateTag } from "next/cache";
 import { db } from "@/lib/db";
+import { auth } from "@/lib/auth";
 import { requirePermission } from "@/lib/permissions";
 import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
 import { logAudit } from "@/lib/audit";
@@ -12,6 +13,7 @@ import {
   cancelAttendanceCorrectionSchema,
 } from "@/lib/validations/attendanceCorrection";
 import { determineStatus } from "@/lib/attendance-helpers";
+import { resolveManagerId } from "@/lib/resolve-manager";
 import { uploadToStorage, randomId12 } from "@/lib/storage";
 import { compressToWebp } from "@/lib/image";
 import type { FileDescriptor } from "@/lib/validations/common";
@@ -73,6 +75,8 @@ export async function submitAttendanceCorrection(data: unknown): Promise<{ succe
       return { success: false, error: "Gagal mengupload bukti." };
     }
 
+    const approverId = await resolveManagerId(profileId);
+
     const correction = await db.attendanceCorrection.create({
       data: {
         profileId,
@@ -86,6 +90,7 @@ export async function submitAttendanceCorrection(data: unknown): Promise<{ succe
         reason: parsed.data.reason,
         evidence: evidence as Prisma.InputJsonValue,
         status: "pending",
+        approverId,
       },
     });
 
@@ -105,6 +110,122 @@ export async function submitAttendanceCorrection(data: unknown): Promise<{ succe
   }
 }
 
+export async function managerApproveAttendanceCorrection(data: unknown): Promise<{ success: boolean; error?: string }> {
+  const session = await auth();
+  if (!session?.user?.id) return { success: false, error: "Sesi tidak ditemukan." };
+  if (!mutationLimiter.check(`attendance-correction-mgr-approve:${session.user.id}`)) {
+    return { success: false, ...rateLimitError() };
+  }
+
+  const parsed = approveAttendanceCorrectionSchema.safeParse(data);
+  if (!parsed.success) return { success: false, error: parsed.error.issues[0].message };
+
+  const profileId = session.user.profileId;
+  if (!profileId) return { success: false, error: "Profile tidak ditemukan." };
+
+  try {
+    const callerProfile = await db.profile.findUnique({
+      where: { id: profileId },
+      select: { status: true },
+    });
+    if (!callerProfile || callerProfile.status !== "active") {
+      return { success: false, error: "Akun Anda tidak aktif." };
+    }
+
+    const correction = await db.attendanceCorrection.findUnique({
+      where: { id: parsed.data.requestId },
+      select: { id: true, status: true, approverId: true, type: true },
+    });
+    if (!correction) return { success: false, error: "Pengajuan tidak ditemukan." };
+    if (correction.status !== "pending") return { success: false, error: "Pengajuan sudah diproses." };
+    if (correction.approverId !== profileId) {
+      return { success: false, error: "Anda bukan manager dari karyawan ini." };
+    }
+
+    await db.attendanceCorrection.update({
+      where: { id: parsed.data.requestId },
+      data: {
+        status: "manager_approved",
+        managerApprovedBy: profileId,
+        managerApprovedAt: new Date(),
+        managerNote: parsed.data.note ?? null,
+      },
+    });
+
+    await logAudit({
+      userId: session.user.profileId,
+      action: "attendance_correction.manager_approve",
+      entityType: "attendance_correction",
+      entityId: correction.id,
+      description: `Manager menyetujui koreksi absen (${correction.type})`,
+    });
+
+    revalidateTag("attendance-corrections", "max");
+    return { success: true };
+  } catch (e) {
+    console.error("[managerApproveAttendanceCorrection]", e);
+    return { success: false, error: "Terjadi kesalahan." };
+  }
+}
+
+export async function managerRejectAttendanceCorrection(data: unknown): Promise<{ success: boolean; error?: string }> {
+  const session = await auth();
+  if (!session?.user?.id) return { success: false, error: "Sesi tidak ditemukan." };
+  if (!mutationLimiter.check(`attendance-correction-mgr-reject:${session.user.id}`)) {
+    return { success: false, ...rateLimitError() };
+  }
+
+  const parsed = rejectAttendanceCorrectionSchema.safeParse(data);
+  if (!parsed.success) return { success: false, error: parsed.error.issues[0].message };
+
+  const profileId = session.user.profileId;
+  if (!profileId) return { success: false, error: "Profile tidak ditemukan." };
+
+  try {
+    const callerProfile = await db.profile.findUnique({
+      where: { id: profileId },
+      select: { status: true },
+    });
+    if (!callerProfile || callerProfile.status !== "active") {
+      return { success: false, error: "Akun Anda tidak aktif." };
+    }
+
+    const correction = await db.attendanceCorrection.findUnique({
+      where: { id: parsed.data.requestId },
+      select: { id: true, status: true, approverId: true, type: true },
+    });
+    if (!correction) return { success: false, error: "Pengajuan tidak ditemukan." };
+    if (correction.status !== "pending") return { success: false, error: "Pengajuan sudah diproses." };
+    if (correction.approverId !== profileId) {
+      return { success: false, error: "Anda bukan manager dari karyawan ini." };
+    }
+
+    await db.attendanceCorrection.update({
+      where: { id: parsed.data.requestId },
+      data: {
+        status: "rejected",
+        reviewedBy: profileId,
+        reviewedAt: new Date(),
+        reviewNote: parsed.data.reason,
+      },
+    });
+
+    await logAudit({
+      userId: session.user.profileId,
+      action: "attendance_correction.manager_reject",
+      entityType: "attendance_correction",
+      entityId: correction.id,
+      description: `Manager menolak koreksi absen: ${parsed.data.reason}`,
+    });
+
+    revalidateTag("attendance-corrections", "max");
+    return { success: true };
+  } catch (e) {
+    console.error("[managerRejectAttendanceCorrection]", e);
+    return { success: false, error: "Terjadi kesalahan." };
+  }
+}
+
 export async function hrApproveAttendanceCorrection(data: unknown): Promise<{ success: boolean; error?: string }> {
   const { session, error } = await requirePermission({ module: "hr-attendance", action: "approve" });
   if (error) return { success: false, error };
@@ -118,7 +239,10 @@ export async function hrApproveAttendanceCorrection(data: unknown): Promise<{ su
   try {
     const correction = await db.attendanceCorrection.findUnique({ where: { id: parsed.data.requestId } });
     if (!correction) return { success: false, error: "Pengajuan tidak ditemukan." };
-    if (correction.status !== "pending") return { success: false, error: "Pengajuan sudah diproses." };
+    const hrCanActDirectly = correction.status === "pending" && correction.approverId === null;
+    if (correction.status !== "manager_approved" && !hrCanActDirectly) {
+      return { success: false, error: "Pengajuan belum disetujui manager." };
+    }
 
     const touchesClockIn = correction.type === "CLOCK_IN" || correction.type === "BOTH";
     const touchesClockOut = correction.type === "CLOCK_OUT" || correction.type === "BOTH";
@@ -242,10 +366,13 @@ export async function hrRejectAttendanceCorrection(data: unknown): Promise<{ suc
   try {
     const correction = await db.attendanceCorrection.findUnique({
       where: { id: parsed.data.requestId },
-      select: { id: true, status: true, type: true },
+      select: { id: true, status: true, type: true, approverId: true },
     });
     if (!correction) return { success: false, error: "Pengajuan tidak ditemukan." };
-    if (correction.status !== "pending") return { success: false, error: "Pengajuan sudah diproses." };
+    const hrCanActDirectly = correction.status === "pending" && correction.approverId === null;
+    if (correction.status !== "manager_approved" && !hrCanActDirectly) {
+      return { success: false, error: "Pengajuan belum disetujui manager." };
+    }
 
     await db.attendanceCorrection.update({
       where: { id: parsed.data.requestId },
@@ -295,7 +422,7 @@ export async function cancelAttendanceCorrection(data: unknown): Promise<{ succe
     if (correction.profileId !== profileId) {
       return { success: false, error: "Anda tidak berhak membatalkan pengajuan ini." };
     }
-    if (correction.status !== "pending") {
+    if (correction.status !== "pending" && correction.status !== "manager_approved") {
       return { success: false, error: "Pengajuan sudah diproses, tidak bisa dibatalkan." };
     }
 

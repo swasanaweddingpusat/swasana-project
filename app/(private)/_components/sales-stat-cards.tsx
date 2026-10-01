@@ -88,14 +88,13 @@ export function SalesStatCards({ initialStats, dealFrom, dealTo, eventFrom, even
   const activeCard = cards.find((c) => c.filter === activeFilter);
   const [selectedBookingId, setSelectedBookingId] = useState<string | null>(null);
 
-  const revenueCard = cards.find((card) => card.key === "totalRevenue");
-  const statusCards = cards.filter((card) => card.key !== "totalRevenue");
-  const RevenueIcon = revenueCard?.icon;
+  const primaryCards = cards.filter((card) => card.key === "totalBookings" || card.key === "totalRevenue");
+  const statusCards = cards.filter((card) => card.key !== "totalRevenue" && card.key !== "totalBookings");
 
   return (
     <>
-      <div className={cn("grid", "grid-cols-3", "divide-x", "divide-border", "rounded-2xl", "border", "border-border", "bg-card", "shadow-sm", "transition-shadow", "hover:shadow-md", "overflow-hidden")}>
-        {statusCards.map(({ key, label, icon: Icon, fmt, tone, filter }) => (
+      <div className={cn("grid", "grid-cols-2", "divide-x", "divide-border", "rounded-2xl", "border", "border-border", "bg-card", "shadow-sm", "transition-shadow", "hover:shadow-md", "overflow-hidden")}>
+        {primaryCards.map(({ key, label, icon: Icon, fmt, tone, filter }) => (
           <div
             key={key}
             onClick={() => setActiveFilter(filter)}
@@ -123,19 +122,25 @@ export function SalesStatCards({ initialStats, dealFrom, dealTo, eventFrom, even
           </div>
         ))}
       </div>
-      {revenueCard && (
-        <div className={cn("rounded-2xl", "border", "border-border", "bg-card", "p-4", "sm:p-5", "shadow-sm", "transition-shadow", "hover:shadow-md")}>
-          <div className={cn("flex", "items-center", "justify-between", "gap-2")}>
-            <span className={cn("text-xs", "font-medium", "text-muted-foreground", "leading-tight")}>{revenueCard.label}</span>
-            <div className={cn("hidden", "sm:flex", "h-9", "w-9", "shrink-0", "items-center", "justify-center", "rounded-xl", TONE_CHIP[revenueCard.tone])}>
-              {RevenueIcon && <RevenueIcon weight="BoldDuotone" className="h-4 w-4" />}
+      <div className={cn("grid", "grid-cols-2", "divide-x", "divide-border", "rounded-2xl", "border", "border-border", "bg-card", "shadow-sm", "transition-shadow", "hover:shadow-md", "overflow-hidden")}>
+        {statusCards.map(({ key, label, icon: Icon, fmt, tone, filter }) => (
+          <div
+            key={key}
+            onClick={() => setActiveFilter(filter)}
+            className={cn("flex", "flex-col", "gap-1.5", "p-4", "sm:p-5", "cursor-pointer")}
+          >
+            <div className={cn("flex", "items-center", "justify-between", "gap-2")}>
+              <span className={cn("text-xs", "font-medium", "text-muted-foreground", "leading-tight")}>{label}</span>
+              <div className={cn("hidden", "sm:flex", "h-9", "w-9", "shrink-0", "items-center", "justify-center", "rounded-xl", TONE_CHIP[tone])}>
+                <Icon weight="BoldDuotone" className="h-4 w-4" />
+              </div>
             </div>
+            <p className={cn("font-heading", "text-xl", "sm:text-2xl", "lg:text-3xl", "font-semibold", "leading-tight", TONE_VALUE[tone])}>
+              {fmt(stats[key])}
+            </p>
           </div>
-          <p className={cn("font-heading", "text-xl", "sm:text-2xl", "lg:text-3xl", "font-semibold", "leading-tight", TONE_VALUE[revenueCard.tone])}>
-            {revenueCard.fmt(stats[revenueCard.key])}
-          </p>
-        </div>
-      )}
+        ))}
+      </div>
       <Dialog
         open={!!activeFilter}
         onOpenChange={(open) => { if (!open) setActiveFilter(null); }}

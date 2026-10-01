@@ -6,8 +6,9 @@ export type AttendanceStatusValue = z.infer<typeof attendanceStatusEnum>;
 export const clockInSchema = z
   .object({
     attendanceStatus: attendanceStatusEnum,
-    // Public holiday is a tag on a WORKDAY clock-in (employee still comes to work on a
-    // tanggal merah) — never on DAY_OFF, which is always a plain libur biasa.
+    // Public holiday is a tag independent of attendanceStatus: WORKDAY = employee still
+    // comes to work on a tanggal merah; DAY_OFF = employee marks the day off itself as a
+    // public holiday (vs. a plain "Libur Mingguan"). Validated for both below.
     isPublicHoliday: z.boolean().optional(),
     publicHolidayId: z.string().optional(),
     workShiftId: z.string().optional(),
@@ -19,32 +20,38 @@ export const clockInSchema = z
     lng: z.number().optional(),
   })
   .superRefine((data, ctx) => {
-    if (data.attendanceStatus !== "WORKDAY") {
-      if (!data.photoBase64) {
-        ctx.addIssue({ code: "custom", message: "Foto wajib disertakan", path: ["photoBase64"] });
+    const isWorkday = data.attendanceStatus === "WORKDAY";
+
+    if (isWorkday) {
+      if (!data.workShiftId) {
+        ctx.addIssue({ code: "custom", message: "Shift wajib dipilih", path: ["workShiftId"] });
       }
-      return;
+      if (!data.workType) {
+        ctx.addIssue({ code: "custom", message: "Tipe kerja wajib dipilih", path: ["workType"] });
+      }
+      if (data.workType === "WFO" && !data.workLocationId) {
+        ctx.addIssue({ code: "custom", message: "Lokasi kerja wajib dipilih", path: ["workLocationId"] });
+      }
     }
-    if (!data.workShiftId) {
-      ctx.addIssue({ code: "custom", message: "Shift wajib dipilih", path: ["workShiftId"] });
-    }
-    if (!data.workType) {
-      ctx.addIssue({ code: "custom", message: "Tipe kerja wajib dipilih", path: ["workType"] });
-    }
-    if (data.workType === "WFO" && !data.workLocationId) {
-      ctx.addIssue({ code: "custom", message: "Lokasi kerja wajib dipilih", path: ["workLocationId"] });
-    }
+
+    // Public holiday adalah tag yang independen dari attendanceStatus: WORKDAY (karyawan
+    // tetap masuk di tanggal merah) atau DAY_OFF (hari libur ditandai sebagai hari besar).
+    // Validasi berlaku untuk kedua status.
     if (data.isPublicHoliday && !data.publicHolidayId) {
       ctx.addIssue({ code: "custom", message: "Public holiday wajib dipilih", path: ["publicHolidayId"] });
     }
+
     if (!data.photoBase64) {
       ctx.addIssue({ code: "custom", message: "Foto wajib disertakan", path: ["photoBase64"] });
     }
-    if (data.lat === undefined) {
-      ctx.addIssue({ code: "custom", message: "Koordinat latitude wajib ada", path: ["lat"] });
-    }
-    if (data.lng === undefined) {
-      ctx.addIssue({ code: "custom", message: "Koordinat longitude wajib ada", path: ["lng"] });
+
+    if (isWorkday) {
+      if (data.lat === undefined) {
+        ctx.addIssue({ code: "custom", message: "Koordinat latitude wajib ada", path: ["lat"] });
+      }
+      if (data.lng === undefined) {
+        ctx.addIssue({ code: "custom", message: "Koordinat longitude wajib ada", path: ["lng"] });
+      }
     }
   });
 
