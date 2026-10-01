@@ -24,6 +24,10 @@ const correctionSelect = {
   reviewedBy: true,
   reviewedAt: true,
   reviewNote: true,
+  approverId: true,
+  managerApprovedBy: true,
+  managerApprovedAt: true,
+  managerNote: true,
   cancelledAt: true,
   createdAt: true,
   profile: {
@@ -39,6 +43,8 @@ const correctionSelect = {
   workShift: { select: { id: true, name: true, startTime: true, endTime: true } },
   workLocation: { select: { id: true, name: true } },
   reviewer: { select: { id: true, fullName: true } },
+  approver: { select: { id: true, fullName: true } },
+  managerApprover: { select: { id: true, fullName: true } },
 } satisfies Prisma.AttendanceCorrectionSelect;
 
 export async function getAttendanceCorrections(params?: {
@@ -74,6 +80,23 @@ export async function getMyAttendanceCorrections(profileId: string) {
       where: { profileId },
       select: correctionSelect,
       orderBy: { createdAt: "desc" },
+      take: 100,
+    });
+  } catch (e) {
+    if (isTableMissing(e)) return [];
+    throw e;
+  }
+}
+
+export async function getPendingForManager(managerId: string) {
+  try {
+    return await db.attendanceCorrection.findMany({
+      where: {
+        status: "pending",
+        approverId: managerId,
+      },
+      select: correctionSelect,
+      orderBy: { createdAt: "asc" },
       take: 100,
     });
   } catch (e) {

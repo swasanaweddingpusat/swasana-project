@@ -55,6 +55,9 @@ export function LeaveApprovalTable() {
   const { data: pendingHr, isLoading: loadingHr } = useLeaveRequests(
     can("hr-leave", "approve") ? { status: "manager_approved" } : undefined
   );
+  const { data: pendingAll, isLoading: loadingPendingAll } = useLeaveRequests(
+    can("hr-leave", "approve") ? { status: "pending" } : undefined
+  );
 
   const managerApproveMut = useManagerApproveLeave();
   const managerRejectMut = useManagerRejectLeave();
@@ -223,6 +226,54 @@ export function LeaveApprovalTable() {
           </Card>
         )}
 
+        {/* HR visibility into requests still pending at manager level */}
+        {showHrSection && (
+          <Card className="rounded-2xl shadow-sm">
+            <CardHeader className="pb-3">
+              <CardTitle className="font-heading text-lg flex items-center gap-2">
+                <ClockCircle weight="BoldDuotone" className="h-5 w-5" />
+                Menunggu Manager
+                {pendingAll && pendingAll.length > 0 && (
+                  <Badge variant="secondary" className="rounded-full ml-2">
+                    {pendingAll.length}
+                  </Badge>
+                )}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {loadingPendingAll && (
+                <div className="space-y-2">
+                  {Array.from({ length: 3 }).map((_, i) => (
+                    <Skeleton key={i} className="h-10 w-full rounded-lg" />
+                  ))}
+                </div>
+              )}
+
+              {!loadingPendingAll && (!pendingAll || pendingAll.length === 0) && (
+                <div className="flex flex-col items-center justify-center py-12 text-center">
+                  <CheckCircle
+                    weight="BoldDuotone"
+                    className="h-10 w-10 text-muted-foreground/40"
+                  />
+                  <p className="mt-3 text-sm text-muted-foreground">
+                    Tidak ada pengajuan yang menunggu persetujuan manager
+                  </p>
+                </div>
+              )}
+
+              {!loadingPendingAll && pendingAll && pendingAll.length > 0 && (
+                <ApprovalTableContent
+                  requests={pendingAll}
+                  scope="hr-pending"
+                  onApprove={(req) => openDialog(req, "approve", "hr")}
+                  onReject={(req) => openDialog(req, "reject", "hr")}
+                  onViewEvidence={setEvidenceTarget}
+                />
+              )}
+            </CardContent>
+          </Card>
+        )}
+
         {/* HR Approval Section */}
         {showHrSection && (
           <Card className="rounded-2xl shadow-sm">
@@ -372,7 +423,7 @@ function ApprovalTableContent({
   onViewEvidence,
 }: {
   requests: LeaveRequestItem[];
-  scope: "manager" | "hr";
+  scope: "manager" | "hr" | "hr-pending";
   onApprove: (req: LeaveRequestItem) => void;
   onReject: (req: LeaveRequestItem) => void;
   onViewEvidence: (req: LeaveRequestItem) => void;
@@ -388,6 +439,7 @@ function ApprovalTableContent({
             <TableHead>Hari</TableHead>
             <TableHead>Alasan</TableHead>
             {scope === "hr" && <TableHead>Manager</TableHead>}
+            {scope === "hr-pending" && <TableHead>Manager</TableHead>}
             <TableHead className="w-32">Aksi</TableHead>
           </TableRow>
         </TableHeader>
@@ -428,6 +480,11 @@ function ApprovalTableContent({
                   {req.managerApprover?.fullName ?? "-"}
                 </TableCell>
               )}
+              {scope === "hr-pending" && (
+                <TableCell className="text-xs text-muted-foreground">
+                  {req.approver?.fullName ?? "Belum ada manager — HR wajib proses"}
+                </TableCell>
+              )}
               <TableCell>
                 <div className="flex items-center gap-1">
                   {req.evidence && (
@@ -441,24 +498,33 @@ function ApprovalTableContent({
                       <Gallery weight="BoldDuotone" className="h-4 w-4" />
                     </Button>
                   )}
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7 rounded-full text-primary hover:text-primary"
-                    onClick={() => onApprove(req)}
-                    title="Setujui"
-                  >
-                    <CheckCircle weight="BoldDuotone" className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7 rounded-full text-destructive hover:text-destructive"
-                    onClick={() => onReject(req)}
-                    title="Tolak"
-                  >
-                    <CloseCircle weight="BoldDuotone" className="h-4 w-4" />
-                  </Button>
+                  {scope === "hr-pending" && req.approverId !== null && (
+                    <Badge variant="outline" className="rounded-full text-xs whitespace-nowrap">
+                      Menunggu {req.approver?.fullName ?? "manager"}
+                    </Badge>
+                  )}
+                  {(scope !== "hr-pending" || req.approverId === null) && (
+                    <>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 rounded-full text-primary hover:text-primary"
+                        onClick={() => onApprove(req)}
+                        title="Setujui"
+                      >
+                        <CheckCircle weight="BoldDuotone" className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 rounded-full text-destructive hover:text-destructive"
+                        onClick={() => onReject(req)}
+                        title="Tolak"
+                      >
+                        <CloseCircle weight="BoldDuotone" className="h-4 w-4" />
+                      </Button>
+                    </>
+                  )}
                 </div>
               </TableCell>
             </TableRow>

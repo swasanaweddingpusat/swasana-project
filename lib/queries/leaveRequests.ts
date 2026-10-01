@@ -20,6 +20,7 @@ const requestSelect = {
   status: true,
   publicHolidayId: true,
   publicHolidayName: true,
+  approverId: true,
   managerApprovedBy: true,
   managerApprovedAt: true,
   managerNote: true,
@@ -43,6 +44,7 @@ const requestSelect = {
     },
   },
   leaveType: { select: { id: true, name: true, code: true } },
+  approver: { select: { id: true, fullName: true } },
   managerApprover: { select: { id: true, fullName: true } },
   hrApprover: { select: { id: true, fullName: true } },
   rejector: { select: { id: true, fullName: true } },
@@ -94,7 +96,7 @@ export async function getPendingForManager(managerId: string) {
     return await db.leaveRequest.findMany({
       where: {
         status: "pending",
-        profile: { managerId },
+        approverId: managerId,
       },
       select: requestSelect,
       orderBy: { createdAt: "asc" },

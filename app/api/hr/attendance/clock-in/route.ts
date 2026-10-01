@@ -4,7 +4,8 @@ import { mutationLimiter, rateLimitResponse } from "@/lib/rate-limit";
 import { clockInSchema } from "@/lib/validations/attendance";
 import type { FileDescriptor } from "@/lib/validations/common";
 import { getAttendanceToday, todayMidnightUTC } from "@/lib/queries/attendance";
-import { validateGpsAgainstLocations, determineStatus } from "@/lib/attendance-helpers";
+import { validateGpsAgainstLocations, determineStatus, resolveHolidayTag } from "@/lib/attendance-helpers";
+import { resolveManagerId } from "@/lib/resolve-manager";
 import { db } from "@/lib/db";
 import { uploadToStorage, randomId12 } from "@/lib/storage";
 import { compressToWebp } from "@/lib/image";
@@ -49,14 +50,19 @@ export async function POST(req: Request) {
   const ip = req.headers.get("x-forwarded-for") ?? "unknown";
   const { attendanceStatus } = parsed.data;
 
-  // --- Off flow: employee self-reports a plain day off. Selfie required as proof of
-  // presence, but no venue/GPS (not tied to a work location). Public Holiday is never
-  // set here — it's a tag on the WORKDAY flow below (employee still comes to work on a
-  // tanggal merah). ---
+  // --- Off flow: employee self-reports a day off, either plain ("Libur Mingguan") or
+  // tagged as Public Holiday via the "Tipe Libur" picker. Selfie required as proof of
+  // presence, but no venue/GPS (not tied to a work location). ---
   if (attendanceStatus !== "WORKDAY") {
-    const { photoBase64 } = parsed.data;
+    const { photoBase64, isPublicHoliday, publicHolidayId } = parsed.data;
     if (!photoBase64) {
       return Response.json({ error: "Foto wajib disertakan" }, { status: 422 });
+    }
+
+    const wantsPublicHoliday = isPublicHoliday === true;
+    const holidayResult = await resolveHolidayTag(wantsPublicHoliday, publicHolidayId, today);
+    if (!holidayResult.ok) {
+      return Response.json({ error: "Public holiday tidak tersedia untuk tanggal hari ini" }, { status: 422 });
     }
 
     // SOP upload: random-id filename, webp, 50% quality, JSON descriptor
@@ -82,19 +88,19 @@ export async function POST(req: Request) {
         create: {
           profileId,
           date: today,
-          clockInAt: now,
+  clockInAt: now,
           attendantType: "DAY_OFF",
-          isPublicHoliday: false,
-          publicHolidayId: null,
-          publicHolidayName: null,
+          isPublicHoliday: wantsPublicHoliday,
+          publicHolidayId: holidayResult.id,
+          publicHolidayName: holidayResult.name,
           clockInEvidence: clockInEvidence as Prisma.InputJsonValue,
         },
         update: {
           clockInAt: now,
           attendantType: "DAY_OFF",
-          isPublicHoliday: false,
-          publicHolidayId: null,
-          publicHolidayName: null,
+          isPublicHoliday: wantsPublicHoliday,
+          publicHolidayId: holidayResult.id,
+          publicHolidayName: holidayResult.name,
           clockInEvidence: clockInEvidence as Prisma.InputJsonValue,
         },
       });
@@ -154,20 +160,14 @@ export async function POST(req: Request) {
     resolvedLocationId = gpsResult.nearestLocationId;
   }
 
-  // 5. Public Holiday tag. Identitas "hari besar" (nama) ditentukan HRD lewat master
-  // PublicHoliday: server mencocokkan tanggal absen dengan master by-date lalu
-  // meng-snapshot namanya supaya absensi tetap tampil benar bila master di-rename/hapus.
-  const holiday = wantsPublicHoliday
-    ? await db.publicHoliday.findFirst({
-        where: { id: publicHolidayId, date: { lte: today }, isActive: true },
-        select: { id: true, name: true },
-      })
-    : null;
-  if (wantsPublicHoliday && !holiday) {
+  // 5. Public Holiday tag — resolved via the shared helper (same lookup+snapshot logic
+  // used by the Day Off flow above).
+  const holidayResult = await resolveHolidayTag(wantsPublicHoliday, publicHolidayId, today);
+  if (!holidayResult.ok) {
     return Response.json({ error: "Public holiday tidak tersedia untuk tanggal hari ini" }, { status: 422 });
   }
-  const resolvedHolidayId: string | null = holiday?.id ?? null;
-  const resolvedHolidayName: string | null = holiday?.name ?? null;
+  const resolvedHolidayId = holidayResult.id;
+  const resolvedHolidayName = holidayResult.name;
 
   // 6. Upload photo — SOP: random-id filename, webp, 50% quality, JSON descriptor
   const dateStr = today.toISOString().slice(0, 10);
@@ -188,6 +188,10 @@ export async function POST(req: Request) {
 
   // 7. Determine status
   const status = determineStatus(now, workShift.startTime, workShift.lateToleranceMinutes, workShift.isOvernight);
+
+  // WFH/WFA butuh approval 2-tahap: resolve manager sekali di submit time (snapshot),
+  // biar approver-nya konsisten walau struktur organisasi berubah kemudian.
+  const workTypeApproverId = workType === "WFO" ? null : await resolveManagerId(profileId);
 
   // 8. Upsert attendance with the employee's self-selected shift + location
   try {
@@ -210,6 +214,10 @@ export async function POST(req: Request) {
         publicHolidayName: resolvedHolidayName,
         workTypeReason: workType === "WFO" ? null : (workTypeReason ?? null),
         workTypeApprovalStatus: workType === "WFO" ? null : "pending",
+        workTypeApproverId,
+        workTypeManagerApprovedBy: null,
+        workTypeManagerApprovedAt: null,
+        workTypeManagerNote: null,
         workTypeApprovedBy: null,
         workTypeApprovedAt: null,
         workTypeReviewNote: null,
@@ -229,6 +237,10 @@ export async function POST(req: Request) {
         publicHolidayName: resolvedHolidayName,
         workTypeReason: workType === "WFO" ? null : (workTypeReason ?? null),
         workTypeApprovalStatus: workType === "WFO" ? null : "pending",
+        workTypeApproverId,
+        workTypeManagerApprovedBy: null,
+        workTypeManagerApprovedAt: null,
+        workTypeManagerNote: null,
         workTypeApprovedBy: null,
         workTypeApprovedAt: null,
         workTypeReviewNote: null,

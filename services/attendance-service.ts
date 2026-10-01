@@ -92,8 +92,17 @@ export async function fetchAttendanceExport(params: {
   return res.json() as Promise<AttendanceExportItem[]>;
 }
 
-export async function fetchWorkTypeApprovals(): Promise<PendingWorkTypeApprovalItem[]> {
-  const res = await fetch("/api/hr/attendance/work-type-approvals");
+export async function fetchWorkTypeApprovals(params?: { status?: string }): Promise<PendingWorkTypeApprovalItem[]> {
+  const sp = new URLSearchParams();
+  if (params?.status) sp.set("status", params.status);
+  const qs = sp.toString();
+  const res = await fetch(`/api/hr/attendance/work-type-approvals${qs ? `?${qs}` : ""}`);
+  if (!res.ok) throw new Error("Gagal memuat data persetujuan WFH/WFA");
+  return res.json();
+}
+
+export async function fetchPendingWorkTypeApprovalsForManager(): Promise<PendingWorkTypeApprovalItem[]> {
+  const res = await fetch("/api/hr/attendance/work-type-approvals/pending");
   if (!res.ok) throw new Error("Gagal memuat data persetujuan WFH/WFA");
   return res.json();
 }

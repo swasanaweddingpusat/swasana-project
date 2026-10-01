@@ -1,5 +1,5 @@
 import { db } from "@/lib/db";
-import type { Prisma } from "@prisma/client";
+import type { Prisma, WorkTypeApprovalStatus } from "@prisma/client";
 import type { AttendanceListQuery, AttendanceExportQuery, AttendanceOverviewQuery } from "@/lib/validations/attendance";
 import type { AttendanceContext } from "@/lib/attendance-helpers";
 
@@ -254,6 +254,14 @@ const pendingWorkTypeApprovalSelect = {
   clockInEvidence: true,
   workType: true,
   workTypeReason: true,
+  workTypeApprovalStatus: true,
+  workTypeApproverId: true,
+  workTypeManagerApprovedBy: true,
+  workTypeManagerApprovedAt: true,
+  workTypeManagerNote: true,
+  workTypeApprovedBy: true,
+  workTypeApprovedAt: true,
+  workTypeReviewNote: true,
   profile: {
     select: {
       id: true,
@@ -263,13 +271,24 @@ const pendingWorkTypeApprovalSelect = {
     },
   },
   workShift: { select: { id: true, name: true } },
+  workTypeDesignatedApprover: { select: { id: true, fullName: true } },
+  workTypeManagerApprover: { select: { id: true, fullName: true } },
 } satisfies Prisma.AttendanceSelect;
 
-export async function getPendingWorkTypeApprovals() {
+export async function getPendingWorkTypeApprovals(params?: { status?: string }) {
   return db.attendance.findMany({
-    where: { workTypeApprovalStatus: "pending" },
+    where: { workTypeApprovalStatus: (params?.status ?? "pending") as WorkTypeApprovalStatus },
     orderBy: { date: "desc" },
     take: 500,
+    select: pendingWorkTypeApprovalSelect,
+  });
+}
+
+export async function getPendingWorkTypeApprovalsForManager(managerId: string) {
+  return db.attendance.findMany({
+    where: { workTypeApprovalStatus: "pending", workTypeApproverId: managerId },
+    orderBy: { date: "asc" },
+    take: 100,
     select: pendingWorkTypeApprovalSelect,
   });
 }
