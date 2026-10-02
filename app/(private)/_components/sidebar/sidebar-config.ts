@@ -124,7 +124,6 @@ export const MODULE_NAV_MAP: Record<ModuleKey, NavItem[]> = {
     { name: "Koreksi Absen", href: "/hrd/koreksi-absen", icon: ClipboardList, subtitle: "Persetujuan pengajuan koreksi absensi", permission: { module: "hr-attendance", action: "approve" } },
     { name: "Penggajian & Perpajakan", href: "/hrd/penggajian-perpajakan", icon: Dollar, subtitle: "Proses penggajian dan konfigurasi pajak", permission: { module: "hr", action: "view" } },
     { name: "Slip Gaji", href: "/hrd/slip-gaji", icon: FileText, subtitle: "Rekap slip gaji seluruh karyawan", permission: { module: "hr", action: "view" } },
-    { name: "Sistem Cuti", href: "/hrd/sistem-cuti", icon: CalendarDate, subtitle: "Pengajuan dan saldo cuti karyawan", permission: { module: "hr", action: "view" } },
     { name: "Rekrutmen & Onboarding", href: "/hrd/rekrutmen-onboarding", icon: UserPlus, subtitle: "Pipeline rekrutmen hingga onboarding", permission: { module: "hr-recruitment", action: "view" } },
     { name: "Onboarding Karyawan", href: "/hrd/onboarding-karyawan", icon: ClipboardCheck, subtitle: "Formulir data karyawan baru & link form publik", permission: { module: "hr", action: "create" } },
     { name: "Pengembangan SDM", href: "/hrd/pengembangan-sdm", icon: GraphUp, subtitle: "Pelatihan, pengembangan, dan sertifikasi", permission: { module: "hr", action: "view" } },
