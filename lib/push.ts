@@ -78,7 +78,7 @@ export function getNotificationUrl(
   entityType?: string | null,
 ): string {
   if (type === "leave_approved" || type === "leave_rejected") {
-    return "/hrd/sistem-cuti";
+    return "/cuti";
   }
   if (type === "payslip_generated") {
     return "/hrd/slip-gaji";

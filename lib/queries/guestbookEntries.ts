@@ -608,7 +608,13 @@ export async function getGuestbookFunnelBucketEntries(
   bucket: GuestbookFunnelDrilldownKey
 ): Promise<GuestbookFunnelBucketEntry[]> {
   const scopeWhere = (await buildOwnerScopeWhere(profileId, dataScope, "salesId")) as Prisma.GuestbookEntryWhereInput;
-  const baseWhere: Prisma.GuestbookEntryWhereInput = { ...scopeWhere, ...buildGuestbookWhere(filters ?? {}) };
+  // Kunci rentang ke `createdAt` persis seperti getGuestbookFunnelReport. Tanpa
+  // ini drawer jatuh ke default `checkInAt`, sehingga angka pada drawer bisa beda
+  // dengan angka di card funnel yang memakai tanggal input sales.
+  const baseWhere: Prisma.GuestbookEntryWhereInput = {
+    ...scopeWhere,
+    ...buildGuestbookWhere({ ...(filters ?? {}), dateField: "createdAt" }),
+  };
 
   let where: Prisma.GuestbookEntryWhereInput;
   if (bucket === "database") {
