@@ -13,7 +13,8 @@ export async function updateAttendance(
 ): Promise<{ success: boolean; error?: string }> {
   const { session, error } = await requirePermission({ module: "hr-attendance", action: "edit" });
   if (error) return { success: false, error };
-  if (!mutationLimiter.check(`attendance-update:${session!.user.id}`)) return { success: false, ...rateLimitError() };
+  if (!session) return { success: false, error: "Sesi tidak ditemukan. Silakan login kembali." };
+  if (!mutationLimiter.check(`attendance-update:${session.user.id}`)) return { success: false, ...rateLimitError() };
 
   const parsed = updateAttendanceSchema.safeParse(data);
   if (!parsed.success) return { success: false, error: parsed.error.issues[0].message };
@@ -34,7 +35,7 @@ export async function updateAttendance(
     });
 
     await logAudit({
-      userId: session!.user.profileId,
+      userId: session.user.profileId,
       action: "attendance.update",
       entityType: "attendance",
       entityId: id,
@@ -52,7 +53,8 @@ export async function updateAttendance(
 export async function deleteAttendance(id: string): Promise<{ success: boolean; error?: string }> {
   const { session, error } = await requirePermission({ module: "hr-attendance", action: "delete" });
   if (error) return { success: false, error };
-  if (!mutationLimiter.check(`attendance-delete:${session!.user.id}`)) return { success: false, ...rateLimitError() };
+  if (!session) return { success: false, error: "Sesi tidak ditemukan. Silakan login kembali." };
+  if (!mutationLimiter.check(`attendance-delete:${session.user.id}`)) return { success: false, ...rateLimitError() };
 
   try {
     const existing = await db.attendance.findUnique({ where: { id }, select: { id: true, profileId: true, date: true } });
@@ -61,7 +63,7 @@ export async function deleteAttendance(id: string): Promise<{ success: boolean; 
     await db.attendance.delete({ where: { id } });
 
     await logAudit({
-      userId: session!.user.profileId,
+      userId: session.user.profileId,
       action: "attendance.delete",
       entityType: "attendance",
       entityId: id,
@@ -79,7 +81,8 @@ export async function deleteAttendance(id: string): Promise<{ success: boolean; 
 export async function deleteBulkAttendance(ids: unknown): Promise<{ success: boolean; error?: string; count?: number }> {
   const { session, error } = await requirePermission({ module: "hr-attendance", action: "delete" });
   if (error) return { success: false, error };
-  if (!mutationLimiter.check(`attendance-bulk-delete:${session!.user.id}`)) return { success: false, ...rateLimitError() };
+  if (!session) return { success: false, error: "Sesi tidak ditemukan. Silakan login kembali." };
+  if (!mutationLimiter.check(`attendance-bulk-delete:${session.user.id}`)) return { success: false, ...rateLimitError() };
 
   const parsed = bulkDeleteAttendanceSchema.safeParse({ ids });
   if (!parsed.success) return { success: false, error: parsed.error.issues[0].message };
@@ -88,7 +91,7 @@ export async function deleteBulkAttendance(ids: unknown): Promise<{ success: boo
     const result = await db.attendance.deleteMany({ where: { id: { in: parsed.data.ids } } });
 
     await logAudit({
-      userId: session!.user.profileId,
+      userId: session.user.profileId,
       action: "attendance.bulk_delete",
       entityType: "attendance",
       entityId: parsed.data.ids.join(","),
