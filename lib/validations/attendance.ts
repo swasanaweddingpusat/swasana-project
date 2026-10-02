@@ -105,6 +105,21 @@ export const attendanceOverviewQuerySchema = z.object({
   year: z.coerce.number().int().min(2020).max(2100).optional(),
 });
 
+export const updateAttendanceSchema = z.object({
+  clockInAt: z.string().datetime().nullable().optional(),
+  clockOutAt: z.string().datetime().nullable().optional(),
+  status: z.enum(["on_time", "late", "absent"]).optional(),
+  attendantType: attendanceStatusEnum.optional(),
+  workLocationId: z.string().nullable().optional(),
+  workShiftId: z.string().nullable().optional(),
+  workType: z.enum(["WFO", "WFH", "WFA"]).nullable().optional(),
+  isPublicHoliday: z.boolean().optional(),
+});
+
+export const bulkDeleteAttendanceSchema = z.object({
+  ids: z.array(z.string().min(1)).min(1, "Minimal pilih 1 data"),
+});
+
 export type ClockInInput = z.infer<typeof clockInSchema>;
 export type ClockOutInput = z.infer<typeof clockOutSchema>;
 export type AttendanceSettingsInput = z.infer<typeof attendanceSettingsSchema>;
@@ -112,3 +127,5 @@ export type AttendanceListQuery = z.infer<typeof attendanceListQuerySchema>;
 export type AttendanceExportQuery = z.infer<typeof attendanceExportQuerySchema>;
 export type AttendanceOverviewQuery = z.infer<typeof attendanceOverviewQuerySchema>;
 export type GlobalAttendanceSettingsInput = z.infer<typeof globalAttendanceSettingsSchema>;
+export type UpdateAttendanceInput = z.infer<typeof updateAttendanceSchema>;
+export type BulkDeleteAttendanceInput = z.infer<typeof bulkDeleteAttendanceSchema>;
