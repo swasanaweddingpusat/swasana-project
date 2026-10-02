@@ -59,7 +59,7 @@ export async function fetchGuestbookFunnelReport(
 
 export async function fetchGuestbookFunnelBucketEntries(
   bucket: GuestbookFunnelDrilldownKey,
-  params?: Pick<GuestbookFilterOptions, "venueIds" | "hostId" | "dateFrom" | "dateTo">
+  params?: Pick<GuestbookFilterOptions, "venueIds" | "hostId" | "dateFrom" | "dateTo" | "categories">
 ): Promise<GuestbookFunnelBucketEntry[]> {
   const searchParams = new URLSearchParams();
   searchParams.set("bucket", bucket);
@@ -67,6 +67,7 @@ export async function fetchGuestbookFunnelBucketEntries(
   if (params?.hostId) searchParams.set("hostId", params.hostId);
   if (params?.dateFrom) searchParams.set("dateFrom", params.dateFrom);
   if (params?.dateTo) searchParams.set("dateTo", params.dateTo);
+  if (params?.categories?.length) searchParams.set("categories", params.categories.join(","));
 
   const res = await fetch(`/api/guestbook/funnel-bucket?${searchParams.toString()}`);
   if (!res.ok) throw new Error("Failed to fetch guestbook funnel bucket entries");

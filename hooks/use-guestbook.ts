@@ -130,10 +130,10 @@ export function useGuestbookFunnelReport(params?: GuestbookFilterOptions) {
 
 export function useGuestbookFunnelBucketEntries(
   bucket: GuestbookFunnelDrilldownKey | undefined,
-  params?: Pick<GuestbookFilterOptions, "venueIds" | "hostId" | "dateFrom" | "dateTo">
+  params?: Pick<GuestbookFilterOptions, "venueIds" | "hostId" | "dateFrom" | "dateTo" | "categories">
 ) {
   return useQuery({
-    queryKey: ["guestbook-funnel-bucket", bucket, params?.venueIds, params?.hostId, params?.dateFrom, params?.dateTo],
+    queryKey: ["guestbook-funnel-bucket", bucket, params?.venueIds, params?.hostId, params?.dateFrom, params?.dateTo, params?.categories],
     queryFn: () => fetchGuestbookFunnelBucketEntries(bucket as GuestbookFunnelDrilldownKey, params),
     enabled: !!bucket,
     staleTime: 60 * 1000,

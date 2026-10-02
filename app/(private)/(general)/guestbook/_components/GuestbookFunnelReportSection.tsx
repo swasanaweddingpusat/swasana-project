@@ -268,6 +268,7 @@ function FunnelBucketDrawer({
   hostId,
   dateFrom,
   dateTo,
+  categories,
 }: {
   bucket: ActiveBucket;
   onClose: () => void;
@@ -275,19 +276,26 @@ function FunnelBucketDrawer({
   hostId?: string;
   dateFrom?: string;
   dateTo?: string;
+  categories?: GuestbookCategoryFilter[];
 }) {
   const { data: entries, isLoading } = useGuestbookFunnelBucketEntries(bucket.key, {
     venueIds: venueIds.length > 0 ? venueIds : undefined,
     hostId,
     dateFrom,
     dateTo,
+    categories: categories && categories.length > 0 ? categories : undefined,
   });
 
   return (
     <Drawer
       isOpen
       onClose={onClose}
-      title={`${bucket.label} (${entries?.length ?? 0})`}
+      title={bucket.label}
+      headerActions={
+        <Badge variant="secondary" className="rounded-full tabular-nums shrink-0">
+          {entries?.length ?? 0}
+        </Badge>
+      }
       maxWidth="sm:max-w-2xl"
     >
       {isLoading ? (
@@ -420,6 +428,7 @@ export function GuestbookFunnelReportSection({
           hostId={hostId}
           dateFrom={dateFrom}
           dateTo={dateTo}
+          categories={categories}
         />
       ) : null}
     </div>

@@ -24,15 +24,22 @@ import { LeaveBalanceManager } from "./LeaveBalanceManager";
 import { HolidayTokenManager } from "./HolidayTokenManager";
 
 interface LeaveManagementProps {
+  // When omitted, the view adapts to the caller's permissions: users with any HR
+  // leave-management capability (approve/create/edit) get the full tabbed admin
+  // view; everyone else gets the self-service view.
   mode?: "self-service" | "hr";
 }
 
-export function LeaveManagement({ mode = "hr" }: LeaveManagementProps) {
+export function LeaveManagement({ mode }: LeaveManagementProps) {
   const { can } = usePermissions();
   const { data: pendingRequests } = usePendingForManager();
   const [isRequestDialogOpen, setIsRequestDialogOpen] = useState(false);
 
-  if (mode === "self-service") {
+  const canManageLeave =
+    can("hr-leave", "approve") || can("hr-leave", "create") || can("hr-leave", "edit");
+  const effectiveMode = mode ?? (canManageLeave ? "hr" : "self-service");
+
+  if (effectiveMode === "self-service") {
     return (
       <div className="space-y-8">
         <LeaveBalanceCards />
