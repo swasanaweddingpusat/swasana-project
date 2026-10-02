@@ -20,6 +20,7 @@ import { useLeaveBalances } from "@/hooks/use-leave-balances";
 import { useSubmitLeaveRequest } from "@/hooks/use-leave-requests";
 import { useHolidayTokens } from "@/hooks/use-holiday-tokens";
 import { countWeekdays, getAvailableBalance } from "@/lib/leave-helpers";
+import { compressImageToWebp } from "@/lib/upload-client";
 import { Camera, CloseCircle, DocumentText, FileText, Wallet } from "@solar-icons/react";
 
 interface FormState {
@@ -90,11 +91,21 @@ export function LeaveRequestForm({ inDialog = false, onSubmitted }: LeaveRequest
   const isInsufficientBalance =
     availableDays !== null && calculatedDays > 0 && calculatedDays > availableDays;
 
-  const handleFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     if (!file.type.startsWith("image/")) {
       toast.error("Bukti harus berupa gambar");
+      return;
+    }
+    // Compress in-browser first (max 1920px, webp) so the base64 payload stays
+    // well under the Server Action body limit — a raw phone photo exceeds it and
+    // the submit action rejects before running.
+    let compressed: File;
+    try {
+      compressed = await compressImageToWebp(file);
+    } catch {
+      toast.error("Gagal memproses gambar");
       return;
     }
     const reader = new FileReader();
@@ -102,7 +113,7 @@ export function LeaveRequestForm({ inDialog = false, onSubmitted }: LeaveRequest
       setForm((f) => ({ ...f, photoBase64: reader.result as string, photoName: file.name }));
     };
     reader.onerror = () => toast.error("Gagal membaca file");
-    reader.readAsDataURL(file);
+    reader.readAsDataURL(compressed);
   }, []);
 
 

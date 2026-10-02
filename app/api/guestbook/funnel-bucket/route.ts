@@ -2,10 +2,13 @@ import { requirePermissionForRoute } from "@/lib/permissions";
 import { apiLimiter, rateLimitResponse } from "@/lib/rate-limit";
 import {
   getGuestbookFunnelBucketEntries,
+  type GuestbookCategoryFilter,
   type GuestbookFunnelBucketKey,
   type GuestbookFunnelDrilldownKey,
 } from "@/lib/queries/guestbookEntries";
 import type { DataScope } from "@/types/user";
+
+const ALLOWED_CATEGORY = new Set<GuestbookCategoryFilter>(["WEDDINGS", "MICE", "no_package"]);
 
 const ALLOWED_BUCKET = new Set<GuestbookFunnelBucketKey>([
   "database",
@@ -52,6 +55,11 @@ export async function GET(request: Request): Promise<Response> {
   const hostId = searchParams.get("hostId")?.trim() || undefined;
   const dateFrom = searchParams.get("dateFrom")?.trim() || undefined;
   const dateTo = searchParams.get("dateTo")?.trim() || undefined;
+  // Kategori harus ikut diteruskan supaya jumlah entry di drawer sama dengan
+  // angka card funnel yang juga difilter kategori.
+  const categories = parseListParam(searchParams.get("categories"))?.filter((v): v is GuestbookCategoryFilter =>
+    ALLOWED_CATEGORY.has(v as GuestbookCategoryFilter)
+  );
 
   const profileId = session.user.profileId ?? undefined;
   const dataScope: DataScope = session.user.dataScope ?? "own";
@@ -60,7 +68,7 @@ export async function GET(request: Request): Promise<Response> {
     const result = await getGuestbookFunnelBucketEntries(
       profileId,
       dataScope,
-      { venueIds, hostId, dateFrom, dateTo },
+      { venueIds, hostId, dateFrom, dateTo, categories },
       bucket as GuestbookFunnelDrilldownKey
     );
     return Response.json(result);
