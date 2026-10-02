@@ -2,15 +2,27 @@
 
 import { useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { useAttendanceList } from "@/hooks/use-attendance";
+import { toast } from "sonner";
+import { useAttendanceList, useDeleteAttendanceRecord, useDeleteBulkAttendanceRecords } from "@/hooks/use-attendance";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { PermissionGate } from "@/components/shared/permission-gate";
 import { PhotoPreviewModal } from "./PhotoPreviewModal";
 import { EmployeeOverviewDrawer } from "./EmployeeOverviewDrawer";
-import { Gallery, ArrowLeft, ArrowRight, ChartSquare } from "@solar-icons/react";
+import { AttendanceEditDialog } from "./AttendanceEditDialog";
+import { Gallery, ArrowLeft, ArrowRight, ChartSquare, Pen, TrashBinTrash } from "@solar-icons/react";
 import type { AttendanceListItem } from "@/lib/queries/attendance";
 import type { AttendanceOverviewQuery } from "@/lib/validations/attendance";
 
@@ -62,6 +74,13 @@ export function AttendanceTable() {
   const [page, setPage] = useState(1);
   const [selectedRecord, setSelectedRecord] = useState<AttendanceListItem | null>(null);
   const [overviewTarget, setOverviewTarget] = useState<{ profileId: string; profileName: string } | null>(null);
+  const [editTarget, setEditTarget] = useState<AttendanceListItem | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<AttendanceListItem | null>(null);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+
+  const deleteMutation = useDeleteAttendanceRecord();
+  const bulkDeleteMutation = useDeleteBulkAttendanceRecords();
 
   const mode = searchParams.get("mode") ?? "month";
   const date = mode === "date" ? (searchParams.get("date") ?? undefined) : undefined;
@@ -83,6 +102,45 @@ export function AttendanceTable() {
   });
 
   const totalPages = data ? Math.ceil(data.total / data.limit) : 0;
+  const rows = data?.data ?? [];
+
+  function toggleSelectAll(checked: boolean) {
+    setSelectedIds(checked ? rows.map((r) => r.id) : []);
+  }
+
+  function toggleSelectRow(id: string, checked: boolean) {
+    setSelectedIds((prev) => (checked ? Array.from(new Set([...prev, id])) : prev.filter((x) => x !== id)));
+  }
+
+  function handleDeleteConfirm() {
+    if (!deleteTarget) return;
+    deleteMutation.mutate(deleteTarget.id, {
+      onSuccess: (result) => {
+        if (result.success) {
+          toast.success("Data kehadiran berhasil dihapus");
+          setSelectedIds((prev) => prev.filter((id) => id !== deleteTarget.id));
+        } else {
+          toast.error(result.error ?? "Gagal menghapus data kehadiran");
+        }
+        setDeleteTarget(null);
+      },
+      onError: () => {
+        toast.error("Terjadi kesalahan");
+        setDeleteTarget(null);
+      },
+    });
+  }
+
+  async function handleBulkDelete() {
+    const result = await bulkDeleteMutation.mutateAsync(selectedIds);
+    if (result.success) {
+      toast.success(`${result.count ?? selectedIds.length} data kehadiran berhasil dihapus`);
+      setSelectedIds([]);
+    } else {
+      toast.error(result.error ?? "Gagal menghapus data kehadiran");
+    }
+    setBulkDeleteOpen(false);
+  }
 
   return (
     <>
@@ -94,6 +152,24 @@ export function AttendanceTable() {
               <span className="text-sm text-muted-foreground">{data.total} record</span>
             )}
           </div>
+          {selectedIds.length > 0 && (
+            <div className="mt-3 flex items-center justify-between rounded-xl bg-muted px-4 py-2">
+              <span className="text-sm">
+                <span className="font-semibold">{selectedIds.length}</span> data dipilih
+              </span>
+              <PermissionGate module="hr-attendance" action="delete">
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  className="rounded-full"
+                  onClick={() => setBulkDeleteOpen(true)}
+                >
+                  <TrashBinTrash weight="BoldDuotone" className="h-4 w-4 mr-1.5" />
+                  Hapus Terpilih
+                </Button>
+              </PermissionGate>
+            </div>
+          )}
         </CardHeader>
         <CardContent>
           {isLoading && (
@@ -116,6 +192,12 @@ export function AttendanceTable() {
                 <Table>
                   <TableHeader>
                     <TableRow>
+                      <TableHead className="w-10">
+                        <Checkbox
+                          checked={rows.length > 0 && selectedIds.length === rows.length}
+                          onCheckedChange={(checked) => toggleSelectAll(checked === true)}
+                        />
+                      </TableHead>
                       <TableHead>Nama</TableHead>
                       <TableHead>Tanggal</TableHead>
                       <TableHead>Clock In</TableHead>
@@ -129,6 +211,7 @@ export function AttendanceTable() {
                       <TableHead>Tanggal Merah</TableHead>
                       <TableHead className="w-16">Foto</TableHead>
                       <TableHead className="w-16">Overview</TableHead>
+                      <TableHead className="w-20">Aksi</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -136,6 +219,12 @@ export function AttendanceTable() {
                       const badge = STATUS_BADGE[record.status] ?? STATUS_BADGE.absent;
                       return (
                         <TableRow key={record.id}>
+                          <TableCell>
+                            <Checkbox
+                              checked={selectedIds.includes(record.id)}
+                              onCheckedChange={(checked) => toggleSelectRow(record.id, checked === true)}
+                            />
+                          </TableCell>
                           <TableCell className="font-medium">
                             {record.profile.fullName ?? "-"}
                           </TableCell>
@@ -207,6 +296,30 @@ export function AttendanceTable() {
                               <ChartSquare weight="BoldDuotone" className="h-4 w-4" />
                             </Button>
                           </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-1">
+                              <PermissionGate module="hr-attendance" action="edit">
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8 rounded-full"
+                                  onClick={() => setEditTarget(record)}
+                                >
+                                  <Pen weight="BoldDuotone" className="h-4 w-4" />
+                                </Button>
+                              </PermissionGate>
+                              <PermissionGate module="hr-attendance" action="delete">
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8 rounded-full text-destructive hover:text-destructive"
+                                  onClick={() => setDeleteTarget(record)}
+                                >
+                                  <TrashBinTrash weight="BoldDuotone" className="h-4 w-4" />
+                                </Button>
+                              </PermissionGate>
+                            </div>
+                          </TableCell>
                         </TableRow>
                       );
                     })}
@@ -259,6 +372,62 @@ export function AttendanceTable() {
             : null
         }
       />
+
+      <AttendanceEditDialog
+        key={editTarget?.id ?? "closed"}
+        record={editTarget}
+        onClose={() => setEditTarget(null)}
+      />
+
+      <Dialog open={!!deleteTarget} onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}>
+        <DialogContent className="rounded-2xl">
+          <DialogHeader>
+            <DialogTitle className="font-heading">Hapus Data Kehadiran</DialogTitle>
+            <DialogDescription>
+              Apakah Anda yakin ingin menghapus data kehadiran{" "}
+              <span className="font-semibold">{deleteTarget?.profile.fullName ?? "-"}</span> pada tanggal{" "}
+              {deleteTarget ? formatDate(deleteTarget.date) : "-"}? Tindakan ini tidak dapat dibatalkan.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" className="rounded-full" onClick={() => setDeleteTarget(null)}>
+              Batal
+            </Button>
+            <Button
+              variant="destructive"
+              className="rounded-full"
+              onClick={handleDeleteConfirm}
+              disabled={deleteMutation.isPending}
+            >
+              {deleteMutation.isPending ? "Menghapus..." : "Hapus"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={bulkDeleteOpen} onOpenChange={setBulkDeleteOpen}>
+        <DialogContent className="rounded-2xl">
+          <DialogHeader>
+            <DialogTitle className="font-heading">Hapus Data Terpilih</DialogTitle>
+            <DialogDescription>
+              Yakin ingin menghapus {selectedIds.length} data kehadiran terpilih? Tindakan ini tidak dapat dibatalkan.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" className="rounded-full" onClick={() => setBulkDeleteOpen(false)}>
+              Batal
+            </Button>
+            <Button
+              variant="destructive"
+              className="rounded-full"
+              onClick={handleBulkDelete}
+              disabled={bulkDeleteMutation.isPending}
+            >
+              {bulkDeleteMutation.isPending ? "Menghapus..." : "Hapus Semua"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

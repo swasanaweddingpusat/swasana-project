@@ -11,6 +11,7 @@ import {
   clockOut,
   updateAttendanceSettings,
 } from "@/services/attendance-service";
+import { updateAttendance, deleteAttendance, deleteBulkAttendance } from "@/actions/attendance";
 import type { AttendanceTodayResponse, AttendanceSettingsResult, AttendanceListResult, MyAttendanceHistoryResult, EmployeeAttendanceOverview } from "@/lib/queries/attendance";
 import type { AttendanceListQuery, AttendanceOverviewQuery } from "@/lib/validations/attendance";
 
@@ -85,5 +86,30 @@ export function useUpdateAttendanceSettings() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["attendance-settings"] });
     },
+  });
+}
+
+export function useUpdateAttendanceRecord() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: Parameters<typeof updateAttendance>[1] }) =>
+      updateAttendance(id, data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["attendance-list"] }),
+  });
+}
+
+export function useDeleteAttendanceRecord() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => deleteAttendance(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["attendance-list"] }),
+  });
+}
+
+export function useDeleteBulkAttendanceRecords() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (ids: string[]) => deleteBulkAttendance(ids),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["attendance-list"] }),
   });
 }
