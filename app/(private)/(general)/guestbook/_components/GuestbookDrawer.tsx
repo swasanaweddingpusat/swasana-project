@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Calendar } from "@/components/ui/calendar";
 import {
   Select,
@@ -495,6 +496,9 @@ function PhotoUpload({
 
 export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerProps) {
   const [form, setForm] = useState<GuestbookForm>(EMPTY_FORM);
+  // UI-only toggle: "belum menentukan waktu kunjungan". When true, the visit
+  // datetime (checkInAt) is hidden and persisted as null.
+  const [visitTimeUndecided, setVisitTimeUndecided] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [doneVisitDialogOpen, setDoneVisitDialogOpen] = useState(false);
@@ -625,8 +629,15 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
         bitrixSourceInfo: editEntry.bitrixSourceInfo ?? "",
         bitrixAdsUrl: editEntry.bitrixAdsUrl ?? "",
       });
+      setVisitTimeUndecided(!editEntry.checkInAt);
     });
   }, [isOpen, isEditMode, editEntry, canWedding]);
+
+  // Create mode: always start with the datetime picker shown (not "undecided"),
+  // so reusing the drawer after editing an undecided entry doesn't carry over.
+  useEffect(() => {
+    if (isOpen && !isEditMode) setVisitTimeUndecided(false);
+  }, [isOpen, isEditMode]);
 
   // Backfill gap fix: entries with a Bitrix deal linked before this auto-refresh
   // existed (or created via manual-ID fallback) never got bitrixAdsUrl fetched.
@@ -1108,17 +1119,39 @@ export function GuestbookDrawer({ isOpen, onClose, editEntry }: GuestbookDrawerP
             <SectionHeader icon={MapPoint} title="Detail Kunjungan" />
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="space-y-1.5 sm:col-span-2">
-                  <Label htmlFor="gb-checkInAt" className="text-sm font-medium">
-                    Tanggal Berkunjung
-                  </Label>
-                  <Input
-                    id="gb-checkInAt"
-                    type="datetime-local"
-                    value={form.checkInAt}
-                    onChange={(e) => setField("checkInAt", e.target.value)}
-                    className="rounded-xl"
-                  />
+                <div className="space-y-2 sm:col-span-2">
+                  <Label className="text-sm font-medium">Tanggal Berkunjung</Label>
+                  <RadioGroup
+                    value={visitTimeUndecided ? "undecided" : "set"}
+                    onValueChange={(v) => {
+                      const undecided = v === "undecided";
+                      setVisitTimeUndecided(undecided);
+                      if (undecided) setField("checkInAt", "");
+                    }}
+                    className="flex flex-col gap-2 sm:flex-row sm:gap-5"
+                  >
+                    <div className="flex items-center gap-2">
+                      <RadioGroupItem value="set" id="gb-visit-set" />
+                      <label htmlFor="gb-visit-set" className="cursor-pointer text-sm text-foreground">
+                        Tentukan waktu
+                      </label>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <RadioGroupItem value="undecided" id="gb-visit-undecided" />
+                      <label htmlFor="gb-visit-undecided" className="cursor-pointer text-sm text-foreground">
+                        Belum menentukan waktu kunjungan
+                      </label>
+                    </div>
+                  </RadioGroup>
+                  {!visitTimeUndecided && (
+                    <Input
+                      id="gb-checkInAt"
+                      type="datetime-local"
+                      value={form.checkInAt}
+                      onChange={(e) => setField("checkInAt", e.target.value)}
+                      className="rounded-xl"
+                    />
+                  )}
                 </div>
               </div>
 
