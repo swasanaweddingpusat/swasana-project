@@ -349,7 +349,7 @@ export function AttendanceClock() {
   // Clock-in stays open for resubmission until clock-out locks the day; clock-out
   // itself can always be resubmitted once clocked in — the latest submission wins.
   const canClockIn = !attendance?.clockOutAt;
-  const canClockOut = !!attendance?.clockInAt;
+  const canClockOut = !!attendance?.clockInAt && attendance?.attendantType !== "DAY_OFF";
   const showClockInDetails = canClockIn && pendingAction === "in" && !!capturedPhoto;
   const submitClockInDisabled =
     isMutating ||
@@ -403,7 +403,9 @@ export function AttendanceClock() {
             <div className="min-w-0">
               <p className="text-[11px] text-muted-foreground">Durasi</p>
               <p className="mt-0.5 truncate font-medium">
-                {formatDuration(attendance?.clockInAt ?? null, attendance?.clockOutAt ?? null)}
+                {attendance?.attendantType === "DAY_OFF"
+                  ? "-"
+                  : formatDuration(attendance?.clockInAt ?? null, attendance?.clockOutAt ?? null)}
               </p>
             </div>
           </div>
@@ -729,6 +731,12 @@ export function AttendanceClock() {
             {attendance?.clockOutAt && (
               <p className="text-sm text-muted-foreground self-center">
                 Sudah clock out jam {formatTime(new Date(attendance.clockOutAt))} — bisa diulang kalau perlu.
+              </p>
+            )}
+
+            {attendance?.attendantType === "DAY_OFF" && attendance?.clockInAt && (
+              <p className="text-sm text-muted-foreground self-center">
+                Absensi Day Off tercatat — tidak perlu clock out.
               </p>
             )}
           </div>
