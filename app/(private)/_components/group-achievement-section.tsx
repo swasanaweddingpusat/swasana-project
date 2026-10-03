@@ -26,7 +26,7 @@ function getInitials(name: string): string {
 }
 
 const groupChartConfig = {
-  revenue: { label: "Revenue", color: "var(--brand-ink)" },
+  revenue: { label: "Total Dealing", color: "var(--brand-ink)" },
 } satisfies ChartConfig;
 
 interface GroupChartDatum {
