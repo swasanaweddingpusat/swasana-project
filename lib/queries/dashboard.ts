@@ -15,6 +15,8 @@ export interface DashboardStats {
   pendingBookings: number;
   lostBookings: number;
   totalRevenue: number;
+  /** Count of active deals (saved bookings excl. Lost/Canceled). */
+  totalDealing: number;
 }
 
 export interface GroupAchievementData {
@@ -25,6 +27,8 @@ export interface GroupAchievementData {
   revenue: number;
   target: number;
   confirmedBookings: number;
+  /** Count of active deals (saved bookings excl. Lost/Canceled). */
+  dealCount: number;
 }
 
 export interface SalesPerformanceItem {
@@ -155,6 +159,7 @@ async function _queryBookingStats(
     pendingBookings: pending,
     lostBookings: lost,
     totalRevenue: revenueAgg._sum.price ?? 0,
+    totalDealing: total - lost,
   };
 }
 
@@ -214,6 +219,7 @@ export async function getDashboardData(
       revenue: members.reduce((s, m) => s + m.actual, 0),
       target: members.reduce((s, m) => s + m.target, 0),
       confirmedBookings: members.reduce((s, m) => s + m.confirmed, 0),
+      dealCount: members.reduce((s, m) => s + m.bookings, 0),
     }),
   );
 
@@ -279,6 +285,7 @@ async function _queryGroupsAndLeaderboard(
       revenue: members.reduce((s, m) => s + m.actual, 0),
       target: members.reduce((s, m) => s + m.target, 0),
       confirmedBookings: members.reduce((s, m) => s + m.confirmed, 0),
+      dealCount: members.reduce((s, m) => s + m.bookings, 0),
     }),
   );
 
