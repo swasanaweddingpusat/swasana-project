@@ -300,9 +300,12 @@ export function SalesPerformanceSection({
                   </div>
                 )}
               </div>
-              <p className="shrink-0 text-sm font-semibold text-foreground tabular-nums">
-                {formatCurrency(item.revenue)}
-              </p>
+              <div className="shrink-0 text-right">
+                <p className="text-[10px] leading-tight text-muted-foreground">Total Dealing</p>
+                <p className="text-sm font-semibold text-foreground tabular-nums">
+                  {formatCurrency(item.revenue)}
+                </p>
+              </div>
             </li>
           ))}
         </ol>

@@ -34,7 +34,7 @@ const cards = [
   },
   {
     key: "totalRevenue" as keyof DashboardStats,
-    label: "Total Revenue",
+    label: "Total Dealing",
     icon: MoneyBag,
     fmt: (v: number) => formatRupiah(v),
     tone: "neutral" as const,
