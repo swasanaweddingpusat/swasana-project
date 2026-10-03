@@ -41,10 +41,15 @@ export async function POST(req: Request) {
   const today = todayMidnightUTC();
   const now = new Date();
 
-  // 3. Already clocked in today?
+  // 3. Already clocked out today? Day is locked for clock-in once closed out.
+  // Re-clock-in before clock-out is allowed — the upsert below overwrites so the
+  // latest submission wins (shift/workType/photo/GPS/status all re-evaluated).
   const existing = await getAttendanceToday(profileId);
-  if (existing?.clockInAt) {
-    return Response.json({ error: "Anda sudah melakukan clock in hari ini" }, { status: 409 });
+  if (existing?.clockOutAt) {
+    return Response.json(
+      { error: "Anda sudah melakukan clock out hari ini, tidak bisa clock in ulang" },
+      { status: 409 },
+    );
   }
 
   const ip = req.headers.get("x-forwarded-for") ?? "unknown";
