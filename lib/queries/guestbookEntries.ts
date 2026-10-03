@@ -1,9 +1,10 @@
 import { db } from "@/lib/db";
 import { buildOwnerScopeWhere } from "@/lib/access-control";
 import type { DataScope } from "@/types/user";
-import type { Prisma } from "@prisma/client";
+import { BookingStatus, type EventCategory, type Prisma } from "@prisma/client";
 import { isBitrixSourceName } from "@/lib/validations/guestbook";
 import { PROSPECT_STATUS } from "@/lib/prospect-status";
+import { normalizePhoneId } from "@/lib/phone";
 
 export type GuestbookCategoryFilter = "WEDDINGS" | "MICE" | "no_package";
 
@@ -14,7 +15,7 @@ export interface GuestbookFilterOptions {
   dateFrom?: string; // yyyy-MM-dd
   dateTo?: string; // yyyy-MM-dd
   categories?: GuestbookCategoryFilter[];
-  /** ID ProspectStatus — menggantikan filter enum status + interaction type. */
+  /** ID ProspectStatus â€” menggantikan filter enum status + interaction type. */
   statusIds?: string[];
   sourceOfInformationIds?: string[];
   festivalIds?: string[];
@@ -31,7 +32,7 @@ export interface GuestbookEntriesOptions extends GuestbookFilterOptions {
   pageSize?: number;
 }
 
-/** Mirrors buildSearchFilter/buildDateFilter in lib/queries/bookings.ts — the
+/** Mirrors buildSearchFilter/buildDateFilter in lib/queries/bookings.ts â€” the
  *  established convention for server-side filtered list endpoints. */
 export function buildGuestbookWhere(filters: GuestbookFilterOptions): Prisma.GuestbookEntryWhereInput {
   const where: Prisma.GuestbookEntryWhereInput = {};
@@ -100,21 +101,21 @@ export interface GuestbookOverviewBucket {
   count: number;
   /**
    * Berapa dari `count` yang datang lewat iklan (punya bitrixAdsUrl). Hanya
-   * diisi untuk sumber Bitrix — sumber lain tidak mengenal konsep ads URL.
+   * diisi untuk sumber Bitrix â€” sumber lain tidak mengenal konsep ads URL.
    */
   adsCount?: number;
 }
 
 export interface GuestbookOverview {
-  /** Database — semua entry guestbook yang tercatat. */
+  /** Database â€” semua entry guestbook yang tercatat. */
   total: number;
-  /** Sudah Visit — entry berstatus "Visit Venue". */
+  /** Sudah Visit â€” entry berstatus "Visit Venue". */
   doneVisit: number;
-  /** Tidak Jadi Visit — entry berstatus "Tidak Jadi Visit (Lost)". */
+  /** Tidak Jadi Visit â€” entry berstatus "Tidak Jadi Visit (Lost)". */
   lost: number;
-  /** Online Meeting — entry berstatus "Online Meeting". */
+  /** Online Meeting â€” entry berstatus "Online Meeting". */
   onlineMeetings: number;
-  /** Deal — entry berstatus "Deal" saja, tanpa No Deal (Lost). */
+  /** Deal â€” entry berstatus "Deal" saja, tanpa No Deal (Lost). */
   deal: number;
   byStatus: GuestbookOverviewBucket[];
   byCategory: GuestbookOverviewBucket[];
@@ -123,6 +124,8 @@ export interface GuestbookOverview {
   byHost: GuestbookOverviewBucket[];
   adsUrlBuckets: GuestbookOverviewBucket[];
   adsUrlOrganik: number;
+  /** Unique guests whose Bitrix ID / phone matches a Confirmed booking. */
+  bookedCount: number;
 }
 
 const guestbookEntrySelect = {
@@ -167,6 +170,7 @@ const guestbookEntrySelect = {
   attendanceConfirmedBy: { select: { id: true, fullName: true } },
   venue: { select: { id: true, name: true } },
   sourceOfInformation: { select: { id: true, name: true } },
+  _count: { select: { visits: true } },
   package: {
     select: {
       id: true,
@@ -195,7 +199,7 @@ const guestbookEntrySelect = {
 
 type GuestbookEntryRow = Prisma.GuestbookEntryGetPayload<{ select: typeof guestbookEntrySelect }>;
 
-/** Candidate cap for the guest-grouping pass in getGuestbookEntries — mirrors the
+/** Candidate cap for the guest-grouping pass in getGuestbookEntries â€” mirrors the
  *  bounded take() used by app/api/guestbook/export/route.ts for bulk reads. */
 const GUEST_GROUPING_CANDIDATE_CAP = 5000;
 
@@ -206,6 +210,80 @@ const GUEST_GROUPING_CANDIDATE_CAP = 5000;
 function guestGroupKey(entry: { id: string; visitorName: string; phoneNumberNorm: string | null }): string {
   if (!entry.phoneNumberNorm) return `id:${entry.id}`;
   return `norm:${entry.phoneNumberNorm}|${entry.visitorName.trim().toLowerCase()}`;
+}
+
+// â”€â”€â”€ Booking match (guestbook â†’ Confirmed booking) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+export interface GuestbookBookingMatch {
+  bookingId: string;
+  category: EventCategory;
+}
+
+interface ConfirmedBookingIndex {
+  byBitrix: Map<string, GuestbookBookingMatch>;
+  byPhone: Map<string, GuestbookBookingMatch>;
+}
+
+/** Extract raw phone strings from a Customer.mobileNumber Json value, tolerating
+ *  both `string[]` and `{ number: string }[]` shapes. */
+function extractCustomerPhones(mobileNumber: Prisma.JsonValue | null | undefined): string[] {
+  if (!Array.isArray(mobileNumber)) return [];
+  const out: string[] = [];
+  for (const el of mobileNumber) {
+    if (typeof el === "string") out.push(el);
+    else if (el && typeof el === "object" && "number" in el) {
+      const n = (el as { number?: unknown }).number;
+      if (typeof n === "string") out.push(n);
+    }
+  }
+  return out;
+}
+
+/** Index of Confirmed (saved) bookings keyed by customer Bitrix ID and by
+ *  normalized phone, so a guestbook entry can be flagged as already-booked.
+ *  First-write-wins keeps the most recent booking (ordered by eventDate desc). */
+async function buildConfirmedBookingIndex(): Promise<ConfirmedBookingIndex> {
+  const confirmed = await db.booking.findMany({
+    where: { bookingStatus: BookingStatus.Confirmed, recordStatus: "saved" },
+    select: {
+      id: true,
+      category: true,
+      customer: { select: { bitrixId: true, mobileNumber: true } },
+    },
+    orderBy: { eventDate: "desc" },
+    take: 10000,
+  });
+
+  const byBitrix = new Map<string, GuestbookBookingMatch>();
+  const byPhone = new Map<string, GuestbookBookingMatch>();
+  for (const b of confirmed) {
+    const match: GuestbookBookingMatch = { bookingId: b.id, category: b.category };
+    const bitrix = b.customer?.bitrixId?.trim();
+    if (bitrix && !byBitrix.has(bitrix)) byBitrix.set(bitrix, match);
+    for (const raw of extractCustomerPhones(b.customer?.mobileNumber)) {
+      const norm = normalizePhoneId(raw);
+      if (norm && !byPhone.has(norm)) byPhone.set(norm, match);
+    }
+  }
+  return { byBitrix, byPhone };
+}
+
+/** Flag a guestbook entry as already-booked by matching its Bitrix contact ID or
+ *  normalized phone against the Confirmed-booking index. */
+function matchEntryToBooking(
+  entry: { bitrixContactId: string | null; phoneNumberNorm: string | null },
+  index: ConfirmedBookingIndex,
+): GuestbookBookingMatch | null {
+  const bitrix = entry.bitrixContactId?.trim();
+  if (bitrix) {
+    const m = index.byBitrix.get(bitrix);
+    if (m) return m;
+  }
+  if (entry.phoneNumberNorm) {
+    const m = index.byPhone.get(entry.phoneNumberNorm);
+    if (m) return m;
+  }
+  return null;
 }
 
 export async function getGuestbookEntries(
@@ -243,7 +321,7 @@ export async function getGuestbookEntries(
     db.guestbookEntry.groupBy({ by: ["venueId"], where, _count: { _all: true } }),
     db.guestbookEntry.groupBy({ by: ["hostId"], where, _count: { _all: true } }),
     db.guestbookEntry.groupBy({ by: ["bitrixAdsUrl"], where, _count: { _all: true } }),
-    // Entry beriklan per sumber — dipakai menandai "Iklan (n)" di kartu Sumber
+    // Entry beriklan per sumber â€” dipakai menandai "Iklan (n)" di kartu Sumber
     // Data, supaya Bitrix organik dan Bitrix dari iklan bisa dibedakan.
     db.guestbookEntry.groupBy({
       by: ["sourceOfInformationId"],
@@ -256,10 +334,9 @@ export async function getGuestbookEntries(
     db.guestbookEntry.count({ where: { ...where, prospectStatus: { name: PROSPECT_STATUS.DEAL } } }),
   ]);
 
-  // Label status dibaca dari tabel — daftar status dikelola admin lewat
+  // Label status dibaca dari tabel â€” daftar status dikelola admin lewat
   // Settings, jadi tidak boleh di-hardcode seperti enum sebelumnya.
   const allProspectStatuses = await db.prospectStatus.findMany({ select: { id: true, name: true } });
-  const statusLabels = new Map(allProspectStatuses.map((row) => [row.id, row.name]));
 
   const sourceIds = sourceGroups.flatMap((row) => row.sourceOfInformationId ? [row.sourceOfInformationId] : []);
   const venueIds = venueGroups.flatMap((row) => row.venueId ? [row.venueId] : []);
@@ -306,40 +383,47 @@ export async function getGuestbookEntries(
       .slice(0, 10)
       .map((row) => ({ key: row.bitrixAdsUrl as string, label: row.bitrixAdsUrl as string, count: row._count._all })),
     adsUrlOrganik: adsUrlGroups.find((row) => row.bitrixAdsUrl === null)?._count._all ?? 0,
+    bookedCount: 0,
   };
 
   // Grouped pagination: one row per unique guest (same normalized phone + name),
   // shown across festivals/venues. Candidates are fetched lightweight & capped,
   // grouped in JS, then the current page's representatives are hydrated with the
   // full select. Overview stats and weddingCount/miceCount stay entry-level (not
-  // guest-level) — they describe raw activity volume, not unique-guest counts.
-  const [candidates, weddingCount, miceCount] = await Promise.all([
+  // guest-level) â€” they describe raw activity volume, not unique-guest counts.
+  const [candidates, weddingCount, miceCount, bookingIndex] = await Promise.all([
     db.guestbookEntry.findMany({
       where,
-      select: { id: true, visitorName: true, phoneNumberNorm: true, checkInAt: true },
+      select: { id: true, visitorName: true, phoneNumberNorm: true, bitrixContactId: true, checkInAt: true },
       orderBy: { checkInAt: "desc" },
       take: GUEST_GROUPING_CANDIDATE_CAP,
     }),
     db.guestbookEntry.count({ where: categoryCountWhere("WEDDINGS") }),
     db.guestbookEntry.count({ where: categoryCountWhere("MICE") }),
+    buildConfirmedBookingIndex(),
   ]);
 
-  const groups = new Map<string, { representativeId: string; representativeCheckInAt: Date; visitCount: number }>();
+  const groups = new Map<string, { representativeId: string; representativeCheckInAt: Date; visitCount: number; booked: boolean }>();
   for (const candidate of candidates) {
     const key = guestGroupKey(candidate);
+    const matched = matchEntryToBooking(candidate, bookingIndex) !== null;
     const existing = groups.get(key);
     if (existing) {
       existing.visitCount += 1;
+      if (matched) existing.booked = true;
     } else {
       // candidates are ordered by checkInAt desc, so the first entry seen per
-      // key is already the most recent visit — keep it as the representative.
+      // key is already the most recent visit â€” keep it as the representative.
       groups.set(key, {
         representativeId: candidate.id,
         representativeCheckInAt: candidate.checkInAt,
         visitCount: 1,
+        booked: matched,
       });
     }
   }
+
+  overview.bookedCount = Array.from(groups.values()).filter((g) => g.booked).length;
 
   const groupedList = Array.from(groups.values()).sort(
     (a, b) => b.representativeCheckInAt.getTime() - a.representativeCheckInAt.getTime()
@@ -347,17 +431,19 @@ export async function getGuestbookEntries(
 
   const total = groupedList.length;
   const pageGroups = groupedList.slice((page - 1) * pageSize, (page - 1) * pageSize + pageSize);
-  const visitCountByRepresentativeId = new Map(pageGroups.map((g) => [g.representativeId, g.visitCount]));
   const pageIds = pageGroups.map((g) => g.representativeId);
 
   const rows = pageIds.length > 0
     ? await db.guestbookEntry.findMany({ where: { id: { in: pageIds } }, select: guestbookEntrySelect })
     : [];
   const rowById = new Map(rows.map((row) => [row.id, row]));
+  // Satu barcode/entry kini bisa discan berulang kali (GuestbookVisit), jadi
+  // visitHistoryCount membaca jumlah visit asli milik entry itu sendiri â€”
+  // bukan lagi hasil phone+name grouping entry terpisah.
   const data: GuestbookEntryItem[] = pageIds.flatMap((id) => {
     const row = rowById.get(id);
     if (!row) return [];
-    return [{ ...row, visitHistoryCount: visitCountByRepresentativeId.get(id) ?? 1 }];
+    return [{ ...row, visitHistoryCount: row._count.visits, bookingMatch: matchEntryToBooking(row, bookingIndex) }];
   });
 
   overview.byCategory = [
@@ -368,7 +454,10 @@ export async function getGuestbookEntries(
   return { data, total, weddingCount, miceCount, overview, page, pageSize };
 }
 
-export type GuestbookEntryItem = GuestbookEntryRow & { visitHistoryCount: number };
+export type GuestbookEntryItem = GuestbookEntryRow & {
+  visitHistoryCount: number;
+  bookingMatch?: GuestbookBookingMatch | null;
+};
 
 export interface GuestVisitHistoryItem {
   id: string;
@@ -379,9 +468,11 @@ export interface GuestVisitHistoryItem {
   venue: { id: string; name: string } | null;
 }
 
-/** Full cross-festival visit history for the guest behind `entryId` (matched by
- *  normalized phone + name, same rule as getGuestbookEntries' grouping) — used by
- *  the Detail drawer instead of only scanning the current page's fetched rows. */
+/** Real scan history for one reusable barcode (guestCode) â€” reads the entry's
+ *  GuestbookVisit rows instead of the old phone+name grouping hack. One
+ *  GuestbookEntry's barcode can be scanned across many events/days, and every
+ *  scan creates a new GuestbookVisit row; this lists those rows for the
+ *  Detail drawer. */
 export async function getGuestVisitHistory(
   profileId: string | undefined,
   dataScope: DataScope | undefined,
@@ -391,31 +482,30 @@ export async function getGuestVisitHistory(
 
   const anchor = await db.guestbookEntry.findFirst({
     where: { ...scopeWhere, id: entryId },
-    select: { id: true, visitorName: true, phoneNumberNorm: true },
+    select: {
+      id: true,
+      guestCode: true,
+      prospectStatus: { select: { id: true, name: true } },
+      venue: { select: { id: true, name: true } },
+    },
   });
   if (!anchor) return [];
 
-  const matchWhere: Prisma.GuestbookEntryWhereInput = anchor.phoneNumberNorm
-    ? {
-        ...scopeWhere,
-        phoneNumberNorm: anchor.phoneNumberNorm,
-        visitorName: { equals: anchor.visitorName, mode: "insensitive" },
-      }
-    : { ...scopeWhere, id: anchor.id };
-
-  return db.guestbookEntry.findMany({
-    where: matchWhere,
-    select: {
-      id: true,
-      checkInAt: true,
-      prospectStatus: { select: { id: true, name: true } },
-      guestCode: true,
-      festival: { select: { id: true, name: true } },
-      venue: { select: { id: true, name: true } },
-    },
-    orderBy: { checkInAt: "desc" },
+  const visits = await db.guestbookVisit.findMany({
+    where: { entryId: anchor.id },
+    select: { id: true, visitedAt: true, festival: { select: { id: true, name: true } } },
+    orderBy: { visitedAt: "desc" },
     take: 50,
   });
+
+  return visits.map((v) => ({
+    id: v.id,
+    checkInAt: v.visitedAt,
+    prospectStatus: anchor.prospectStatus,
+    guestCode: anchor.guestCode,
+    festival: v.festival,
+    venue: anchor.venue,
+  }));
 }
 
 export interface GuestbookFunnelReport {
@@ -448,7 +538,7 @@ export interface GuestbookFunnelReportResult {
   ads: GuestbookFunnelReport;
   /** Jumlah entry pada filter aktif yang benar-benar memiliki Bitrix Ads URL. */
   totalAdsUrl: number;
-  /** Breakdown SEMUA status untuk kartu "Database dari Ads" — dataset sama dengan
+  /** Breakdown SEMUA status untuk kartu "Database dari Ads" â€” dataset sama dengan
    *  `ads`/`totalAdsUrl`, sehingga jumlah seluruh count == totalAdsUrl. */
   adsStatusBreakdown: GuestbookAdsStatusBucket[];
 }
@@ -575,7 +665,7 @@ export interface GuestbookFunnelBucketEntry {
 
 const FUNNEL_BUCKET_TAKE = 200;
 
-/** Status yang dikurangkan dari Database untuk mendapat sisa Belum Visit —
+/** Status yang dikurangkan dari Database untuk mendapat sisa Belum Visit â€”
  *  harus persis sama dengan yang dipakai di computeFunnelReport supaya angka
  *  card dan isi drawer selalu konsisten. */
 const BELUM_VISIT_EXCLUDED_STATUSES = [
@@ -598,7 +688,7 @@ const FUNNEL_BUCKET_STATUS_NAME: Partial<Record<GuestbookFunnelBucketKey, string
   noResponse: PROSPECT_STATUS.NO_RESPONSE,
 };
 
-/** Daftar entry mentah di balik satu bucket funnel/ads Overview — dipakai drawer
+/** Daftar entry mentah di balik satu bucket funnel/ads Overview â€” dipakai drawer
  *  saat sebuah stat card di-klik. Logika pencocokan bucket sengaja dijaga persis
  *  sama dengan computeFunnelReport/computeAdsStatusBreakdown di atas. */
 export async function getGuestbookFunnelBucketEntries(
@@ -668,7 +758,7 @@ export async function getGuestbookFunnelBucketEntries(
  *  Rentang tanggal memakai `createdAt` (tanggal sales input data), BUKAN
  *  `checkInAt`. Matriks ini mengukur produktivitas input sales pada periode
  *  terpilih, jadi harus dikunci ke kolom yang sama dengan kartu ringkasan
- *  Overview — kalau beda, Database di matriks dan di kartu tidak akan cocok.
+ *  Overview â€” kalau beda, Database di matriks dan di kartu tidak akan cocok.
  *
  *  `ads` adalah funnel terpisah yang dibatasi ke entry ber-`bitrixAdsUrl`;
  *  `totalAdsUrl` dipakai sebagai denominator rasio Ads Performance. */

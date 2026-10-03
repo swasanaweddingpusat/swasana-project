@@ -136,7 +136,8 @@ export interface ConfirmAttendanceResult {
 
 export async function confirmGuestbookAttendance(
   guestCode: string,
-  actualGuestCount?: number
+  actualGuestCount?: number,
+  festivalId?: string | null
 ): Promise<ConfirmAttendanceResult> {
   const { session, error } = await requirePermission({ module: "guestbook", action: "edit" });
   if (error) return { success: false, error };
@@ -157,26 +158,18 @@ export async function confirmGuestbookAttendance(
         id: true,
         visitorName: true,
         companyName: true,
-        attendanceConfirmedAt: true,
         confirmedGuestCount: true,
         actualGuestCount: true,
+        festivalId: true,
       },
     });
     if (!existing) return { success: false, error: "Kode tidak ditemukan." };
 
-    if (existing.attendanceConfirmedAt) {
-      return {
-        success: true,
-        alreadyConfirmed: true,
-        visitorName: existing.visitorName,
-        companyName: existing.companyName,
-        confirmedAt: existing.attendanceConfirmedAt.toISOString(),
-        confirmedGuestCount: existing.confirmedGuestCount,
-        actualGuestCount: existing.actualGuestCount,
-      };
-    }
-
     const now = new Date();
+    // Barcode satu tamu dipakai berulang lintas event — setiap scan WAJIB
+    // mencatat baris GuestbookVisit baru, tidak ada dedupe/blokir ulang scan.
+    const resolvedFestivalId =
+      typeof festivalId === "string" && festivalId.trim() ? festivalId.trim() : existing.festivalId ?? null;
     const resolvedActualGuestCount = actualGuestCount ?? existing.confirmedGuestCount ?? null;
     // Scan kehadiran menandai tamu benar-benar datang. Statusnya dicari by name
     // karena daftar status kini dikelola lewat Settings — kalau status "Visit
@@ -186,6 +179,18 @@ export async function confirmGuestbookAttendance(
       select: { id: true },
     });
     await db.$transaction([
+      db.guestbookVisit.create({
+        data: {
+          entryId: existing.id,
+          festivalId: resolvedFestivalId,
+          visitedAt: now,
+          confirmedById: session!.user.profileId,
+          actualGuestCount: resolvedActualGuestCount,
+        },
+      }),
+      // Entry's "last visit" cache fields stay in sync so existing listing/
+      // overview keep working. entry.festivalId (original registration
+      // festival) is intentionally left untouched.
       db.guestbookEntry.update({
         where: { id: existing.id },
         data: {

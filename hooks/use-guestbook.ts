@@ -78,8 +78,15 @@ export function useDeleteBulkGuestbookEntries() {
 export function useConfirmGuestbookAttendance() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ guestCode, actualGuestCount }: { guestCode: string; actualGuestCount?: number }) =>
-      confirmGuestbookAttendance(guestCode, actualGuestCount),
+    mutationFn: ({
+      guestCode,
+      actualGuestCount,
+      festivalId,
+    }: {
+      guestCode: string;
+      actualGuestCount?: number;
+      festivalId?: string | null;
+    }) => confirmGuestbookAttendance(guestCode, actualGuestCount, festivalId),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["guestbook-entries"] }),
   });
 }
@@ -137,5 +144,25 @@ export function useGuestbookFunnelBucketEntries(
     queryFn: () => fetchGuestbookFunnelBucketEntries(bucket as GuestbookFunnelDrilldownKey, params),
     enabled: !!bucket,
     staleTime: 60 * 1000,
+  });
+}
+
+export type FestivalOption = {
+  id: string;
+  name: string;
+  startDate: string | null;
+  endDate: string | null;
+  createdAt: string;
+};
+
+export function useFestivals() {
+  return useQuery({
+    queryKey: ["festivals"],
+    queryFn: async (): Promise<FestivalOption[]> => {
+      const res = await fetch("/api/festivals", { credentials: "same-origin" });
+      if (!res.ok) throw new Error("Gagal memuat daftar festival.");
+      return res.json() as Promise<FestivalOption[]>;
+    },
+    staleTime: 5 * 60 * 1000,
   });
 }

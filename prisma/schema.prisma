@@ -240,6 +240,7 @@ model Profile {
   guestbookCreated             GuestbookEntry[]           @relation("GuestbookCreator")
   guestbookSales               GuestbookEntry[]           @relation("GuestbookSales")
   guestbookAttendanceConfirmed GuestbookEntry[]           @relation("GuestbookAttendanceConfirmer")
+  guestbookVisitsConfirmed     GuestbookVisit[]           @relation("GuestbookVisitConfirmer")
   blacklistCreated             BlacklistEntry[]           @relation("BlacklistCreator")
   memosCreated                 Memo[]                     @relation("MemoCreator")
   memoComments                 MemoComment[]              @relation("MemoCommentAuthor")
@@ -896,6 +897,7 @@ model Festival {
   endDate            DateTime?
   createdAt          DateTime         @default(now())
   guestbookEntries   GuestbookEntry[]
+  visits             GuestbookVisit[]
 
   @@map("festivals")
 }
@@ -4282,6 +4284,7 @@ model GuestbookEntry {
   segment             DailyActivitySegment? @relation(fields: [segmentId], references: [id], onDelete: SetNull)
   festival            Festival?             @relation(fields: [festivalId], references: [id], onDelete: SetNull)
   prospectStatus      ProspectStatus?       @relation(fields: [prospectStatusId], references: [id], onDelete: SetNull)
+  visits              GuestbookVisit[]
 
   @@index([checkInAt])
   @@index([createdAt]) // matriks performance Guestbook Overview memfilter per tanggal input sales
@@ -4295,6 +4298,30 @@ model GuestbookEntry {
   @@index([segmentId])
   @@index([festivalId])
   @@map("guestbook_entries")
+}
+
+// Satu baris per SCAN. Memungkinkan satu GuestbookEntry (satu barcode/ID-card
+// client) dipakai berkali-kali lintas festival & hari — tiap scan mencatat
+// kunjungan baru dengan visitedAt = waktu scan, tanpa sales mengubah tanggal
+// secara manual. GuestbookEntry.attendanceConfirmedAt tetap dipertahankan
+// sebagai cache "kunjungan terakhir" agar listing/overview lama tak berubah.
+model GuestbookVisit {
+  id               String   @id @default(uuid())
+  entryId          String
+  festivalId       String?
+  visitedAt        DateTime @default(now())
+  confirmedById    String?
+  actualGuestCount Int?
+  createdAt        DateTime @default(now())
+
+  entry       GuestbookEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  festival    Festival?      @relation(fields: [festivalId], references: [id], onDelete: SetNull)
+  confirmedBy Profile?       @relation("GuestbookVisitConfirmer", fields: [confirmedById], references: [id], onDelete: SetNull)
+
+  @@index([entryId])
+  @@index([festivalId])
+  @@index([visitedAt])
+  @@map("guestbook_visits")
 }
 
 // --- Module Grouping -----------------------------------------------------------
