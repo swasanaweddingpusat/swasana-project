@@ -346,9 +346,10 @@ export function AttendanceClock() {
     }
   }, [capturedPhoto]);
 
-  const canClockIn = !attendance?.clockInAt;
-  const canClockOut = !!attendance?.clockInAt && !attendance?.clockOutAt;
-  const isDone = !!attendance?.clockOutAt;
+  // Clock-in stays open for resubmission until clock-out locks the day; clock-out
+  // itself can always be resubmitted once clocked in — the latest submission wins.
+  const canClockIn = !attendance?.clockOutAt;
+  const canClockOut = !!attendance?.clockInAt;
   const showClockInDetails = canClockIn && pendingAction === "in" && !!capturedPhoto;
   const submitClockInDisabled =
     isMutating ||
@@ -433,7 +434,9 @@ export function AttendanceClock() {
 
           {canClockIn && pendingAction !== "in" && (
             <p className="text-center text-sm text-muted-foreground">
-              Ambil foto terlebih dahulu, lalu lengkapi detail kehadiran.
+              {attendance?.clockInAt
+                ? "Absen ulang akan menimpa data clock in sebelumnya."
+                : "Ambil foto terlebih dahulu, lalu lengkapi detail kehadiran."}
             </p>
           )}
 
@@ -669,8 +672,17 @@ export function AttendanceClock() {
                 disabled={isMutating}
                 onClick={handleClockInTap}
               >
-                <Camera weight="BoldDuotone" className="h-5 w-5 mr-2" />
-                Ambil Foto & Absen
+                {attendance?.clockInAt ? (
+                  <>
+                    <Restart weight="BoldDuotone" className="h-5 w-5 mr-2" />
+                    Absen Ulang
+                  </>
+                ) : (
+                  <>
+                    <Camera weight="BoldDuotone" className="h-5 w-5 mr-2" />
+                    Ambil Foto & Absen
+                  </>
+                )}
               </Button>
             )}
 
@@ -706,13 +718,17 @@ export function AttendanceClock() {
                 onClick={handleClockOutTap}
               >
                 <Logout3 weight="BoldDuotone" className="h-5 w-5 mr-2" />
-                {gpsLoading && pendingAction === "out" ? "Mencari lokasi..." : "Clock Out"}
+                {gpsLoading && pendingAction === "out"
+                  ? "Mencari lokasi..."
+                  : attendance?.clockOutAt
+                    ? "Update Clock Out"
+                    : "Clock Out"}
               </Button>
             )}
 
-            {isDone && (
-              <p className="text-sm text-muted-foreground">
-                Absensi hari ini sudah selesai. Sampai jumpa besok!
+            {attendance?.clockOutAt && (
+              <p className="text-sm text-muted-foreground self-center">
+                Sudah clock out jam {formatTime(new Date(attendance.clockOutAt))} — bisa diulang kalau perlu.
               </p>
             )}
           </div>
