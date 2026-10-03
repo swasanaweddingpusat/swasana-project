@@ -10,12 +10,6 @@ import type { GroupAchievementData } from "@/lib/queries/dashboard";
 
 export type { GroupAchievementData } from "@/lib/queries/dashboard";
 
-function formatCurrency(amount: number): string {
-  if (amount >= 1_000_000_000) return `Rp ${(amount / 1_000_000_000).toFixed(1)}M`;
-  if (amount >= 1_000_000) return `Rp ${(amount / 1_000_000).toFixed(0)}Jt`;
-  return `Rp ${amount.toLocaleString("id-ID")}`;
-}
-
 function getInitials(name: string): string {
   return name
     .split(" ")
@@ -26,12 +20,12 @@ function getInitials(name: string): string {
 }
 
 const groupChartConfig = {
-  revenue: { label: "Total Dealing", color: "var(--brand-ink)" },
+  dealCount: { label: "Total Dealing", color: "var(--brand-ink)" },
 } satisfies ChartConfig;
 
 interface GroupChartDatum {
   name: string;
-  revenue: number;
+  dealCount: number;
   leaderName: string;
   confirmedBookings: number;
   memberCount: number;
@@ -56,7 +50,7 @@ function GroupTooltipContent({
       <p className="mt-1 text-muted-foreground">Leader: {d.leaderName}</p>
       <p className="text-muted-foreground">{d.confirmedBookings} booking confirmed</p>
       <p className="text-muted-foreground">{d.memberCount} anggota</p>
-      <p className="mt-1 font-semibold text-foreground">{formatCurrency(d.revenue)}</p>
+      <p className="mt-1 font-semibold text-foreground">{d.dealCount} deal</p>
     </div>
   );
 }
@@ -81,16 +75,16 @@ export function GroupAchievementSection({
   const { data } = useDashboardGroups(dealFrom, dealTo, eventFrom, eventTo, initialGroups);
   const groups = data ?? initialGroups;
   const sorted = useMemo(
-    () => [...groups].sort((a, b) => b.revenue - a.revenue),
+    () => [...groups].sort((a, b) => b.dealCount - a.dealCount),
     [groups],
   );
-  const maxRevenue = Math.max(...sorted.map((group) => group.revenue), 1);
+  const maxDeal = Math.max(...sorted.map((group) => group.dealCount), 1);
 
   const chartData: GroupChartDatum[] = useMemo(
     () =>
       sorted.map((g) => ({
         name: g.name,
-        revenue: g.revenue,
+        dealCount: g.dealCount,
         leaderName: g.leaderName,
         confirmedBookings: g.confirmedBookings,
         memberCount: g.memberCount,
@@ -110,10 +104,11 @@ export function GroupAchievementSection({
               <CartesianGrid horizontal={false} strokeDasharray="3 3" />
               <XAxis
                 type="number"
-                tickFormatter={(v: number) => formatCurrency(v)}
+                tickFormatter={(v: number) => String(v)}
                 tick={{ fontSize: 10 }}
                 axisLine={false}
                 tickLine={false}
+                allowDecimals={false}
               />
               <YAxis
                 type="category"
@@ -124,12 +119,12 @@ export function GroupAchievementSection({
                 tickLine={false}
               />
               <ChartTooltip content={<GroupTooltipContent />} />
-              <Bar dataKey="revenue" fill="var(--brand-ink)" radius={[0, 4, 4, 0]}>
+              <Bar dataKey="dealCount" fill="var(--brand-ink)" radius={[0, 4, 4, 0]}>
                 <LabelList
-                  dataKey="revenue"
+                  dataKey="dealCount"
                   position="right"
                   style={{ fontSize: 10, fill: "var(--foreground)" }}
-                  formatter={(value: unknown) => formatCurrency(Number(value))}
+                  formatter={(value: unknown) => `${Number(value)} deal`}
                 />
               </Bar>
             </BarChart>
@@ -191,13 +186,13 @@ export function GroupAchievementSection({
 
               <div className="w-32 shrink-0 sm:w-48">
                 <div className="mb-1 flex items-center justify-between gap-2 text-xs">
-                  <span className="text-muted-foreground">{g.confirmedBookings} booking</span>
-                  <span className="font-semibold tabular-nums text-foreground">{formatCurrency(g.revenue)}</span>
+                  <span className="text-muted-foreground">Total Dealing</span>
+                  <span className="font-semibold tabular-nums text-foreground">{g.dealCount} deal</span>
                 </div>
                 <div className="h-2 overflow-hidden rounded-full bg-muted">
                   <div
                     className="h-full rounded-full bg-primary transition-[width]"
-                    style={{ width: `${Math.round((g.revenue / maxRevenue) * 100)}%` }}
+                    style={{ width: `${Math.round((g.dealCount / maxDeal) * 100)}%` }}
                   />
                 </div>
               </div>

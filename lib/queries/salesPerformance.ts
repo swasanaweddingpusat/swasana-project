@@ -232,8 +232,9 @@ async function _queryTopSales(
     };
   });
 
-  // Sort by confirmed revenue descending — return every sales, not just the top few.
-  return aggregated.sort((a, b) => b.revenue - a.revenue);
+  // Sort by deal count (total active bookings) descending — tiebreak by deal
+  // value. Returns every sales, not just the top few.
+  return aggregated.sort((a, b) => b.bookingCount - a.bookingCount || b.revenue - a.revenue);
 }
 
 // ─── Cached wrapper ──────────────────────────────────────────────────────────

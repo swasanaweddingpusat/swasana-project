@@ -24,13 +24,6 @@ import { BookingDetailModal } from "@/app/(private)/booking/booking-weddings/_co
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function formatCurrency(amount: number): string {
-  if (amount >= 1_000_000_000)
-    return `Rp ${(amount / 1_000_000_000).toFixed(1)}M`;
-  if (amount >= 1_000_000) return `Rp ${(amount / 1_000_000).toFixed(0)}Jt`;
-  return `Rp ${amount.toLocaleString("id-ID")}`;
-}
-
 function getInitials(name: string): string {
   return name
     .split(" ")
@@ -281,7 +274,6 @@ export function SalesPerformanceSection({
                 {item.groupName && (
                   <p className="text-xs text-muted-foreground">{item.groupName}</p>
                 )}
-                <p className="text-xs text-muted-foreground">{item.bookingCount} booking</p>
                 {item.bookingCount > 0 && (
                   <div className="mt-1 flex flex-wrap items-center gap-1">
                     <Badge variant="outline" className="text-[10px]">
@@ -303,7 +295,7 @@ export function SalesPerformanceSection({
               <div className="shrink-0 text-right">
                 <p className="text-[10px] leading-tight text-muted-foreground">Total Dealing</p>
                 <p className="text-sm font-semibold text-foreground tabular-nums">
-                  {formatCurrency(item.revenue)}
+                  {item.bookingCount} deal
                 </p>
               </div>
             </li>
@@ -320,7 +312,7 @@ export function SalesPerformanceSection({
             <DialogTitle>Booking — {selectedSales?.name}</DialogTitle>
             <DialogDescription>
               {selectedSales
-                ? `${selectedSales.bookingCount} booking • ${formatCurrency(selectedSales.revenue)}`
+                ? `${selectedSales.bookingCount} deal`
                 : ""}
             </DialogDescription>
           </DialogHeader>
