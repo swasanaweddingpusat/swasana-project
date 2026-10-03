@@ -1,9 +1,10 @@
 import { db } from "@/lib/db";
 import { buildOwnerScopeWhere } from "@/lib/access-control";
 import type { DataScope } from "@/types/user";
-import type { Prisma } from "@prisma/client";
+import { BookingStatus, type EventCategory, type Prisma } from "@prisma/client";
 import { isBitrixSourceName } from "@/lib/validations/guestbook";
 import { PROSPECT_STATUS } from "@/lib/prospect-status";
+import { normalizePhoneId } from "@/lib/phone";
 
 export type GuestbookCategoryFilter = "WEDDINGS" | "MICE" | "no_package";
 
@@ -123,6 +124,8 @@ export interface GuestbookOverview {
   byHost: GuestbookOverviewBucket[];
   adsUrlBuckets: GuestbookOverviewBucket[];
   adsUrlOrganik: number;
+  /** Unique guests whose Bitrix ID / phone matches a Confirmed booking. */
+  bookedCount: number;
 }
 
 const guestbookEntrySelect = {
@@ -206,6 +209,80 @@ const GUEST_GROUPING_CANDIDATE_CAP = 5000;
 function guestGroupKey(entry: { id: string; visitorName: string; phoneNumberNorm: string | null }): string {
   if (!entry.phoneNumberNorm) return `id:${entry.id}`;
   return `norm:${entry.phoneNumberNorm}|${entry.visitorName.trim().toLowerCase()}`;
+}
+
+// ─── Booking match (guestbook → Confirmed booking) ────────────────────────────
+
+export interface GuestbookBookingMatch {
+  bookingId: string;
+  category: EventCategory;
+}
+
+interface ConfirmedBookingIndex {
+  byBitrix: Map<string, GuestbookBookingMatch>;
+  byPhone: Map<string, GuestbookBookingMatch>;
+}
+
+/** Extract raw phone strings from a Customer.mobileNumber Json value, tolerating
+ *  both `string[]` and `{ number: string }[]` shapes. */
+function extractCustomerPhones(mobileNumber: Prisma.JsonValue | null | undefined): string[] {
+  if (!Array.isArray(mobileNumber)) return [];
+  const out: string[] = [];
+  for (const el of mobileNumber) {
+    if (typeof el === "string") out.push(el);
+    else if (el && typeof el === "object" && "number" in el) {
+      const n = (el as { number?: unknown }).number;
+      if (typeof n === "string") out.push(n);
+    }
+  }
+  return out;
+}
+
+/** Index of Confirmed (saved) bookings keyed by customer Bitrix ID and by
+ *  normalized phone, so a guestbook entry can be flagged as already-booked.
+ *  First-write-wins keeps the most recent booking (ordered by eventDate desc). */
+async function buildConfirmedBookingIndex(): Promise<ConfirmedBookingIndex> {
+  const confirmed = await db.booking.findMany({
+    where: { bookingStatus: BookingStatus.Confirmed, recordStatus: "saved" },
+    select: {
+      id: true,
+      category: true,
+      customer: { select: { bitrixId: true, mobileNumber: true } },
+    },
+    orderBy: { eventDate: "desc" },
+    take: 10000,
+  });
+
+  const byBitrix = new Map<string, GuestbookBookingMatch>();
+  const byPhone = new Map<string, GuestbookBookingMatch>();
+  for (const b of confirmed) {
+    const match: GuestbookBookingMatch = { bookingId: b.id, category: b.category };
+    const bitrix = b.customer?.bitrixId?.trim();
+    if (bitrix && !byBitrix.has(bitrix)) byBitrix.set(bitrix, match);
+    for (const raw of extractCustomerPhones(b.customer?.mobileNumber)) {
+      const norm = normalizePhoneId(raw);
+      if (norm && !byPhone.has(norm)) byPhone.set(norm, match);
+    }
+  }
+  return { byBitrix, byPhone };
+}
+
+/** Flag a guestbook entry as already-booked by matching its Bitrix contact ID or
+ *  normalized phone against the Confirmed-booking index. */
+function matchEntryToBooking(
+  entry: { bitrixContactId: string | null; phoneNumberNorm: string | null },
+  index: ConfirmedBookingIndex,
+): GuestbookBookingMatch | null {
+  const bitrix = entry.bitrixContactId?.trim();
+  if (bitrix) {
+    const m = index.byBitrix.get(bitrix);
+    if (m) return m;
+  }
+  if (entry.phoneNumberNorm) {
+    const m = index.byPhone.get(entry.phoneNumberNorm);
+    if (m) return m;
+  }
+  return null;
 }
 
 export async function getGuestbookEntries(
@@ -306,6 +383,7 @@ export async function getGuestbookEntries(
       .slice(0, 10)
       .map((row) => ({ key: row.bitrixAdsUrl as string, label: row.bitrixAdsUrl as string, count: row._count._all })),
     adsUrlOrganik: adsUrlGroups.find((row) => row.bitrixAdsUrl === null)?._count._all ?? 0,
+    bookedCount: 0,
   };
 
   // Grouped pagination: one row per unique guest (same normalized phone + name),
@@ -313,23 +391,26 @@ export async function getGuestbookEntries(
   // grouped in JS, then the current page's representatives are hydrated with the
   // full select. Overview stats and weddingCount/miceCount stay entry-level (not
   // guest-level) — they describe raw activity volume, not unique-guest counts.
-  const [candidates, weddingCount, miceCount] = await Promise.all([
+  const [candidates, weddingCount, miceCount, bookingIndex] = await Promise.all([
     db.guestbookEntry.findMany({
       where,
-      select: { id: true, visitorName: true, phoneNumberNorm: true, checkInAt: true },
+      select: { id: true, visitorName: true, phoneNumberNorm: true, bitrixContactId: true, checkInAt: true },
       orderBy: { checkInAt: "desc" },
       take: GUEST_GROUPING_CANDIDATE_CAP,
     }),
     db.guestbookEntry.count({ where: categoryCountWhere("WEDDINGS") }),
     db.guestbookEntry.count({ where: categoryCountWhere("MICE") }),
+    buildConfirmedBookingIndex(),
   ]);
 
-  const groups = new Map<string, { representativeId: string; representativeCheckInAt: Date; visitCount: number }>();
+  const groups = new Map<string, { representativeId: string; representativeCheckInAt: Date; visitCount: number; booked: boolean }>();
   for (const candidate of candidates) {
     const key = guestGroupKey(candidate);
+    const matched = matchEntryToBooking(candidate, bookingIndex) !== null;
     const existing = groups.get(key);
     if (existing) {
       existing.visitCount += 1;
+      if (matched) existing.booked = true;
     } else {
       // candidates are ordered by checkInAt desc, so the first entry seen per
       // key is already the most recent visit — keep it as the representative.
@@ -337,9 +418,12 @@ export async function getGuestbookEntries(
         representativeId: candidate.id,
         representativeCheckInAt: candidate.checkInAt,
         visitCount: 1,
+        booked: matched,
       });
     }
   }
+
+  overview.bookedCount = Array.from(groups.values()).filter((g) => g.booked).length;
 
   const groupedList = Array.from(groups.values()).sort(
     (a, b) => b.representativeCheckInAt.getTime() - a.representativeCheckInAt.getTime()
@@ -357,7 +441,7 @@ export async function getGuestbookEntries(
   const data: GuestbookEntryItem[] = pageIds.flatMap((id) => {
     const row = rowById.get(id);
     if (!row) return [];
-    return [{ ...row, visitHistoryCount: visitCountByRepresentativeId.get(id) ?? 1 }];
+    return [{ ...row, visitHistoryCount: visitCountByRepresentativeId.get(id) ?? 1, bookingMatch: matchEntryToBooking(row, bookingIndex) }];
   });
 
   overview.byCategory = [
@@ -368,7 +452,10 @@ export async function getGuestbookEntries(
   return { data, total, weddingCount, miceCount, overview, page, pageSize };
 }
 
-export type GuestbookEntryItem = GuestbookEntryRow & { visitHistoryCount: number };
+export type GuestbookEntryItem = GuestbookEntryRow & {
+  visitHistoryCount: number;
+  bookingMatch?: GuestbookBookingMatch | null;
+};
 
 export interface GuestVisitHistoryItem {
   id: string;

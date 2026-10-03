@@ -10,6 +10,7 @@ import {
   Leaf,
   Videocamera,
   CheckCircle,
+  BagCheck,
   Link as LinkIcon,
 } from "@solar-icons/react";
 import { cn } from "@/lib/utils";
@@ -146,6 +147,8 @@ export function GuestbookOverviewCards({
     { label: "Online Meeting", value: overview.onlineMeetings, icon: Videocamera },
     // Hanya status "Deal" — "No Deal (Lost)" tidak ikut terhitung di sini.
     { label: "Deal", value: overview.deal, icon: CheckCircle },
+    // Unique guest yang Bitrix ID / nomor HP-nya cocok dengan booking Confirmed.
+    { label: "Sudah Booking", value: overview.bookedCount, icon: BagCheck },
   ];
 
   const lists: {
@@ -166,7 +169,7 @@ export function GuestbookOverviewCards({
 
   return (
     <div className="space-y-3">
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-6">
       {metrics.map(({ label, value, icon: Icon }) => (
         <Card key={label} className="rounded-2xl shadow-sm">
           <CardContent className="flex items-center gap-3 p-4">
