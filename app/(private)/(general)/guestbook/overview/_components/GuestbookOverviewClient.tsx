@@ -21,6 +21,7 @@ const EMPTY_OVERVIEW = {
   lost: 0,
   onlineMeetings: 0,
   deal: 0,
+  bookedCount: 0,
   byStatus: [],
   byCategory: [],
   bySource: [],
@@ -143,8 +144,8 @@ export function GuestbookOverviewClient() {
 
       {isLoading ? (
         <div className="space-y-3">
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
-            {Array.from({ length: 5 }).map((_, i) => (
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-6">
+            {Array.from({ length: 6 }).map((_, i) => (
               <Skeleton key={i} className="h-[76px] rounded-2xl" />
             ))}
           </div>

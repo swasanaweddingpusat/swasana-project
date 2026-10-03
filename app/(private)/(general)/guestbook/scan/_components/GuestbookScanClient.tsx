@@ -7,10 +7,22 @@ import { toast } from "sonner";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { useConfirmGuestbookAttendance, useLookupGuestbookEntryByCode } from "@/hooks/use-guestbook";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  useConfirmGuestbookAttendance,
+  useFestivals,
+  useLookupGuestbookEntryByCode,
+} from "@/hooks/use-guestbook";
 import type { ConfirmAttendanceResult, LookupGuestbookEntryResult } from "@/actions/guestbook";
 import {
   ArrowLeft,
+  CalendarMark,
   CheckCircle,
   CloseCircle,
   Keyboard,
@@ -43,6 +55,26 @@ export function GuestbookScanClient(): React.ReactElement {
   const [manualCode, setManualCode] = useState("");
   const [pendingGuestCode, setPendingGuestCode] = useState<string | null>(null);
   const [guestCountInput, setGuestCountInput] = useState("");
+  const [selectedFestivalId, setSelectedFestivalId] = useState("");
+
+  const { data: festivals } = useFestivals();
+
+  // Auto-default the festival picker to whichever festival is currently running
+  // (startDate <= now <= endDate, null bounds treated as open-ended) the first time
+  // the list loads, falling back to the newest festival (list is ordered newest-first).
+  // Staff can still override via the Select afterwards. This reads Date.now(), an impure
+  // call, so it must run in an effect rather than during render.
+  useEffect(() => {
+    if (selectedFestivalId !== "" || !festivals || festivals.length === 0) return;
+    const now = Date.now();
+    const active = festivals.find((f) => {
+      const startOk = f.startDate ? new Date(f.startDate).getTime() <= now : true;
+      const endOk = f.endDate ? new Date(f.endDate).getTime() >= now : true;
+      return startOk && endOk;
+    });
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time default pick once festivals load, guarded so it never re-fires after a staff override
+    setSelectedFestivalId((active ?? festivals[0]).id);
+  }, [festivals, selectedFestivalId]);
 
   const {
     mutate: lookupEntry,
@@ -60,7 +92,8 @@ export function GuestbookScanClient(): React.ReactElement {
     reset: resetConfirm,
   } = useConfirmGuestbookAttendance();
 
-  // Once the lookup resolves for a non-already-confirmed entry, pre-fill the editable
+  // Once the lookup resolves successfully (barcode is reusable across festivals, so this
+  // includes guests who were already confirmed on a previous visit), pre-fill the editable
   // guest-count field with the client's RSVP confirmation (falls back to a prior
   // actualGuestCount, then blank) so staff can review/override before confirming.
   // Adjusted during render (not an effect) — see https://react.dev/learn/you-might-not-need-an-effect
@@ -69,7 +102,7 @@ export function GuestbookScanClient(): React.ReactElement {
   );
   if (lookupResult !== undefined && lookupResult !== prefilledForResult) {
     setPrefilledForResult(lookupResult);
-    if (lookupResult.success && !lookupResult.alreadyConfirmed) {
+    if (lookupResult.success) {
       const prefill = lookupResult.confirmedGuestCount ?? lookupResult.actualGuestCount ?? null;
       setGuestCountInput(prefill !== null ? String(prefill) : "");
     }
@@ -233,17 +266,22 @@ export function GuestbookScanClient(): React.ReactElement {
     const trimmedCount = guestCountInput.trim();
     const parsedCount = trimmedCount ? Number(trimmedCount) : undefined;
     const actualGuestCount = parsedCount !== undefined && Number.isFinite(parsedCount) ? parsedCount : undefined;
-    confirmAttendance({ guestCode: pendingGuestCode, actualGuestCount });
-  }, [pendingGuestCode, guestCountInput, confirmAttendance]);
+    confirmAttendance({
+      guestCode: pendingGuestCode,
+      actualGuestCount,
+      festivalId: selectedFestivalId || null,
+    });
+  }, [pendingGuestCode, guestCountInput, selectedFestivalId, confirmAttendance]);
 
+  // Barcode tamu reusable lintas-event — setiap lookup sukses lanjut ke step
+  // review+confirm, termasuk tamu yang sudah pernah dikonfirmasi sebelumnya.
   const isReviewing = Boolean(
     !confirmIsPending &&
       !confirmIsError &&
       !confirmResult &&
       !lookupIsPending &&
       !lookupIsError &&
-      lookupResult?.success &&
-      !lookupResult.alreadyConfirmed
+      lookupResult?.success
   );
 
   const showOverlayPanel =
@@ -277,6 +315,27 @@ export function GuestbookScanClient(): React.ReactElement {
           Kembali
         </Button>
       </div>
+
+      <Card className="rounded-2xl">
+        <CardContent className="flex flex-col gap-2 p-4">
+          <label className="flex items-center gap-1.5 text-xs font-medium text-foreground">
+            <CalendarMark weight="BoldDuotone" className="h-4 w-4 text-muted-foreground" />
+            Event / Festival
+          </label>
+          <Select value={selectedFestivalId} onValueChange={setSelectedFestivalId}>
+            <SelectTrigger className="rounded-xl w-full">
+              <SelectValue placeholder="Pilih event / festival" />
+            </SelectTrigger>
+            <SelectContent>
+              {(festivals ?? []).map((festival) => (
+                <SelectItem key={festival.id} value={festival.id}>
+                  {festival.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </CardContent>
+      </Card>
 
       <Card className="rounded-2xl overflow-hidden py-0">
         <CardContent className="p-0">
@@ -326,39 +385,21 @@ export function GuestbookScanClient(): React.ReactElement {
                     </>
                   )}
 
-                  {/* Already confirmed — matches the existing already-confirmed result state,
-                      just now reached via the lookup step instead of an immediate confirm call. */}
-                  {!lookupIsPending &&
-                    !lookupIsError &&
-                    lookupResult &&
-                    lookupResult.success &&
-                    lookupResult.alreadyConfirmed &&
-                    !confirmResult && (
-                      <>
-                        <CheckCircle weight="BoldDuotone" className="h-12 w-12 text-emerald-600" />
-                        <div className="flex flex-col gap-1">
-                          <p className="text-sm font-bold text-foreground">{lookupResult.visitorName}</p>
-                          {lookupResult.companyName && (
-                            <p className="text-xs text-muted-foreground">{lookupResult.companyName}</p>
-                          )}
-                          <span className="mt-2 inline-flex items-center justify-center rounded-full bg-secondary px-3 py-1 text-xs font-medium text-secondary-foreground">
-                            Sudah dikonfirmasi sebelumnya
-                          </span>
-                          <p className="mt-1 text-xs text-muted-foreground">
-                            {formatDateTime(lookupResult.confirmedAt)}
-                          </p>
-                        </div>
-                      </>
-                    )}
-
-                  {/* Review step — not yet confirmed: editable guest count auto-filled from
-                      the client's RSVP confirmation, staff can override before confirming. */}
+                  {/* Review step — barcode tamu reusable lintas-event, jadi setiap lookup
+                      sukses (termasuk tamu yang sudah pernah dikonfirmasi) lanjut ke sini:
+                      editable guest count auto-filled dari RSVP terakhir, staff bisa override
+                      sebelum konfirmasi ulang. */}
                   {isReviewing && lookupResult && !confirmResult && (
                     <>
                       <div className="flex flex-col gap-1">
                         <p className="text-sm font-bold text-foreground">{lookupResult.visitorName}</p>
                         {lookupResult.companyName && (
                           <p className="text-xs text-muted-foreground">{lookupResult.companyName}</p>
+                        )}
+                        {lookupResult.alreadyConfirmed && (
+                          <p className="text-xs text-muted-foreground">
+                            Terakhir hadir: {formatDateTime(lookupResult.confirmedAt)}
+                          </p>
                         )}
                       </div>
                       <div className="w-full space-y-1.5 text-left">
@@ -418,14 +459,8 @@ export function GuestbookScanClient(): React.ReactElement {
                         {confirmResult.companyName && (
                           <p className="text-xs text-muted-foreground">{confirmResult.companyName}</p>
                         )}
-                        <span
-                          className={
-                            confirmResult.alreadyConfirmed
-                              ? "mt-2 inline-flex items-center justify-center rounded-full bg-secondary px-3 py-1 text-xs font-medium text-secondary-foreground"
-                              : "mt-2 inline-flex items-center justify-center rounded-full bg-emerald-100 px-3 py-1 text-xs font-medium text-emerald-700"
-                          }
-                        >
-                          {confirmResult.alreadyConfirmed ? "Sudah dikonfirmasi sebelumnya" : "Kehadiran dikonfirmasi"}
+                        <span className="mt-2 inline-flex items-center justify-center rounded-full bg-emerald-100 px-3 py-1 text-xs font-medium text-emerald-700">
+                          Kehadiran dikonfirmasi
                         </span>
                         {confirmResult.actualGuestCount != null && (
                           <p className="mt-1 text-xs text-muted-foreground">

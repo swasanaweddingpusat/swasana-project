@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { requirePagePermission } from "@/lib/require-page-permission";
-import { KoreksiAbsenTabs } from "./_components/KoreksiAbsenTabs";
+import { KoreksiAbsenTabs } from "@/app/(private)/hrd/koreksi-absen/_components/KoreksiAbsenTabs";
 
 export const metadata: Metadata = {
   title: "Koreksi Absen - SWASANA",

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { format } from "date-fns";
 import { CalendarMark, ClockCircle, CloseCircle, MoneyBag } from "@solar-icons/react";
-import { cn, formatRupiah } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import { useDashboardStats } from "@/hooks/use-dashboard-stats";
 import type { DashboardStats } from "@/lib/queries/dashboard";
 import { useDashboardBookings } from "@/hooks/use-dashboard-bookings";
@@ -33,10 +33,10 @@ const cards = [
     filter: "total",
   },
   {
-    key: "totalRevenue" as keyof DashboardStats,
-    label: "Total Revenue",
+    key: "totalDealing" as keyof DashboardStats,
+    label: "Total Dealing",
     icon: MoneyBag,
-    fmt: (v: number) => formatRupiah(v),
+    fmt: (v: number) => v.toString(),
     tone: "neutral" as const,
     filter: null,
   },
@@ -88,8 +88,8 @@ export function SalesStatCards({ initialStats, dealFrom, dealTo, eventFrom, even
   const activeCard = cards.find((c) => c.filter === activeFilter);
   const [selectedBookingId, setSelectedBookingId] = useState<string | null>(null);
 
-  const primaryCards = cards.filter((card) => card.key === "totalBookings" || card.key === "totalRevenue");
-  const statusCards = cards.filter((card) => card.key !== "totalRevenue" && card.key !== "totalBookings");
+  const primaryCards = cards.filter((card) => card.key === "totalBookings" || card.key === "totalDealing");
+  const statusCards = cards.filter((card) => card.key !== "totalDealing" && card.key !== "totalBookings");
 
   return (
     <>

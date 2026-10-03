@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import Image from "next/image";
+import NextLink from "next/link";
 import QRCode from "qrcode";
 import { toast } from "sonner";
 import { Drawer } from "@/components/shared/drawer";
@@ -47,6 +48,11 @@ interface GuestbookDetailDrawerProps {
 const EVENT_CATEGORY_LABELS: Record<string, string> = {
   WEDDINGS: "Wedding",
   MICE: "MICE",
+};
+
+const BOOKING_SECTION_HREF: Record<"WEDDINGS" | "MICE", string> = {
+  WEDDINGS: "/booking/booking-weddings",
+  MICE: "/booking/booking-mice",
 };
 
 const ONLINE_MEDIUM_LABELS: Record<string, string> = {
@@ -481,6 +487,18 @@ export function GuestbookDetailDrawer({
             <p className="text-xs text-muted-foreground">Total Kunjungan</p>
             <p className="text-sm font-medium text-foreground">{totalVisit}x</p>
           </div>
+          {entry.bookingMatch && (
+            <div className="space-y-1">
+              <p className="text-xs text-muted-foreground">Status Booking</p>
+              <NextLink
+                href={BOOKING_SECTION_HREF[entry.bookingMatch.category]}
+                className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
+              >
+                <CheckCircle weight="BoldDuotone" className="h-4 w-4" style={{ color: "var(--brand-gold)" }} />
+                Sudah Booking · {EVENT_CATEGORY_LABELS[entry.bookingMatch.category] ?? entry.bookingMatch.category}
+              </NextLink>
+            </div>
+          )}
         </div>
 
         {/* Visit History */}

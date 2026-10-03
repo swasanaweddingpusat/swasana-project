@@ -69,6 +69,7 @@ import { useSalesUsers } from "@/hooks/use-sales-users";
 import type {
   GuestbookEntryItem,
   GuestbookCategoryFilter,
+  GuestbookBookingMatch,
 } from "@/lib/queries/guestbookEntries";
 
 import { guestbookSourceLabel, type ProofFiles } from "@/lib/validations/guestbook";
@@ -84,6 +85,15 @@ const EVENT_CATEGORY_LABELS: Record<string, string> = {
   WEDDINGS: "Wedding",
   MICE: "MICE",
 };
+
+function BookingMatchBadge({ bookingMatch }: { bookingMatch?: GuestbookBookingMatch | null }) {
+  if (!bookingMatch) return null;
+  return (
+    <Badge className="rounded-full text-[10px] font-medium border-0 bg-[var(--brand-gold)]/15 text-[var(--brand-gold)]">
+      Sudah Booking {EVENT_CATEGORY_LABELS[bookingMatch.category] ?? bookingMatch.category}
+    </Badge>
+  );
+}
 
 // checkInAt is stored as a naive local wall-clock value anchored to UTC on the
 // server — display must read them back with timeZone: "UTC" to avoid double-converting.
@@ -184,20 +194,23 @@ function MobileCard({
                 </span>
               )}
             </p>
-            {status && (
-              <Badge
-                className={cn(
-                  "rounded-full text-[10px] mt-0.5 cursor-pointer transition-opacity hover:opacity-80",
-                  prospectStatusClass(status.name)
-                )}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onStatusClick?.(status.id);
-                }}
-              >
-                {status.name}
-              </Badge>
-            )}
+            <div className="flex items-center gap-1 flex-wrap mt-0.5">
+              {status && (
+                <Badge
+                  className={cn(
+                    "rounded-full text-[10px] cursor-pointer transition-opacity hover:opacity-80",
+                    prospectStatusClass(status.name)
+                  )}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onStatusClick?.(status.id);
+                  }}
+                >
+                  {status.name}
+                </Badge>
+              )}
+              <BookingMatchBadge bookingMatch={entry.bookingMatch} />
+            </div>
           </div>
         </div>
       </div>
@@ -696,20 +709,23 @@ function GuestbookClientInner() {
                                   </span>
                                 )}
                               </p>
-                              {status && (
-                                <Badge
-                                  className={cn(
-                                    "rounded-full text-[10px] mt-0.5 cursor-pointer transition-opacity hover:opacity-80",
-                                    prospectStatusClass(status.name)
-                                  )}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleStatusBucketClick(status.id);
-                                  }}
-                                >
-                                  {status.name}
-                                </Badge>
-                              )}
+                              <div className="flex items-center gap-1 flex-wrap mt-0.5">
+                                {status && (
+                                  <Badge
+                                    className={cn(
+                                      "rounded-full text-[10px] cursor-pointer transition-opacity hover:opacity-80",
+                                      prospectStatusClass(status.name)
+                                    )}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleStatusBucketClick(status.id);
+                                    }}
+                                  >
+                                    {status.name}
+                                  </Badge>
+                                )}
+                                <BookingMatchBadge bookingMatch={entry.bookingMatch} />
+                              </div>
                             </div>
                           </div>
                         </TableCell>
