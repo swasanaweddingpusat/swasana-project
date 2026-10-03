@@ -39,8 +39,11 @@ export async function POST(req: Request) {
   if (!existing?.clockInAt) {
     return Response.json({ error: "Anda belum melakukan clock in hari ini" }, { status: 409 });
   }
-  if (existing.clockOutAt) {
-    return Response.json({ error: "Anda sudah melakukan clock out hari ini" }, { status: 409 });
+  if (existing.attendantType === "DAY_OFF") {
+    return Response.json(
+      { error: "Hari ini tercatat sebagai Day Off, tidak perlu clock out" },
+      { status: 409 },
+    );
   }
 
   // Optional GPS validation based on requireClockOutLocation setting.

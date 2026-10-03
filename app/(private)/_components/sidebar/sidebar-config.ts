@@ -121,7 +121,6 @@ export const MODULE_NAV_MAP: Record<ModuleKey, NavItem[]> = {
   ],
   hrd: [
     { name: "Database Karyawan", href: "/hrd/database-karyawan", icon: UsersGroupRounded, subtitle: "Data lengkap seluruh karyawan", permission: { module: "hr", action: "view" } },
-    { name: "Koreksi Absen", href: "/hrd/koreksi-absen", icon: ClipboardList, subtitle: "Persetujuan pengajuan koreksi absensi", permission: { module: "hr-attendance", action: "approve" } },
     { name: "Penggajian & Perpajakan", href: "/hrd/penggajian-perpajakan", icon: Dollar, subtitle: "Proses penggajian dan konfigurasi pajak", permission: { module: "hr", action: "view" } },
     { name: "Slip Gaji", href: "/hrd/slip-gaji", icon: FileText, subtitle: "Rekap slip gaji seluruh karyawan", permission: { module: "hr", action: "view" } },
     { name: "Rekrutmen & Onboarding", href: "/hrd/rekrutmen-onboarding", icon: UserPlus, subtitle: "Pipeline rekrutmen hingga onboarding", permission: { module: "hr-recruitment", action: "view" } },
