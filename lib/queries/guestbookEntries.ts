@@ -466,9 +466,10 @@ export interface GuestVisitHistoryItem {
   venue: { id: string; name: string } | null;
 }
 
-/** Full cross-festival visit history for the guest behind `entryId` (matched by
- *  normalized phone + name, same rule as getGuestbookEntries' grouping) — used by
- *  the Detail drawer instead of only scanning the current page's fetched rows. */
+/** Real scan history for one reusable barcode (guestCode) — reads the entry's
+ *  GuestbookVisit rows. One GuestbookEntry's barcode can be scanned across many
+ *  events/days, and every scan creates a new GuestbookVisit row; this lists
+ *  those rows (newest first) for the Detail drawer. */
 export async function getGuestVisitHistory(
   profileId: string | undefined,
   dataScope: DataScope | undefined,
@@ -478,31 +479,30 @@ export async function getGuestVisitHistory(
 
   const anchor = await db.guestbookEntry.findFirst({
     where: { ...scopeWhere, id: entryId },
-    select: { id: true, visitorName: true, phoneNumberNorm: true },
+    select: {
+      id: true,
+      guestCode: true,
+      prospectStatus: { select: { id: true, name: true } },
+      venue: { select: { id: true, name: true } },
+    },
   });
   if (!anchor) return [];
 
-  const matchWhere: Prisma.GuestbookEntryWhereInput = anchor.phoneNumberNorm
-    ? {
-        ...scopeWhere,
-        phoneNumberNorm: anchor.phoneNumberNorm,
-        visitorName: { equals: anchor.visitorName, mode: "insensitive" },
-      }
-    : { ...scopeWhere, id: anchor.id };
-
-  return db.guestbookEntry.findMany({
-    where: matchWhere,
-    select: {
-      id: true,
-      checkInAt: true,
-      prospectStatus: { select: { id: true, name: true } },
-      guestCode: true,
-      festival: { select: { id: true, name: true } },
-      venue: { select: { id: true, name: true } },
-    },
-    orderBy: { checkInAt: "desc" },
+  const visits = await db.guestbookVisit.findMany({
+    where: { entryId: anchor.id },
+    select: { id: true, visitedAt: true, festival: { select: { id: true, name: true } } },
+    orderBy: { visitedAt: "desc" },
     take: 50,
   });
+
+  return visits.map((v) => ({
+    id: v.id,
+    checkInAt: v.visitedAt,
+    prospectStatus: anchor.prospectStatus,
+    guestCode: anchor.guestCode,
+    festival: v.festival,
+    venue: anchor.venue,
+  }));
 }
 
 export interface GuestbookFunnelReport {
